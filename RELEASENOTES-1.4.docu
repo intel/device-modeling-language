@@ -273,4 +273,7 @@
       interface (the parameter <tt>use_io_memory</tt>
       is <tt>false</tt>) now handle accesses that are bigger than 8
       bytes.</add-note></build-id>
+  <build-id value="next"><add-note>Added an optimization that
+      reduces the compile time for devices with huge register arrays
+      <bug number="SIMICS-7038"/> </add-note></build-id>
 </rn>
