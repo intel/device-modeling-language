@@ -48,5 +48,21 @@ stest.expect_equal(obj.port.p_saved1.v, -5)
 obj.port.p_saved2.v = 5
 stest.expect_equal(obj.port.p_saved2.v, 5)
 
+g1_id = ['g1', []]
+obj.saved_identity_g1 = g1_id
+stest.expect_equal(obj.saved_identity_g1, g1_id)
+
+g2_2_id = ['g2[%u]', [2]]
+obj.saved_identity_g2_2 = g2_2_id
+stest.expect_equal(obj.saved_identity_g2_2, g2_2_id)
+
+g2_0_child_id = ['g2[%u].child', [0]]
+obj.saved_identity_g2_0_child = g2_0_child_id
+stest.expect_equal(obj.saved_identity_g2_0_child, g2_0_child_id)
+
+g2_1_children_2_4_id = ['g2[%u].children[%u][%u]', [1, 2, 4]]
+obj.saved_identity_g2_1_children_2_4 = g2_1_children_2_4_id
+stest.expect_equal(obj.saved_identity_g2_1_children_2_4, g2_1_children_2_4_id)
+
 # Test set values within dml
 obj.test_later = None

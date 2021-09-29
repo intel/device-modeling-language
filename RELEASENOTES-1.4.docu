@@ -230,4 +230,8 @@
   <build-id value="6131"><add-note> It is no longer an error to instantiate
       a non-existing template from within a dead branch of an `#if` block.
   </add-note></build-id>
+  <build-id value="next"><add-note> Two values of the same template type
+      can now be compared for equality, and are equal when they
+      reference the same object
+      <bug number="SIMICS-6998"/>.</add-note></build-id>
 </rn>

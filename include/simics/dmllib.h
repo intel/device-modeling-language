@@ -151,19 +151,37 @@ DML_eq(uint64 a, uint64 b)
         return ((a ^ b) | ((b | a) >> 63)) == 0;
 }
 
-// Downcast a trait vtable expression expr to the vtable type of trait 'to',
-// given that expr's type is found as to.ancestry. E.g.: If a trait y extends
-// z, and x extends y, and xyz is a reference to trait x (i.e., has type
-// (x *)), then DOWNCAST(xyz, x, y.z) yields a reference to the x trait,
-// and DOWNCAST(xyz, x, y.z)->y.z == xyz.
-// This is similar to the container_of macro in Linux.
-#define DOWNCAST(expr, to, ancestry) \
-        ((to *)((char *)(expr) - offsetof(to, ancestry)))
+// Upcast a trait reference expression expr of type 'from' to a corresponding
+// trait reference of an ancestor trait, given that the vtable of the new trait
+// is found as from.ancestry. E.g.: If a trait y extends z, and x extends y,
+// and xyz is a reference to trait x, then UPCAST(xyz, x, y.z) yields a trait
+// reference to the z trait.
+#define UPCAST(expr, from, ancestry)                            \
+    ({_traitref_t __tref = expr;                                \
+      __tref.trait = (char *)(__tref.trait)                     \
+                     + offsetof(struct _ ## from, ancestry);    \
+      __tref;})
 
-#define CALL_TRAIT_METHOD(type, method, dev, trait, ...)    \
-        ({type __tref = trait; __tref->method(dev, __tref, __VA_ARGS__);})
-#define CALL_TRAIT_METHOD0(type, method, dev, trait)    \
-        ({type __tref = trait; __tref->method(dev, __tref);})
+// Downcast a trait reference expression expr to a corresponding trait
+// reference with vtable type of trait 'to',
+// given that expr's vtable type is found as to.ancestry. E.g.: If a trait y
+// extends z, and x extends y, and xyz is a reference to trait x upcast to
+// trait z, then DOWNCAST(xyz, x, y.z) yields a trait reference to the x trait,
+// and UPCAST(DOWNCAST(xyz, x, y.z), x, y.z) == xyz.
+// This is similar to the container_of macro in Linux.
+#define DOWNCAST(expr, to, ancestry)                            \
+        ({_traitref_t __tref = expr;                            \
+          __tref.trait = (char *)(__tref.trait)                 \
+                         - offsetof(struct _ ## to, ancestry);  \
+          __tref;})
+
+#define CALL_TRAIT_METHOD(type, method, dev, traitref, ...)             \
+        ({_traitref_t __tref = traitref;                                \
+          ((struct _ ## type *) __tref.trait)->method(dev, __tref,      \
+                                                      __VA_ARGS__);})
+#define CALL_TRAIT_METHOD0(type, method, dev, traitref)                 \
+        ({_traitref_t __tref = traitref;                                \
+          ((struct _ ## type *) __tref.trait)->method(dev, __tref);})   \
 
 #define _raw_load_uint8_be_t   UNALIGNED_LOAD_BE8
 #define _raw_load_uint16_be_t  UNALIGNED_LOAD_BE16
@@ -487,6 +505,82 @@ FOR_ENDIAN_VARIANTS(DEFINE_PRECHANGE);
 #undef FOR_ALL_BITSIZES
 #undef FOR_ENDIAN_VARIANTS
 
+typedef struct {
+    uint32 id;
+    uint32 encoded_index;
+} _identity_t;
+
+typedef struct {
+    const char *logname;
+    const uint32 *dimsizes;
+    uint32 dimensions;
+    uint32 id;
+} _id_info_t;
+
+typedef struct {
+    void *trait;
+    _identity_t id;
+} _traitref_t;
+
+UNUSED static attr_value_t
+_serialize_identity(const _id_info_t *id_info_array, const _identity_t id) {
+    _id_info_t info = id_info_array[id.id];
+    attr_value_t inner = SIM_alloc_attr_list(info.dimensions);
+    uint32 index = id.encoded_index;
+    for (int i = info.dimensions - 1; i >= 0; --i) {
+        SIM_attr_list_set_item(&inner, i,
+                               SIM_make_attr_uint64(index % info.dimsizes[i]));
+        index /= info.dimsizes[i];
+    }
+    return SIM_make_attr_list(2, SIM_make_attr_string(info.logname), inner);
+}
+
+UNUSED static _identity_t
+_deserialize_identity(ht_str_table_t *id_info_ht, attr_value_t val) {
+    if (SIM_attr_list_size(val) != 2) {
+        const char *msg = "invalid serialized representation of _identity_t";
+        VT_critical_error(msg, msg);
+        return (_identity_t) {0, 0};
+    }
+    const char *logname = SIM_attr_string(SIM_attr_list_item(val, 0));
+    attr_value_t indices_attr = SIM_attr_list_item(val, 1);
+    const _id_info_t *info = ht_lookup_str(id_info_ht, logname);
+    if (!info) {
+        const char *msg = "Failed to look up object when deserialising"
+                           "_identity_t";
+        char buf[256];
+        snprintf(buf, 256, "Failed to look up object '%s' when attempting to"
+                           "deserialize _identity_t",
+                 logname);
+        VT_critical_error(msg, buf);
+        return (_identity_t) {0, 0};
+    }
+    if (SIM_attr_list_size(indices_attr) != info->dimensions) {
+        const char *msg = "Invalid number of indices";
+        char buf[512];
+        snprintf(buf, 512,
+                 "Invalid number of indices for when attempting"
+                 "to deserialize _identity_t for object %s."
+                 "Expected %u indices, got %u.",
+                 logname, (unsigned) info->dimensions,
+                 SIM_attr_list_size(indices_attr));
+        VT_critical_error(msg, buf);
+        return (_identity_t) {0, 0};
+    }
+    _identity_t id = {info->id, 0};
+    attr_value_t *indices = SIM_attr_list(indices_attr);
+    for (uint32 i = 0; i < info->dimensions; ++i) {
+        id.encoded_index = id.encoded_index * info->dimsizes[i]
+            + SIM_attr_integer(indices[i]);
+    }
+    return id;
+}
+
+UNUSED __attribute__((const)) static inline bool
+_identity_eq(_identity_t a, _identity_t b) {
+    return a.id == b.id && a.encoded_index == b.encoded_index;
+}
+
 // List of vtables of a specific trait in one specific object
 typedef struct {
         // first trait vtable instance. Instances are stored linearly in a
@@ -494,29 +588,31 @@ typedef struct {
         // index of outer DML object.
         uintptr_t base;
         // total number of elements (product of object's dimsizes)
-        int num;
+        uint64 num;
         // offset between two vtable instances; at least sizeof(<vtable type>)
-        int offset;
+        uint32 offset;
+        // The unique object id
+        uint32 id;
 } _vtable_list_t;
 
 typedef struct {
         const _vtable_list_t *base;
         // iteration interval in list of vtable_list_t. Interval includes start
         // point but not endpoint. starti is currently always 0.
-        int starti;
-        int endi;
+        uint32 starti;
+        uint32 endi;
         // When iterating inside an array, the vtable_list_t instances show
         // number of elements globally. If one or more outer object array index
         // is fixed in the 'in each' expression, then these members show which
         // subset to iterate through from each vtable_list_t: Iteration in a
         // vtable_array_t starts at array_idx * num/array_size, and we iterate
         // through num/array_size elements.
-        int array_idx;
-        int array_size;
+        uint32 array_idx;
+        uint32 array_size;
 } _each_in_t;
 
 UNUSED static uint64 _count_eachin(_each_in_t each_in) {
-        int count = 0;
+        uint64 count = 0;
         for (int i = each_in.starti; i < each_in.endi; ++i) {
                 count += each_in.base[i].num / each_in.array_size;
         }

@@ -303,6 +303,7 @@ def expr_binop(tree, location, scope):
         raise ICE(tree.site, 'Unknown binary operation: %s %s %s'
                   % (repr(lh), repr(op), repr(rh)))
     lh = codegen_expression(lh, location, scope)
+
     if op in ['&&', '||']:
         lh = as_bool(lh)
         if lh.constant and bool(lh.value) == (op == '||'):
@@ -575,7 +576,7 @@ def expr_cast(tree, location, scope):
 
     if isinstance(expr, NonValue) and (
             not isinstance(expr, NodeRef)
-            or not isinstance(safe_realtype(type), TTrait)):
+            or not isinstance(safe_realtype(type), (TTrait, TObjIdentity))):
         raise expr.exc()
     else:
         return mkCast(tree.site, expr, type)
@@ -1021,7 +1022,7 @@ def get_initializer(site, etype, astinit, location, scope):
         return ExpressionInitializer(mkBoolConstant(site, False))
     elif typ.is_float:
         return ExpressionInitializer(mkFloatConstant(site, 0.0))
-    elif isinstance(typ, (TStruct, TExternStruct, TArray)):
+    elif isinstance(typ, (TStruct, TExternStruct, TArray, TTrait, TObjIdentity)):
         return MemsetInitializer(site)
     elif isinstance(typ, TPtr):
         return ExpressionInitializer(mkLit(site, 'NULL', typ))
@@ -1029,8 +1030,6 @@ def get_initializer(site, etype, astinit, location, scope):
         return ExpressionInitializer(mkLit(site, 'VNULL', typ))
     elif isinstance(typ, TFunction):
         raise EVARTYPE(site, etype.describe())
-    elif isinstance(typ, TTrait):
-        return ExpressionInitializer(mkLit(site, 'NULL', typ))
     elif isinstance(typ, TTraitList):
         return ExpressionInitializer(mkLit(site, '{NULL, 0, 0, 0, 0}', typ))
     raise ICE(site, "No initializer for %r" % (etype,))
@@ -1560,9 +1559,9 @@ def stmt_log(stmt, location, scope):
         if location.method():
             key = mkLit(site, '(uint64)NULL', TInt(64, False))
         else:
-            # Normally, we are not allowed to cast "this" to an uint,
+            # Normally, we are not allowed to cast "this.trait" to an uint,
             # but since we _internally_ know it is a pointer this is justified
-            key = mkLit(site, "(uint64)%s" % lookup_var(
+            key = mkLit(site, "(uint64)(%s.trait)" % lookup_var(
                 site, scope, "this").read(), TInt(64, False))
         once_lookup = mkLit(
             site, "_select_log_level",
@@ -1721,15 +1720,21 @@ def foreach_each_in(site, itername, trait, each_in,
     scope = Symtab(scope)
     each_in_sym = scope.add_variable(
         '_each_in_expr', type=TTraitList(trait.name),
-        init=ExpressionInitializer(each_in))
+        init=ExpressionInitializer(each_in), stmt = True)
     ident = each_in_sym.value
     inner_scope = Symtab(scope)
     trait_type = TTrait(trait)
+    trait_ptr = (f'(struct _{cident(trait.name)} *) '
+                 + '(_list.base + _inner_idx * _list.offset)')
+    obj_ref = '(_identity_t) { .id = _list.id, .encoded_index = _inner_idx}'
     inner_scope.add_variable(
         itername, type=trait_type,
         init=ExpressionInitializer(
-            mkLit(site, '(%s)(_list.base + _inner_idx * _list.offset)' % (
-                trait_type.declaration('')), trait_type)))
+            mkLit(site,
+                  ('((%s) {%s, %s})' % (trait_type.declaration(''),
+                                        trait_ptr, obj_ref)),
+                  trait_type
+                  )))
     inner_body = mkCompound(site, declarations(inner_scope)
         + codegen_statements([body_ast], location, inner_scope))
     loop = mkFor(
@@ -1742,17 +1747,16 @@ def foreach_each_in(site, itername, trait, each_in,
             site,
             [mkInline(site,
                       '_vtable_list_t _list = %s.base[_outer_idx];' % (ident,)),
-             mkInline(
-                 site, 'int _num = _list.num / %s.array_size;' % (ident,)),
-             mkInline(site, 'int _start = _num * %s.array_idx;' % (ident,)),
+             mkInline(site, 'uint64 _num = _list.num / %s.array_size;' % (ident,)),
+             mkInline(site, 'uint64 _start = _num * %s.array_idx;' % (ident,)),
              mkFor(site,
-                   [mkLit(site, 'int _inner_idx = _start', TVoid())],
+                   [mkLit(site, 'uint64 _inner_idx = _start', TVoid())],
                    mkLit(site, '_inner_idx < _start + _num', TBool()),
                    [mkExpressionStatement(
                        site, mkLit(site, '++_inner_idx', TVoid()))],
                    inner_body)]))
 
-    return [mkCompound(site, declarations(scope) + [loop])]
+    return [mkCompound(site, [sym_declaration(each_in_sym), loop])]
 
 @expression_dispatcher
 def expr_each_in(ast, location, scope):

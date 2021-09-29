@@ -1034,6 +1034,9 @@ local register x = cast(regs.r0, register);
 x.val = 14;  // sets regs.r0.val
 ```
 
+Two values of the same template type can be compared for equality, and are
+considered equal when they both reference the same object.
+
 ### Shared methods
 If a method is declared in a template, then one copy of the method
 will appear in each object where the template is instantiated;

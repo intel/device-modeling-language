@@ -226,7 +226,10 @@ def check_named_types(t):
         for pt in t.input_types:
             check_named_types(pt)
         check_named_types(t.output_type)
-    elif isinstance(t, (TVoid, IntegerType, TBool, TFloat, TTrait)):
+    elif isinstance(t, TTraitList):
+        if t.traitname not in dml.globals.traits:
+            raise ETYPE(t.declaration_site, t)
+    elif isinstance(t, (TVoid, IntegerType, TBool, TFloat, TTrait, TObjIdentity)):
         pass
     else:
         raise ICE(t.declaration_site, "unknown type %r" % t)

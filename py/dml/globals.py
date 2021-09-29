@@ -21,6 +21,9 @@ api_version = None
 # This is a tuple (major, minor)
 dml_version = None
 
+# Array of all declared composite objects
+objects = []
+
 # 1.4 style integer operations in 1.2, --strict-dml12-int
 strict_int_flag = None
 def compat_dml12_int(site):

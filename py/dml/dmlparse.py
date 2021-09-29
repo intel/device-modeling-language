@@ -666,8 +666,8 @@ def param_(t):
 @prod_dml12
 def trait_param(t):
     '''trait_param : param_ named_cdecl SEMI'''
-    (declsite, _, name, typ) = t[2]
-    t[0] = ast.typedparam(site(t), declsite, name, typ)
+    (name, typ) = t[2].args
+    t[0] = ast.typedparam(site(t), t[2].site, name, typ)
 
 # Templates
 

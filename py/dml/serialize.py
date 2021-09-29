@@ -113,6 +113,13 @@ def serialize(real_type, current_expr, target_expr):
                           lookup_serialize(real_type),
                           [ctree.mkAddressOf(current_site, current_expr),
                            ctree.mkAddressOf(current_site, target_expr)])
+    elif isinstance(real_type, TObjIdentity):
+        id_infos = expr.mkLit(current_site, '_id_infos',
+                              TPtr(TNamed('_id_info_t', const = True)))
+        apply_expr = apply_c_fun(current_site, "_serialize_identity",
+                                 [id_infos, current_expr], attr_value_t)
+        return ctree.mkAssignStatement(current_site, target_expr,
+                                       ctree.ExpressionInitializer(apply_expr))
     else:
         # Callers are responsible for checking that the type is serializeable
         # usually done with the map_dmltype_to_attrtype function
@@ -141,6 +148,13 @@ def deserialize(real_type, current_expr, target_expr):
                           lookup_deserialize(real_type),
                           [ctree.mkAddressOf(current_site, current_expr),
                            ctree.mkAddressOf(current_site, target_expr)])
+    elif isinstance(real_type, TObjIdentity):
+        id_info_ht = expr.mkLit(current_site, '&_id_info_ht',
+                                TPtr(TNamed('ht_str_table_t')))
+        apply_expr = apply_c_fun(current_site, '_deserialize_identity',
+                                 [id_info_ht, current_expr], real_type)
+        return ctree.mkAssignStatement(current_site, target_expr,
+                                       ctree.ExpressionInitializer(apply_expr))
     else:
         raise ICE(current_site, "Unexpectedly asked to deserialize %s" % (
             real_type))
@@ -167,6 +181,8 @@ def map_dmltype_to_attrtype(site, dmltype):
         arr_attr_type = map_dmltype_to_attrtype(site, real_type.base)
         arr_length = expr_intval(real_type.size)
         return '[%s{%s}]' % (arr_attr_type, arr_length)
+    if isinstance(real_type, TObjIdentity):
+        return '[s[i*]]'
     # TODO should be implemented
     #if isinstance(real_type, TVector):
         # return '[%s*]' % (map_dmltype_to_attrtype(site, real_type.base))
@@ -200,6 +216,8 @@ def type_signature(dmltype):
         return 'A%d%s' % (arr_length, arr_attr_type)
     if isinstance(dmltype, TVector):
         return 'V%s' % type_signature(dmltype.base)
+    if isinstance(dmltype, TObjIdentity):
+        return 'Id'
     assert False
 
 def generate_serialize(real_type):
@@ -261,7 +279,7 @@ def generate_serialize(real_type):
                 site, [attr_assign_statement, imm_attr_decl] + statements).toc()
         elif isinstance(real_type, TVector):
             raise ICE(site, "TODO: serialize vector")
-        elif isinstance(real_type, (IntegerType, TBool, TFloat)):
+        elif isinstance(real_type, (IntegerType, TBool, TFloat, TObjIdentity)):
             serialize(real_type,
                       ctree.mkDereference(site, in_arg),
                       ctree.mkDereference(site, out_arg)).toc()
@@ -327,7 +345,7 @@ def generate_deserialize(real_type):
                 site, [imm_attr_decl] + statements).toc()
         elif isinstance(real_type, TVector):
             raise ICE(site, "TODO: serialize vector")
-        elif isinstance(real_type, (IntegerType, TBool, TFloat)):
+        elif isinstance(real_type, (IntegerType, TBool, TFloat, TObjIdentity)):
             deserialize(real_type,
                         ctree.mkDereference(site, in_arg),
                         ctree.mkDereference(site, out_arg)).toc()

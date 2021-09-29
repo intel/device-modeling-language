@@ -1,0 +1,54 @@
+dml 1.4;
+
+device test;
+
+import "testing.dml";
+
+param base1 = base[1];
+
+template t is _qname {}
+
+group base[i < 2] is t {
+    group child[l < 5][m < 7] is t;
+}
+
+method test() throws {
+    #if (cast(base[0], _identity_t) == cast(base1, _identity_t)) {
+        error "base[0] == base1";
+    }
+
+    #if (cast(base[1], _identity_t) != cast(base1, _identity_t)) {
+        error "base[1] != base1";
+    }
+
+    #if (cast(base[0].child[0][0], _identity_t)
+        == cast(base[0], _identity_t)) {
+        error "base[0].child[0][0] == base[0]";
+    }
+
+    for (local int i = 0; i < 2; ++i) {
+        assert cast(base[i], t) == cast(base[i], t);
+        assert cast(base[i], t) != cast(base[i ^ 1], t);
+        assert cast(base[i].child[0][0], t) != cast(base[i], t);
+
+        assert cast(cast(base[i], t), _identity_t)
+            == cast(base[i], _identity_t);
+        assert cast(cast(base[i], t), _identity_t)
+            == cast(cast(base[i], object), _identity_t);
+
+        local _identity_t id_1 = cast(base[i], _identity_t);
+        local _identity_t id_2 = cast(cast(base[i], t), _identity_t);
+        assert id_1 == id_2;
+        assert cast(base[i], _identity_t) == id_2;
+        assert id_1 == cast(cast(base[i], t), _identity_t);
+    }
+
+    local int found = 0;
+    foreach child in (each t in (base[1])) {
+        local bool same = child == cast(base[1].child[2][3], t);
+        assert (strcmp(base[1].child[2][3].qname, child._qname()) == 0)
+               == same;
+        found += same ? 1 : 0;
+    }
+    assert found == 1;
+}

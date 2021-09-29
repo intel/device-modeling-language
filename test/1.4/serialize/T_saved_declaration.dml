@@ -86,6 +86,26 @@ port p_saved2 is saved_template {
     param initial_value = 4;
 }
 
+// identity
+template mass_groups {
+    group g1;
+    group g2[i < 3] {
+        group child;
+        group children[j < 5][l < 7];
+    }
+}
+
+group initial is mass_groups;
+
+is mass_groups;
+
+saved _identity_t saved_identity_g1 = cast(initial.g1, _identity_t);
+saved _identity_t saved_identity_g2_2 = cast(initial.g2[2], _identity_t);
+saved _identity_t saved_identity_g2_0_child =
+    cast(initial.g2[0].child, _identity_t);
+saved _identity_t saved_identity_g2_1_children_2_4 =
+    cast(initial.g2[1].children[2][4], _identity_t);
+
 attribute test_initial is write_only_attr {
     param type = "n";
 
@@ -107,6 +127,13 @@ attribute test_initial is write_only_attr {
         // No initial test for bitfields or layout
         assert p_saved1.v == 0;
         assert p_saved2.v == 4;
+
+        assert saved_identity_g1 == cast(initial.g1, _identity_t);
+        assert saved_identity_g2_2 == cast(initial.g2[2], _identity_t);
+        assert saved_identity_g2_0_child
+            == cast(initial.g2[0].child, _identity_t);
+        assert saved_identity_g2_1_children_2_4
+            == cast(initial.g2[1].children[2][4], _identity_t);
     }
 }
 
@@ -157,5 +184,12 @@ attribute test_later is write_only_attr {
 
         assert p_saved1.v == -5;
         assert p_saved2.v == 5;
+
+        assert saved_identity_g1 == cast(g1, _identity_t);
+        assert saved_identity_g2_2 == cast(g2[2], _identity_t);
+        assert saved_identity_g2_0_child
+            == cast(g2[0].child, _identity_t);
+        assert saved_identity_g2_1_children_2_4
+            == cast(g2[1].children[2][4], _identity_t);
     }
 }

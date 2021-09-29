@@ -122,6 +122,9 @@ __all__ = (
     'TraitMethodDirect',
     'mkTraitUpcast',
     'TraitUpcast',
+    'try_convert_identity',
+    'ObjIdentity',
+    'TraitObjIdentity',
     'ObjTraitRef',
     'NodeArrayRef',
     'SessionVariableRef',
@@ -1229,6 +1232,11 @@ class Equals(BinOp):
             if (isinstance(lh, StringConstant)
                 and isinstance(rh, StringConstant)):
                 return mkBoolConstant(site, lh.value == rh.value)
+            if isinstance(lh, ObjIdentity) and isinstance(rh, ObjIdentity):
+                lh_indices = [idx.value for idx in lh.indices]
+                rh_indices = [idx.value for idx in rh.indices]
+                return mkBoolConstant(site, (lh.node is rh.node
+                                             and lh_indices == rh_indices))
         if lhtype.is_int:
             lh = as_int(lh)
             lhtype = realtype(lh.ctype())
@@ -1258,6 +1266,24 @@ class Equals(BinOp):
                 and compatible_types(lhtype, rhtype))
             or (isinstance(lhtype, TBool) and isinstance(rhtype, TBool))):
             return Equals(site, lh, rh)
+
+        def mkIdentityEq(lh, rh):
+            return mkApply(site,
+                           mkLit(site, '_identity_eq',
+                                 TFunction([TObjIdentity(), TObjIdentity()],
+                                           TBool())),
+                           [lh, rh])
+
+        # Equality between trait references of the same template is
+        # implicitly converted to equality between identities
+        if (isinstance(lhtype, TTrait) and isinstance(rhtype, TTrait)
+            and lhtype.trait is rhtype.trait):
+            return mkIdentityEq(TraitObjIdentity(lh.site, lh),
+                                TraitObjIdentity(rh.site, rh))
+
+        if (isinstance(lhtype, TObjIdentity)
+            and isinstance(rhtype, TObjIdentity)):
+            return mkIdentityEq(lh, rh)
         raise EILLCOMP(site, lh, lhtype, rh, rhtype)
 
 def mkEquals(site, lh, rh):
@@ -2647,13 +2673,13 @@ class TraitMethodApplyIndirect(Expression):
     def read(self):
         if self.inargs:
             return "CALL_TRAIT_METHOD(%s, %s, _dev, %s)" % (
-                self.traitref.ctype().declaration(''),
+                cident(realtype(self.traitref.ctype()).trait.name),
                 self.methname,
                 ', '.join([arg.read()
                            for arg in [self.traitref] + self.inargs]))
         else:
             return "CALL_TRAIT_METHOD0(%s, %s, _dev, %s)" % (
-                self.traitref.ctype().declaration(''),
+                cident(realtype(self.traitref.ctype()).trait.name),
                 self.methname, self.traitref.read())
 
 class TraitMethodApplyDirect(Expression):
@@ -2846,10 +2872,7 @@ class EachIn(Expression):
         if self.indices:
             dimsizes = self.node.dimsizes
             array_size = reduce(operator.mul, dimsizes)
-            array_idx = self.indices[0].read()
-            for (dimsize, idx) in zip(dimsizes[1:], self.indices[1:]):
-                array_idx = "(%s) * %d + (%s)" % (
-                    array_idx, dimsize, idx.read())
+            array_idx = encode_indices(self.indices, dimsizes)
         else:
             array_size = 1
             array_idx = "0"
@@ -3130,10 +3153,97 @@ class ObjTraitRef(Expression):
 
     def read(self):
         self.node.traits.mark_referenced(self.trait)
+        if all(idx.constant for idx in self.indices):
+            indices_decl = None
+            indices = self.indices
+        else:
+            # Create intermediate array to avoid evaluating indices multiple
+            # times
+            indices_decl = ('uint32 __indices[] = {%s}'
+                            % (', '.join(i.read() for i in self.indices)))
+            indices = tuple(mkLit(self.site, '__indices[%d]' % (i,),
+                                  TInt(32, False))
+                            for i in range(self.node.dimensions))
         structref = (self.node.traits.vtable_cname(self.ancestry_path[0])
-                     + ''.join('[%s]' % i.read() for i in self.indices))
-        return "(&%s)" % ('.'.join([structref] + [
+                     + ''.join('[%s]' % (i.read(),) for i in indices))
+        pointer = '(&%s)' % ('.'.join([structref] + [
             cident(t.name) for t in self.ancestry_path[1:]]))
+        id = ObjIdentity(self.site, self.node, indices).read()
+        traitref_expr = ('((%s) {%s, %s})'
+                         % (cident(self.trait.name), pointer, id))
+        if indices_decl:
+            return '({%s; %s;})' % (indices_decl, traitref_expr)
+        else:
+            return traitref_expr
+
+
+def try_convert_identity(expr, convert_value_noderefs = True):
+    if (isinstance(expr, NodeRef)
+        and isinstance(expr.node, objects.CompositeObject)
+        and (convert_value_noderefs or isinstance(expr, NonValue))):
+        return ObjIdentity(expr.site, expr.node, expr.indices)
+    elif not isinstance(expr, NonValue):
+        typ = safe_realtype(expr.ctype())
+        if isinstance(typ, TObjIdentity):
+            return expr
+        elif isinstance(typ, TTrait):
+            return TraitObjIdentity(expr.site, expr)
+    return None
+
+class ObjIdentity(Expression):
+    '''A unique identifier for a specific compound object'''
+    slots = ('constant', 'constant_indices', 'value')
+    def __init__(self, site, node, indices):
+        Expression.__init__(self, site)
+        if not isinstance(indices, tuple):
+            raise ICE(site, 'bad indices: %r' % (indices,))
+        assert len(indices) == node.dimensions
+        self.node = node
+        self.indices = indices
+        if all(idx.constant for idx in indices):
+            self.constant = True
+            self.constant_indices = tuple(idx.value for idx in indices)
+            self.value = (node, self.constant_indices)
+        else:
+            self.constant = False
+            self.constant_indices = None
+            self.value = None
+
+    def __str__(self):
+        return "%s" % (self.node.logname(self.indices),)
+
+    def ctype(self):
+        return TObjIdentity()
+
+    def read(self):
+        if self.constant:
+            encoded_index = encode_indices_constant(self.constant_indices,
+                                                    self.node.dimsizes)
+        else:
+            encoded_index = encode_indices(self.indices, self.node.dimsizes)
+        return ('((_identity_t) {.id = %d, .encoded_index = %s})'
+                % (self.node.uniq, encoded_index))
+
+def encode_indices_constant(indices, dimsizes):
+    return reduce(lambda x, y: x*y[0] + y[1], zip(dimsizes, indices), 0)
+
+def encode_indices(indices, dimsizes):
+    return reduce(lambda x, y: ('(%s) * %d + (%s)' % (x, y[0], y[1].read())),
+                  zip(dimsizes[1:], indices[1:]),
+                  indices[0].read())
+
+class TraitObjIdentity(Expression):
+    @auto_init
+    def __init__(self, site, traitref): pass
+
+    def __str__(self):
+        return "%s" % (self.traitref,)
+
+    def ctype(self):
+        return TObjIdentity()
+
+    def read(self):
+        return "(%s).id" % (self.traitref.read(),)
 
 class TraitUpcast(Expression):
     @auto_init
@@ -3151,8 +3261,11 @@ class TraitUpcast(Expression):
         if self.parent not in typ.trait.ancestors:
             raise ICE(self.site, 'cannot upcast %s to %s'
                       % (typ.trait.name, self.parent.name))
-        return "(&(%s)->%s)" % (self.sub.read(), ".".join(
-            cident(t.name) for t in typ.trait.ancestry_paths[self.parent][0]))
+
+        return ("UPCAST(%s, %s, %s)"
+                % (self.sub.read(), cident(typ.trait.name),
+                   ".".join(cident(t.name) for t in
+                            typ.trait.ancestry_paths[self.parent][0])))
 
 def mkTraitUpcast(site, sub, parent):
     typ = safe_realtype(sub.ctype())
@@ -3163,6 +3276,12 @@ def mkTraitUpcast(site, sub, parent):
             return TraitUpcast(site, sub, parent)
     raise ETEMPLATEUPCAST(site, typ, parent.type())
 
+def vtable_read(expr):
+    typ = realtype(expr.ctype())
+    assert isinstance(typ, TTrait)
+    return '((struct _%s *) (%s).trait)' % (cident(typ.trait.name),
+                                            expr.read())
+
 class TraitParameter(Expression):
     priority = 160 # SubRef.priority
     @auto_init
@@ -3172,7 +3291,8 @@ class TraitParameter(Expression):
         return "%s.%s" % (self.traitref, self.name)
 
     def read(self):
-        return "(%s)->%s" % (self.traitref.read(), self.name)
+        return ("%s->%s"
+                % (vtable_read(self.traitref), self.name))
 
 class TraitSessionRef(Expression):
     '''A reference to a trait session variable.
@@ -3191,8 +3311,9 @@ class TraitSessionRef(Expression):
         return TPtr(self.type_)
 
     def read(self):
-        return '(%s)((uintptr_t)_dev + (%s)->%s)' % (
-            TPtr(self.type_).declaration(''), self.traitref.read(), self.name)
+        return '(%s)((uintptr_t)_dev + %s->%s)' % (
+            TPtr(self.type_).declaration(''), vtable_read(self.traitref),
+            self.name)
 
 class TraitMethodRef(NonValue):
     '''A reference to a bound method in a trait. The expression
@@ -3728,6 +3849,12 @@ def mkCast(site, expr, new_type):
             raise ETEMPLATEUPCAST(site, "object", new_type)
         else:
             return mkTraitUpcast(site, expr, real.trait)
+    elif isinstance(real, TObjIdentity):
+        converted = try_convert_identity(expr)
+        if converted:
+            return converted
+        else:
+            raise ICE(site, "invalid cast to '_identity_t'")
     old_type = safe_realtype(expr.ctype())
     if (dml.globals.compat_dml12_int(site)
         and (isinstance(old_type, (TStruct, TVector, TLayout))
@@ -4075,7 +4202,8 @@ class MemsetInitializer(Initializer):
     def assign_to(self, dest, typ):
         '''output C statements to assign an lvalue'''
         assert isinstance(safe_realtype(typ),
-                          (TExternStruct, TStruct, TArray, TEndianInt))
+                          (TExternStruct, TStruct, TArray, TEndianInt, TTrait,
+                           TObjIdentity))
         out('memset(&%s, 0, sizeof(%s));\n'
             % (dest.read(), typ.declaration('')))
 

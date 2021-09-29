@@ -192,7 +192,7 @@ class TraitMethod(TraitVTableItem):
         if downcast_path:
             trait_decl = mkInline(
                 site,
-                '%s UNUSED = DOWNCAST(%s, struct _%s, %s);' % (
+                '%s UNUSED = DOWNCAST(%s, %s, %s);' % (
                     self.trait.type().declaration('_' + cident(self.trait.name)),
                     '_' + cident(self.vtable_trait.name),
                     cident(self.trait.name),

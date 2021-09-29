@@ -1,0 +1,14 @@
+dml 1.4;
+
+device test;
+
+method init() {
+    // no error
+    cast(dev, object) == cast(dev, object);
+
+    /// ERROR EILLCOMP
+    cast(dev, object) == cast(dev, init);
+
+    /// ERROR EILLCOMP
+    cast(dev, object) == cast(dev, _identity_t);
+}

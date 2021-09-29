@@ -31,6 +31,7 @@ __all__ = (
     'TVector',
     'TTrait',
     'TTraitList',
+    'TObjIdentity',
     'StructType',
     'TExternStruct',
     'TStruct',
@@ -755,7 +756,7 @@ class TVector(DMLType):
 
 class TTrait(DMLType):
     '''A run-time reference to a trait. Represented in C as a pointer
-    to a trait vtable struct, together with the implicit _dev reference.'''
+    to a trait vtable struct, together with an object identity'''
     __slots__ = ('trait',)
 
     def __init__(self, trait, const=False):
@@ -780,7 +781,7 @@ class TTrait(DMLType):
     def declaration(self, var):
         return '%s %s' % (cident(self.trait.name), var)
 
-    def print_struct_declaration(self):
+    def print_vtable_struct_declaration(self):
         out('struct _%s {\n' % cident(self.trait.name), postindent=1)
         empty = True
         for p in self.trait.direct_parents:
@@ -1056,6 +1057,30 @@ class TFunction(DMLType):
         return self.output_type.declaration(
             "%s(%s%s)" % (var, ", ".join(params), varargs))
 
+class TObjIdentity(DMLType):
+    '''A unique identifier for a compound object.'''
+    __slots__ = ()
+    def __init__(self, const=False):
+        DMLType.__init__(self, const)
+
+    def __repr__(self):
+        return "TObjIdentity()"
+
+    def clone(self):
+        return TObjIdentity()
+
+    def cmp(self, other):
+        if isinstance(realtype(other), TObjIdentity):
+            return 0
+        else:
+            return NotImplemented
+
+    def describe(self):
+        return 'identity'
+
+    def declaration(self, var):
+        return '_identity_t %s' % (var,)
+
 intre = re.compile('(u?)int([1-5][0-9]?|6[0-4]?|[789])(_be_t|_le_t)?$')
 def parse_type(typename):
     "Parse a simple C type name and return a DMLType"
@@ -1080,6 +1105,8 @@ def parse_type(typename):
         return TInt(64, True)
     elif typename == 'uinteger_t':
         return TInt(64, False)
+    elif typename == '_identity_t':
+        return TObjIdentity()
     else:
         return TNamed(typename)
 

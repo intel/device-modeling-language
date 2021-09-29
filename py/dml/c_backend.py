@@ -262,7 +262,7 @@ def generate_hfile(device, headers, filename):
     out('#include "'+structfilename+'"\n\n')
 
     for name in dml.globals.traits:
-        out('typedef struct _%s *%s;\n' % (cident(name), cident(name)))
+        out(f'typedef _traitref_t {cident(name)};\n')
 
     # Constraints from C:
     # - Types must be defined before they are referred to
@@ -318,7 +318,8 @@ def generate_hfile(device, headers, filename):
     out('\n')
 
     for (name, t) in list(dml.globals.traits.items()):
-        t.type().print_struct_declaration()
+        t.type().print_vtable_struct_declaration()
+
 
     print_device_substruct(device)
 
@@ -1216,6 +1217,32 @@ def generate_state_existence_callback(device):
     out("}\n", preindent = -1)
     out('}\n\n', preindent = -1)
 
+def generate_identity_data_decls():
+    items = ('(const _id_info_t) {"%s", %s, %d, %d}' %
+             (node.logname(("%u",) * node.dimensions),
+              ('(const uint32 []) {%s}' % (', '.join(map(str, node.dimsizes)),)
+               if node.dimensions else 'NULL'),
+              node.dimensions,
+              node.uniq)
+             for node in dml.globals.objects)
+    init = '{\n%s\n}' % (',\n'.join('    %s' % (item,) for item in items),)
+    add_variable_declaration(
+        'const _id_info_t _id_infos[%d]' % (len(dml.globals.objects)),
+        init)
+
+    add_variable_declaration('ht_str_table_t _id_info_ht',
+                             'HT_STR_NULL(false)')
+
+def generate_init_identity_hashtable():
+    start_function_definition('void _initialize_identity_ht(void)')
+    out('{\n', postindent=1)
+    out('for (uint64 i = 0; i < %d; ++i) {\n' % (len(dml.globals.objects),),
+        postindent=1)
+    out('ht_insert_str(&_id_info_ht, _id_infos[i].logname, &_id_infos[i]);\n')
+    out('}\n', preindent=-1)
+    out('}\n', preindent=-1)
+    splitting_point()
+
 def generate_alloc(device):
     start_function_definition(
         'conf_object_t *\n' + crep.cname(device)+'_alloc(conf_class_t *cls)')
@@ -1603,6 +1630,7 @@ def generate_init(device, initcode, outprefix):
         out('}\n', preindent = -1)
 
     out('_initialize_traits();\n')
+    out('_initialize_identity_ht();\n')
     out('_register_events(class);\n')
 
     # initcode is independently indented
@@ -1676,8 +1704,10 @@ def generate_each_in_table(node, trait, subnodes):
             ''.join('.' + cident(t.name)
                     for t in ancestry_path[1:]))
         num = reduce(operator.mul, sub.dimsizes, 1)
+        uniq = sub.uniq
         offset = 'sizeof(struct _%s)' % (cident(ancestry_path[0].name),)
-        items.append("{(uintptr_t)%s, %d, %s}\n" % (base, num, offset))
+        items.append("{(uintptr_t)%s, %d, %s, %d}\n"
+                     % (base, num, offset, uniq))
     init = '{\n%s}' % (',\n'.join('    %s' % (item,) for item in items),)
     add_variable_declaration(
         'const _vtable_list_t %s[%d]' % (ident, len(subnodes)), init)
@@ -1703,14 +1733,15 @@ def generate_adjustor_thunk(traitname, name, inp, outp, throws,
         postindent=1)
     (vt_name, vtable_trait_type) = inargs[1]
     assert vtable_trait_type.trait is vtable_trait
-    out('%s _vtable = &DOWNCAST(%s, struct _%s, %s)->%s;\n' % (
-        cident(vtable_trait.name), vt_name, cident(traitname),
+    out('%s.trait = &((struct _%s *) DOWNCAST(%s, %s, %s).trait)->%s;\n' % (
+        vt_name, cident(traitname), vt_name, cident(traitname),
         '.'.join(cident(t.name) for t in vtable_path),
         '.'.join(cident(t.name) for t in def_path)))
     if not rettype.void:
         out('return ')
-    fun = hardcoded_impl or '_vtable->%s' % (name,)
-    out('%s(_dev, %s);\n' % (fun, ", ".join(['_vtable'] + [
+    fun = hardcoded_impl or ('((struct _%s *) %s.trait)->%s'
+                             % (cident(vtable_trait.name), vt_name, name))
+    out('%s(_dev, %s);\n' % (fun, ", ".join([vt_name] + [
         name for (name, _) in inargs[2:]])))
     out('}\n', preindent=-1)
     return generated_name
@@ -1987,11 +2018,11 @@ def generate_trait_trampoline(method, vtable_trait):
         if path[0] is vtable_trait:
             downcast = tname
         else:
-            downcast = 'DOWNCAST(%s, struct _%s, %s)' % (
+            downcast = 'DOWNCAST(%s, %s, %s)' % (
                 tname, cident(path[0].name),
                 '.'.join(cident(t.name) for t in path[1:]))
-        out('int _flat_index = %s - &%s%s;\n' % (
-            downcast, obj.traits.vtable_cname(path[0]),
+        out('int _flat_index = ((struct _%s *)%s.trait) - &%s%s;\n' % (
+            cident(path[0].name), downcast, obj.traits.vtable_cname(path[0]),
             '[0]' * obj.dimensions))
     indices = [
         mkLit(site, '((_flat_index / %d) %% %d)' % (
@@ -2364,6 +2395,7 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     generate_finalize(device)
     generate_dealloc(device)
     generate_events(device)
+    generate_identity_data_decls()
     if dml.globals.dml_version == (1, 2):
         generate_reset(device, 'hard')
         generate_reset(device, 'soft')
@@ -2423,6 +2455,7 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     for ((node, trait), subobjs) in list(EachIn.instances.items()):
         generate_each_in_table(node, trait, subobjs)
     generate_simple_events(device)
+    generate_init_identity_hashtable()
     generate_register_events(device)
     generate_init_port_objs(device)
     generate_init_static_vars(device)

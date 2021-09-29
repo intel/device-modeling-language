@@ -185,7 +185,7 @@ class DMLObject(object):
 class CompositeObject(DMLObject):
     '''A DML object that may contain other DML objects'''
     __slots__ = ('name', '_components', '_component_dict', '_arraylens',
-                 '_idxvars', 'traits', '_confidential')
+                 '_idxvars', 'traits', '_confidential', 'uniq')
 
     def __init__(self, ident, site, parent, arraylens = (), idxvars = ()):
         super(CompositeObject, self).__init__(ident, site, parent)
@@ -206,6 +206,9 @@ class CompositeObject(DMLObject):
         self.traits = None
 
         self._confidential = False
+
+        self.uniq = len(dml.globals.objects)
+        dml.globals.objects.append(self)
 
     @property
     def name_site(self):
