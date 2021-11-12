@@ -151,10 +151,11 @@ def deserialize(real_type, current_expr, target_expr):
     elif isinstance(real_type, TObjIdentity):
         id_info_ht = expr.mkLit(current_site, '&_id_info_ht',
                                 TPtr(TNamed('ht_str_table_t')))
-        apply_expr = apply_c_fun(current_site, '_deserialize_identity',
-                                 [id_info_ht, current_expr], real_type)
-        return ctree.mkAssignStatement(current_site, target_expr,
-                                       ctree.ExpressionInitializer(apply_expr))
+        # _deserialize_identity returns a set_error_t which is currently unused
+        return call_c_fun(current_site,
+                          '_deserialize_identity',
+                          [id_info_ht, current_expr,
+                           ctree.mkAddressOf(current_site, target_expr)])
     else:
         raise ICE(current_site, "Unexpectedly asked to deserialize %s" % (
             real_type))

@@ -535,49 +535,67 @@ _serialize_identity(const _id_info_t *id_info_array, const _identity_t id) {
     return SIM_make_attr_list(2, SIM_make_attr_string(info.logname), inner);
 }
 
-UNUSED static _identity_t
-_deserialize_identity(ht_str_table_t *id_info_ht, attr_value_t val) {
-    if (SIM_attr_list_size(val) != 2) {
-        const char *msg = "invalid serialized representation of _identity_t";
-        VT_critical_error(msg, msg);
-        return (_identity_t) {0, 0};
+UNUSED static set_error_t
+_deserialize_identity(ht_str_table_t *id_info_ht, attr_value_t val,
+                      _identity_t *out_id) {
+    if (unlikely(!SIM_attr_is_list(val) || SIM_attr_list_size(val) != 2)) {
+        goto bad_repr;
     }
-    const char *logname = SIM_attr_string(SIM_attr_list_item(val, 0));
+
+    attr_value_t logname_attr = SIM_attr_list_item(val, 0);
     attr_value_t indices_attr = SIM_attr_list_item(val, 1);
+
+    if (unlikely(!SIM_attr_is_string(logname_attr)
+                 || !SIM_attr_is_list(indices_attr))) {
+        goto bad_repr;
+    }
+
+    const char *logname = SIM_attr_string(logname_attr);
     const _id_info_t *info = ht_lookup_str(id_info_ht, logname);
-    if (!info) {
-        const char *msg = "Failed to look up object when deserialising"
-                           "_identity_t";
-        char buf[256];
-        snprintf(buf, 256, "Failed to look up object '%s' when attempting to"
-                           "deserialize _identity_t",
-                 logname);
-        VT_critical_error(msg, buf);
-        return (_identity_t) {0, 0};
+
+    if (unlikely(!info)) {
+        SIM_c_attribute_error("Failed to look up object node '%s' when "
+                              "deserializing _identity_t", logname);
+        return Sim_Set_Illegal_Value;
     }
-    if (SIM_attr_list_size(indices_attr) != info->dimensions) {
-        const char *msg = "Invalid number of indices";
-        char buf[512];
-        snprintf(buf, 512,
-                 "Invalid number of indices for when attempting"
-                 "to deserialize _identity_t for object %s."
-                 "Expected %u indices, got %u.",
-                 logname, (unsigned) info->dimensions,
-                 SIM_attr_list_size(indices_attr));
-        VT_critical_error(msg, buf);
-        return (_identity_t) {0, 0};
+    if (unlikely(SIM_attr_list_size(indices_attr) != info->dimensions)) {
+        SIM_c_attribute_error(
+            "Invalid number of indices for when attempting "
+            "to deserialize _identity_t for object node %s. "
+            "Expected %u indices, got %u.",
+            logname, info->dimensions, SIM_attr_list_size(indices_attr));
+        return Sim_Set_Illegal_Value;
     }
-    _identity_t id = {info->id, 0};
+
+    uint32 flat_index = 0;
     attr_value_t *indices = SIM_attr_list(indices_attr);
     for (uint32 i = 0; i < info->dimensions; ++i) {
-        id.encoded_index = id.encoded_index * info->dimsizes[i]
-            + SIM_attr_integer(indices[i]);
+        if (unlikely(!SIM_attr_is_integer(indices[i]))) {
+            goto bad_repr;
+        }
+        uint32 index = SIM_attr_integer(indices[i]);
+        if (unlikely(index >= info->dimsizes[i])) {
+            SIM_c_attribute_error(
+                "Encountered invalid index when attempting to deserialize "
+                "_identity_t for object node %s. The size of dimension %u is "
+                "%u, but deserialized index for that dimension is %u.",
+                logname, i, info->dimsizes[i], index);
+            return Sim_Set_Illegal_Value;
+        }
+
+        flat_index = flat_index * info->dimsizes[i] + index;
     }
-    return id;
+
+    *out_id = (_identity_t) { .id = info->id, .encoded_index = flat_index };
+    return Sim_Set_Ok;
+
+    bad_repr:
+    SIM_attribute_error("invalid serialized representation of _identity_t");
+    return Sim_Set_Illegal_Type;
 }
 
 UNUSED __attribute__((const)) static inline bool
-_identity_eq(_identity_t a, _identity_t b) {
+_identity_eq(const _identity_t a, const _identity_t b) {
     return a.id == b.id && a.encoded_index == b.encoded_index;
 }
 
