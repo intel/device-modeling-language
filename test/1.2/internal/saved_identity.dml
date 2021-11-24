@@ -1,0 +1,18 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+saved _identity_t saved_identity;
+
+method check_identity_logname(_identity_t id, const char *expected_name,
+                              const char *obj_name) {
+    saved_identity = id;
+    local const char *logname = SIM_attr_string(
+        SIM_attr_list_item(SIM_get_attribute(dev.obj, "saved_identity"), 0));
+    if (strcmp(logname, expected_name) != 0) {
+        log error: "cast(%s, _identity_t) serialized logname is %s, and not "
+                 + "the expected %s", obj_name, logname, expected_name;
+    }
+}

@@ -1219,7 +1219,7 @@ def generate_state_existence_callback(device):
 
 def generate_identity_data_decls():
     items = ('(const _id_info_t) {"%s", %s, %d, %d}' %
-             (node.logname(("%u",) * node.dimensions),
+             (node.logname_anonymized(("%u",) * node.dimensions),
               ('(const uint32 []) {%s}' % (', '.join(map(str, node.dimsizes)),)
                if node.dimensions else 'NULL'),
               node.dimensions,

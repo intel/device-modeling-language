@@ -7,6 +7,7 @@ device test;
 import "simics/simulator-api.dml";
 import "utility.dml";
 import "testing.dml";
+import "saved_identity.dml";
 
 // Generated event classes for after:ed methods.
 extern event_class_t *_evclass_u_a_r_m;
@@ -403,6 +404,18 @@ method test -> (bool ok)
     call $check_event_name(_evclass_u_a_r_fa_m, "u.a._ur0._b9_8[$i].m",
                            "u.a.r.fa[$i].m");
 
+    // _identity_t serialized representation must use anonymized qname
+    // when confidentiality applies
+    call $check_identity_logname(cast($a.r, _identity_t), "a._r0x4", "a.r");
+    call $check_identity_logname(cast($c.r, _identity_t), "c.r", "c.r");
+    call $check_identity_logname(cast($u.b.r.f, _identity_t),
+                                 "u.b._ur1._b7_0", "u.b.r.f");
+    call $check_identity_logname(cast($u.a.r.e, _identity_t),
+                                 "u.a._ur0.e", "u.a.r.e");
+    call $check_identity_logname(cast($a.r.fa[2], _identity_t),
+                                 "a._r0x4._b9_8[%u]", "a.r.fa[2]");
+    call $check_identity_logname(cast($u.a.r.fa[2], _identity_t),
+                                 "u.a._ur0._b9_8[%u]", "u.a.r.fa[2]");
 
     ok = true;
 }
