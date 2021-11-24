@@ -9,6 +9,9 @@ import "utility.dml";
 import "testing.dml";
 import "saved_identity.dml";
 
+/// WARNING WEXPERIMENTAL saved_identity.dml
+/// WARNING WEXPERIMENTAL T_confidential.dml
+
 // Generated event classes for after:ed methods.
 extern event_class_t *_evclass_u_a_r_m;
 extern event_class_t *_evclass_u_a_r_fa_m;

@@ -3865,7 +3865,8 @@ def mkCast(site, expr, new_type):
     if isinstance(real, (TVoid, TStruct, TArray, TVector, TTraitList,
                          TLayout, TFunction)):
         raise ECAST(site, expr, new_type)
-    if isinstance(old_type, (TVoid, TStruct, TVector, TTraitList, TLayout)):
+    if isinstance(old_type, (TVoid, TStruct, TVector, TTraitList, TLayout,
+                             TTrait, TObjIdentity)):
         raise ECAST(site, expr, new_type)
     if old_type.is_int and old_type.is_endian:
         expr = as_int(expr)
@@ -3890,7 +3891,7 @@ def mkCast(site, expr, new_type):
         if isinstance(old_type, (TFloat, TBool, TUnknown)):
             old_type = TInt(64, True)
             expr = Cast(site, expr, old_type)
-        elif isinstance(old_type, (TPtr, TArray, TFunction, TTrait)):
+        elif isinstance(old_type, (TPtr, TArray, TFunction)):
             old_type = TInt(64, False)
             expr = Cast(site, expr, old_type)
         elif not old_type.is_int:

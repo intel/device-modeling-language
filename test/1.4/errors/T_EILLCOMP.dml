@@ -6,6 +6,8 @@ dml 1.4;
 
 device test;
 
+/// WARNING WEXPERIMENTAL T_EILLCOMP.dml
+
 method init() {
     // no error
     cast(dev, object) == cast(dev, object);

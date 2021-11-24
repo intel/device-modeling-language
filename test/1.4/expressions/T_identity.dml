@@ -8,6 +8,8 @@ device test;
 
 import "testing.dml";
 
+/// WARNING WEXPERIMENTAL T_identity.dml
+
 param base1 = base[1];
 
 template t is _qname {}
@@ -26,7 +28,7 @@ method test() throws {
     }
 
     #if (cast(base[0].child[0][0], _identity_t)
-        == cast(base[0], _identity_t)) {
+         == cast(base[0], _identity_t)) {
         error "base[0].child[0][0] == base[0]";
     }
 
@@ -34,6 +36,7 @@ method test() throws {
         assert cast(base[i], t) == cast(base[i], t);
         assert cast(base[i], t) != cast(base[i ^ 1], t);
         assert cast(base[i].child[0][0], t) != cast(base[i], t);
+
 
         assert cast(cast(base[i], t), _identity_t)
             == cast(base[i], _identity_t);

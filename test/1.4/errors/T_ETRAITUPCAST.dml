@@ -26,4 +26,6 @@ method init() {
     cast(c, b_t);
     /// ERROR ETEMPLATEUPCAST
     cast(4, a_t);
+    /// ERROR ETEMPLATEUPCAST
+    cast(NULL, a_t);
 }

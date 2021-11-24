@@ -8,6 +8,8 @@ device test;
 
 import "utility.dml";
 
+/// WARNING WEXPERIMENTAL T_saved_declaration.dml
+
 // Simple types
 saved int saved_int = 2;
 

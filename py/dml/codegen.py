@@ -7,6 +7,7 @@ import operator
 import contextlib
 from functools import reduce
 import itertools
+import os
 
 from . import objects, crep, ctree, ast, int_register, logging, serialize
 from . import dmlparse
@@ -791,6 +792,9 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
             raise ICE(site, "Strange type")
     elif isinstance(asttype[0], str):
         etype = parse_type(asttype[0])
+        if (isinstance(etype, TObjIdentity)
+            and os.path.basename(site.filename()) != 'dml-builtins.dml'):
+            report(WEXPERIMENTAL(site, '_identity_t'))
     else:
         raise ICE(site, "Stranger type")
 
