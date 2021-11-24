@@ -1,0 +1,30 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+/// WARNING WEXPERIMENTAL
+trait t {
+    method m(int i) throws;
+}
+
+port p {
+    /// ERROR EABSTEMPLATE
+    is t;
+}
+
+/// WARNING WEXPERIMENTAL
+trait t2 {
+    parameter int p;
+}
+
+port p2 {
+    /// ERROR EABSTEMPLATE
+    is t2;
+}
+
+method init() {
+}

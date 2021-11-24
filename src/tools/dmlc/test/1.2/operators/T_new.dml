@@ -1,0 +1,28 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+parameter x = 4;
+
+method test -> (bool ok)
+{
+    local char *p;
+
+    p = new char;
+
+    p = new char[4];
+
+    p[0] = 3;
+    p = new char[p[0]];
+
+    p = new char[$x];
+
+    local char **pp;
+    pp = new char * [10];
+
+    ok = true;
+}

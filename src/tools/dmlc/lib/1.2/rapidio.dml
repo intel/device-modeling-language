@@ -1,0 +1,210 @@
+/*
+  © 2010-2021 Intel Corporation
+  SPDX-License-Identifier: 0BSD
+*/
+
+dml 1.2;
+bitorder be;
+
+import "utility.dml";
+
+import "simics/devs/rapidio.dml";
+
+/* Function that translates rapidio_operation_t to string. */
+
+extern const char *rapidio_operation_to_string(rapidio_operation_t op);
+
+header %{
+#include <simics/devs/rapidio.h>
+static UNUSED const char *rapidio_operation_to_string(rapidio_operation_t op);
+%}
+
+footer %{
+static const char *rapidio_operation_to_string(rapidio_operation_t op)
+{
+    static const char *const ops[] = {
+        "Read", "Write", "Increment", "Decrement", "Test and Swap",
+        "Set", "Clear", "Compare and Swap", "Swap",
+    };
+    return ops[op];
+}
+%}
+
+constant RAPIDIO_V3_INTERFACE = "rapidio_v3";
+constant RAPIDIO_V4_INTERFACE = "rapidio_v4";
+constant RAPIDIO_V5_INTERFACE = "rapidio_v5";
+
+/* <add id="rapidio.dml templates">
+   <insert-until text="// end of templates"/>
+   </add> */
+template arch_io_registers {
+    /* should be implemented by all */
+    parameter io_regbase default 0;
+
+    /* Capabilities registers */
+    register device_id         size 4 @ $io_regbase + 0x00 is (arch_read_only)
+        "Device identity capability register";
+    register device_info       size 4 @ $io_regbase + 0x04 is (arch_read_only)
+        "Device information capability register";
+    register assembly_id       size 4 @ $io_regbase + 0x08
+        "Assembly identity capability register";
+    register assembly_info     size 4 @ $io_regbase + 0x0C
+        "Assembly information capability register" {
+        field assy_rev [0:15]  "Assembly revision level";
+        field ef_ptr  [16:31]  "Pointer to first ext.feat.";
+    }
+    register pe_features       size 4 @ $io_regbase + 0x10 is (arch_read_only)
+        "Processing element features capability register";
+    register switch_info       size 4 @ $io_regbase + 0x14 is (arch_read_only)
+        "Switch port information capability register";
+}
+
+template arch_message_registers {
+    /* Valid for transport endpoints */
+    register src_operations    size 4 @ $io_regbase + 0x18 is (arch_read_only)
+        "Source operations capability register";
+    register dst_operations    size 4 @ $io_regbase + 0x1C is (arch_read_only)
+        "Destination operations capability register";
+    register write_port_status size 4 @ $io_regbase + 0x44 is (arch_read_only)
+        "Port-write and doorbell command and status register";
+    register pe_ll_status      size 4 @ $io_regbase + 0x4C
+        "Processing element logical layer control command and status register";
+    register base1_status_hi   size 4 @ $io_regbase + 0x58 is (arch_read_write)
+        "Local configuration space base address 1 command and status register";
+    register base1_status      size 4 @ $io_regbase + 0x5C is (arch_read_write)
+        "Local configuration space base address 1 command and status register";
+}
+
+template arch_transport_registers {
+    /* Valid for transport endpoints */
+    parameter trans_regbase default 0;
+    register base_device_id   size 4 @ $trans_regbase + 0x60 "Base Device ID";
+    register host_base_device_id   size 4 @ $trans_regbase + 0x68 "Host Base Device ID Lock" {
+        parameter hard_reset_value = 0xffff;
+        method write(value) {
+            if (0) {
+                /* This expression generates code that compiles incorrectly
+                   on gcc 3.2 and 3.3 */
+                value &= 0xffff;
+            } else {
+                value[31:16, le] = 0;
+            }
+            if ($this == 0xffff && value != 0xffff) {
+                log info, 3: "Device id %d locked me.", value;
+                $this = value;
+            } else if ($this != 0xffff && $this == value) {
+                log info, 3: "Device id %d unlocked me.", value;
+                $this = 0xffff;
+            }
+        }
+    }
+    register component_tag   size 4 @ $trans_regbase + 0x6c is (arch_read_write)
+        "Component Tag";
+    register conf_dest_id    size 4 @ $trans_regbase + 0x70
+        "Standard Route Configuration Destination ID Select";
+    register conf_output_port size 4 @ $trans_regbase + 0x74
+        "Standard Route Configuration Port Select";
+    register default_output_port size 4 @ $trans_regbase + 0x78
+        "Standard Route Default Port";
+}
+
+template arch_port_maintenance_registers {
+    parameter switch_regbase default 0x100;
+    register port_block_header size 4 @ $switch_regbase + 0x00 {
+        field ef_ptr [0:15] is (read_only);
+        field ef_id  [16:31] is (read_only);
+    }
+    register port_link_timeout   size 4 @ $switch_regbase + 0x20 {
+        parameter hard_reset_value = 0xffffff00;
+    }
+    register port_general_control size 4 @ $switch_regbase + 0x3c;
+}
+
+template arch_per_port_maintenance_registers {
+    parameter port_no default $i;
+    register link_maintenance_request size 4
+             @ $switch_regbase + 0x40 + $port_no * 0x20;
+    register link_maintenance_response size 4
+             @ $switch_regbase + 0x44 + $port_no * 0x20;
+    register port_local_ackid_status size 4
+             @ $switch_regbase + 0x48 + $port_no * 0x20;
+    register port_error_and_status size 4
+             @ $switch_regbase + 0x58 + $port_no * 0x20 {
+        is write_1_clears;
+    }
+    register port_control size 4
+             @ $switch_regbase + 0x5c + $port_no * 0x20;
+}
+
+template arch_error_management_registers {
+    parameter error_regbase default undefined;
+    register error_block_header size 4 @ $error_regbase + 0x00 {
+        field ef_ptr [0:15] is (read_only);
+        field ef_id  [16:31] is (read_only);
+    }
+    register layer_error_detect       size 4 @ $error_regbase + 0x08;
+    register layer_error_enable       size 4 @ $error_regbase + 0x0c;
+    register layer_capture_address_hi size 4 @ $error_regbase + 0x10;
+    register layer_capture_address    size 4 @ $error_regbase + 0x14;
+    register layer_capture_device_id  size 4 @ $error_regbase + 0x18;
+    register layer_capture_control    size 4 @ $error_regbase + 0x1c;
+    register portwrite_target_id      size 4 @ $error_regbase + 0x28;
+    register packet_ttl               size 4 @ $error_regbase + 0x2c;
+}
+
+template arch_per_port_error_management_registers {
+    parameter port_no default $i;
+    register port_error_detect size 4
+             @ $error_regbase + 0x40 + $port_no * 0x40;
+    register port_error_rate_enable size 4
+             @ $error_regbase + 0x44 + $port_no * 0x40;
+    register port_capture_attributes size 4
+             @ $error_regbase + 0x48 + $port_no * 0x40;
+    register port_capture_symbol size 4
+             @ $error_regbase + 0x4c + $port_no * 0x40;
+    register port_capture_packet_1 size 4
+             @ $error_regbase + 0x50 + $port_no * 0x40;
+    register port_capture_packet_2 size 4
+             @ $error_regbase + 0x54 + $port_no * 0x40;
+    register port_capture_packet_3 size 4
+             @ $error_regbase + 0x58 + $port_no * 0x40;
+    register port_error_rate size 4
+             @ $error_regbase + 0x68 + $port_no * 0x40;
+    register port_error_rate_threshold size 4
+             @ $error_regbase + 0x6c + $port_no * 0x40;
+}
+// end of templates
+
+template maintenance_v1 {
+    /* The method below assumes the register bank is named "regs" */
+    method on_read_register(int reg_no) -> (uint32 value) default {
+        local bool success;
+        local int offs = reg_no * 4;
+        local uint8 buf[4];
+        local buffer_t payload;
+        memset(buf, 0, 4);
+        payload.data = buf;
+        payload.len = 4;
+        local generic_transaction_t memop = SIM_make_mem_op_read(
+            offs, payload, false, NULL);
+        try {
+            call $regs.read_access_memop(&memop, offs, 4);
+            value = SIM_get_mem_op_value_le(&memop);
+        } catch {}
+    }
+
+    method on_write_register(int reg_no, uint32 value) default {
+        local bool success;
+        local int offs = reg_no * 4;
+        local uint8 buf[4];
+        local bytes_t payload;
+        UNALIGNED_STORE_LE32(buf, value);
+        payload.data = buf;
+        payload.len = 4;
+        local generic_transaction_t memop = SIM_make_mem_op_write(
+            offs, payload, false, NULL);
+        try {
+            call $regs.write_access_memop(&memop, offs, 4, value);
+        } catch {}
+    }
+}

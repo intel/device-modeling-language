@@ -1,0 +1,27 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+import "testing.dml";
+
+// Failing part of T_vect.dml, bug 21873
+
+method test() -> (bool ok) {
+    local int vect v;
+    VINIT(v);
+    VADD(v, 2);
+    VADD(v, 6);
+    VADD(v, 5);
+    local bool first = true;
+    local int *i;
+    select i in (v) where (*i % 2 == 1) {
+        log info: "%d", *i;
+        ok = first && *i == 5;
+        first = false;
+    } else { ok = false; }
+    ok = ok && !first;
+}

@@ -1,0 +1,32 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+attribute foo {
+    parameter allocate_type = "uint32";
+}
+
+method test -> (bool ok) {
+    local int i;
+    local int buf[10];
+    local int *p;
+    p = buf;
+
+    i = 5;
+    ok = (i++ == 5) && (++i == 7) && (i-- == 7) && (--i == 5);
+
+    ok = ok && (++p == &buf[1] &&
+                p++ == &buf[1] &&
+                p-- == &buf[2] &&
+                --p == &buf[0]);
+
+    $foo = 17;
+    ok = ok && (++$foo == 18);
+
+    // Need this to trigger bug 9000
+    i = $foo++;
+}

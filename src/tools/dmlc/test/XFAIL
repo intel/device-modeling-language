@@ -1,0 +1,91 @@
+# SIMICS-11098, old unclassified failures 
+1.2/errors/EAPPLY_4
+1.2/errors/EASSIGN_34
+1.2/errors/EASZVAR_3
+1.2/methods/inline_smallint
+1.2/misc/array_set_8
+1.2/structure/array_size_param
+
+# bug 5980
+1.2/errors/EVARPARAM_2
+1.2/errors/EVARPARAM_3
+1.2/errors/EVARPARAM_5
+1.2/errors/EVARPARAM_6
+
+# bug 22466
+1.2/errors/EVARPARAM_bug22466
+
+# bug 5090
+1.2/errors/EASSIGN_06
+1.2/errors/EASSIGN_09
+1.2/errors/EASSIGN_12
+1.2/errors/EASSIGN_13
+1.2/errors/EASSIGN_15
+1.2/errors/EASSIGN_16
+1.2/errors/EASSIGN_19
+1.2/errors/EASSIGN_20
+1.2/errors/EASSIGN_21
+1.2/errors/EASSIGN_22
+1.2/errors/EASSIGN_23
+1.2/errors/EASSIGN_24
+1.2/errors/EASSIGN_25
+
+# Bug 19496
+1.2/errors/EASSIGN_target_type
+
+# Bug 4582
+1.2/structure/object_naming
+
+# Bug 13814
+1.2/operators/assign_1
+
+# bug 21074
+1.2/errors/ENVAL_param_site
+
+# bug 21862
+1.2/methods/inline_params_index
+
+# bug 21873
+1.2/internal/vect_select
+
+# bug 25200
+1.2/errors/ENCONST_array_type
+
+# bug 25244
+1.2/errors/ETREC_layout
+
+# bug 25248
+1.2/statements/local_const_struct
+
+# bug 7099
+1.2/methods/inline_array
+
+# bug 10671
+1.2/operators/bitfields_member_sign
+
+# bug 17847
+1.2/methods/inline_untyped_extern
+
+# bug 23542
+1.2/structure/parameter_if
+
+# SIMICS-11346
+1.2/structure/trait
+
+# SIMICS-12233
+1.2/errors/ENAMECOLL_uint32
+
+# SIMICS-13343
+1.4/structure/trait_abstract
+
+# SIMICS-15714
+1.2/types/endian_int_return
+
+# SIMICS-16113
+1.4/serialize/shared_method
+
+# SIMICS-16524
+1.4/errors/EVOID_typedefed
+
+# SIMICS-18244
+1.4-register-view-fields

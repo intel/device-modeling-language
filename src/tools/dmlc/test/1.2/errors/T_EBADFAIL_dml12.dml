@@ -1,0 +1,95 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+/// SCAN-FOR-TAGS EBADFAIL_dml14.dml
+import "EBADFAIL_dml14.dml";
+
+/// WARNING WEXPERIMENTAL
+trait t {
+    method shared_dml12() throws  { }
+}
+
+port p {
+    is methods_dml14;
+    method good1() {
+    }
+    method good2() {
+        $good1();
+        call $good1();
+        try {
+            $bad1();
+            call $bad1();
+            $shared_dml12();
+            call $shared_dml12();
+        } catch {}
+    }
+    method bad0() {
+        throw;
+    }
+    method bad1() {
+        /// ERROR EBADFAIL_dml12
+        throw;
+    }
+    is t;
+    method bad2() {
+        /// ERROR EBADFAIL_dml12
+        call $shared_dml12();
+    }
+    method bad3() {
+        /// ERROR EBADFAIL_dml12
+        $shared_dml12();
+    }
+    method bad4() {
+        /// ERROR EBADFAIL_dml12
+        $bad2();
+    }
+    method bad5() {
+        /// ERROR EBADFAIL_dml12
+        call $bad2();
+    }
+    method bad6() {
+        /// ERROR EBADFAIL_dml12
+        inline $bad2();
+    }
+
+    // These count as throwing because they will be converted to throwing
+    // methods when migrating to 1.4
+    method bad7() {
+        /// ERROR EBADFAIL_dml12
+        $a.set(SIM_make_attr_nil());
+    }
+    method bad8() {
+        local bool ok;
+        local uint64 val;
+        /// ERROR EBADFAIL_dml12
+        call $b.read_access(NULL, 0, 0) -> (ok, val);
+    }
+    method bad9() {
+        local bool ok;
+        /// ERROR EBADFAIL_dml12
+        inline $b.write_access(NULL, 0, 0, 0) -> (ok);
+    }
+}
+
+attribute a {
+    parameter allocate_type = "uint64";
+    method set(attr_value_t a) {}
+}
+bank b {
+    method read_access(generic_transaction_t *memop, physical_address_t offset,
+                       physical_address_t size)
+        -> (bool success, uint64 readvalue) {}
+    method write_access(generic_transaction_t *memop,
+                        physical_address_t offset,
+                        physical_address_t size,
+                        uint64 writevalue) -> (bool success) {}
+}
+
+method init() {
+    $p.call_all();
+}

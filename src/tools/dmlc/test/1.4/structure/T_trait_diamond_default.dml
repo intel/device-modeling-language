@@ -1,0 +1,46 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+import "testing.dml";
+
+template AA {
+    shared method b() default {
+    }
+    shared method c() default {
+    }
+}
+
+template BB is AA {
+    /// GREP .*BB
+    shared method from_b_vtable() default { log info: "BB"; }
+    shared method b() default {
+        // this call requires that we have a well-formed vtable
+        from_b_vtable();
+    }
+}
+
+template CC is AA {
+    /// GREP .*CC
+    shared method from_c_vtable() default { log info: "CC"; }
+    shared method c() default {
+        // this call requires that we have a well-formed vtable
+        from_c_vtable();
+    }
+}
+
+port x is (BB, CC) {
+    method b() {
+        default();
+    }
+    method c() {
+        default();
+    }
+}
+port y is (BB, CC);
+method test() throws {
+    x.b();
+    x.c();
+}

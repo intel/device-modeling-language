@@ -1,0 +1,22 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+// This tests that it is possible to log something useful even when
+// indexing a register array using a variable.
+
+bank {
+    register r[4] size 4 @ undefined;
+}
+
+method test -> (bool ok)
+{
+    local int i = 2;
+    /// GREP .* qname is r\[2\]
+    log "info": "qname is %s", $r[i].qname;
+    ok = true;
+}

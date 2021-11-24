@@ -1,0 +1,51 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+method test -> (bool ok)
+{
+    ok = true;
+
+    local double x;
+
+    x = 0;
+    x = 0.0;
+    x = 0.1;
+    x = 1.23;
+    x = .123;
+    x = 1E6;
+    x = 1E06;
+    x = 1E-06;
+    x = 1.0E6;
+    x = 1.0E06;
+    x = .1E6;
+    x = .1E06;
+    x = 1.0E-06;
+
+    x = -0;
+    x = -0.0;
+    x = -0.1;
+    x = -1.23;
+    x = -.123;
+    x = -1E6;
+    x = -1E06;
+    x = -1E-06;
+    x = -1.0E6;
+    x = -1.0E06;
+    x = -.1E6;
+    x = -.1E06;
+    x = -1.0E-06;
+    x = -x;
+
+    local double f = 0.12345678901234566;
+    /// GREP .*f = 0.12345678901234566
+    log "info": "f = %.17f", f;
+
+    f = 1.0 / 2;
+    /// GREP .*f = 0.5
+    log "info": "f = %f", f;
+}

@@ -1,0 +1,26 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+import "testing.dml";
+
+method test() throws {
+    switch (4) {
+    case 0:
+#if (false) {
+    case 4: assert false;
+} #else {
+    case 3: assert false;
+}
+#if (true) {
+    case 4:
+}
+    case 5:
+        break;
+    default: assert false;
+    }
+}

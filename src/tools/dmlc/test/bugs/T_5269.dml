@@ -1,0 +1,20 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+data uint32 x;
+method m(int i) -> (bool result) {
+    result = true;
+    if ($x == 1 && i == 0)
+        result = false;
+}
+
+method test -> (bool result)
+{
+    $x = 0;
+    inline $m(0) -> (result);
+}

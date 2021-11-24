@@ -1,0 +1,14 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+// This is a header comment consisting
+
+// of multiple one-line comments
+
+// and whitespace.
+
+dml 1.2;
+device test;
+/// COMPILE-ONLY

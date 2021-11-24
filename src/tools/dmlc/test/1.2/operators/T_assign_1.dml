@@ -1,0 +1,36 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+// This test checks a number of valid assignments
+
+method test -> (bool ok) {
+    local uint64 u64 = 0;
+    local integer_t ii = 0;
+    local uint8 a[4];
+    local int i;
+
+    ok = true;
+
+    u64 = ii;
+    ii = u64;
+
+    a[0] = 0;
+    a[1] = 0;
+    a[2] = 0;
+    a[3] = 0;
+    i = 0;
+    a[i++] = 17; // a[0] = 17
+    a[i++] = 18; // a[1] = 18
+    ok = (ok && a[0] == 17 && a[1] == 18);
+
+    ii = (a[i++] = 21);
+    ok = (ok && a[2] == 21 && i == 3);
+
+    a[i++] += 19;
+    ok = (ok && a[3] == 19 && i == 4);
+}

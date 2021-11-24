@@ -1,0 +1,23 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+// bug 19876
+
+bank x_regs {
+    register x[2] size 4 @ $i * 4;
+}
+
+bank y_regs {
+    register x0 size 4 @ 0 {
+        parameter desc = "alias of " + $x_regs.x[0].name;
+    }
+}
+
+method test -> (bool ok) {
+    ok = $y_regs.x0.desc == "alias of x";
+}

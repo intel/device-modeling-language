@@ -1,0 +1,13 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+// bug 22910
+
+bank b {
+    parameter _confidentiality = 1;
+    register xyz size 1 @ 0 { parameter regnum = 17; }
+}

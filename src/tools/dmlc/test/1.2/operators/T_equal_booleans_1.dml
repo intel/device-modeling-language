@@ -1,0 +1,16 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+method test -> (bool b) {
+    local uint8 x = 255;
+    local bool xb;
+    local bool yb;
+    xb = x[1];
+    yb = x[2];
+    b = (xb == yb);
+}

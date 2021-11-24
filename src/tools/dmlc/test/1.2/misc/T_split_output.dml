@@ -1,0 +1,64 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+// This file is compiled with --split-c-file=1. The code will trigger all
+// possible kinds of file splitting points, so the test would fail with a CC
+// error if we e.g. forgot to expose a method definition in
+// split_output-protos.c.
+
+import "testing.dml";
+
+bank regs {
+    register r[2] size 4 @ $i * 4 {
+        parameter regnum = $i;
+    }
+}
+
+/// WARNING WEXPERIMENTAL
+trait t {
+    method a() -> (int x) {
+        x = p;
+    }
+    parameter int p;
+    template {
+        parameter p = 8;
+    }
+}
+
+is t;
+
+method b() {
+    static int i = 4;
+}
+
+data int i = 3;
+
+typedef struct { void (*fun)(void); } x_interface_t;
+implement x {
+    method fun() {
+        // these are put here so they are reachable (and code generation is
+        // tested), but without having to be executed during the test (would
+        // require custom code for a clock)
+        after (1.0) call $b();
+        inline $e.post(1.0, NULL);
+    }
+}
+
+attribute attr { parameter allocate_type = "bool"; }
+
+event e {
+    parameter timebase = "seconds";
+    method event(data) { }
+}
+
+method init() {
+    call $b();
+    local t t = cast($dev, t);
+    t.a();
+    $dev.a();
+}

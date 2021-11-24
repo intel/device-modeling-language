@@ -1,0 +1,165 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+import "testing.dml";
+
+// Describe this descriptor:
+//
+//       0 1 2 3
+//      +-------+
+//   00 |   a   |
+//      +---+---+
+//   04 | b | c |
+//      +-+-+---+
+//   08 | |  d  |
+//      +-+-+---+
+//   0c |  e[0] |
+//      +-------+
+//   10 |  e[1] |
+//      +-------+
+//   ..    ...
+//      +-------+
+//   xx |  e[n] |  (xx = 0c+4n)
+//      +-------+
+//
+// Where d has fields:
+//
+//   23  16 15             1 0
+//  +------+----------------+-+
+//  |  n   |       y        |z|
+//  +------+----------------+-+
+//
+
+
+typedef layout "big-endian" {
+    uint32 a;
+    uint16 b;
+    uint16 c;
+    uint8 reserved;
+    uint24 d;
+    uint40 e40;
+    uint48 e48;
+    uint56 e56;
+    uint64 e64;
+} bedesc;
+
+typedef layout "little-endian" {
+    uint32 a;
+    uint16 b;
+    uint16 c;
+    uint8 reserved;
+    uint24 d;
+    uint40 e40;
+    uint48 e48;
+    uint56 e56;
+    uint64 e64;
+} ledesc;
+
+method betest() throws
+{
+    expect(sizeoftype bedesc == 38, "be wrong size");
+
+    local uint8 buf [256];
+    local int i;
+    for (i = 0; i < 256; i++)
+        buf[i] = i;
+
+    local bedesc *d = cast(buf, bedesc *);
+
+    // Test reading
+    expect(d->a == 0x00010203 &&
+           d->b == 0x0405 &&
+           d->c == 0x0607 &&
+           d->d == 0x090a0b &&
+           d->e40 == 0x0c0d0e0f10 &&
+           d->e48 == 0x111213141516 &&
+           d->e56 == 0x1718191a1b1c1d &&
+           d->e64 == 0x1e1f202122232425,
+           "be values read");
+
+    // Test writing
+    d->a = 0x11121314;
+    d->b = 0x2122;
+    d->c = 0x3132;
+    d->d = 0x414243;
+    d->e40 = 0x5152535455;
+    d->e48 = 0x616263646566;
+    d->e56 = 0x71727374757677;
+    d->e64 = 0x8182838485868788;
+    expect (buf[0] == 0x11 && buf[1] == 0x12 && buf[2] == 0x13 &&
+            buf[3] == 0x14 && buf[4] == 0x21 && buf[5] == 0x22 &&
+            buf[6] == 0x31 && buf[7] == 0x32 && buf[8] == 0x08 &&
+            buf[9] == 0x41 && buf[10] == 0x42 && buf[11] == 0x43 &&
+            buf[12] == 0x51 && buf[13] == 0x52 && buf[14] == 0x53 &&
+            buf[15] == 0x54 && buf[16] == 0x55 && buf[17] == 0x61 &&
+            buf[18] == 0x62 && buf[19] == 0x63 && buf[20] == 0x64 &&
+            buf[21] == 0x65 && buf[22] == 0x66 && buf[23] == 0x71 &&
+            buf[24] == 0x72 && buf[25] == 0x73 && buf[26] == 0x74 &&
+            buf[27] == 0x75 && buf[28] == 0x76 && buf[29] == 0x77 &&
+            buf[30] == 0x81 && buf[31] == 0x82 && buf[32] == 0x83 &&
+            buf[33] == 0x84 && buf[34] == 0x85 && buf[35] == 0x86 &&
+            buf[36] == 0x87 && buf[37] == 0x88,
+            "be values write");
+
+    // Test other things
+    d->a += 1;
+    d->a = d->a + 1;
+    // d->a++;
+}
+
+method letest() throws
+{
+
+    expect(sizeoftype ledesc == 38, "le wrong size");
+
+    local uint8 buf [256];
+    local int i;
+    for (i = 0; i < 256; i++)
+        buf[i] = i;
+
+    local ledesc *d = cast(buf, ledesc *);
+
+    // Test reading
+    expect(d->a == 0x03020100 &&
+           d->b == 0x0504 &&
+           d->c == 0x0706 &&
+           d->d == 0x0b0a09 &&
+           d->e40 == 0x100f0e0d0c &&
+           d->e48 == 0x161514131211 &&
+           d->e56 == 0x1d1c1b1a191817 &&
+           d->e64 == 0x2524232221201f1e,
+           "le values read");
+
+    // Test writing
+    d->a = 0x11121314;
+    d->b = 0x2122;
+    d->c = 0x3132;
+    d->d = 0x414243;
+    d->e40 = 0x5152535455;
+    d->e48 = 0x616263646566;
+    d->e56 = 0x71727374757677;
+    d->e64 = 0x8182838485868788;
+    expect(buf[0] == 0x14 && buf[1] == 0x13 && buf[2] == 0x12 &&
+           buf[3] == 0x11 && buf[4] == 0x22 && buf[5] == 0x21 &&
+           buf[6] == 0x32 && buf[7] == 0x31 && buf[8] == 0x08 &&
+           buf[9] == 0x43 && buf[10] == 0x42 && buf[11] == 0x41 &&
+           buf[12] == 0x55 && buf[13] == 0x54 && buf[14] == 0x53 &&
+           buf[15] == 0x52 && buf[16] == 0x51 && buf[17] == 0x66 &&
+           buf[18] == 0x65 && buf[19] == 0x64 && buf[20] == 0x63 &&
+           buf[21] == 0x62 && buf[22] == 0x61 && buf[23] == 0x77 &&
+           buf[24] == 0x76 && buf[25] == 0x75 && buf[26] == 0x74 &&
+           buf[27] == 0x73 && buf[28] == 0x72 && buf[29] == 0x71 &&
+           buf[30] == 0x88 && buf[31] == 0x87 && buf[32] == 0x86 &&
+           buf[33] == 0x85 && buf[34] == 0x84 && buf[35] == 0x83 &&
+           buf[36] == 0x82 && buf[37] == 0x81,
+           "le values write");
+}
+
+method test() throws
+{
+    betest();
+    letest();
+}

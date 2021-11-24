@@ -1,0 +1,482 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+import "utility.dml";
+import "dml12-compatibility.dml";
+import "simics/simulator/conf-object.dml";
+
+template nothrowing {
+    shared method nothrow_shared_default() default { }
+    shared method nothrow_shared_abstract();
+    method nothrow_method() default { }
+}
+
+typedef struct {
+    void (*f)(conf_object_t *obj);
+} tmp_interface_t;
+implement tmp {
+    method f() default { }
+}
+
+typedef layout "big-endian" {
+    int24 i24;
+    uint56 a56[2];
+} be_layout;
+
+typedef layout "little-endian" {
+    int24 i24;
+    uint56 a56[2];
+} le_layout;
+
+port p {
+    // shadows the 'constant' declaration from 1.2
+    param x = true;
+    method m() {
+        #if (!x) {
+            error;
+        }
+    }
+}
+
+is inline_def;
+inline method inl(inline x, inline u) -> (int) default {
+    local int y;
+    y = default(x + 1, u);
+    return y + 1;
+}
+
+method ret_one() -> (int) default {
+    return 2;
+}
+
+export ret_one as "exp_ret_one";
+extern int exp_ret_one(conf_object_t *obj);
+
+// when a hook method is defined by common code in 1.2, it is normally declared
+// as 'throws' because that's the default, even if the method never is expected
+// to throw. In this case, it can make sense for the hook to be declared as
+// 'throws' when imported from 1.2, but not when imported from a 1.4 device;
+// this way methods can be redefined as non-throwing one by one
+// when migrating to 1.4. This means that any overrides in 1.4 code of the hook
+// method in 1.4 code must be non-throwing in order to work in a 1.4 device.
+// If such overrides are imported from a 1.2 device, then we will
+// see a non-throwing method overriding a throwing method, which is normally
+// prohibited. DMLC has a special hack to detect and permit this pattern, i.e.
+// a 1.2 device containing a default declaration of a throwing method,
+// overridden by a non-throwing method declared in a 1.4 file.
+template common {
+    #if (dml_1_2) {
+        method throws_in_dml12() throws default {
+        }
+    } #else {
+        method throws_in_dml12() default {
+        }
+    }
+}
+is common;
+method throws_in_dml12() {}
+
+method ret_throws() -> (int, int) throws default {
+    local int x;
+    local int y;
+    (x, y) = ret_throws_dml12();
+    return (x * 10, y * 10);
+}
+
+method m() {
+    local int i;
+    i = inline_dml12(4);
+    switch (i) {
+    case 0:
+    case 1:
+        assert false;
+    case 4:
+        break;
+    default:
+        assert false;
+    }
+    return;
+}
+
+template t {
+    shared method traitmethod() -> (int, int) {
+        return (7, 8);
+    }
+}
+
+bank regs {
+    register r size 4 @ 4 is (read, write) {
+        method write(uint64 value) {
+            this.val = value;
+        }
+        method read() -> (uint64) {
+            return this.val;
+        }
+    }
+    #if (dml_1_2) {
+        method read_access(generic_transaction_t *memop,
+                           physical_address_t offset,
+                           physical_address_t size) -> (bool, uint64) throws {
+            local bool ok;
+            local uint64 value;
+            (ok, value) = default(memop, offset, size);
+            return (ok, value + 1);
+        }
+    } #else {
+        method read(uint64 offset, uint64 enabled_bytes, void *aux)
+            -> (uint64) throws {
+            local uint64 value;
+            value = default(offset, enabled_bytes, aux);
+            return value + 1;
+        }
+    }
+    register r2 size 4 @ 8 is (unified_get, unified_set) {
+        field f @ [0] is (unified_get, unified_set);
+    }
+
+    register r3 size 4 @ 12 is (unified_hard_reset, unified_soft_reset);
+
+    register r4 size 4 @ 16 is (soft_reset_val) {
+        param soft_reset_val = 4;
+    }
+}
+
+bank field_regs {
+    param partial = true;
+    register r4 size 4 @ 16 is (read_field) {
+        is dml12_compat_read_field;
+        method read_field(uint64 enabled_bits, void *aux) -> (uint64) {
+            return 0x12345678;
+        }
+        field f @ [15:8] is (read, write_field) {
+            is dml12_compat_write_field;
+            method write_field(uint64 value, uint64 enabled_bits, void *aux) {
+                assert enabled_bits == 0xff;
+                /// GREP .*r4[.]f write
+                log info: "r4.f write";
+            }
+            method read() -> (uint64) { assert false; }
+        }
+    }
+    register r5 size 4 @ 20 is (write_field) {
+        is dml12_compat_write_field;
+        method write_field(uint64 value, uint64 enabled_bits, void *aux) {
+            log info: "r5.write %x", value;
+        }
+        field f @ [15:8] is (read_field, write) {
+            is dml12_compat_read_field;
+            method read_field(uint64 enabled_bits, void *aux) -> (uint64) {
+                assert enabled_bits == 0xff;
+                /// GREP .*r5[.]f read
+                log info: "r5.f read";
+                return 0xff;
+            }
+            method write(uint64 value) { assert false; }
+        }
+    }
+    // Custom override of write_register requires a bit of DML 1.2 boilerplate
+    register r6 size 4 @ 24 {
+        // custom read/write inverts value bits
+        is dml12_compat_write_register;
+        method write_register(uint64 value, uint64 enabled_bits, void *aux) {
+            default(~value, enabled_bits, aux);
+        }
+        is dml12_compat_read_register;
+        method read_register(uint64 enabled_bits, void *aux) -> (uint64) {
+            return ~default(enabled_bits, aux) & enabled_bits;
+        }
+    }
+
+    method test() {
+        local uint16 value;
+        local buffer_t buf;
+        buf.len = 2;
+        buf.data = cast(&value, uint8 *);
+        local generic_transaction_t read_memop = SIM_make_mem_op_read(
+            0, buf, false, NULL);
+        local generic_transaction_t write_memop = SIM_make_mem_op_write(
+            0, buffer_bytes(buf), false, NULL);
+        assert this.io_memory_access(&write_memop, 17, NULL);
+        assert this.io_memory_access(&read_memop, 17, NULL);
+        // assuming little-endian host
+        assert value == 0x3456;
+        /// GREP .*r5[.]write 345600
+        assert this.io_memory_access(&write_memop, 21, NULL);
+        assert this.io_memory_access(&read_memop, 21, NULL);
+        local uint64 x;
+        x=r5.get();
+        assert value == 0x00ff;
+        value = 0x1234;
+        r6.set(0xffffffff);
+        assert this.io_memory_access(&write_memop, 25, NULL);
+        local uint64 r6val;
+        r6val = r6.get();
+        assert r6val == 0xffedcbff;
+        value = 0;
+        assert this.io_memory_access(&read_memop, 25, NULL);
+        assert value == 0x1234;
+        r4.f.val = 42;
+        r4.f.val += 1;
+        value = r4.get();
+        assert value[15:8] == 43;
+    }
+}
+
+bank io_memory_access_bank {
+    method io_memory_access(generic_transaction_t *memop, uint64 offset,
+                            void *aux) -> (bool) {
+        SIM_set_mem_op_value_le(memop, 0xdeadbeef);
+        return true;
+    }
+    method test() {
+        local uint32 value;
+        local buffer_t buf;
+        buf.len = 4;
+        buf.data = cast(&value, uint8 *);
+        local generic_transaction_t read_memop = SIM_make_mem_op_read(
+            0, buf, false, NULL);
+        io_memory_access(&read_memop, 13, NULL);
+        // assuming little-endian host
+        assert value == 0xdeadbeef;
+    }
+}
+
+bank regs_with_saved {
+    register r1 size 4 @ 0 { saved int x; }
+    register r2 size 4 @ 4 { field f @ [0:0] { saved int x; } }
+}
+
+template name_shared is name {
+    shared method test_name() -> (const char *) {
+        return this.name;
+    }
+}
+template shown_desc_shared is shown_desc {
+    param desc = "foo";
+    shared method test_shown_desc() -> (const char *) {
+        return this.shown_desc;
+    }
+}
+template miss_pattern_shared is miss_pattern_bank {
+    param miss_pattern = 0x0;
+    shared method test_miss_pattern() -> (uint8) {
+        return this.miss_pattern;
+    }
+}
+template function_shared is function_mapped_bank {
+    param function = -1;
+    shared method test_function() -> (int) {
+        return this.function;
+    }
+}
+
+bank testbank is (miss_pattern_bank, function_mapped_bank) {
+    param function = 14;
+    param overlapping = true;
+    param miss_pattern = 0xee;
+    register r size 1 @ 0 {
+        param init_val = 13;
+    }
+}
+
+bank overridden_bank is (unified_hard_reset, unified_soft_reset);
+
+/// WARNING WEXPERIMENTAL
+#if (dml_1_2) {
+    import "io-memory.dml";
+} #else {
+    implement io_memory { is function_io_memory; }
+}
+
+method memop_test() {
+    local uint8 value;
+    local buffer_t buf;
+    buf.len = 1;
+    buf.data = &value;
+    local generic_transaction_t memop = SIM_make_mem_op_read(
+        0, buf, false, NULL);
+    local map_info_t info;
+    info.base = 0;
+    info.start = 0;
+    info.function = 14;
+    local exception_type_t exc;
+    // hit
+    exc = dev.io_memory.operation(&memop, info);
+    assert value == 13;
+    // miss, captured by miss_pattern
+    info.start = 1;
+    exc = dev.io_memory.operation(&memop, info);
+    assert value == 0xee;
+
+    assert testbank.io_memory_access(&memop, 0, NULL);
+    assert SIM_get_mem_op_value_le(&memop) == 13;
+}
+
+event time_ev is (custom_time_event) {
+    method set_event_info(attr_value_t v) -> (void *) {
+        return NULL;
+    }
+    method get_event_info(void *v) -> (attr_value_t) {
+        return SIM_make_attr_nil();
+    }
+    method event(void *data) {
+    }
+    method destroy(void *v) {
+    }
+}
+event cycle_ev is (custom_cycle_event) {
+    method set_event_info(attr_value_t v) -> (void *) {
+        return NULL;
+    }
+    method get_event_info(void *v) -> (attr_value_t) {
+        return SIM_make_attr_nil();
+    }
+    method event(void *data) {
+    }
+    method destroy(void *data) {
+    }
+}
+
+attribute ia is (int64_attr);
+attribute ua is (uint64_attr);
+attribute ba is (bool_attr);
+attribute fa is (double_attr);
+attribute pa is (pseudo_attr) {
+    param type = "n";
+    method get() -> (attr_value_t) { return SIM_make_attr_invalid(); }
+    method set(attr_value_t val) throws {}
+}
+attribute roa is (read_only_attr) {
+    param type = "n";
+    method get() -> (attr_value_t) { return SIM_make_attr_invalid(); }
+}
+attribute woa is (write_only_attr) {
+    param type = "n";
+    method set(attr_value_t val) throws {}
+}
+
+param global_sym = 14;
+
+/// WARNING WEXPERIMENTAL
+#if (!dml_1_2) {
+    param cond = false;
+/// WARNING WEXPERIMENTAL
+} #else #if (!dml_1_2) {
+    error;
+} #else {
+    param cond = true;
+}
+
+#if (cond != is_dml_12) {
+    error "x";
+}
+
+template unified_get is get {
+    method get() -> (uint64) {
+        local uint64 result;
+        // Needed because get() can throw in dml12
+        try {
+            result = default();
+        } catch {
+            return 0;
+        }
+        return result - 1;
+    }
+}
+
+template unified_set is set {
+    method set(uint64 val) {
+        try {
+            default(val + 1);
+        } catch {}
+    }
+}
+
+template track_state {
+    session int state;
+}
+
+template unified_hard_reset is (track_state, hard_reset) {
+    method hard_reset() {
+        state = 1;
+    }
+}
+
+template unified_soft_reset is (track_state, soft_reset) {
+    method soft_reset() {
+        state = 2;
+    }
+}
+
+// use dml 1.4 reset mechanics
+is hreset;
+is sreset;
+
+// Test that .len works on some 1.2-only lists
+bank len_compat_testbank {
+    param register_size = 4;
+    register r @ 0;
+    group g[i < 2] {
+        register r @ 4 + i * 12;
+        register r2[j < 2] @ 8 + j * 4 + i * 12;
+    }
+}
+
+method len_test() {
+    assert len_compat_testbank.mapped_registers.len == 7;
+}
+
+// checks that typed attribute access works
+method attribute_test() throws {
+    cast(ia, int64_attr).set(SIM_make_attr_int64(-16));
+    local attr_value_t ia_get;
+    (ia_get) = cast(ia, int64_attr).get();
+    assert(SIM_attr_integer(ia_get) == -16);
+    cast(ua, uint64_attr).set(SIM_make_attr_uint64(32));
+    local attr_value_t ua_get;
+    (ua_get) = cast(ua, uint64_attr).get();
+    assert(SIM_attr_integer(ua_get) == 32);
+    cast(ba, bool_attr).set(SIM_make_attr_boolean(true));
+    local attr_value_t ba_get;
+    (ba_get) = cast(ba, bool_attr).get();
+    assert(SIM_attr_boolean(ba_get));
+    cast(fa, double_attr).set(SIM_make_attr_floating(4.13));
+    local attr_value_t fa_get;
+    (fa_get) = cast(fa, double_attr).get();
+    assert(SIM_attr_floating(fa_get) == 4.13);
+}
+
+method pseudo_attr_test() throws {
+    local attr_value_t a = SIM_get_attribute(dev.obj, "woa");
+    assert SIM_attr_is_invalid(a);
+    assert SIM_clear_exception() != 0;
+    a = SIM_make_attr_nil();
+    SIM_set_attribute(dev.obj, "roa", &a);
+    assert SIM_clear_exception() != 0;
+}
+
+// Check that unified hard/soft reset overrides work
+method reset_test() throws {
+    // We should already be in post-hard-reset state
+    assert dev.regs.r3.state == 1;
+    assert overridden_bank.state == 1;
+    regs.r4.val = 0;
+    dev.soft_reset();
+    assert dev.regs.r3.state == 2;
+    assert overridden_bank.state == 2;
+    assert regs.r4.val == 4;
+}
+
+bank bank_obj_get is bank_obj;
+
+method test_bank_obj_get() {
+    local bank_obj bo = cast(bank_obj_get, bank_obj);
+    assert bo.bank_obj() == SIM_object_descendant(dev.obj, "bank.bank_obj_get");
+}
+
+method log_once() {
+    log info, 1 then 4: "Once logging";
+}

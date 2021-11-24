@@ -1,0 +1,17 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+typedef uint32 atype[32]; 
+
+method test -> (bool ok) {
+    local atype a;
+    a[0] = 4;
+    // bug 9085
+    local int i = cast(a, uint32*)[0];
+    ok = i == 4;
+}

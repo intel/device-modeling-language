@@ -1,0 +1,13 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+method test -> (bool result) {
+    local int i = 0xffff;
+    local int j = 65535;
+    result = (i == j);
+}

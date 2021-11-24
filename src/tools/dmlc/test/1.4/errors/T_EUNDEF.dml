@@ -1,0 +1,16 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+inline method m(inline x) {
+}
+method init() {
+    /// ERROR EUNDEF
+    m(undefined);
+    /// ERROR EUNDEF
+    true || undefined;
+    /// ERROR EUNDEF
+    false && undefined;
+}

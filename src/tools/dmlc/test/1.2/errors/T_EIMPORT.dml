@@ -1,0 +1,14 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+/// ERROR EIMPORT
+import "nonexisting.dml";
+
+// resolves to a directory, which cannot be opened
+/// ERROR EIMPORT 1.2
+import "1.2";

@@ -1,0 +1,61 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+template flag_attr {
+    parameter allocate_type = "bool";
+}
+
+template val_attr {
+    parameter allocate_type = "uint64";
+}
+
+attribute before_read_called is (flag_attr);
+attribute after_read_called is (flag_attr);
+attribute before_set_called is (flag_attr);
+attribute after_set_called is (flag_attr);
+attribute before_write_called is (flag_attr);
+attribute write_val is (val_attr);
+attribute after_write_called is (flag_attr);
+
+bank b {
+    parameter register_size = 8;
+    parameter partial = true;
+
+    register r @ 0 {
+
+        method before_read(memop) {
+            $before_read_called = true;
+        }
+        method read -> (value) {
+            value = 0xdeadbeefbaadc0de;
+        }
+
+        method after_read(memop) {
+            $after_read_called = true;
+        }
+
+        method write(value) {
+            $write_val = value;
+        }
+
+        method before_write(memop, msb1, lsb, value) {
+            $before_write_called = true;
+        }
+
+        method after_write(memop) {
+            $after_write_called = true;
+        }
+
+        method before_set {
+            $before_set_called = true;
+        }
+
+        method after_set {
+            $after_set_called = true;
+        }
+    }
+}

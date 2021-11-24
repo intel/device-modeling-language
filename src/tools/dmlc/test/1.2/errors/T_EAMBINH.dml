@@ -1,0 +1,118 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+// trivial example
+/// WARNING WEXPERIMENTAL
+trait a {
+    method m() default {}
+}
+/// WARNING WEXPERIMENTAL
+trait b {
+    method m() default {}
+}
+/// WARNING WEXPERIMENTAL T_EAMBINH.dml
+/// ERROR EAMBINH
+trait c {
+    is a;
+    is b;
+}
+
+// parameters vs methods
+trait ap {
+    parameter int m;
+}
+/// ERROR EAMBINH
+trait cp {
+    is a;
+    is ap;
+}
+
+// nontrivial example
+/// WARNING WEXPERIMENTAL
+trait d {
+    method m();
+}
+/// WARNING WEXPERIMENTAL
+trait e {
+    is d;
+    method m() default {}
+}
+/// WARNING WEXPERIMENTAL
+trait f {
+    is d;
+    method m() default {}
+}
+/// WARNING WEXPERIMENTAL
+trait g {
+    is e;
+}
+/// ERROR EAMBINH
+trait h {
+    is g;
+    is f;
+}
+
+// Currently, not even abstract methods may clash. We don't have a good reason
+// to disallow this clash; we just haven't implemented it yet.
+/// WARNING WEXPERIMENTAL
+trait i {
+    method m();
+}
+/// WARNING WEXPERIMENTAL
+trait j {
+    method m();
+}
+/// WARNING WEXPERIMENTAL T_EAMBINH.dml
+/// ERROR EAMBINH
+trait k {
+    is i;
+    is j;
+    method m() default {}
+}
+
+// name clash between methods from unrelated traits, instantiated directly
+// by an object, bug 22980
+/// ERROR EAMBINH
+port p {
+    is i;
+    is j;
+    method m() nothrow {}
+}
+
+template ta {
+    is a;
+    /// ERROR EAMBINH
+    method m() default {}
+}
+template tb {
+    is a;
+    /// ERROR EAMBINH
+    method m() default {}
+}
+port q {
+    is ta;
+    is tb;
+}
+
+// Errors are signalled for ambiguous parameter overrides as well
+template aa {
+    group g {
+        /// ERROR EAMBINH
+        parameter p1 default 4;
+    }
+}
+template bb {
+    group g {
+        /// ERROR EAMBINH
+        parameter p1 default 4;
+    }
+}
+bank b {
+    is aa;
+    is bb;
+}

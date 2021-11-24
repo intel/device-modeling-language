@@ -1,0 +1,120 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+import "testing.dml";
+
+// Test that example obscureable template works
+template obscureable is (name, documentation, limitations) {
+    param obscured;
+    param obscured_name;
+    param name = obscured #? obscured_name #: _ident;
+    param shown_documentation = obscured #? "" #: documentation;
+    param shown_limitations = obscured #? "" #: limitations;
+}
+
+template fie is (field, obscureable) {
+    param obscured_name = "f" + stringify(msb) + "_" + stringify(lsb);
+}
+
+template secret_field is (fie, read, write) {
+    param obscured = true;
+}
+template public_field is (fie, read, write) {
+    param obscured = false;
+}
+
+template reg is (register, obscureable) {
+    param size = 2;
+    param obscured_name = "r" + stringify(offset);
+    field f @ [7:0] is (public_field);
+    field s @ [15:8] is (secret_field);
+}
+
+template secret_reg is reg {
+    param obscured = true;
+}
+
+template public_reg is reg {
+    param obscured = false;
+}
+
+bank test_bank {
+    register r @ 4 is (public_reg);
+    register t @ 6 is (secret_reg);
+}
+
+// regular bank
+bank a {
+    is obscureable;
+    param obscured = false;
+    param obscured_name = "secret_bank0";
+}
+
+// secret bank
+bank b {
+    is obscureable;
+    param obscured = true;
+    param obscured_name = "secret_bank1";
+}
+
+method test() throws
+{
+    // check register log name
+
+    /// GREP .* test_bank.r name is r
+    log info: "test_bank.r name is %s", test_bank.r.name;
+    /// GREP .* test_bank.t name is r6
+    log info: "test_bank.t name is %s", test_bank.t.name;
+
+    // check register log qname
+
+    /// GREP .* test_bank.r qname is test_bank.r
+    log info: "test_bank.r qname is %s", test_bank.r.qname;
+    /// GREP .* test_bank.t qname is test_bank.r
+    log info: "test_bank.t qname is %s", test_bank.t.qname;
+
+    // check field log name
+
+    /// GREP .* test_bank.r.f name is f
+    log info: "test_bank.r.f name is %s", test_bank.r.f.name;
+    /// GREP .* test_bank.r.s name is f15_8
+    log info: "test_bank.r.s name is %s", test_bank.r.s.name;
+
+    /// GREP .* test_bank.t.f name is f
+    log info: "test_bank.t.f name is %s", test_bank.t.f.name;
+    /// GREP .* test_bank.t.s name is f15_8
+    log info: "test_bank.t.s name is %s", test_bank.t.s.name;
+
+    // check field log qname
+
+    /// GREP .* test_bank.r.f qname is test_bank.r.f
+    log info: "test_bank.r.f qname is %s", test_bank.r.f.qname;
+    /// GREP .* test_bank.r.s qname is test_bank.r.f15_8
+    log info: "test_bank.r.s qname is %s", test_bank.r.s.qname;
+
+    /// GREP .* test_bank.t.f qname is test_bank.r6.f
+    log info: "test_bank.t.f qname is %s", test_bank.t.f.qname;
+    /// GREP .* test_bank.t.s qname is test_bank.r6.f15_8
+    log info: "test_bank.t.s qname is %s", test_bank.t.s.qname;
+
+    // check bank log name
+
+    /// GREP .* a name is a
+    log info: "a name is %s", a.name;
+    /// GREP .* b name is secret_bank1
+    log info: "b name is %s", b.name;
+
+    // check bank log qname
+
+    /// GREP .* a qname is a
+    log info: "a qname is %s", a.qname;
+    /// GREP .* b name is secret_bank1
+    log info: "b qname is %s", b.qname;
+
+    // TODO: Test documentation and limitations properly
+}

@@ -1,0 +1,40 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+method test -> (bool result) {
+    local int i;
+    call $m1;
+    call $m2;
+    call $m3;
+    call $m4;
+    call $m1();
+    call $m2 -> ();
+    call $m3() -> ();
+    call $m4;
+    inline $m1;
+    inline $m2;
+    inline $m3;
+    inline $m4;
+    inline $m1();
+    inline $m2 -> ();
+    inline $m3() -> ();
+    inline $m4;
+    result = true;
+}
+
+method m1 {
+}
+
+method m2() {
+}
+
+method m3 -> () {
+}
+
+method m4() -> () {
+}

@@ -1,0 +1,13 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+method init {
+    /// ERROR ESHNEG
+    1 << -1;
+    /// ERROR ESHNEG
+    1 >> -1;
+}

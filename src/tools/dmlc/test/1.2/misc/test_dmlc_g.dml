@@ -1,0 +1,44 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+// test-dmlc-g.dml - A device containing all DML items is to test dmlc -g option.
+
+dml 1.2;
+
+device test;
+parameter desc = "test dmlc -g option";
+
+header %{
+typedef struct sample_interface {
+    void (*simple_method)(conf_object_t *obj, int arg);
+} sample_interface_t;
+%}
+
+extern typedef struct {
+    void (*simple_method)(conf_object_t *obj, int arg);
+} sample_interface_t;
+
+data float d = 3.14;
+
+attribute int_attr {
+    parameter allocate_type = "int32";
+    method after_set() {}
+}
+
+port p_irq { 
+    implement sample {}
+} 
+
+bank reg[2] {
+    group x {}
+    register r size 4 @ 0x0000 {
+        field EN [0];
+    }
+}
+
+connect pic { 
+    interface sample;
+} 
+
+event ev_cycles {}

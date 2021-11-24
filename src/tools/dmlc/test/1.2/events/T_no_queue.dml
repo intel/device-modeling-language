@@ -1,0 +1,44 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+method m {
+}
+
+event ev {
+    parameter timebase = "seconds";
+}
+
+event step_ev {
+    parameter timebase = "seconds";
+}
+
+attribute after_test {
+    parameter type = "i";
+    parameter configuration = "pseudo";
+    method set(value) {
+        log "info": "trying after";
+        after (0.1) call $m;
+    }
+}
+
+attribute post_test {
+    parameter type = "i";
+    parameter configuration = "pseudo";
+    method set(value) {
+        log "info": "trying ev.post";
+        inline $ev.post(0.2, NULL);
+    }
+}
+
+attribute post_step_test {
+    parameter type = "i";
+    parameter configuration = "pseudo";
+    method set(value) {
+        log "info": "trying step_ev.post";
+        inline $step_ev.post(3, NULL);
+    }
+}

@@ -1,0 +1,17 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+/// COMPILE-ONLY
+
+parameter s = 4;
+
+struct ss {
+    int x[$s];
+}
+
+connect c[$s];
+
+event e[$s];

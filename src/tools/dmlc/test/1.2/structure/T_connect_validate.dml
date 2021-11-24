@@ -1,0 +1,17 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+connect foo {
+    method validate(conf_object_t *o) -> (bool valid) {
+        if (strcmp(SIM_get_class_name(SIM_object_class(o)), "sim") == 0)
+            valid = true;
+        else {
+            log "error": "not a sim object";
+            valid = false;
+        }
+    }
+}

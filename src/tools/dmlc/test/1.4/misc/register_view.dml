@@ -1,0 +1,127 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+import "utility.dml";
+
+bank b {
+    param register_size = 4;
+    param desc = "Description for b";
+
+    register UR is (read, write, unmapped) {
+        param desc = "UR";
+        param init_val = 0x8;
+    }
+    register R1 @ 0x00 is (read, write) {
+        param desc = "R1";
+        param init_val = 0x1;
+    }
+    register R2 @ 0x04 is (read, write) {
+        param desc = "R2";
+        param init_val = 0x2;
+    }
+    register R3[i < 2][j < 2] @ 0x08 + i * 8 +  j * 4 is (read, write)
+    {
+        param desc = "R3";
+        param init_val = 0x4;
+    }
+}
+
+bank ba[i < 3] {
+    param register_size = 4;
+
+    register UR is (read, write, unmapped) {
+        param desc = "UR";
+        param init_val = 0x8;
+    }
+    register R1 @ 0x00 is (read, write) {
+        param init_val = 0x1;
+        param desc = "R1";
+        field all @ [31:0] is (read, write);
+    }
+    register R2 @ 0x04 is (read, write) {
+        param init_val = 0x2;
+        param desc = "R2";
+    }
+    register R3[i < 2][j < 2] @ 0x8 + i * 8 + j * 4 is (read, write) {
+        param init_val = 0x4;
+        param desc = "R3";
+    }
+}
+
+bank baa[i < 3][j < 3] {
+    param register_size = 4;
+    param desc = "Description for baa";
+
+    register UR is (read, write, unmapped) {
+        param desc = "UR";
+        param init_val = 0x8;
+    }
+    register R1 @ 0x00 is (read, write) {
+        param init_val = 0x1;
+        param desc = "R1";
+        field all @ [31:0] is (read, write);
+    }
+    register R2 @ 0x04 is (read, write) {
+        param init_val = 0x2;
+        param desc = "R2";
+    }
+    register R3[i < 2][j < 2] is (read, write) {
+        param offset = 0x8 + i * 8 + j * 4;
+        param desc = "R3";
+        param init_val = 0x4;
+    }
+}
+
+bank u {
+    param register_size = 4;
+
+    register UR is (read, write, unmapped) {
+        param desc = "UR";
+        param init_val = 0x8;
+    }
+    register R1 @ 0x00 is (read, write) {
+        param desc = "R1";
+        param init_val = 0x1;
+    }
+    register R2 @ 0x04 is (read, write) {
+        param desc = "R2";
+        param init_val = 0x2;
+    }
+    register R3[i < 2][j < 2] @ 0x08 + i * 8 +  j * 4 is (read, write)
+    {
+        param desc = "R3";
+        param init_val = 0x4;
+    }
+}
+
+bank bg {
+    param register_size = 4;
+    group g[g < 2] {
+        group h {
+            group i[i < 2] {
+                register r @ 0 + g * 80 + i * 40;
+                register ru[j < 3]
+                    @ j == 1 ? cast(-1, uint64) : 12 + g * 80 + i * 40 + j * 4;
+                register rma[j < 2][k < 2]
+                    @ 24 + g * 80 + i * 40 + j * 8 + k * 4;
+            }
+        }
+    }
+}
+
+bank le {
+    param byte_order = "little-endian";
+    param register_size = 4;
+
+    register r @ 0x00 is (read, write);
+}
+bank be {
+    param byte_order = "big-endian";
+    param register_size = 4;
+
+    register r @ 0x00 is (read, write);
+}

@@ -1,0 +1,31 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+header %{
+typedef struct { int y; } y_t;
+%}
+
+extern typedef struct {
+    int y;
+} y_t;
+
+typedef struct {
+    int x;
+} x_t;
+
+typedef struct {
+    x_t x;
+    y_t y;
+} xy_t;
+
+method test -> (bool result) {
+    local xy_t xy;
+    xy.x.x = 42;
+    xy.y.y = 17;
+    result = (25 == (xy.x.x - xy.y.y));
+}

@@ -1,0 +1,27 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+// This test should be merged into T_inline_params once it passes
+
+port p[10] {
+    method m(int j) -> (int val) {
+        val = $i;
+        val += $i;
+        val += j;
+        val += j;
+    }
+}
+
+method test() -> (bool ok) {
+    local int i = 0;
+    local int j = 0;
+    local int val;
+    inline $p[++i].m(++j) -> (val);
+    log info: "%d %d %d", i, j, val;
+    ok = ok && i == 1 && j == 1 && val == 4;
+}

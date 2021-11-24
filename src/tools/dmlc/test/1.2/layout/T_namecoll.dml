@@ -1,0 +1,21 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+import "testing.dml";
+
+method test() -> (bool ok) {
+    // name collision on layout members is permitted in DML 1.2 only, and
+    // resolves to the first member.
+    local layout "little-endian" {
+        uint32 a;
+        uint32 a;
+        uint32 a;
+        uint32 _a;
+    } x;
+    ok = cast(&x._a, uint8 *) - cast(&x.a, uint8 *) == 12;
+}

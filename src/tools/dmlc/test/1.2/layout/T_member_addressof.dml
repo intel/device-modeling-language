@@ -1,0 +1,28 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+typedef bitfields 32 {
+    uint17 field1 @ [31:15];
+    uint15 field2 @ [14:0];
+} bitfield_32;
+
+typedef layout "big-endian" {
+    bitfield_32 bitfieldmember;
+    int16       intmember;
+} be_layout;
+
+method test -> (ok) {
+    // Because of compatibility hacks in 1.2, typeof(layout_member)*
+    // is not the same type as &layout_member
+    local be_layout be_l;
+    /// ERROR EASTYPE
+    local typeof(be_l.bitfieldmember) *lbp = &be_l.bitfieldmember;
+    /// ERROR EASTYPE
+    local typeof(be_l.intmember) *lip = &be_l.intmember;
+    ok == true;
+}

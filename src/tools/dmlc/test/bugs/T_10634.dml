@@ -1,0 +1,16 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+import "testing.dml";
+
+method test() -> (bool ok) {
+    local int8 c = -47;
+    local layout "big-endian" {
+        int8 c;
+    } *l = cast(&c, void *);
+    ok = l->c == -47;
+}

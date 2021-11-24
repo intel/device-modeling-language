@@ -1,0 +1,13 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// SCAN-FOR-TAGS porting.dml
+import "porting.dml";
+
+/// SCAN-FOR-TAGS porting-common.dml
+import "porting-common.dml";

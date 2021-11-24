@@ -1,0 +1,18 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+bitorder be;
+import "testing.dml";
+
+bank b {
+    register r size 4 @ 0x0100 {
+	field f [8:31];
+    }
+}
+
+method test -> (bool result) {
+    result = (($b.r.f.bitsize == 24) && ($b.r.f.msb == 23));
+}

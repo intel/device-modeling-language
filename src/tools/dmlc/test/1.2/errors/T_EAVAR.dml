@@ -1,0 +1,12 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+parameter l = [1,2,3];
+method init {
+    local int i;
+    /// ERROR EAVAR
+    $l[i];
+}

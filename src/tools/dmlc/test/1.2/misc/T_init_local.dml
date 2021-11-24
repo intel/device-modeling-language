@@ -1,0 +1,87 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+method test -> (bool ok) {
+    // simple array
+    local int simple_array[4] = {0, 256, 128, 4096};
+    ok = simple_array[0] == 0
+      && simple_array[1] == 256
+      && simple_array[2] == 128
+      && simple_array[3] == 4096;
+    if (!ok)
+        return;
+
+    // 2D array
+    local int d2_array[2][4] = {
+        {1, 2, 3, 4},
+        {5, 6, 7, 8}};
+    ok = d2_array[0][0] == 1
+      && d2_array[0][1] == 2
+      && d2_array[0][2] == 3
+      && d2_array[0][3] == 4
+      && d2_array[1][0] == 5
+      && d2_array[1][1] == 6
+      && d2_array[1][2] == 7
+      && d2_array[1][3] == 8;
+    if (!ok)
+        return;
+
+    // string array
+    local const char *str_array[2] = {
+        "A", "B",};
+    ok = str_array[0][0] == 0x41
+      && str_array[0][1] == 0x0
+      && str_array[1][0] == 0x42
+      && str_array[1][1] == 0x0;
+    if (!ok)
+        return;
+    
+    // simple struct
+    local struct {
+        int i;
+        bool b;
+    } simple_struct = {42, true};
+    ok = simple_struct.i == 42 && simple_struct.b == true;
+    if (!ok)
+        return;
+
+    // array of struct
+    local struct {
+        int i;
+    } a_struct_array[2] = {{11}, {12}};
+    ok = a_struct_array[0].i == 11 && a_struct_array[1].i == 12;
+    if (!ok)
+        return;
+
+    // array in struct
+    local struct {
+        int a[2];
+    } b_struct = {{9, 10}};
+    ok = b_struct.a[0] == 9 && b_struct.a[1] == 10;
+    if (!ok)
+        return;
+
+    // bit field
+    local bitfields 32 {
+        uint3 x @ [31:29];
+        uint16 y @ [23:8];
+        uint8 z @ [7:0];
+    } bf = {0x2, 0x1234, 0xcc};
+    local uint32 bf_v = bf;
+    ok = bf.x == 0x2 
+      && bf.y == 0x1234 
+      && bf.z == 0xcc
+      && bf_v == ((0x2 << 29) | (0x1234 << 8) | 0xcc);
+    if (!ok)
+        return;
+
+    // nonconstant array initializer
+    local int i = 3;
+    local int nonconst_array[1] = {i,};
+    ok = nonconst_array[0] == i;
+}

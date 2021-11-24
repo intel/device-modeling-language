@@ -1,0 +1,23 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+bank b1 {
+    parameter mappable = true;
+}
+
+bank b2 {
+    parameter mappable = false;
+}
+
+bank b3 {
+}
+
+method test -> (bool ok)
+{
+    ok = $b3.mappable;
+}

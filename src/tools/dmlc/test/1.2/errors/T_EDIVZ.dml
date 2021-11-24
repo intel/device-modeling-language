@@ -1,0 +1,20 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+method init {
+    /// ERROR EDIVZ
+    5 / 0;
+    /// ERROR EDIVZ
+    5 % 0;
+    local int i = 0;
+    // no error here
+    1 / i;
+    /// ERROR EDIVZ
+    i / 0;
+    /// ERROR EDIVZ
+    i % 0;
+}

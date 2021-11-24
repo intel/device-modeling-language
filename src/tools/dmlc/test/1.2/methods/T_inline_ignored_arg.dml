@@ -1,0 +1,49 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+// Test that side-effects in arguments passed to inlined methods that
+// ignore the value given still gets executed properly
+
+method m(mvalue) {
+}
+
+method n(nvalue) {
+    log "info": "hello";
+}
+
+method o(ovalue) {
+    inline $m(ovalue);
+}
+
+// This catches a weird problem that only happened when there were
+// three inlines.
+method p1(int v) {
+    inline $m(v);
+    inline $m(v);
+    inline $m(v);
+}
+
+// Unfortunately, fixing the three-inline bug only changed it to a
+// four-inline bug.
+method p2(int v) {
+    inline $m(v);
+    inline $m(v);
+    inline $m(v);
+    inline $m(v);
+}
+
+method test -> (bool ok) {
+    local int v = 17;
+    inline $m(v++);
+    inline $n(v++);
+    inline $o(v++);
+    ok = (v == 20);
+
+    call $p1(v);
+    call $p2(v);
+}

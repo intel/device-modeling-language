@@ -1,0 +1,39 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+import "testing.dml";
+
+import "unified_template.dml";
+
+bank b {
+    register r size 4 @ 0x0 {
+        is unified_write_override;
+        is unified_read_override;
+    }
+    register r2 size 4 @ 0x4 {
+        field f[8:0] {
+            is unified_write_override;
+            is unified_read_override;
+        }
+    }
+}
+
+method test -> (bool ok) {
+    ok = true;
+    /// GREP .* Value written to register: 5
+    call $b.r.write(5);
+    /// GREP .* Value written to field: 4
+    call $b.r2.f.write(4);
+    /// GREP .* Value read from register: 5
+    local typeof($b.r) throwaway_r;
+    call $b.r.read() -> (throwaway_r);
+    ok = throwaway_r == 5 && ok;
+    /// GREP .* Value read from field: 4
+    local typeof($b.r2.f) throwaway_r2_f;
+    call $b.r2.f.read() -> (throwaway_r2_f);
+    ok = throwaway_r2_f == 4 && ok;
+}

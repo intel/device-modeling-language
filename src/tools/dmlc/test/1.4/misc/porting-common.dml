@@ -1,0 +1,228 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+// This file contains code that is converted differently depending on the
+// --compat flag to port-dml
+
+import "porting.dml";
+
+bank b2 {
+    register r size 1 @ 0 {
+        field f2 @ [0] {
+            is read_field;
+            method read_field(uint64 enabled_bits, void *aux) -> (uint64) {
+                local uint64 value;
+                log info: "read_access";
+                return value;
+            }
+            is write_field;
+            method write_field(uint64 value, uint64 enabled_bits, void *aux) {
+                log info: "write_access %d", value;
+            }
+        }
+        method write_register(uint64 foo, uint64 enabled_bytes, void *aux) {
+            log info: "before %d", foo;
+            default(foo, enabled_bytes, aux);
+            log info: "after write";
+        }
+        method read_register(uint64 enabled_bytes, void *aux) -> (uint64) {
+            log info: "before read";
+            local uint64 value = default(enabled_bytes, aux);
+            log info: "after read";
+            return value;
+        }
+        method set(uint64 value) {
+            log info: "before set";
+            default(value);
+            log info: "after set";
+        }
+        method soft_reset() {
+            default();
+            log info: "after soft";
+        }
+        method hard_reset() {
+            default();
+            log info: "after hard";
+        }
+    }
+    register r2 size 1 @ 1 {
+        method read_register(uint64 enabled_bytes, void *aux) -> (uint64) {
+            log info: "before read";
+            return default(enabled_bytes, aux);
+        }
+    }
+    register r3 size 1 @ 2 {
+        method write_register(uint64 foo, uint64 enabled_bytes, void *aux) {
+            log info: "before %d", foo;
+            default(foo, enabled_bytes, aux);
+        }
+    }
+    register r4 size 1 @ 3 {
+        method read_register(uint64 enabled_bytes, void *aux) -> (uint64) {
+            local uint64 value = default(enabled_bytes, aux);
+            log info: "after read";
+            return value;
+        }
+    }
+    register r5 size 1 @ 4 {
+        method write_register(uint64 value, uint64 enabled_bytes, void *aux) {
+            default(value, enabled_bytes, aux);
+            log info: "after";
+        }
+    }
+    register r7 size 1 @ 6 {
+        method read_register(uint64 enabled_bytes, void *aux) -> (uint64) {
+            local uint64 value;
+            log info: "read_access";
+            return value;
+        }
+        method write_register(uint64 value, uint64 enabled_bytes, void *aux) {
+            log info: "write_access %d", value;
+        }
+    }
+}
+
+bank access {
+    method io_memory_access(generic_transaction_t *memop, uint64 offset, void *aux) -> (bool) {
+        // TODO: further conversion likely needed; probably move
+        // old_access implementation into this method
+        try {
+            old_access(memop, offset, SIM_get_mem_op_size(memop));
+        } catch {
+            return false;
+        }
+        return true;
+    }
+
+    method old_access(generic_transaction_t *memop, uint64 offset, uint64 size) throws {
+        log info: "hello";
+    }
+}
+
+bank miss {
+    method unmapped_read(uint64 offset, uint64 bits, void *aux)
+        -> (uint64) throws {
+        local bool ok;
+        local uint64 value;
+        (ok, value) = old_miss_read_access(offset);
+        if (!ok)
+            throw;
+        return value;
+    }
+
+    method old_miss_read_access(uint64 offset)
+        -> (bool, uint64) /* success, value */ {
+        local bool success;
+        local uint64 value;
+        success = true;
+        value = 5;
+        return (success, value);
+    }
+
+    method unmapped_write(uint64 offset, uint64 bits, uint64 value, void *aux) throws {
+        if (!old_miss_write_access(offset, value))
+            throw;
+    }
+
+    method old_miss_write_access(uint64 offset, uint64 value) -> (bool) {
+        local bool success;
+        success = value == 5;
+        return success;
+    }
+}
+
+bank read_access_memop {
+    method io_memory_access(generic_transaction_t *memop, uint64 offset, void *aux) -> (bool) {
+        // TODO: further conversion likely needed; probably move
+        // old_read_access_memop implementation into this method
+        try {
+            old_read_access_memop(memop, offset, SIM_get_mem_op_size(memop));
+        } catch {
+            return false;
+        }
+        return true;
+    }
+
+    method old_read_access_memop(generic_transaction_t *memop, uint64 offset, uint64 size) throws {
+        log info: "hello";
+    }
+}
+
+bank write_access_memop {
+    method io_memory_access(generic_transaction_t *memop, uint64 offset, void *aux) -> (bool) {
+        // TODO: further conversion likely needed; probably move
+        // old_write_access_memop implementation into this method
+        try {
+            old_write_access_memop(memop, offset, SIM_get_mem_op_size(memop),
+                                   this.byte_order == "little-endian"
+                                   #? SIM_get_mem_op_value_le(memop)
+                                   #: SIM_get_mem_op_value_be(memop));
+        } catch {
+            return false;
+        }
+        return true;
+    }
+
+    method old_write_access_memop(generic_transaction_t *memop, uint64 offset, uint64 size, uint64 value) throws {
+        log info: "hello";
+    }
+}
+
+bank rw_access {
+    method read(uint64 offset, uint64 enabled_bytes, void *aux) -> (uint64) throws {
+        local bool ok;
+        local uint64 value;
+        // TODO: further conversion likely needed; probably move
+        // old_read_access implementation into this method
+        (ok, value) = old_read_access(offset);
+        if (!ok) {
+            throw;
+        }
+        return value;
+    }
+
+    method old_read_access(uint64 offset)
+        -> (bool, uint64) /* success, value */ {
+        local bool success;
+        local uint64 value;
+        log info: "hello";
+        return (success, value);
+    }
+
+    method write(uint64 offset, uint64 enabled_bytes, uint64 value, void *aux) throws {
+        // TODO: further conversion likely needed; probably move
+        // old_write_access implementation into this method
+        if (!old_write_access(offset, value)) {
+            throw;
+        }
+    }
+
+    method old_write_access(uint64 offset, uint64 value)
+        -> (bool) {
+        local bool ok;
+        ok = true;
+        log info: "hello";
+        return ok;
+    }
+}
+
+bank miss_access {
+    method unmapped_read(uint64 offset, uint64 bits, void *aux)
+        -> (uint64) throws {
+        // TODO: manual conversion likely needed
+        old_miss_access(offset);
+        return 0;
+    }
+
+    method unmapped_write(uint64 offset, uint64 bits, uint64 value, void *aux) throws {
+        // TODO: manual conversion likely needed
+        old_miss_access(offset);
+    }
+
+    method old_miss_access(uint64 offset) throws {
+        log info: "hello";
+    }
+}

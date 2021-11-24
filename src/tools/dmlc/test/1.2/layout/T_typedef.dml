@@ -1,0 +1,93 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+// Check that passing typedeffed types into layouts does not break size or
+// semantics
+
+typedef int24 ty_int24;
+typedef int48_be_t ty_int48_be_t;
+typedef int56_le_t ty_int56_le_t;
+typedef bitfields 24 {
+    uint17 field1 @ [23:7];
+    uint7  field2 @ [6:0];
+} ty_bitfield;
+typedef layout "big-endian" {
+    uint24 a;
+} ty_be_layout;
+typedef layout "little-endian" {
+    uint24 a;
+} ty_le_layout;
+typedef int24 ty_int24_array[2];
+typedef ty_le_layout ty_le_layout_array[2];
+
+
+typedef layout "big-endian" {
+    ty_int24 int24_member;
+    ty_int48_be_t int48_be_member;
+    ty_int56_le_t int56_le_member;
+    ty_bitfield bitfield_member;
+    ty_be_layout be_layout_member;
+    ty_le_layout le_layout_member;
+    ty_int24_array int24_array_member;
+    ty_le_layout_array le_layout_array_member;
+} to_test_layout;
+
+method test -> (bool ok)
+{
+    local to_test_layout l;
+    assert sizeof(l) == 37;
+    local uint8 *b_set = cast(&l, void*);
+    local int i;
+    for (i = 0; i < 37; ++i) {
+        b_set[i] = i;
+    }
+    assert l.int24_member == 0x000102;
+    assert l.int48_be_member == 0x030405060708;
+    assert l.int56_le_member == 0x0f0e0d0c0b0a09;
+    assert l.bitfield_member.field1 == 0x2022;
+    assert l.bitfield_member.field2 == 0x12;
+    assert l.be_layout_member.a == 0x131415;
+    assert l.le_layout_member.a == 0x181716;
+    assert l.int24_array_member[0] == 0x191a1b;
+    assert l.int24_array_member[1] == 0x1c1d1e;
+    assert l.le_layout_array_member[0].a == 0x21201f;
+    assert l.le_layout_array_member[1].a == 0x242322;
+
+    // test assignment from underlying types
+    // we are not too concerned with these being bytemapped
+    // wrongly, so just check compilation
+    local int24 int24_val = 0x0;
+    l.int24_member = int24_val;
+    local int48_be_t int48_be_val = 0x1;
+    l.int48_be_member = int48_be_val;
+    local int56_le_t int56_le_val = 0x2;
+    l.int56_le_member = int56_le_val;
+    local ty_bitfield bitfield_val;
+    bitfield_val.field1 = 0x3;
+    bitfield_val.field2 = 0x4;
+    l.bitfield_member = bitfield_val;
+    local ty_be_layout be_layout_val;
+    be_layout_val.a= 0x5;
+    l.be_layout_member = be_layout_val;
+    local ty_le_layout le_layout_val;
+    le_layout_val.a= 0x6;
+    l.le_layout_member = le_layout_val;
+    // Cant directly assign arrays
+    local ty_int24_array int24_array_val;
+    int24_array_val[0] = 0x7;
+    int24_array_val[1] = 0x8;
+    l.int24_array_member[0] = int24_array_val[0];
+    l.int24_array_member[1] = int24_array_val[1];
+    local ty_le_layout_array le_layout_array_val;
+    le_layout_array_val[0].a = 0x9;
+    le_layout_array_val[1].a = 0x10;
+    l.le_layout_array_member[0] = le_layout_array_val[0];
+    l.le_layout_array_member[1] = le_layout_array_val[1];
+
+    ok = true;
+}

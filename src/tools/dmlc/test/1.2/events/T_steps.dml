@@ -1,0 +1,103 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+import "testing.dml";
+
+import "simics/model-iface/step.dml";
+
+constant STEPS = 14;
+
+// The step and cycle interfaces cannot be implemented well enough in Python,
+// so provide mock implementations here and set queue to self.
+data event_class_t *evclass;
+data conf_object_t *tdev;
+data void *user_data;
+implement step {
+    method post_step(event_class_t *evclass, conf_object_t *dev,
+                     pc_step_t steps, void *user_data) {
+        $evclass = evclass;
+        $tdev = dev;
+        $user_data = user_data;
+        assert steps == STEPS;
+    }
+    method get_step_count() -> (pc_step_t d) { assert false; }
+    method cancel_step(event_class_t *evclass, conf_object_t *obj, int (*pred)(void *data, void *match_data), void *match_data) { assert false; }
+    method find_next_step(event_class_t *evclass, conf_object_t *obj, int (*pred)(void *data, void *match_data), void *match_data) -> (pc_step_t t) { assert false; }
+    method events() -> (attr_value_t v) { assert false; }
+    method advance(pc_step_t steps) -> (pc_step_t t) { assert false; }
+}
+implement cycle {
+    method get_cycle_count() -> (cycles_t c) { assert false; }
+    method get_time() -> (double t) { assert false; }
+    method cycles_delta(double when) -> (cycles_t c) { assert false; }
+    method get_frequency() -> (uint64 f) { assert false; }
+    method post_cycle(event_class_t *evclass, conf_object_t *obj,
+                      cycles_t c, void *data) { assert false; }
+    method post_time(event_class_t *evclass, conf_object_t *obj,
+                     double s, void *data) { assert false; }
+    method cancel(event_class_t *evclass,
+                  conf_object_t *obj,
+                  int (*pred)(void *data, void *match_data),
+                  void *match_data) { assert false; }
+    method find_next_cycle(event_class_t *evclass,
+                           conf_object_t *obj,
+                           int (*pred)(void *data, void *match_data),
+                           void *match_data) -> (cycles_t v)  { assert false; }
+    method find_next_time(event_class_t *evclass,
+                          conf_object_t *obj,
+                          int (*pred)(void *data, void *match_data),
+                          void *match_data) -> (double t)  { assert false; }
+    method events() -> (attr_value_t v) { assert false; }
+
+    method get_time_in_ps() -> (local_time_t t) { assert false; }
+    method cycles_delta_from_ps(local_time_t when)
+        -> (cycles_t t) { assert false; }
+    method post_time_in_ps(event_class_t *evclass, conf_object_t *obj,
+                           duration_t picoseconds, void *user_data) {
+        assert false;
+    }
+    method find_next_time_in_ps(
+        event_class_t *evclass, conf_object_t *obj,
+        int (*pred)(void *data, void *match_data), void *match_data)
+        -> (duration_t d) { assert false; }
+}
+
+attribute called {
+    parameter allocate_type = "bool";
+}
+
+event E {
+    parameter timebase = "steps";
+    method event(void *data) {
+        log "info": "%s happened", $qname;
+        $called = true;
+    }
+}
+
+event F[i in 0..1][j in 0..1] {
+    parameter timebase = "steps";
+    method event(void *data) {
+        log "info": "%s happened", $qname;
+        $called = true;
+    }
+}
+
+method test() -> (bool ok) {
+    inline $E.post_on_queue($dev.obj, STEPS, NULL);
+    assert $evclass != NULL;
+    ok = $called == false;
+    $evclass->callback($tdev, $user_data);
+    ok = ok && $called == true;
+
+    $evclass = NULL;
+    $called = false;
+    inline $F[1][0].post_on_queue($dev.obj, STEPS, NULL);
+    assert $evclass != NULL;
+    ok = $called == false;
+    $evclass->callback($tdev, $user_data);
+    ok = ok && $called == true;
+}

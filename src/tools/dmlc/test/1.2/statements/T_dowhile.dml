@@ -1,0 +1,16 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+// bug 22332
+
+method test -> (bool ok) {
+    ok = false;
+    do {
+        ok = true;
+    } while (false);
+}

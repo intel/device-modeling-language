@@ -1,0 +1,26 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+/// COMPILE-ONLY
+
+template shadowed_by_method {
+    shared method shadowed_by_method() -> (uint64) default { return 4; }
+    // Currently, methods are output in alphabetical order, meaning leading z
+    // is needed to ensure the trait type in this function type is shadowed
+    // by previous function pointer arg
+    shared method z_other_trait_method() -> (uint64) default { return 3; }
+}
+
+bank b {
+    is shadowed_by_method;
+}
+
+method init() {
+    local shadowed_by_method bank_template_type = cast(b, shadowed_by_method);
+    log info, 1: "%d", bank_template_type.shadowed_by_method();
+    log info, 1: "%d", bank_template_type.z_other_trait_method();
+}

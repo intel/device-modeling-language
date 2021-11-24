@@ -1,0 +1,31 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+import "testing.dml";
+
+typedef layout "big-endian" {
+    uint32 i;
+} i32_t;
+
+method test() -> (bool ok) {
+    // Test legacy behaviour of layouts in DML 1.2:
+    // & on a layout member becomes a void *
+    local uint32 i;
+    // this allows us to access &lp->i as a uint32 without violating a C
+    // standard
+    local i32_t *lp = cast(&i, i32_t *);
+    local uint32 *p32 = &lp->i;
+    // this is OK, assignment to endian-int is reduced to char-by-char
+    // access which C allows
+    lp->i = 0xdeadbeef;
+    // assuming little-endian host
+    assert i == 0xefbeadde;
+    *p32 = 0xdeadbeef;
+    assert i == 0xdeadbeef;
+    ok = true;
+}

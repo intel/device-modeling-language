@@ -1,0 +1,28 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+// bug 6283
+
+bank b {
+    group outer[j in 0..3] {
+        register array1[k in 0..3] size 4 {
+            parameter offset = 0x030 + 16 * $j + 4 * $k;
+            method get() -> (result) {
+                /// ERROR ESYNTAX
+                log "info": "%s[%d][%d] got an attribute get access, 
+returning value %d",
+                    $name, $j, $k, $this;
+                result = $this;
+            }
+            method set(value) {
+                log "info": "%s[%d][%d] got an attribute set access with value %d",
+                    $name, $j, $k, value;
+                $this = value;
+            }
+        }
+    }
+}

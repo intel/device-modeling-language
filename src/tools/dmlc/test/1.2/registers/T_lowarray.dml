@@ -1,0 +1,20 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "io-memory.dml";
+import "utility.dml";
+
+// Bug 9096
+
+// Covered by lib/T_registers in 1.4
+
+bank b {
+    parameter function = 0;
+    parameter partial = true;
+    parameter overlapping = true;
+    //register r1[6] size 4 @ $i * 24 + 0 is (constant) { parameter value = 0x11111111; }
+    register r2[6] size 4 @ $i * 24 + 16 is (constant) { parameter value = 0x22222222; }
+}

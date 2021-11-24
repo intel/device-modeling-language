@@ -1,0 +1,116 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+import "utility.dml";
+
+// Test various aspects of the register dispatcher. A number of registers are
+// implemented, where each offset always contains the lowest byte of the
+// offset. These are then accessed in a few different ways, verifying that
+// stuff like byte order, and overlapping and partial accesses are handled
+// correctly.
+
+is hreset;
+
+template testreg {
+    field f @ [reg.bitsize-1:0] is (read, write);
+}
+
+template testbank {
+    is bank;
+    param register_size = 4;
+
+    // Basic register layout for testing overlapping and partial
+    // accesses
+
+    register r1 @ 0x000 {
+        field f1 @ [7:0] is (read, write);
+        field f2 @ [15:8] is (read, write);
+        field f3 @ [23:16] is (read, write);
+        field f4 @ [31:24] is (read, write);
+    }
+    register r2 @0x004 {
+        field f1 @ [7:0] is (read, write);
+        field f2 @ [15:8] is (read, write);
+        field f3 @ [23:16] is (read, write);
+        field f4 @ [31:24] is (read, write);
+    }
+    register r3 @0x008 {
+        field f1 @ [7:0] is (read, write);
+        field f2 @ [15:8] is (read, write);
+        field f3 @ [23:16] is (read, write);
+        field f4 @ [31:24] is (read, write);
+    }
+
+    // Registers of different sizes
+    register s1 size 1 @ 0x1000000 is (testreg);
+    register s2 size 2 @ 0x2000000 is (testreg);
+    register s3 size 3 @ 0x3000000 is (testreg);
+    register s4 size 4 @ 0x4000000 is (testreg);
+    register s5 size 5 @ 0x5000000 is (testreg);
+    register s6 size 6 @ 0x6000000 is (testreg);
+    register s7 size 7 @ 0x7000000 is (testreg);
+    register s8 size 8 @ 0x8000000 is (testreg);
+
+    // A dense array
+    register a1[i < 4][j < 4] @ 0x0100 + i * 16 + j * 4 is (testreg);
+
+    // A sparse array
+    register a2[i < 4] @ 0x0200 + i * 8 is (testreg);
+
+    // Two interleaved arrays
+    register a3[i < 4] @ 0x0300 + i * 8 is (testreg);
+    register a4[i < 4] @ 0x0304 + i * 8 is (testreg);
+
+    // An array that isn't naturally aligned
+    register a5[i < 4] @ 0x0408 + i * 4 is (testreg);
+
+    // interleaved arrays with different strides
+    register a6[i < 3] size 1 @ 0x0508 - i * 4 is (testreg);
+    register a7[i < 4] size 1 @ 0x0501 + i * 2 is (testreg);
+    register x1 size 1 @ 0x0502 is (testreg);
+    register x2 size 1 @ 0x0506 is (testreg);
+}
+
+// unit test of the _sort_regs() method
+bank sort_test {
+    register r[i < 129] size 1 @ (i * 37) % 129;
+    is init;
+    method init() {
+        local int n;
+        local register *r;
+        (r, n) = _sort_regs();
+        for (local int i = 0; i < 129; i++) {
+            assert r[i].offset == i;
+        }
+        delete r;
+    }
+}
+bank par_over is (testbank) {
+    param partial = true;
+    param overlapping = true;
+}
+
+bank par_nonover is (testbank) {
+    param partial = true;
+    param overlapping = false;
+}
+
+bank nonpar_over is (testbank) {
+    param partial = false;
+    param overlapping = true;
+}
+
+bank nonpar_nonover is (testbank) {
+    param partial = false;
+    param overlapping = false;
+}
+
+bank par_over_be is (testbank) {
+    param partial = true;
+    param overlapping = true;
+    param byte_order = "big-endian";
+}

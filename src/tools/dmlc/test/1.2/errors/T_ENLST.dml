@@ -1,0 +1,22 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+method init {
+    /// ERROR ENLST
+    select x in (1) where (true) {
+    } else {
+    }
+    /// ERROR ENLST
+    foreach x in (1) {
+    }
+    /// ERROR ENLST
+    select x in ($dev) where (true) {
+    } else {
+    }
+    /// ERROR ENLST
+    foreach x in ($dev) {
+    }
+}

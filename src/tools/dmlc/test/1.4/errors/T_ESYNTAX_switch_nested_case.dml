@@ -1,0 +1,18 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+method init() {
+    switch (x) {
+    case 4:
+    #foreach x in ([y]) {
+        // case must be direct child of switch
+        /// ERROR ESYNTAX
+        case y:
+            ;
+    }
+    }
+}

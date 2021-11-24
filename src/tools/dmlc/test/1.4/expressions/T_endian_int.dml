@@ -1,0 +1,241 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+// Test functionality of EndianInt types in various contexts
+
+dml 1.4;
+
+device test;
+
+import "testing.dml";
+
+header %{
+bool coerce_vargs(uint64 coerce, ...) {
+    va_list varargs;
+    va_start(varargs, coerce);
+    uint64 var_arg = va_arg(varargs, uint64);
+    va_end(varargs);
+    bool ok = 1;
+    ok = ok & (coerce == 0xFFFFFFF);
+    ok = ok & (var_arg == 0xFFFFFF0);
+    return ok;
+}
+%}
+
+extern bool coerce_vargs(uint64, ...);
+
+template use_typed_endianint_parameters {
+    // No need to test the types exhuastively
+    param typed_int64_be_t : int64_be_t;
+    param typed_uint64_le_t : uint64_le_t;
+    param typed_uint8_le_t : uint8_le_t;
+    param typed_int8_le_t : int8_le_t;
+    shared method s_m_t(int x) throws default {
+        expect(x == 10, "coerced eint argument in shared throwing method call");
+    }
+    shared method s_m(int x) -> (int) default {
+        return x / 2;
+    }
+    method m_t(int x) throws default {
+        expect(x == 10, "coerced eint argument in template method call");
+    }
+    method m(int x) -> (int) default {
+        return x / 2;
+    }
+}
+
+param int_val = 5;
+
+port p is use_typed_endianint_parameters {
+    param typed_int64_be_t  = -255;
+    param typed_uint64_le_t = 0xFFFFFFFF;
+    param typed_uint8_le_t  = 255;
+    param typed_int8_le_t = int_val;
+}
+
+typedef struct {
+  int24_be_t int24be;
+  int48_le_t int48lea[2];
+} be_struct;
+
+typedef uint24_be_t endian_alias_t;
+
+method int_arg(int64 arg) -> (int64) {
+    assert arg == 10;
+    // recreate endian int locally, and return
+    return cast(arg, int64_le_t);
+}
+
+method test() throws {
+    local int64_be_t int64be   = 0x7f;
+    local int64_le_t int64le   = 0x7f;
+    local int56_le_t uint56le  = 0x7f;
+    local int48_le_t int48le   = 0x7f;
+    local uint24_be_t uint24be = 0x7f;
+    local uint64_le_t uint64le = 0x7f;
+    local int8_be_t int8be   = 0x7f;
+    local int8_le_t int8le   = 0x7f;
+    local uint8_be_t uint8be = 0x7f;
+    // These should all trivially be true;
+    expect(int64be == 0x7f, "int64be == 0x7f");
+    expect(int64be == int64le, "int64be  == int64le");
+    expect(int64be == uint64le, "int64be == uint64le");
+    expect(int64be == uint56le, "int64be == uint56le");
+    expect(int64be == int48le, "int64be  == int48le");
+    expect(int64be == uint24be, "int64be == uint24be");
+    expect(int64be == int8be, "int64be == int8be");
+    expect(int64be == int8le, "int64be == int8le");
+    expect(int64be == uint8be, "int64be == uint8be");
+    // Sanity check some transitive, reflexive, and commutative properties
+    expect(int64be == int64be, "int64be == int64be");
+    expect(int64le == int64be, "int64le == int64be");
+    expect(uint64le == int64be, "uint64le == int64be");
+    expect(int64le == uint64le, "int64le == uint64le");
+    expect(uint64le == int8be, "uint64le == int8be");
+    expect(int8be == uint64le, "int8be == uint64le");
+    expect(int8be == uint8be, "int8be == int8be");
+
+    // Check that parameters and typed parameters work correctly
+    local int8_be_t local_from_param = int_val;
+    expect(local_from_param == 5, "int8_be local_from_param");
+    local use_typed_endianint_parameters tp =
+        cast(p, use_typed_endianint_parameters);
+    expect(tp.typed_int64_be_t == -255, "typed_int64_be");
+    expect(tp.typed_uint64_le_t == 0xFFFFFFFF, "typed_uint64_le");
+    expect(tp.typed_uint8_le_t == 255, "typed_uint8_le");
+    expect(tp.typed_int8_le_t == 5, "typed_int8_le from param");
+
+    // Check session variable
+    // TODO: Session initializers are required to be constant,
+    // which implicitly converted endian ints are not
+    session int32_be_t int32_be_t_session;
+    int32_be_t_session = -2555;
+    session uint16_le_t uint16_le_t_session;
+    uint16_le_t_session = 455;
+    expect(int32_be_t_session == -2555, "int32_be_session variable");
+    expect(uint16_le_t_session == 455, "uint16_le_session variable");
+    local bitfields 32 { uint32 whatever @ [31:0]; } bf = 0xff;
+    local int64_be_t from_bitfield = bf;
+    expect(from_bitfield == 0xff, "int64_be_t from bitfield");
+
+    // Check that shorthand variable statements work
+    local int48_le_t var = 10;
+    var += 5;
+    expect(var == 15, "eint += int");
+    var -= 10;
+    expect(var == 5, "eint -= int");
+    var *= 4;
+    expect(var == 20, "eint *= int");
+    var /= 5;
+    expect(var == 4, "eint /= int");
+    var %= 3;
+    expect(var == 1, "eint %= int");
+
+    local int i = 10;
+    i += var;
+    expect(i == 11, "int += eint");
+    i -= var;
+    expect(i == 10, "int -= eint");
+    i *= var;
+    expect(i == 10, "int *= eint");
+    i /= var;
+    expect(i == 10, "int /= eint");
+    i %= var;
+    expect(i == 0, "int %= eint");
+
+    // Check endianint as struct member
+    local be_struct bes;
+    local be_struct bes2;
+    local be_struct *besp = &bes;
+    bes.int24be = 5;
+    bes.int48lea[0] = 10;
+    bes.int48lea[1] = 15;
+    expect(bes.int24be == 5, "eint in struct write");
+    expect(bes.int48lea[0] == 10, "eint array [0] in struct write");
+    expect(bes.int48lea[1] == 15, "eint array [1] in struct write");
+    expect(besp->int24be == 5, "eint in ptr to struct write");
+    expect(besp->int48lea[0] == 10, "eint array [0] in ptr to struct write");
+    expect(besp->int48lea[1] == 15, "eint array [1] in ptr to struct write");
+    besp->int24be = 10;
+    expect(bes.int24be == 10, "eint in struct write ptr");
+    expect(besp->int24be == 10, "eint in ptr to struct write ptr");
+    besp->int48lea[1] = 5;
+    expect(bes.int48lea[1] == 5, "eint array in struct write ptr");
+    expect(besp->int48lea[1] == 5, "eint array in struct write ptr");
+    bes2 = bes;
+    expect(bes2.int24be == 10, "eint in struct write struct");
+    expect(bes2.int48lea[0] == 10, "eint array [0] in struct write struct");
+    expect(bes2.int48lea[1] == 5, "eint array [1] in struct write struct");
+
+    // Check size of endianint in structs
+    expect(sizeoftype be_struct == 15, "sizeof struct with eints");
+    expect(sizeof(bes) == 15, "sizeof struct var with eints");
+
+    // Method call with eint arg
+    var = 10;
+    expect(int_arg(var) == 10, "eint to int argument");
+
+    expect(coerce_vargs(cast(0xFFFFFFF, uint56_be_t),
+                        cast(0xFFFFFF0, uint56_le_t)),
+           "eint to int implicit in varargs");
+
+    // Trait method call with eint arg
+    // indirect, throws
+    tp.s_m_t(var);
+    // indirect, nothrow
+    expect(tp.s_m(var) == 5, "coerced eint argument, indirect shared nothrow");
+    // direct, throws
+    p.s_m_t(var);
+    // direct, nothrow
+    expect(p.s_m(var) == 5, "coerced eint argument, direct shared nothrow");
+    // non-shared, throws
+    p.m_t(var);
+    // non-shared, nothrow
+    expect(p.m(var) == 5, "coerced eint argument, template nothrow method");
+
+    // Check log info formatting
+    log info, 1: "eint: %d", var;
+
+    // Check bitslicing operations
+    local uint24_le_t ule24;
+    ule24 = 0xf2f0f1;
+    expect(ule24[7:0] == 0xf1, "bitslice eint");
+    ule24[15:8] = 0xf;
+    expect(ule24 == 0xf20ff1, "bitslice write eint");
+
+    // Check casts, only concerned about compilation
+    i = 5;
+    local int48_be_t i48be;
+    // Implicit
+    i48be = 5;
+    // Explicit
+    i48be = cast(5, int48_be_t);
+    // From variable, implicit
+    i48be = i;
+    // From variable, explicit
+    i48be = cast(i, int48_be_t);
+    // Other way around
+    i = i48be;
+    i = cast(i48be, int);
+    i = cast(i48be, endian_alias_t);
+
+    // Check endian int as array index
+    local int8 arr[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+    expect(arr[i48be] == 5, "endian int as array index");
+
+    // Check implicit coerce to bitfield
+    // Only concerned about compilation
+    local bitfields 48 {
+       uint4 a @ [5:2];
+    } bt = i48be;
+
+    // Check rudimentary pointer arithmetic
+    local int iarr[3] = {0, 1, 2};
+    local int *iarrp = &iarr[1];
+    var = 1;
+    expect((iarrp + var) == &iarr[2]
+           && (var + iarrp) == &iarr[2]
+           && (iarrp - var) == &iarr[0],
+           "pointer arith");
+}

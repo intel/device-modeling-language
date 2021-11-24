@@ -1,0 +1,167 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// COMPILE-ONLY
+
+import "utility.dml";
+
+// Test the 'in each' statement.
+
+template x_1 { param x default 1; }
+in each bank { param x default 0; }
+in each group { is x_1; }
+in each field { param x default 4; }
+bank b {
+    // from 'in each bank' block
+    #if (this.x != 0) { error; }
+    in each register { param x = 3; }
+    group g1 {
+        // from 'in each group' block
+        #if (this.x != 1) { error; }
+        // 'in each' respects object hierarchy: this block is not applied to g1
+        // itself, nor to b2.g3
+        in each x_1 {
+            param x default 2;
+        }
+        group g2 {
+            // declaration from 'in each x_1' block overrides declaration from
+            // x_1
+            #if (this.x != 2) { error; }
+        }
+        group g3 {
+            param x default 3;
+            // declaration from block containing 'in each' declaration
+            // overrides declaration from the 'in each' block
+            #if (this.x != 3) { error; }
+        }
+        register r size 1 is (unmapped) {
+            // from 'in each register'
+            #if (this.x != 3) { error; }
+            field f @ [0] is (read, write) {
+                // from 'in each field'
+                #if (this.x != 4) { error; }
+            }
+        }
+    }
+}
+bank b2 {
+    group g1 {
+        // not tainted by 'in each x_1' statement from b.g1
+        #if (this.x != 1) { error; }
+    }
+}
+
+// 'if' inside 'each' works, and the condition may depend on parameters from
+// outer scope
+bank cond {
+    in each group {
+        param cond;
+        #if (cond) {
+            register r { param p = 5; }
+        } #else {
+            register r { param p = 4; }
+        }
+    }
+    group t {
+        param cond = true;
+        register r size 1 @ 0 {
+            #if (this.p != 5) { error; }
+        }
+    }
+    group f {
+        param cond = false;
+        register r size 1 @ 1 {
+            #if (this.p != 4) { error; }
+        }
+    }
+}
+
+// a template instantiated by an 'is' statement can trigger further 'in each'
+// statements
+template x {}
+template y { param p default 0; }
+in each x { is y; }
+in each y { param p default 2; }
+port p {
+     is x;
+     #if (this.p != 2) { error; }
+}
+
+// An 'in each' can contain nested 'in each' statements
+template a {}
+template b {}
+in each a {
+    param q default 1;
+    in each b {
+        param q default 2;
+    }
+}
+bank nested {
+    group g {
+        is a;
+        is b;
+        // 'in each b' from 'in each a' block not triggered here...
+        #if (this.q != 1) { error; }
+        group h1 {
+            is b;
+            // ... but here.
+            #if (this.q != 2) { error; }
+        }
+        group h2 {
+            is a;
+            is b;
+            // Here, both 'in each a' and 'in each b' are triggered, but the
+            // 'in each a' takes precedence (declarations from an 'in each'
+            // block are overridden by declarations from the block containing
+            // the 'in each' statement)
+            #if (this.q != 1) { error; }
+        }
+    }
+}
+
+template foo {}
+template bar {}
+
+bank b3 {
+    in each (group, foo, bar) {
+        param a = 1;
+    }
+    in each (group, bar) {
+        param b = 1;
+    }
+    in each (bar, foo) {
+        param c = 1;
+    }
+    in each (foo, bar) {
+        param d = 1;
+    }
+    register r size 1 is (foo, bar, unmapped) {
+        param a default 0; #if (this.a != 0) { error; }
+        param b default 0; #if (this.b != 0) { error; }
+        #if (this.c != 1) { error; }
+        #if (this.d != 1) { error; }
+    }
+    group y is (foo, bar) {
+        #if (this.a != 1) { error; }
+        #if (this.b != 1) { error; }
+        #if (this.c != 1) { error; }
+        #if (this.d != 1) { error; }
+    }
+    group z is (foo) {
+        param a default 0; #if (this.a != 0) { error; }
+        param b default 0; #if (this.b != 0) { error; }
+        param c default 0; #if (this.c != 0) { error; }
+        param d default 0; #if (this.d != 0) { error; }
+    }
+    group w is (bar) {
+        param a default 0; #if (this.a != 0) { error; }
+        #if (this.b != 1) { error; }
+        param c default 0; #if (this.c != 0) { error; }
+        param d default 0; #if (this.d != 0) { error; }
+    }
+}

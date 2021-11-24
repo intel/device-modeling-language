@@ -1,0 +1,48 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// ERROR EVOID
+session void i;
+
+typedef struct {
+    /// ERROR EVOID
+    void m;
+} t;
+
+// no error
+session void (*f1)(void);
+
+/// ERROR EVOID
+session int (*f2)(void arg);
+/// ERROR EVOID
+session int (*f3)(void, int i);
+
+/// ERROR EVOID
+session void arr1[2];
+// no error
+session void *arr2[2];
+/// ERROR EVOID
+session void (*arr3)[2];
+
+// no errors
+typedef void void_t;
+extern typedef const void ext_void_t;
+
+/// ERROR EVOID
+session void
+/// WARNING WEXPERIMENTAL
+    vect v;
+
+// this is allowed in 1.2, and even used by dml-builtins, unclear why
+/// ERROR EVOID
+extern void x;
+
+method init() {
+    /// ERROR EVOID
+    local void i;
+}

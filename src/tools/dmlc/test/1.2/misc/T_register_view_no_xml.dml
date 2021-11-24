@@ -1,0 +1,18 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+// Make sure that register_view can handle when device info is not present
+
+dml 1.2;
+device test;
+bitorder be;
+
+import "utility.dml";
+import "io-memory.dml";
+
+bank b {
+    parameter register_size = 4;
+    register r1 @ 0x00 is (read_write) {}
+    register r2 @ undefined is (read_write) {}
+}

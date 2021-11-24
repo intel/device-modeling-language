@@ -1,0 +1,42 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+template A {
+    parameter X = true;
+}
+
+template B is (A) {
+    parameter Y = true;
+}
+
+bank {
+    parameter register_size = 4;
+    register r1 @0 is (A);
+    register r2 @4 is (A,B);
+    register r3 @8 is (A,A);
+    register r4 @12 {
+        is A;
+    }
+    register r5 @16 is A {
+        is B;
+    }
+    register r6 @20 is (A) {
+        is (A, B);
+    }
+}
+
+method test -> (bool ok)
+{
+    ok = ($r1.X &&
+          $r2.X && $r2.Y &&
+          $r3.X &&
+          $r4.X &&
+          $r5.X && $r5.Y &&
+          $r6.X && $r6.Y
+        );
+}

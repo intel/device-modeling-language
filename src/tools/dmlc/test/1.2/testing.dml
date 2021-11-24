@@ -1,0 +1,30 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+// Testing support.
+//
+// Each test case that isn't supposed to fail with a compilation error
+// should do
+//
+//   import "testing.dml";
+//
+// and then optionally define a 'test' method that gives a boolean
+// result indicating whether the test succeeded (true) or failed
+// (false).
+
+attribute runtest {
+    parameter configuration = "pseudo";
+    parameter type = "b";
+    method get -> (attr_value_t value) {
+        local bool result = true;
+        inline $test -> (result);
+        value = SIM_make_attr_boolean(result);
+    }
+}
+
+method test -> (bool result) default {
+    result = true;
+}

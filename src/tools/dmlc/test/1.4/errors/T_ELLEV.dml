@@ -1,0 +1,17 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+method init {
+    /// ERROR EBTYPE
+    log "info", true: "hej";
+    /// ERROR ELLEV
+    log "info", 0: "hej";
+    /// ERROR ELLEV
+    log "info", 5: "hej";
+    local int level = 18;
+    // unable to detect the error here
+    log "info", level: "hej";
+}

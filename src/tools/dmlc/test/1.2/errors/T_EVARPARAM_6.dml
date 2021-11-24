@@ -1,0 +1,18 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+/// ERROR EVARPARAM
+parameter n = ($b.r == 0);
+
+bank b {
+    register r size 4 @ undefined;
+}
+
+method test -> (bool ok) {
+    ok = $n;
+}

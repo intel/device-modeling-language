@@ -1,0 +1,93 @@
+/*
+  © 2013-2021 Intel Corporation
+  SPDX-License-Identifier: 0BSD
+*/
+
+dml 1.4;
+
+// This file exposes some utility C macros to DML. These macros are not
+// officially supported, and may be changed without notice.
+
+// simics/util/vect.h
+extern void VINIT(...);
+extern size_t VELEMSIZE(...);
+extern void VRESIZE(...);
+extern void VRESIZE_FREE(...);
+extern void VADD(...);
+extern void VREMOVE(...);
+extern void VDELETE_ORDER(...);
+extern void VINSERT(...);
+extern void VSETLAST(...);
+extern int VLEN(...);
+extern void *VVEC(...);
+extern void VGROW(...);
+extern void VSHRINK(...);
+extern void VFREE(...);
+extern void VTRUNCATE(...);
+extern void VCLEAR(...);
+extern void VCOPY(...);
+// No QUEUE
+
+// simics/util/swabber.h
+extern uint8  CONVERT_LE8 (uint8  val);
+extern uint16 CONVERT_LE16(uint16 val);
+extern uint32 CONVERT_LE32(uint32 val);
+extern uint64 CONVERT_LE64(uint64 val);
+
+extern uint8  CONVERT_BE8 (uint8  val);
+extern uint16 CONVERT_BE16(uint16 val);
+extern uint32 CONVERT_BE32(uint32 val);
+extern uint64 CONVERT_BE64(uint64 val);
+
+extern uint8  LOAD_LE8 (void *src);
+extern uint16 LOAD_LE16(void *src);
+extern uint32 LOAD_LE32(void *src);
+extern uint64 LOAD_LE64(void *src);
+
+extern uint8  LOAD_BE8 (void *src);
+extern uint16 LOAD_BE16(void *src);
+extern uint32 LOAD_BE32(void *src);
+extern uint64 LOAD_BE64(void *src);
+
+extern void STORE_LE8 (void *dst, uint8  val);
+extern void STORE_LE16(void *dst, uint16 val);
+extern void STORE_LE32(void *dst, uint32 val);
+extern void STORE_LE64(void *dst, uint64 val);
+
+extern void STORE_BE8 (void *dst, uint8  val);
+extern void STORE_BE16(void *dst, uint16 val);
+extern void STORE_BE32(void *dst, uint32 val);
+extern void STORE_BE64(void *dst, uint64 val);
+
+extern uint8  UNALIGNED_LOAD_LE8 (void *src);
+extern uint16 UNALIGNED_LOAD_LE16(void *src);
+extern uint32 UNALIGNED_LOAD_LE32(void *src);
+extern uint64 UNALIGNED_LOAD_LE64(void *src);
+
+extern uint8  UNALIGNED_LOAD_BE8 (void *src);
+extern uint16 UNALIGNED_LOAD_BE16(void *src);
+extern uint32 UNALIGNED_LOAD_BE32(void *src);
+extern uint64 UNALIGNED_LOAD_BE64(void *src);
+
+extern void UNALIGNED_STORE_LE8 (void *dst, uint8  val);
+extern void UNALIGNED_STORE_LE16(void *dst, uint16 val);
+extern void UNALIGNED_STORE_LE32(void *dst, uint32 val);
+extern void UNALIGNED_STORE_LE64(void *dst, uint64 val);
+
+extern void UNALIGNED_STORE_BE8 (void *dst, uint8  val);
+extern void UNALIGNED_STORE_BE16(void *dst, uint16 val);
+extern void UNALIGNED_STORE_BE32(void *dst, uint32 val);
+extern void UNALIGNED_STORE_BE64(void *dst, uint64 val);
+
+extern const strbuf_t SB_INIT;
+
+// simics/util/bitcount.h
+extern bool IS_POWER_OF_2(uint64 x);
+extern uint32 COUNT_LEADING_ZEROS32(uint32 x);
+extern uint32 COUNT_LEADING_ZEROS64(uint64 x);
+extern uint32 COUNT_TRAILING_ZEROS32(uint32 x);
+extern uint32 COUNT_TRAILING_ZEROS64(uint64 x);
+extern uint32 LOG2(uint32 x);
+extern uint32 LOG2_64(uint64 x);
+
+import "simics/util/bitcount.dml";

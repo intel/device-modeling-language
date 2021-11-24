@@ -1,0 +1,28 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+// This caught bug #5480
+
+data bool b;
+
+method m {
+    call $other();
+}
+
+method other() {
+    $b = !$b;
+}
+
+attribute alttest {
+    parameter type = "i";
+    parameter configuration = "pseudo";
+    method set(value) {
+        log "info": "running alttest";
+        after (0.1) call $m;
+        after (0.1) call $m();
+    }
+}

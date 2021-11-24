@@ -1,0 +1,56 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+import "testing.dml";
+
+method mark() nothrow {
+    $called = true;
+}
+
+method ret(int v) -> (int x) nothrow {
+    x = v;
+}
+
+method zero() -> (int x) nothrow {
+}
+
+header %{
+int ext_fun(void);
+%}
+footer %{
+int ext_fun(void) { return 5; }
+%}
+typedef int (*cb_t)(void);
+extern cb_t ext_fun;
+data cb_t fun;
+
+data bool called;
+
+bank b[i in 0..10] {
+    group g[j in 0..10] {
+        data bool called;
+        method mark() nothrow {
+            $called = true;
+        }
+        method ret() -> (int i) nothrow {
+            i = $i + $j;
+        }
+    }
+}
+
+method test -> (bool ok)
+{
+    $mark();
+    $b[4].g[7].mark();
+    $ret(0);
+    ok = $called && $b[4].g[7].called;
+    ok = ok && $ret(3) == 3 && $b[5].g[4].ret() == 9;
+    ok = ok && $zero() == 0;
+    $fun = ext_fun;
+    ok = ok && $fun() == 5;
+}

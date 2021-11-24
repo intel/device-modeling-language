@@ -1,0 +1,29 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+import "testing.dml";
+
+parameter documentation =
+"Implements the VMware tools protocol. Currently only supports the mouse " +
+"protocol.";
+
+import "utility.dml";
+import "simics-api.dml";
+import "io-memory.dml";
+
+header %{
+#include "vmcom.h"
+
+typedef struct {
+    int i;
+} foo_t;
+%}
+
+method init() {
+    /// ERROR ETYPE
+    local registers_t registers;
+}

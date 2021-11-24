@@ -1,0 +1,19 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+method init() {
+    // # is not a separate token, instead #if/#else are atomic tokens;
+    // furthermore, they are lexed greedily, so must be followed by space.
+    #if (false) ;
+    /// ERROR ESYNTAX
+    #else3
+    ;
+
+    /// ERROR ESYNTAX
+    #/**/if (false) ;
+}

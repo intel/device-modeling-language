@@ -1,0 +1,169 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+attribute a is uint64_attr {
+    /// WARNING WUNUSED_DML12
+    method before_set() {
+    }
+    /// WARNING WUNUSED_DML12
+    method after_set() {
+    }
+}
+
+bank b {
+    /// WARNING WUNUSED_DML12
+    method access(generic_transaction_t *memop, physical_address_t offset,
+                  physical_address_t size) throws {
+        default(memop, offset, size);
+    }
+    /// WARNING WUNUSED_DML12
+    method get_write_value(generic_transaction_t *memop) -> (uint64) {
+        local uint64 writeval;
+        writeval = default(memop);
+        return writeval;
+    }
+    /// WARNING WUNUSED_DML12
+    method set_read_value(generic_transaction_t *memop, uint64 value) {
+        default(memop, value);
+    }
+    /// WARNING WUNUSED_DML12
+    method read_access_memop(generic_transaction_t *memop,
+                             physical_address_t offset,
+                             physical_address_t size) {
+        default(memop, offset, size);
+    }
+    /// WARNING WUNUSED_DML12
+    method finalize_read_access(generic_transaction_t *memop, uint64 val) {
+        default(memop, val);
+    }
+    /// WARNING WUNUSED_DML12
+    method read_access(generic_transaction_t *memop, physical_address_t offset,
+                       physical_address_t size)
+        -> (bool, uint64) {
+        local bool ok;
+        local uint64 readvalue;
+        (ok, readvalue) = default(memop, offset, size);
+        return (ok, readvalue);
+    }
+    /// WARNING WUNUSED_DML12
+    method miss_read_access(physical_address_t offset, physical_address_t size)
+        -> (bool, uint64) {
+        return (false, 0);
+    }
+    /// WARNING WUNUSED_DML12
+    method write_access_memop(generic_transaction_t *memop,
+                              physical_address_t offset,
+                              physical_address_t size, uint64 value) {
+        default(memop, offset, size, value);
+    }
+    /// WARNING WUNUSED_DML12
+    method finalize_write_access(generic_transaction_t *memop, uint64 val) {
+    }
+    /// WARNING WUNUSED_DML12
+    method write_access(generic_transaction_t *memop,
+                        physical_address_t offset,
+                        physical_address_t size,
+                        uint64 writevalue) -> (bool) {
+        local bool ok;
+        ok = default(memop, offset, size, writevalue);
+        return ok;
+    }
+    /// WARNING WUNUSED_DML12
+    method miss_write_access(physical_address_t offset,
+                             physical_address_t size,
+                             uint64 value) -> (bool) {
+        return false;
+    }
+    /// WARNING WUNUSED_DML12
+    method _unmapped_read_access(generic_transaction_t *memop,
+                                 physical_address_t offset,
+                                 physical_address_t size)
+        -> (bool, uint64) {
+        local bool ok;
+        local uint64 val;
+        (ok, val) = default(memop, offset, size);
+        return (ok, val);
+    }
+
+    /// WARNING WUNUSED_DML12
+    method _unmapped_write_access(generic_transaction_t *memop,
+                                  physical_address_t offset,
+                                  physical_address_t size,
+                                  uint64 writevalue)
+        -> (bool) {
+        return default(memop, offset, size, writevalue);
+    }
+
+    /// WARNING WUNUSED_DML12
+    inline method miss_access(inline memop, inline offset, inline size) { }
+
+    register r size 4 @ 0 {
+        /// WARNING WUNUSED_DML12
+        method after_hard_reset() { }
+        /// WARNING WUNUSED_DML12
+        method after_soft_reset() { }
+        /// WARNING WUNUSED_DML12
+        inline method read_access(inline memop, inline msb1, inline lsb)
+            -> (uint64) {
+            local uint64 value;
+            value = default(memop, msb1, lsb);
+            return value;
+        }
+        /// WARNING WUNUSED_DML12
+        inline method read_access_main(inline memop, inline msb1, inline lsb)
+            -> (uint64) {
+            local uint64 value;
+            value = default(memop, msb1, lsb);
+            return value;
+        }
+        /// WARNING WUNUSED_DML12
+        inline method write_access(inline memop, inline msb1, inline lsb,
+                                   uint64 value) {
+            default(memop, msb1, lsb, value);
+        }
+        /// WARNING WUNUSED_DML12
+        inline method write_access_main(inline memop, inline msb1, inline lsb,
+                                   uint64 value) {
+            default(memop, msb1, lsb, value);
+        }
+        /// WARNING WUNUSED_DML12
+        inline method before_read(inline memop) {
+            default(memop);
+        }
+        /// WARNING WUNUSED_DML12
+        inline method after_read(inline memop) {
+            default(memop);
+        }
+        /// WARNING WUNUSED_DML12
+        inline method before_write(inline memop, inline msb1, inline lsb,
+                                   uint64 value) {
+            default(memop, msb1, lsb, value);
+        }
+        /// WARNING WUNUSED_DML12
+        inline method after_write(inline memop) {
+            default(memop);
+        }
+
+        field f @ [0:0] {
+            /// WARNING WUNUSED_DML12
+            inline method write_access(inline value) { }
+            /// WARNING WUNUSED_DML12
+            method read_access() -> (uint64) { return 5; }
+        }
+    }
+}
+
+connect c {
+    /// WARNING WUNUSED_DML12
+    method validate_port(conf_object_t *obj, const char *port)
+        -> (bool) { return true; }
+    /// WARNING WUNUSED_DML12
+    method before_set() {
+    }
+    /// WARNING WUNUSED_DML12
+    method after_set() {
+    }
+}

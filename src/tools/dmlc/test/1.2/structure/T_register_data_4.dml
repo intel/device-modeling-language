@@ -1,0 +1,124 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+import "io-memory.dml";
+
+// Test that registers can contain 'data'.
+
+template testreg {
+    data uint16 d;
+    method test {
+        // This checks if the same data storage is used multiple times
+        assert $d == 0;
+        $d = 1;
+    }
+    method read -> (value) {
+        value = $d;
+    }
+    method write(value) {
+        $d = value;
+        if ($allocate && !$fields[0].explicit)
+            $this = $d;
+    }
+    method get -> (uint64 value) {
+        value = $d;
+    }
+    method set(value) {
+        $d = value;
+    }
+}
+
+bank regs {
+    parameter function = 0;
+    register r1 size 4 @ 0 is (testreg) {
+        parameter allocate = true;
+    }
+    register r2 size 4 @ 4 is (testreg) {
+        parameter allocate = false;
+    }
+    register r3 size 4 @ 8 is (testreg) {
+        parameter allocate = true;
+        field f[31:0] {
+            parameter allocate = true;
+        }
+    }
+    register r4 size 4 @ 12 is (testreg) {
+        parameter allocate = true;
+        field f[31:0] {
+            parameter allocate = false;
+            method set(value) {}
+            method get -> (value) {value = 0;}
+            method write(value) {}
+            method read -> (value) {value = 0;}
+        }
+    }
+    register r5 size 4 @ 16 is (testreg) {
+        parameter allocate = false;
+        field f[31:0] {
+            parameter allocate = true;
+        }
+    }
+    register r6 size 4 @ 20 is (testreg) {
+        parameter allocate = false;
+        field f[31:0] {
+            parameter allocate = false;
+            method set(value) {}
+            method get -> (value) {value = 0;}
+            method write(value) {}
+            method read -> (value) {value = 0;}
+        }
+    }
+    register r7[i in 0..1][j in 0..1] size 4 @ 8 * $i + 4 * $j + 24
+             is (testreg) {
+        parameter allocate = true;
+    }
+    register r8[i in 0..1][j in 0..1] size 4 @ 8 * $i + 4 * $j + 40
+             is (testreg) {
+        parameter allocate = false;
+    }
+    // A control register that should not be allocated as a structure
+    register rr size 4 @ undefined;
+    // A control field that should not be allocated as a structure
+    register rf size 4 @ undefined {
+        field f[31:0];
+    }
+}
+
+header %{
+    static uint64 get_rr(conf_object_t *obj);
+    static uint64 get_rf(conf_object_t *obj);
+%}
+
+footer %{
+    static uint64 get_rr(conf_object_t *obj)
+    {
+        test_t *dev = (test_t *)obj;
+        return dev->regs.rr;
+    }
+    static uint64 get_rf(conf_object_t *obj)
+    {
+        test_t *dev = (test_t *)obj;
+        return dev->regs.rf.f;
+    }
+%}
+
+extern uint64 get_rr(conf_object_t *obj);
+extern uint64 get_rf(conf_object_t *obj);
+
+method test -> (bool ok)
+{
+    foreach r in ($regs.mapped_registers) {
+        inline r.test;
+        local uint32 val;
+        inline r.read() -> (val);
+        inline r.write(val);
+    }
+    get_rr($dev.obj);
+    get_rf($dev.obj);
+    $regs.r1 = 14;
+    ok = $regs.r1.fields[0] == 14;
+}

@@ -1,0 +1,51 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+extern char *strcpy(char *dst, const char *src);
+
+template foo {
+    method get_qname(char *s) {
+        strcpy(s, $qname);
+    }
+}
+
+bank b {
+    parameter register_size = 4;
+    register ra[4] @ undefined is (foo);
+    group g[4] {
+        register gr @ undefined is (foo);
+    }
+}
+
+method test -> (bool ok)
+{
+    local char qn1[100];
+    inline $b.ra[1].get_qname(qn1);
+    log "info": "qn1 = %s", qn1;
+
+    local char qn2[100];
+    inline $b.g[1].gr.get_qname(qn2);
+    log "info": "qn2 = %s", qn1;
+
+    local int x = 1;
+    local char qn3[100];
+    inline $b.ra[x].get_qname(qn3);
+    log "info": "qn3 = %s", qn1;
+
+    local char qn4[100];
+    inline $b.g[x].gr.get_qname(qn4);
+    log "info": "qn4 = %s", qn1;
+
+    ok =
+        strcmp($b.ra[1].qname, "b.ra[1]") == 0 &&
+        strcmp($b.g[1].gr.qname, "b.g[1].gr") == 0 &&
+        strcmp(qn1, "b.ra[1]") == 0 &&
+        strcmp(qn2, "b.g[1].gr") == 0 &&
+        strcmp(qn3, "b.ra[1]") == 0 &&
+        strcmp(qn4, "b.g[1].gr") == 0;
+}

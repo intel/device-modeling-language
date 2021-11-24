@@ -1,0 +1,23 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+event E {
+    /// WARNING WDEPRECATED
+    parameter timebase = "stacked";
+    method event(void *data) {
+        /// GREP .* E happened
+        log "info": "%s happened", $qname;
+    }
+}
+
+attribute post {
+    parameter configuration = "pseudo";
+    parameter type = "n";
+    method set(attr_value_t val) {
+        inline $E.post(undefined, NULL);
+    }
+}

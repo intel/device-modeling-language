@@ -1,0 +1,29 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+device test;
+/*
+// Unicode BiDi control characters are forbidden.
+/// ERROR ESYNTAX
+⁧לוס
+/// ERROR ESYNTAX
+⁨בילביליקוס קאנטאנ
+/// ERROR ESYNTAX
+⁦Los bilbilocos cantan
+/// ERROR ESYNTAX
+⁩⁩⁩
+/// ERROR ESYNTAX
+‪Con sospiros
+/// ERROR ESYNTAX
+‭de amor
+/// ERROR ESYNTAX
+‫קונ סוספירוס
+/// ERROR ESYNTAX
+‮די אמור
+/// ERROR ESYNTAX
+‬‬‬‬
+*/

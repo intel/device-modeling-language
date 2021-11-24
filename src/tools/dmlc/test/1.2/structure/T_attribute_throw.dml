@@ -1,0 +1,29 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+// Test that throwing in getters and setters give reasonable behaviour
+
+attribute a {
+    parameter type = "n";
+    method get_attribute() -> (attr_value_t v) {
+        throw;
+    }
+    method set_attribute(attr_value_t v) -> (set_error_t e) {
+        throw;
+    }
+}
+
+attribute b {
+    parameter type = "n";
+    method get() -> (attr_value_t v) {
+        throw;
+    }
+    method set(attr_value_t v) {
+        throw;
+    }
+}

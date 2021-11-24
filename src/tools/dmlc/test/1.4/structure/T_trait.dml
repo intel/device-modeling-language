@@ -1,0 +1,78 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+import "testing.dml";
+
+template base {
+    shared method m(int i) -> (int);
+    param param: int;
+    shared method o(int i) -> (int) { return this.m(i); }
+    session int d;
+    saved int e;
+    param traitref_param: base;
+
+    shared method hello2() {
+        /// GREP \[obj info\] hello
+        log info: "hello";
+    }
+
+    shared method hello() {
+        // p[1].hello calls p[2].hello2
+        this.traitref_param.hello2();
+    }
+}
+
+template child is base {
+    shared method m(int i) -> (int) {
+        local int k;
+        local int j;
+        (j, k) = n(i + 1);
+        return j;
+    }
+    shared method n(int i) -> (int, int) default {
+        return (3, 1);
+    }
+}
+
+port p[i < 2] {
+    is child;
+    param param = 13.2 + i;
+    param traitref_param = cast(p[1-i], base);
+
+    method n(int input) -> (int, int) default {
+        local int j;
+        local int k;
+        (j, k) = default(input);
+        return (input * (j + i), k + 3);
+    }
+}
+
+method test() throws {
+    local child c = cast(p[0], child);
+    local base pp;
+    local base *ppp = &pp;
+    *ppp = cast(cast(c, base), base);
+    pp.m(0);
+    c.m(0);
+    c.o(0);
+    expect(ppp->o(3) == 12, "ppp->o(3) == 12");
+    expect(p[1].o(3) == 16, "p[1].o(3) == 16");;
+    // The parameters value is given as a float value 14.2; the parameter's type
+    // causes this to be truncated to an integer when referenced
+    // dynamically as a trait parameter.
+    expect(cast(p[1], child).param == 14, "cast(p[1], child).param == 14");
+    expect(p[1].param == 14.2, "p[1].param == 14.2");
+    p[0].d = 4;
+    p[0].e = 5;
+    expect(ppp->d == 4, "ppp->d == 4");
+    expect(ppp->e == 5, "ppp->e == 5");
+    expect(p[1].traitref_param.d == 4, "p[1].traitref_param.d == 4");
+    expect(p[1].traitref_param.e == 5, "p[1].traitref_param.e == 5");
+    expect(p[1].param == 14.2, "p[1].param == 14.2");
+    p[1].hello();
+}

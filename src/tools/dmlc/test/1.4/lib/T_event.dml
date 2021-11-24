@@ -1,0 +1,151 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+attribute simple_cycle_happened is (int64_attr);
+event simple_cycle is (simple_cycle_event) {
+    param desc = "a cycle event with no data";
+    method event() { simple_cycle_happened.val = 1; }
+}
+
+port p {
+    attribute simple_time_happened is (int64_attr);
+    event simple_time is (simple_time_event) {
+        method event() { simple_time_happened.val = 1; }
+    }
+}
+
+attribute int_cycle_happened is (uint64_attr);
+event int_cycle is (uint64_cycle_event) {
+    param desc = "a cycle event with integer data";
+    method event(uint64 data) { int_cycle_happened.val = data; }
+}
+attribute int_time_happened is (uint64_attr);
+event int_time is (uint64_time_event) {
+    method event(uint64 data) { int_time_happened.val = data; }
+}
+
+attribute custom_cycle_happened is (int64_attr);
+attribute custom_cycle_destroyed is (int64_attr);
+event custom_cycle is (custom_cycle_event) {
+    param desc = "a cycle event with custom data";
+
+    method get_event_info(void *data) -> (attr_value_t) {
+        return SIM_make_attr_int64(cast(cast(data, uintptr_t), int));
+    }
+    method set_event_info(attr_value_t info) -> (void *) {
+        return cast(cast(SIM_attr_integer(info), uintptr_t), void *);
+    }
+    method destroy(void *data_) {
+        assert custom_cycle_destroyed.val == 0;
+        local int32 data = cast(data_, uintptr_t);
+        // Log message, so we can check that it's run on object deletion
+        log info: "DESTROY CYCLE %d", data;
+        custom_cycle_destroyed.val = data;
+    }
+    method event(void *data) {
+        custom_cycle_happened.val = cast(cast(data, uintptr_t), int32);
+    }
+}
+
+attribute custom_time_happened is (int64_attr);
+attribute custom_time_destroyed is (int64_attr);
+event custom_time is (custom_time_event) {
+
+    method get_event_info(void *data) -> (attr_value_t) {
+        return SIM_make_attr_int64(cast(cast(data, uintptr_t), int));
+    }
+    method set_event_info(attr_value_t info) -> (void *) {
+        return cast(cast(SIM_attr_integer(info), uintptr_t), void *);
+    }
+    method destroy(void *data_) {
+        assert custom_time_destroyed.val == 0;
+        local int32 data = cast(data_, uintptr_t);
+        log info: "DESTROY TIME %d", data;
+        custom_time_destroyed.val = data;
+    }
+    method event(void *data) {
+        custom_time_happened.val = cast(cast(data, uintptr_t), int32);
+    }
+}
+
+// Export DML methods to Python via attributes
+attribute simple_cycle_next is (read_only_attr) {
+    param type = "i";
+    method get() -> (attr_value_t) {
+        return SIM_make_attr_int64(simple_cycle.next());
+    }
+}
+port p {
+    attribute simple_time_next is (read_only_attr) {
+        param type = "f";
+        method get() -> (attr_value_t) {
+            return SIM_make_attr_floating(simple_time.next());
+        }
+    }
+}
+attribute int_cycle_next is (read_only_attr) {
+    param type = "i";
+    method get() -> (attr_value_t) {
+        return SIM_make_attr_int64(int_cycle.next(4711));
+    }
+}
+attribute int_time_next is (read_only_attr) {
+    param type = "f";
+    method get() -> (attr_value_t) {
+        return SIM_make_attr_floating(int_time.next(1685));
+    }
+}
+
+attribute simple_cycle_posted is (read_only_attr) {
+    param type = "b";
+    method get() -> (attr_value_t) {
+        return SIM_make_attr_boolean(simple_cycle.posted());
+    }
+}
+port p {
+    attribute simple_time_posted is (read_only_attr) {
+        param type = "b";
+        method get() -> (attr_value_t) {
+            return SIM_make_attr_boolean(simple_time.posted());
+        }
+    }
+}
+attribute int_cycle_posted is (read_only_attr) {
+    param type = "b";
+    method get() -> (attr_value_t) {
+        return SIM_make_attr_boolean(int_cycle.posted(4711));
+    }
+}
+attribute int_time_posted is (read_only_attr) {
+    param type = "b";
+    method get() -> (attr_value_t) {
+        return SIM_make_attr_boolean(int_time.posted(1685));
+    }
+}
+
+attribute post_all is (write_only_attr) {
+    param type = "n";
+    method set(attr_value_t val) throws {
+        simple_cycle.post(2);
+        int_cycle.post(4, 4711);
+        custom_cycle.post(6, cast(cast(-1, uintptr_t), void *));
+        p.simple_time.post(1.0);
+        int_time.post(2.0, 1685);
+        custom_time.post(3.0, cast(cast(1750, uintptr_t), void *));
+    }
+}
+
+attribute remove is (write_only_attr) {
+    param type = "i";
+
+    method set(attr_value_t val) throws {
+        simple_cycle.remove();
+        int_cycle.remove(SIM_attr_integer(val));
+        p.simple_time.remove();
+        int_time.remove(SIM_attr_integer(val));
+    }
+}

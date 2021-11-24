@@ -1,0 +1,20 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+// Bug 6555
+
+bank b {
+    register r size 4 @ 0;
+}
+
+method test -> (bool ok) {
+    local uint8 x = 255;
+    local int bitnum = 2;
+    $b.r = 0xffffffff;
+    ok = x[0] && $b.r[5:5] && $b.r[bitnum];
+}

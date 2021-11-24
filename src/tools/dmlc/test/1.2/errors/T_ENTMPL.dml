@@ -1,0 +1,31 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+/// ERROR ENTMPL
+is asdf;
+
+/// WARNING WEXPERIMENTAL
+trait t {
+    // no error, because t is never instantiated (it's an error in 1.4)
+    is qwer;
+}
+template x {
+    // no error, because x is never instantiated (it's an error in 1.4)
+    is yuio;
+}
+
+port p {
+    /// ERROR ENTMPL
+    is zxcv;
+}
+
+template y {
+    /// ERROR ENTMPL
+    is hjkl;
+}
+is y;

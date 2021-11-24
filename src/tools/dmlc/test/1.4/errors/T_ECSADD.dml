@@ -1,0 +1,23 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+typedef const char* string_t;
+
+method init() {
+    // no error
+    local const char *v1 = "a" + "b";
+
+    /// ERROR ECSADD
+    local const char *v2 = "a" + v1;
+    /// ERROR ECSADD
+    local const char *v3 = v1 + v2;
+    /// ERROR ECSADD
+    local string_t v4 = cast(v1,string_t) + cast(v2,string_t);
+    /// ERROR ECSADD
+    local const int8 *v5 = cast(v1,const int8*) + cast(v2,const int8*);
+}

@@ -1,0 +1,26 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+attribute foo[i in 0..3][j in 0..3] {
+    parameter configuration = "pseudo";
+    parameter type = "i";
+    method get -> (attr_value_t val) {
+        val = SIM_make_attr_uint64($i * 4 + $j);
+    }
+}
+
+attribute bad[5] {
+    parameter configuration = "pseudo";
+    parameter type = "n";
+    method get() -> (attr_value_t val) {
+        val = SIM_make_attr_nil();
+        if ($i == 2) throw;
+    }
+    method set(attr_value_t val) {
+        if ($i == 2) throw;
+    }
+}

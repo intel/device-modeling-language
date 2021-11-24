@@ -1,0 +1,15 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+method m(bool b) -> (int i) {
+}
+
+method init {
+    local int i;
+    local bool b;
+    /// ERROR EPTYPE
+    call $m(i) -> (i);
+}

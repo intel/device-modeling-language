@@ -1,0 +1,39 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+import "testing.dml";
+
+session struct { uint8 c[3]; } v3;
+saved struct { uint8 c[5]; } v5;
+
+template t {
+    session struct { uint8 c[7]; } v7;
+    saved struct { uint8 c[9]; } v9;
+}
+is t;
+
+typedef struct { struct { uint8 c[11]; } *s[2]; } t11;
+
+typedef struct { layout "big-endian" { uint8 c[13]; } *s[2]; } t13;
+
+method test() throws {
+    assert sizeof(v3) == 3;
+    assert sizeof(v5) == 5;
+    assert sizeof(v7) == 7;
+    assert sizeof(v9) == 9;
+    local t11 v11;
+    assert sizeof(*v11.s[0]) == 11;
+    local t13 v13;
+    assert sizeof(v13.s[0]->c) == 13;
+    local struct {uint8 c[15]; } v15;
+    assert sizeof(v15) == 15;
+    session struct {uint8 c[17]; } v17;
+    assert sizeof(v17) == 17;
+    saved struct {uint8 c[19]; } v19;
+    assert sizeof(v19) == 19;
+}

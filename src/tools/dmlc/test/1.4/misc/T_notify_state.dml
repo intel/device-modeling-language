@@ -1,0 +1,87 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+import "utility.dml";
+
+header %{
+    #include <assert.h>
+    extern uint64 *get_count_pointer(conf_object_t *obj);
+    void state_cb(conf_object_t *obj, conf_object_t *_, lang_void *__) {
+        (*get_count_pointer(obj))++;
+    }
+    void register_callbacks(conf_object_t *obj) {
+        SIM_add_notifier(obj,
+                         Sim_Notify_State_Change,
+                         obj,
+                         state_cb,
+                         NULL);
+    }
+
+    extern void exported_method(conf_object_t *);
+    void c_exported(conf_object_t * obj) {
+        exported_method(obj);
+    }
+%}
+
+extern void register_callbacks(conf_object_t *obj);
+
+method init() {
+    register_callbacks(dev.obj);
+}
+
+// These will both only be called from the callbacks registered
+// so, we do not need to be concerned with this being called twice
+method get_count() -> (uint64 *) {
+    return &count.count;
+}
+export get_count as "get_count_pointer";
+
+attribute count is read_only_attr {
+    param type = "i";
+    session uint64 count;
+    method get() -> (attr_value_t) {
+        // The count is incremented at exit of this method, so we
+        // must compensate
+        return SIM_make_attr_int64(count--);
+    }
+}
+
+method exposed_method() {
+    log info, 1: "Exposed method called";
+}
+export exposed_method as "exported_method";
+extern void c_exported();
+
+attribute a is pseudo_attr {
+    param type = "n";
+    method set(attr_value_t val) throws default {
+        log info, 1: "Attribute set called";
+    }
+    method get() -> (attr_value_t) {
+        log info, 1: "Attribute get called";
+        return SIM_make_attr_nil();
+    }
+}
+
+attribute ev is write_only_attr {
+    param type = "n";
+    method event() {
+        log info, 1: "Event triggered";
+    }
+    method set(attr_value_t val) throws default {
+        after 0.1 s: event();
+    }
+}
+
+implement signal {
+    method signal_raise() {
+        log info, 1: "Interface method called";
+    }
+    method signal_lower() {
+        // noop
+    }
+}

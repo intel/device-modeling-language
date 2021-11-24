@@ -1,0 +1,20 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "simics/devs/interrupt.dml";
+
+port p {
+    implement simple_interrupt {
+        method interrupt(int irq) {
+            log "info": "%s interrupt %d", $qname, irq;
+            $last_irq = irq;
+        }
+    }
+
+    attribute last_irq {
+        parameter allocate_type = "int32";
+    }
+}

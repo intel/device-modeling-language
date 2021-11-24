@@ -1,0 +1,30 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+// See bug 6928
+
+extern typedef void (*func_t)(void *d, conf_object_t *ini_obj);
+
+header %{
+    typedef void (*func_t)(void *d, conf_object_t *ini_obj);
+    void f(void *d, conf_object_t *ini_obj) {}
+    void g(func_t fp) {}
+%}
+extern void f(void *d, conf_object_t *ini_obj);
+
+extern void g(func_t fp);
+
+method test -> (bool ok)
+{
+    local func_t fp = f;
+    g(f);
+    g(&f);
+    g(fp);
+    g(*fp);
+    ok = true;
+}

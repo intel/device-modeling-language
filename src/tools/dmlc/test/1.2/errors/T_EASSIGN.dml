@@ -1,0 +1,75 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device eassign;
+
+extern const char *f(void);
+extern uint8 g(void);
+
+method m() -> (x) {}
+
+parameter p = 1;
+
+method init {
+    /// ERROR EASSIGN
+    0 = 1;
+    /// ERROR EASSIGN
+    "hej" = "hopp";
+    /// ERROR EASSIGN
+    0.5 = 0.6;
+    /// ERROR EASSIGN
+    false = true;
+
+    local int i;
+    /// ERROR EASSIGN
+    i++ = 5;
+
+    /// ERROR EASSIGN
+    cast(i, int) = 5;
+
+    /// ERROR EASSIGN
+    (i > 1 ? i : i) = 5;
+
+    local bool b;
+    /// ERROR EASSIGN
+    b && b = true;
+
+    /// ERROR EASSIGN
+    b || b = true;
+
+    /// ERROR EASSIGN
+    2 < 0 = true;
+
+    local uint8 j = 0;
+    /// ERROR EASSIGN
+    j & 255 = 5;
+
+    /// ERROR EASSIGN
+    (i = 4) = 5;
+
+    /// ERROR EASSIGN
+    &i = &i;
+
+    /// ERROR EASSIGN
+    !b = true;
+
+    /// ERROR EASSIGN
+    !!b = true;
+
+    /// ERROR EASSIGN
+    f() = "hej";
+
+    /// ERROR EASSIGN
+    new int = NULL;
+
+    /// ERROR EASSIGN
+    $p = 2;
+
+    /// ERROR EASSIGN
+    inline $m() -> (5);
+
+    /// ERROR EASSIGN
+    g()[1:0] = 1;
+}

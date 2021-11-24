@@ -1,0 +1,19 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device foo;
+
+header %{
+#define FOO 12
+%}
+
+extern FOO;
+
+method bar(i) {}
+
+// ICE, bug 17847
+method init {
+    inline $bar(FOO);
+}

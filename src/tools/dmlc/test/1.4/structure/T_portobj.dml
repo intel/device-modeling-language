@@ -1,0 +1,48 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+import "testing.dml";
+import "simics/simulator/conf-object.dml";
+
+bank b[i<2] {
+}
+port p[j<2] {
+    implement io_memory;
+    attribute a is (uint64_attr, init) {
+        param documentation = "blah";
+        method init() { val = 4711 + j; }
+    }
+}
+
+port x {
+    attribute a is (uint64_attr, init) {
+        param documentation = "blah";
+        method init() { val = 4711; }
+    }
+}
+
+method test() throws {
+    expect(SIM_object_descendant(dev.obj, "bank.b[0]") == b[0].obj, "b[0].obj");
+    expect(SIM_object_descendant(dev.obj, "port.p[1]") == p[1].obj, "p[1].obj");
+
+    assert SIM_get_attribute_attributes(SIM_object_class(p[1].obj), "a")
+        == (Sim_Attr_Optional | Sim_Attr_Legacy);
+    local attr_value_t v = SIM_get_attribute(p[1].obj, "a");
+    assert SIM_attr_integer(v) == 4712;
+    // compatibility proxy attribute
+    assert SIM_get_attribute_attributes(SIM_object_class(dev.obj), "p_a")
+        == (Sim_Attr_Pseudo | Sim_Attr_Legacy | Sim_Attr_Internal);
+    assert SIM_get_attribute_attributes(SIM_object_class(dev.obj), "x_a")
+        == (Sim_Attr_Pseudo | Sim_Attr_Legacy | Sim_Attr_Internal);
+    v = SIM_get_attribute(dev.obj, "p_a");
+    assert SIM_attr_integer(SIM_attr_list_item(v, 1)) == 4712;
+    SIM_free_attribute(v);
+    v = SIM_get_attribute(dev.obj, "x_a");
+    assert SIM_attr_integer(v) == 4711;
+    SIM_free_attribute(v);
+}

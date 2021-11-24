@@ -1,0 +1,40 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+/// DMLC-FLAG -DARG="bar"
+/// ERROR EINVOVER <command-line>
+/// ERROR EINVOVER
+parameter ARG = 4;
+
+// no error
+/// DMLC-FLAG -DARG2=14
+parameter ARG2 default 8;
+
+template a {
+    parameter foo = 1;
+}
+// Backward compatibility: When there is exactly one
+// non-default declaration, it takes precedence even if the
+// inheritance relation indicates otherwise..
+port ok {
+    is a;
+    // .. so no error here.
+    parameter foo default 2;
+    if ($foo != 1) { error; }
+}
+
+template y {
+    /// ERROR EINVOVER
+    parameter foo = 1;
+}
+
+// Cannot override non-default with non-default
+port p1 {
+    is y;
+    /// ERROR EINVOVER
+    parameter foo = 1;
+}

@@ -1,0 +1,10 @@
+/*
+  © 2010-2021 Intel Corporation
+  SPDX-License-Identifier: 0BSD
+*/
+
+// This module contains types needed when using or implementing the
+// interfaces simple_interrupt and/or trigger
+dml 1.2;
+
+import "simics/devs/interrupt.dml";

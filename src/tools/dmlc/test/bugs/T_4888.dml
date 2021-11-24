@@ -1,0 +1,25 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+/// COMPILE-ONLY
+
+import "utility.dml";
+import "simics-api.dml";
+import "io-memory.dml";
+
+bank regs {
+    method unexpected_read() -> (uint64 value) {
+        value = 0;
+    }
+
+    method read_access(generic_transaction_t *memop, uint32 offset, uint32 size) -> (bool success, uint64 readvalue) {
+        success = true;
+        switch (offset) {
+        default:
+            call $unexpected_read() -> (readvalue);
+        }
+    }
+}

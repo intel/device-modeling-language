@@ -1,0 +1,14 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+import "dml12-compatibility.dml";
+import "../../1.4/structure/group_hierarchy.dml";
+
+import "testing.dml";
+
+method test() -> (bool ok) { ok = true; }

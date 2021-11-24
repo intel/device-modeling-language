@@ -1,0 +1,82 @@
+<!--
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+-->
+
+<rn id="dml-experimental">
+  <name>DML experimental features</name>
+  <build-id value="4538"><add-note> Added a warning <tt>WEXPERIMENTAL</tt>,
+    which is signalled in
+    compile-time when using an experimental feature. Such features
+    should be avoided in production code, because there is a risk
+    that they will be changed in a backward
+    incompatible way. </add-note></build-id>
+  <build-id value="4538"><add-note> Added support for marking methods as not
+    throwing, and for
+    calling such methods in expressions. Suggested documentation:
+    A method can be declared as not throwing exceptions, using
+    the <tt>nothrow</tt> keyword:
+    <pre>
+    method m() nothrow {
+    ...
+    }
+    </pre>
+    In a nothrow declared method, it is not permitted to throw an
+    exception, or to invoke a method not declared nothrow, without
+    enclosing this in a <tt>try</tt> block.
+    The main benefit of declaring a method with the <tt>nothrow</tt> annotation, is
+    that calls to such methods can be embedded in expressions under
+    certain conditions. This is further discussed in the next
+    section.
+    If a default method is declared with <tt>nothrow</tt>,
+    the <tt>nothrow</tt> keyword should appear before the <tt>default</tt>
+    keyword in the declaration.
+    The <tt>nothrow</tt> annotation is considered a part of a method's
+    signature, and must therefore match in the default and non-default
+    implementations of a method.
+    A method call can be embedded in an expression if the following
+    conditions are met:
+    <ul>
+    <li>The method is declared with the <tt>nothrow</tt> annotation</li>
+    <li>The method has zero or one output parameter</li>
+    <li>The types of all input and output parameters of the method are
+    specified</li>
+    </ul>
+    When these conditions are fulfilled, the <tt>call</tt> keyword is not
+    required for a method call. If the method has an output parameter, the
+    method call expression assumes the value of that parameter, much like
+    a function return value in C. For example:
+    <pre>
+    method inc(int i) -> (int value) nothrow {
+    value = i + 1;
+    }
+    method f() {
+    local int six;
+    six = $inc(5);
+    }
+    </pre> </add-note></build-id>
+  <build-id value="4543"><add-note> Two methods
+    <fun>_unmapped_read_access</fun> and
+    <fun>_unmapped_write_access</fun> were added in
+    the <em>bank</em> template. These methods will be called
+    from <fun>access2</fun> upon unmapped accesses. They are
+    intended to be used together with the <tt>miss_pattern</tt>
+    parameter to provide customized logging information for such
+    events. The signature of these two methods are subjected to
+    potential changes in the future
+    <bug number="300062"/>. </add-note></build-id>
+  <build-id value="4556"><add-note> Support for field arrays, using the syntax
+    from DML 1.4. Two changes:
+    <ul><li>The range specification of a field can optionally be preceded
+    by <tt>@</tt>:
+    <pre>
+    field f @ [4:2];
+    </pre>
+    </li>
+    <li>A field can be declared as an array, as long as
+    the <tt>in 0..</tt> syntax is used for the array size:
+    <pre>
+    field f[i in 0..2] @ [2 * $i + 3 : 2 * $i];
+    </pre>
+    </li></ul> </add-note></build-id>
+</rn>

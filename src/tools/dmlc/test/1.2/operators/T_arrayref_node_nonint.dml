@@ -1,0 +1,17 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+import "io-memory.dml";
+
+bank b {
+    register r[4] size 4 @ undefined;
+}
+
+method test -> (bool b) {
+    $b.r[1].size;
+    b = true;
+}

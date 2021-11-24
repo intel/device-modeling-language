@@ -1,0 +1,24 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+bitorder be;
+
+/// COMPILE-ONLY
+
+import "utility.dml";
+
+bank b {
+    register r size 4 @ 0 {
+        field a[i < 2]           is (read, write);
+        field a[i < 2] @ [i:i]   is (read, write);
+        field a[i < 2]           is (read, write);
+        field b[i < 2] @ [i + 2] is (read, write);
+    }
+}
+
+method init() {
+    #if (b.r.a[1].msb != 30) { error; }
+}

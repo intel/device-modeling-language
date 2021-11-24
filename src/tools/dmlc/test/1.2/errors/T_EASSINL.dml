@@ -1,0 +1,33 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+// This tests what happens when inlined constant input parameters are
+// reassigned.
+
+// bug #5073
+
+method typed(int x) {
+    x = 17;
+}
+
+method untyped(x) {
+    /// ERROR EASSINL
+    x = 17;
+}
+
+constant c = 2;
+
+method init() {
+    /// ERROR EASSINL
+    inline $typed(1);
+    /// ERROR EASSINL
+    inline $typed(c);
+    /// ERROR EASSINL
+    inline $untyped(1);
+    /// ERROR EASSINL
+    inline $untyped(c);
+}

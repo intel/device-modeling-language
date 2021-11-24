@@ -1,0 +1,23 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+import "utility.dml";
+
+attribute read_raised is (bool_attr);
+attribute write_raised is (bool_attr);
+
+bank inquiry {
+    register r size 4 @ 0x0 is (read, write) {
+        method read() -> (uint64) {
+            read_raised.val = true;
+            return 0;
+        }
+        method write(uint64 val) {
+            write_raised.val = true;
+        }
+    }
+}

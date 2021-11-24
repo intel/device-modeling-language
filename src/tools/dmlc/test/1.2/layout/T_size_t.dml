@@ -1,0 +1,23 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+import "testing.dml";
+
+// DML 1.2 permits size_t as layout member, this is used in real devices
+typedef layout "big-endian" {
+    size_t member;
+} size_be_t;
+
+method test -> (bool ok) {
+    assert sizeoftype(size_t) == 8;
+    assert sizeoftype(size_be_t) == 8;
+    local const char *data = "\x11\x22\x33\x44\x55\x66\x77\x88";
+    local const size_be_t *x = cast(data, size_be_t *);
+    assert x->member == 0x1122334455667788;
+    ok = true;
+}

@@ -1,0 +1,61 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+import "testing.dml";
+
+typedef layout "big-endian" {
+    bitfields 24 {
+        uint8 c @ [23:16];
+        int12 b @ [15:4];
+        uint4 a @ [3:0];
+    } b24;
+    bitfields 8 {
+        uint4 a @ [5:2];
+    } b8;
+} bl_t;
+
+typedef layout "little-endian" {
+    bitfields 24 {
+        uint8 c @ [23:16];
+        int12 b @ [15:4];
+        uint4 a @ [3:0];
+    } b24;
+    bitfields 8 {
+        uint4 a @ [5:2];
+    } b8;
+} ll_t;
+
+method test() throws {
+    local uint8 *ptr;
+    local bl_t b;
+    local ll_t l;
+
+    expect(sizeoftype bl_t == 4, "sizeof be layout with bitfields");
+    expect(sizeoftype ll_t == 4, "sizeof le layout with bitfields");
+
+    local int i;
+    ptr = cast(&b, uint8*);
+    for (i = 0; i < 4; ++i)
+        ptr[i] = i + 0xf0;
+
+    expect(b.b24 == 0xf0f1f2, "be layout bitfield b24 read");
+    expect(b.b24.a == 0x2, "be layout bitfield b24.a read");
+    expect(b.b24.b == 0xf1f, "be layout bitfield b24.b read");
+    expect(b.b24.c == 0xf0, "be layout bitfield b24.c read");
+    expect(b.b8 == 0xf3, "be layout bitfield b8 read");
+    expect(b.b8.a == 0xc, "be layout bitfield b8.a read");
+
+    ptr = cast(&l, uint8*);
+    for (i = 0; i < 4; ++i)
+        ptr[i] = i + 0xf0;
+
+    expect(l.b24 == 0xf2f1f0, "le layout bitfield b24 read");
+    expect(l.b24.a == 0x0, "le layout bitfield b24.a read");
+    expect(l.b24.b == 0xf1f, "le layout bitfield b24.b read");
+    expect(l.b24.c == 0xf2, "le layout bitfield b24.c read");
+    expect(l.b8 == 0xf3, "le layout bitfield b8 read");
+    expect(l.b8.a == 0xc, "le layout bitfield b8.a read");
+}

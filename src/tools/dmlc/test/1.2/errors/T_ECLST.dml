@@ -1,0 +1,26 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+extern int f();
+
+port p0 {
+    /// ERROR ECLST
+    parameter l1 = [1,f(),3];
+}
+
+port p1 {
+    // No error here (but it used to be one)
+    parameter l2 = [1,$dev.name,3];
+}
+
+data int a[2];
+port p2 {
+    // This used to be permitted as a weird side-effect of unevalled
+    // expressions.
+    /// ERROR ECLST
+    parameter p1 = [$a[0]];
+}

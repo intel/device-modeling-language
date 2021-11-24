@@ -1,0 +1,23 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+method foo(x) -> (y) {
+    y = x;
+}
+
+method test -> (bool ok) {
+    local double y;
+
+    ok = true;
+
+    inline $foo(0.01) -> (y);
+    ok = ok && (y > 0);
+
+    inline $foo(255/125.0e6) -> (y);
+    ok = ok && (y > 0);
+}

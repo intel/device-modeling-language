@@ -1,0 +1,77 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+import "simics/devs/signal.dml";
+
+/// DMLC-FLAG --state-change-dml12
+
+header %{
+    #include <assert.h>
+
+    static uint64 counter = 0;
+
+    void state_cb(conf_object_t *obj, conf_object_t *_, lang_void *__) {
+        counter++;
+    }
+    void register_callbacks(conf_object_t *obj) {
+        SIM_add_notifier(obj,
+                         Sim_Notify_State_Change,
+                         obj,
+                         state_cb,
+                         NULL);
+    }
+%}
+
+extern void register_callbacks(conf_object_t *obj);
+extern uint64 counter;
+
+method init() {
+    register_callbacks($dev.obj);
+}
+
+attribute count {
+    parameter type = "i";
+
+    parameter configuration = "pseudo";
+    method get() -> (attr_value_t r) {
+        // The count is incremented at exit of this method, so we
+        // must compensate in the test
+        r = SIM_make_attr_int64(counter);
+    }
+}
+
+attribute a {
+    parameter type = "n";
+    parameter configuration = "pseudo";
+    method set(attr_value_t val) {
+        log info, 1: "Attribute set called";
+    }
+    method get() -> (attr_value_t r) {
+        log info, 1: "Attribute get called";
+        r = SIM_make_attr_nil();
+    }
+}
+
+attribute ev {
+    parameter type = "n";
+    parameter configuration = "pseudo";
+    method event() {
+        log info, 1: "Event triggered";
+    }
+    method set(attr_value_t val) {
+        after (0.1) call $event();
+    }
+}
+
+implement signal {
+    method signal_raise() {
+        log info, 1: "Interface method called";
+    }
+    method signal_lower() {
+        // noop
+    }
+}

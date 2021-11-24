@@ -1,0 +1,59 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+
+bank b {
+    register secret1 size 2 @ 0x0 {
+        parameter _confidentiality = 1;
+
+        method read() -> (value) {
+            value = 0;
+            /// WARNING WCONFIDENTIAL
+            SIM_log_info(1, $dev.obj, 0, "leaky: %s", $qname);
+            /// WARNING WCONFIDENTIAL
+            SIM_log_info(1, $dev.obj, 0, "leaky: %s", $no_leak.qname);
+
+            // no warning
+            log "info": "not leaky: %s", $qname;
+            log "info": "not leaky: %s", $leak.qname;
+        }
+
+        /// WARNING WCONFIDENTIAL
+        event leak;
+
+        // no warning
+        event no_leak {
+            method extern describe_event(void *data) -> (char *description) {
+                description = MM_STRDUP("no_leak");
+            }
+        }
+    }
+
+    register secret2 size 2 @ 0x2 {
+        field f[0] {
+            parameter _confidentiality = 1;
+            method read() -> (value) {
+                value = 0;
+                /// WARNING WCONFIDENTIAL
+                SIM_log_info(1, $dev.obj, 0, "leaky: %s", $qname);
+                /// WARNING WCONFIDENTIAL
+                SIM_log_info(1, $dev.obj, 0, "leaky: %s", $g.qname);
+
+                // no warning
+                log "info": "not leaky: %s", $qname;
+                log "info": "not leaky: %s", $g.qname;
+            }
+
+            group g;
+        }
+
+        // no warning
+        event no_leak;
+    }
+}
+

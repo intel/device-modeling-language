@@ -1,0 +1,41 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+method m0() nothrow {
+    /// ERROR EBADFAIL
+    throw;
+}
+
+method y() {
+}
+
+method m1() nothrow {
+    /// ERROR EBADFAIL
+    call $y();
+}
+
+method m2() nothrow {
+    /// ERROR EBADFAIL
+    inline $y();
+}
+
+method bad() nothrow {
+    /// ERROR EBADFAIL
+    throw;
+}
+
+method m3() {
+    inline $bad();
+}
+
+method init() {
+    call $m0();
+    call $m1();
+    call $m2();
+    call $m3();
+}
