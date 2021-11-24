@@ -1,0 +1,4 @@
+dml 1.2;
+// This file uses CRLF line endings
+device test;
+/// COMPILE-ONLY

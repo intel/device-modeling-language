@@ -1,0 +1,70 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+typedef layout "big-endian" {
+    uint8 pad[48];
+} lo_t;
+
+typedef layout "big-endian" {
+        uint8 a;
+        uint16 b;
+        uint24 c;
+        uint32 d;
+        uint40 e;
+        uint48 f;
+        uint56 g;
+        uint64 h;
+        uint32 pad1;
+        uint64 pad2;
+} swab_be_t;
+
+typedef layout "little-endian" {
+        uint8 a;
+        uint16 b;
+        uint24 c;
+        uint32 d;
+        uint40 e;
+        uint48 f;
+        uint56 g;
+        uint64 h;
+        uint32 pad1;
+        uint64 pad2;
+} swab_le_t;
+
+method foo(const lo_t *ptr) {
+    // nop
+}
+
+method print_swab_be(const swab_be_t *ptr) {
+        log "info", 4: "0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x",
+                ptr->a, ptr->b, ptr->c, ptr->d, ptr->e, ptr->f, ptr->g,
+                ptr->h;
+}
+
+method print_swab_le(const swab_le_t *ptr) {
+        log "info", 4: "0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x",
+                ptr->a, ptr->b, ptr->c, ptr->d, ptr->e, ptr->f, ptr->g,
+                ptr->h;
+}
+
+method test -> (bool ok)
+{
+    local lo_t x;
+    local const lo_t *y = &x;
+    call $foo(&x);
+    call $foo(y);
+    inline $foo(&x);
+    inline $foo(y);
+
+    local swab_be_t s_be;
+    call $print_swab_be(&s_be);
+    local swab_le_t s_le;
+    call $print_swab_le(&s_le);
+
+    ok = true;
+}

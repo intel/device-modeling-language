@@ -1,0 +1,32 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+bank b {
+    /// ERROR ENAMEID
+    param name = "^invalid!";
+}
+
+bank c {
+   register r size 1 @ 0 {
+        /// ERROR ENAMEID
+        param name = "";
+    }
+}
+
+bank d {
+   register r size 1 @ 0 {
+        field f @ [0] {
+            /// ERROR EBTYPE
+            param name = 15;
+        }
+   }
+}
+
+method m() {}
+/// ERROR ENAMEID
+export m as "";

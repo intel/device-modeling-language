@@ -1,0 +1,77 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+attribute foo is (uint64_attr) {
+    /// ERROR EATTRCOLL
+    saved int var;
+}
+/// ERROR EATTRCOLL
+saved int foo_var;
+
+attribute foo {
+    method bar() {
+        /// ERROR EATTRCOLL
+        saved int var;
+    }
+}
+method foo_bar() {
+   /// ERROR EATTRCOLL
+   saved int var;
+}
+
+// Dead method doesn't cause conflict
+attribute foo {
+    method foo() {
+        // no error
+        saved int var;
+    }
+}
+method foo_foo() {
+   saved int var;
+}
+
+method bar() {
+   // non-constant if
+   if (foo.var == 0) {
+       /// ERROR EATTRCOLL
+       saved int v;
+   } else {
+       /// ERROR EATTRCOLL
+       saved int v;
+   }
+}
+
+attribute p[j < 2] is (uint64_attr) {
+    /// ERROR EATTRCOLL
+    saved int i;
+    // no error
+    saved int ok;
+}
+/// ERROR EATTRCOLL
+saved int p_i;
+// no error
+saved int ok;
+
+bank b[i < 2][j < 2] {
+   param register_size = 4;
+   /// ERROR EATTRCOLL
+   register g_r @ 0;
+   group g {
+       /// ERROR EATTRCOLL
+       register r @ 4;
+   }
+}
+
+// call methods to codegen them
+method init() {
+   foo.bar();
+   foo.foo();
+   foo_bar();
+   // Intentionally not calling foo_foo
+   bar();
+}

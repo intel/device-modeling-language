@@ -1,0 +1,18 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+/// COMPILE-ONLY
+
+// ICE in vtable generation
+template x { shared method a() { } }
+template y { shared method a(); }
+template z is (x, y) {}
+
+is z;
+method init() {
+    a();
+}

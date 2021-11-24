@@ -1,0 +1,140 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+import "utility.dml";
+import "io-memory.dml";
+
+bank b {
+    parameter register_size = 4;
+    parameter desc = "Description for b";
+
+    register UR @ undefined is (read_write) {
+        parameter desc = "UR";
+        parameter hard_reset_value = 0x8;
+    }
+    register R1 @ 0x00 is (read_write) {
+        parameter desc = "R1";
+        parameter hard_reset_value = 0x1;
+    }
+    register R2 @ 0x04 is (read_write) {
+        parameter desc = "R2";
+        parameter hard_reset_value = 0x2;
+    }
+    register R3[i in 0..1][j in 0..1] @ 0x8 + $i * 8 + $j * 4 is (read_write)
+    {
+        parameter desc = "R3";
+        parameter hard_reset_value = 0x4;
+    }
+}
+
+bank ba[3] {
+    parameter register_size = 4;
+
+    register UR @ undefined is (read_write) {
+        parameter desc = "UR";
+        parameter hard_reset_value = 0x8;
+    }
+    register R1 @ 0x00 is (read_write) {
+        parameter hard_reset_value = 0x1;
+        parameter desc = "R1";
+        field all[31:0] is (read_write);
+    }
+    register R2 @ 0x04 is (read_write) {
+        parameter hard_reset_value = 0x2;
+        parameter desc = "R2";
+    }
+    register R3[i in 0..1][j in 0..1] is (read_write) {
+        parameter offset = 0x8 + $i * 8 + $j * 4;
+        parameter desc = "R3";
+        parameter hard_reset_value = 0x4;
+    }
+}
+
+bank baa[3][j in 0..2] {
+    parameter register_size = 4;
+    parameter desc = "Description for baa";
+
+    register UR @ undefined is (read_write) {
+        parameter desc = "UR";
+        parameter hard_reset_value = 0x8;
+    }
+    register R1 @ 0x00 is (read_write) {
+        parameter hard_reset_value = 0x1;
+        parameter desc = "R1";
+        field all[31:0] is (read_write);
+    }
+    register R2 @ 0x04 is (read_write) {
+        parameter hard_reset_value = 0x2;
+        parameter desc = "R2";
+    }
+    register R3[i in 0..1][j in 0..1] is (read_write) {
+        parameter offset = 0x8 + $i * 8 + $j * 4;
+        parameter desc = "R3";
+        parameter hard_reset_value = 0x4;
+    }
+}
+
+bank u {
+    parameter mappable = false;
+    parameter register_size = 4;
+
+    register UR @ undefined is (read_write) {
+        parameter desc = "UR";
+        parameter hard_reset_value = 0x8;
+    }
+    register R1 @ 0x00 is (read_write) {
+        parameter desc = "R1";
+        parameter hard_reset_value = 0x1;
+    }
+    register R2 @ 0x04 is (read_write) {
+        parameter desc = "R2";
+        parameter hard_reset_value = 0x2;
+    }
+    register R3[i in 0..1][j in 0..1] @ 0x8 + $i * 8 + $j * 4 is (read_write)
+    {
+        parameter desc = "R3";
+        parameter hard_reset_value = 0x4;
+    }
+}
+
+bank bg {
+    parameter register_size = 4;
+    group g[g in 0..1] {
+        group h {
+            group i[i in 0..1] {
+                register r @ 0 + $g * 80 + $i * 40;
+                register ru[j in 0..2]
+                    @ $j == 1 ? undefined : 4 + $g * 80 + $i * 40 + $j * 4;
+                register rma[j in 0..1][k in 0..1]
+                    @ 20 + $g * 80 + $i * 40 + $j * 8 + $k * 4;
+            }
+        }
+    }
+}
+
+bank le {
+    parameter byte_order = "little-endian";
+    parameter register_size = 4;
+
+    register r @ 0x00 is (read_write);
+}
+bank be {
+    parameter byte_order = "big-endian";
+    parameter register_size = 4;
+
+    register r @ 0x00 is (read_write);
+}
+
+// SIMICS-15724
+bank exc {
+    parameter register_size = 4;
+    register r @ 0x00 is (read_write);
+
+    method access(generic_transaction_t *mem_op, uint64 offset, uint64 size) {
+        throw;
+    }
+}

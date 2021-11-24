@@ -1,0 +1,19 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+/// COMPILE-ONLY
+
+// bug 7099
+method m1(bar) {
+    local char *x = bar;
+}
+
+method init() {
+    local char bar[4];
+    inline $m1(bar);
+}

@@ -1,0 +1,33 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device x;
+/// COMPILE-ONLY
+
+// Test that various reserved words are allowed as identifiers
+method init() {
+    local int attribute;
+    local int bank;
+    local int bitorder;
+    local int connect;
+    local int constant;
+    local int data;
+    local int device;
+    local int event;
+    local int field;
+    local int footer;
+    local int group;
+    local int header;
+    local int implement;
+    local int import;
+    local int interface;
+    local int loggroup;
+    local int method;
+    local int nothrow;
+    local int port;
+    local int size;
+    local int throws;
+}

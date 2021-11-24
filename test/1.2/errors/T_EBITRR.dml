@@ -1,0 +1,18 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+bank b {
+    register r1 size 4 @ undefined {
+        /// ERROR EBITRR
+        field f1 [3:-1];
+    }
+
+    register r2 size 4 @ undefined {
+        /// ERROR EBITRR
+        field f1 [32:16];
+    }
+}

@@ -1,0 +1,47 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+typedef uint32 t;
+
+data uint16 x;
+typedef char x;
+
+method test -> (bool ok) {
+    local uint32 x;
+    local uint32 *ip;
+    local uint8 *bp;
+    local uint24 y;
+    local uint30 z;
+    local uint48_be_t be;
+    local uint56_le_t le;
+    ok = ((sizeof x == 4) &&
+          (sizeof y == 4) &&
+          (sizeof z == 4) &&
+          (sizeof be == 6) &&
+          (sizeof le == 7) &&
+          (sizeof (x) == 4) &&
+          (sizeoftype x == 1) &&
+          /// WARNING WSIZEOFTYPE
+          (sizeof (t) == 4) &&
+          (sizeof $x == 2) &&
+          (sizeof ($x) == 2) &&
+          (sizeoftype uint32 == 4) &&
+          (sizeoftype (uint32) == 4) &&
+          (sizeoftype uint32 * == sizeoftype (uint8 *)) &&
+          (sizeoftype t == 4) &&
+          (sizeoftype (t) == 4) &&
+          (sizeof ip == sizeof bp) &&
+          (sizeoftype size_t == sizeoftype void *));
+
+    // check that all sizeof invocations return a size_t
+    log "info": "%zd %zd %zd %zd", sizeof x, sizeof $x,
+        sizeoftype uint32, sizeoftype (t);
+
+    // check that sizeof have no sideeffects
+    x = sizeof (ok = false);
+}

@@ -1,0 +1,63 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+import "utility.dml";
+// Check that dml 1.4 utility construct usage still works with
+// dml 1.2 utility constructs
+/// WARNING WEXPERIMENTAL dml12-compatibility.dml
+import "../../1.4/lib/utility_12_common.dml";
+
+method init() {
+    local bool result;
+    // Defined in utility_12_common.dml
+    call $test_attributes_14() -> (result);
+    assert result;
+    call $test_attributes_14_to_12() -> (result);
+    assert result;
+    call $test_attributes_12_to_12() -> (result);
+    assert result;
+    call $test_attributes_12_to_14_set();
+    call $test_attributes_12_to_14_get() -> (result);
+    assert result;
+}
+
+// Check that updates made through .val are readable from object
+method test_attributes_14_to_12() -> (bool res) {
+    res = true;
+    if ($simple_bool.val)
+        res = false;
+    if ($simple_uint64.val != 3)
+        res = false;
+    if ($simple_int64.val != -6)
+        res = false;
+    if ($simple_double.val != 4.2)
+        res = false;
+}
+
+method test_attributes_12_to_12() -> (bool res) {
+    res = true;
+    $simple_bool = true;
+    $simple_uint64 = 1;
+    $simple_int64 = -3;
+    $simple_double = 3.14;
+    if (!$simple_bool)
+        res = false;
+    if ($simple_uint64 != 1)
+        res = false;
+    if ($simple_int64 != -3)
+        res = false;
+    if ($simple_double != 3.14)
+        res = false;
+}
+
+// Set attributes in 1.2 api, later read through 1.4 api
+method test_attributes_12_to_14_set() {
+    $simple_bool = false;
+    $simple_uint64 = 2;
+    $simple_int64 = -2;
+    $simple_double = 6.12;
+}

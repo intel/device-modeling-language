@@ -1,0 +1,66 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+import "testing.dml";
+
+/// WARNING WEXPERIMENTAL
+trait abc {
+    method a() -> (int i) default {}
+    method b() -> (int i);
+    method c() -> (int i) default { i = 1; }
+}
+
+/// WARNING WEXPERIMENTAL
+trait ta is abc {
+    method a() -> (int i) default { i = this.b() + this.d(); }
+    method d() -> (int i) default { i = 4; }
+}
+/// WARNING WEXPERIMENTAL
+trait tb is abc {
+    parameter int extra;
+    method b() -> (int i) { i = 2 + this.c() + extra; }
+    template { parameter extra = 3; }
+}
+/// WARNING WEXPERIMENTAL
+trait tc is abc { }
+
+/// WARNING WEXPERIMENTAL
+trait t is (ta, tb, tc) {
+    // explicit direct reference to non-overridable method
+    method e() -> (int i) { i = b(); }
+}
+
+port p {
+    is t;
+}
+
+/// WARNING WEXPERIMENTAL
+trait d is abc { }
+
+port q {
+    is t;
+    // non-trivial, because d.b is implemented by the implementation of t
+    is d;
+}
+
+method test() -> (bool ok) {
+    assert cast($p, ta).a() == 10;
+    assert cast($p, tb).a() == 10;
+    assert cast($p, tc).a() == 10;
+    assert cast($q, d).a() == 10;
+    assert cast($p, ta).b() == 6;
+    assert cast($p, tb).b() == 6;
+    assert cast($p, tc).b() == 6;
+    assert cast($q, d).b() == 6;
+    assert cast($p, ta).c() == 1;
+    assert cast($p, tb).c() == 1;
+    assert cast($p, tc).c() == 1;
+    assert cast($q, d).c() == 1;
+    assert $p.e() == 6;
+    ok = true;
+}

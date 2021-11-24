@@ -1,0 +1,25 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+method test -> (bool ok)
+{
+    local layout "big-endian" {
+        uint64 value;
+    } val;
+    local uint8 *p = cast(&val, uint8*);
+
+    val.value = 17;
+    ok = (val.value == 17
+          && p[0] == 0
+          && p[7] == 17);
+
+    local typeof val val2;
+    val2.value = 17;
+    ok = (ok
+          && val.value == 17);
+}

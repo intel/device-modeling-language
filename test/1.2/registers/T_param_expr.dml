@@ -1,0 +1,20 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+// Test that some parameters (currently only register.offset) are evaluated
+// late enough to allow references to sibling objects. See bug 20849.
+
+/// COMPILE-ONLY
+
+port p {
+    parameter o = 3;
+}
+
+bank b {
+    register r size 1 @ $p.o;
+}

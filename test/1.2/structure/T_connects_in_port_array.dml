@@ -1,0 +1,27 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+// Test that connects in port arrays work.
+device test;
+
+import "simics/devs/signal.dml";
+
+port p[i in 0..1][j in 0..1] {
+    connect c[k in 0..1] { interface signal; }
+}
+bank b[i in 0..1][j in 0..1] {
+    connect c[k in 0..1] { interface signal; }
+}
+
+implement signal {
+    method signal_raise() {
+        $b[$i][$j].c[$k].signal.signal_raise();
+        $p[$i][$j].c[$k].signal.signal_raise();
+    }
+}
+
+attribute i { parameter allocate_type = "uint32"; }
+attribute j { parameter allocate_type = "uint32"; }
+attribute k { parameter allocate_type = "uint32"; }

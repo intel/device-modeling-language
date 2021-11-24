@@ -1,0 +1,52 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+typedef struct { uint32 x; } s_t;
+typedef layout "little-endian" { uint32 x; } l_t;
+/// WARNING WEXPERIMENTAL
+typedef int vect v_t;
+typedef int a_t[1];
+typedef void f_t(void);
+extern f_t f;
+
+method init() {
+    local s_t s;
+    local l_t l;
+    local v_t v;
+    local a_t a;
+    local uint32 i;
+    /// ERROR ECAST
+    cast(s, uint32);
+    /// ERROR ECAST
+    cast(i, s_t);
+    /// ERROR ECAST
+    cast(s, s_t);
+    /// ERROR ECAST
+    cast(l, uint32);
+    /// ERROR ECAST
+    cast(i, l_t);
+    /// ERROR ECAST
+    cast(l, l_t);
+    /// ERROR ECAST
+    cast(v, uint32);
+    /// ERROR ECAST
+    cast(i, v_t);
+    /// ERROR ECAST
+    cast(v, v_t);
+    /// ERROR ECAST
+    cast(l, uint32);
+    // no error!
+    cast(a, uint32);
+    cast(a, double);
+    /// ERROR ECAST
+    cast(i, a_t);
+    // no error
+    cast(f, uint32);
+    /// ERROR ECAST
+    cast(i, f_t);
+}

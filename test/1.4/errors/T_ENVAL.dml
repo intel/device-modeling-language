@@ -1,0 +1,63 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+import "utility.dml";
+import "simics/devs/signal.dml";
+
+attribute a is (uint64_attr);
+
+bank b {
+    register r1 size 1 is (unmapped, read, write);
+    register r2 size 1 is (unmapped) {
+        field f @ [7:0] is (read, write);
+    }
+}
+
+connect c {
+    interface signal;
+}
+template t {
+    shared method sm1() {
+        return;
+    }
+
+    shared method sm2() default {
+        return;
+    }
+}
+
+is t;
+
+
+method m() {}
+
+method init() {
+    local int x;
+    /// ERROR ENVAL
+    m;
+    /// ERROR ENVAL
+    a;
+    /// ERROR ENVAL
+    b.r1;
+    /// ERROR ENVAL
+    b.r2.f;
+}
+
+// dev is not a value in 1.4.  Need to capture this with a rather unnatural
+// reference because of SIMICS-9387
+/// ERROR ENVAL
+param x = dev == NULL;
+
+// no error
+param im_ref = c.signal.signal_raise;
+
+// no error
+param sm_dir_ref = cast(dev, t).sm1;
+
+// no error
+param sm_indir_ref = cast(dev, t).sm2;

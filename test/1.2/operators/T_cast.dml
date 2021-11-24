@@ -1,0 +1,18 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+method test() -> (bool ok) {
+    ok = true;
+    local int a = cast(1000, int8);
+    local int b = cast(127, int8);
+    local int c = cast(128, int8);
+    local int d = cast(-1, uint8);
+    log info: "%d %d %d %d", a, b, c, d;
+
+    ok = a == -24 && b == 127 && c == -128 && d == 255;
+}

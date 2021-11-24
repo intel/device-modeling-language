@@ -1,0 +1,56 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+import "testing.dml";
+
+method test() throws {
+    local int i;
+
+    local int a[4];
+    local int b[4];
+    i = 0;
+    a[++i] = b[++i] = ++i;
+    expect(b[2] == 1 && a[3] == 1,
+            "right-to-left evaluation of assignment chain");
+
+    local int8 byte;
+    local float f;
+    f = byte = i = 255.1;
+    expect(i == 255 && byte == -1 && f == -1,
+            "truncation of values on multi-assignment");
+
+    i = 3;
+
+    // local variable is visible inside entire for expression, but not after
+    local int sum = 0;
+    for (local int i = 1; i < 10; i++) {
+        sum += i;
+    }
+    expect(sum == 45 && i == 3, "for with local");
+
+    local int j;
+    for (j = 0, j += 2; j != 2; ) assert false;
+    expect(j == 2, "pre-statement order");
+
+    for (i = 18; i != 2; --i, i = 2) {
+        // if post-statements are not run correctly, a second failing iteration
+        // will be reached
+        expect(i == 18, "post-statement execution order");
+        i = 12;
+        continue;
+    }
+
+    for (i = j = 3; false;) ;
+    expect(i == 3 && j == 3, "assignment chain in for-pre");
+
+    local int c[3] = {0, 0, 0};
+    j = 0;
+    i = 3;
+    c[++j] += ++i;
+    expect(c[1] == 4 && j == 1 && i == 4, "+= operands evaluated twice");
+}

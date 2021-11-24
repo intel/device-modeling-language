@@ -1,0 +1,46 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+// This was discovered in bug 5262
+
+method m(x) -> (y) {
+    log "info": "x is %d (%d bits)", x, sizeof(x)*8;
+    y = x;
+}
+
+method test -> (bool ok)
+{
+    local int i = 4;
+    local uint8 i8;
+    local int r;
+
+    inline $m(i) -> (r);
+    assert r == i;
+
+    inline $m(4) -> (r);
+    assert r == 4;
+
+    for (i = 0; i < 4; i++) {
+        inline $m(i) -> (r);
+        assert r == i;
+    }
+
+    for (i = 0; i < 4; i++) {
+        inline $m(i*128) -> (r);
+        assert r == i*128;
+    }
+
+    i8 = 255;
+    i = i8 * 2;
+    assert i == 510;
+
+    inline $m(i8 * 2) -> (r);
+    assert r == 510;
+
+    ok = true;
+}

@@ -1,0 +1,46 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+attribute trigger[i < 2][j < 2] is (pseudo_attr) {
+    param type = "i";
+    session int val;
+    method inc() {
+        this.val++;
+    }
+    method set(attr_value_t val) throws {
+        after 0.1 s:
+          trigger[SIM_attr_integer(val)][SIM_attr_integer(val)].inc();
+    }
+    method get() -> (attr_value_t) {
+        return SIM_make_attr_uint64(val);
+    }
+}
+
+
+typedef struct {
+    int elem[2];
+} chunk_t;
+
+attribute operate is (write_only_attr) {
+    param type = "n";
+    method set(attr_value_t val) throws {
+        local chunk_t c = {{3,5}};
+        after 0.1 s: single_operator.modify(c, 1);
+        after 0.1 s: multi_operator[0][1].modify(c, 1);
+        after 0.1 s: multi_operator[1][0].modify(c, 0);
+        after 200000 cycles: single_operator.modify(c, 0);
+    }
+}
+
+template operator is (int64_attr) {
+    method modify(chunk_t chunk, int ix) {
+        this.val = chunk.elem[ix];
+    }
+}
+
+attribute multi_operator[i < 2][j < 2] is (operator);
+attribute single_operator is (operator);

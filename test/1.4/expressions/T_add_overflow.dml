@@ -1,0 +1,16 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+/// COMPILE-ONLY
+
+method init() {
+    local int i;
+    for (i = 0; i < 4; i++) {
+        // This used to cause a GCC warning for signed overflow
+        log info: "%x", 0x3333333333333333 + i * 0x4444444444444444;
+    }
+}

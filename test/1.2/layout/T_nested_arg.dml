@@ -1,0 +1,27 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+import "testing.dml";
+
+typedef layout "big-endian" {
+    uint32 a;
+} inner;
+
+typedef layout "big-endian" {
+    inner i;
+} outer;
+
+method m(inner x) -> (bool ok) {
+    ok = x.a == 0xdeadbeef;
+}
+
+method test() -> (bool ok) {
+    local outer x;
+    x.i.a = 0xdeadbeef;
+    // Passing a sub-layout as method arg currently generated broken C code
+    call $m(x.i) -> (ok);
+}

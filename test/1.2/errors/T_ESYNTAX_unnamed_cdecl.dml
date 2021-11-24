@@ -1,0 +1,33 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+// name clash between unnamed typedefs
+/// ERROR ENAMECOLL T_ESYNTAX_unnamed_cdecl.dml
+
+/// ERROR ESYNTAX
+typedef int;
+
+/// ERROR ESYNTAX
+extern typedef int;
+
+data struct {
+    /// ERROR ESYNTAX
+    int;
+} x_t;
+
+/// ERROR ESYNTAX
+data int;
+
+data layout "big-endian" {
+    /// ERROR ESYNTAX
+    int;
+} l;
+data bitfields 32 {
+    /// ERROR ESYNTAX
+    int2 @ [4:3];
+} b;

@@ -1,0 +1,40 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+import "testing.dml";
+
+typedef layout "little-endian" {
+    int24 i24;
+    int56 a56[2];
+} le_12_layout;
+
+import "nested_14_layout.dml";
+
+method test() -> (bool ok) {
+    ok = true;
+    local uint8 *acc;
+
+    local be_nested_layout nb;
+    nb.a = 0xf00f00;
+    nb.b = 0xf0;
+    nb.l.i24 = 0xf00f00;
+    nb.l.a56[0] = 0xff0f0000000000;
+    nb.l.a56[1] = 0xfff0ff00000000;
+    acc = cast(&nb, uint8*);
+    // for (i = 0; i < 21; i ++)
+    //     log "info": "acc[%d] = %#x", i, acc[i];
+    ok = (acc[0] == 0xf0 && acc[1]  == 0xf && acc[2]  == 0x0   && // i24be
+          acc[3] == 0x0  && acc[4]  == 0xf && acc[5]  == 0xf0  && // l.i24 le
+          acc[6] == 0x0  && acc[7]  == 0x0 && acc[8]  == 0x0   && // l.a56[0] le
+          acc[9] == 0x0  && acc[10] == 0x0 && acc[11] == 0xf   &&
+          acc[12] == 0xff &&
+          acc[13] == 0x0 && acc[14] == 0x0  && acc[15] == 0x0  && // l.156[1] le
+          acc[16] == 0x0 && acc[17] == 0xff && acc[18] == 0xf0 && // l.156[1] le
+          acc[19] == 0xff &&
+          acc[20] == 0xf0 && ok); // l.b be
+}

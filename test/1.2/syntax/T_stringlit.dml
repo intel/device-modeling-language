@@ -1,0 +1,22 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+method test -> (bool ok) {
+    local const char *ss = "\"\\\n\r\t\b\x5f\x00\xa3";
+    local const char *ts = "å\nä\x7f";
+    local const uint8 *s = cast(ss, uint8 *);
+    local const uint8 *t = cast(ts, uint8 *);
+    ok = (s[0] == 34 && s[1] == 92 && s[2] == 10 && s[3] == 13 && s[4] == 9
+          && s[5] == 8 && s[6] == 0x5f && s[7] == 0 && s[8] == 0xa3
+          && s[9] == 0
+          && t[0] == 0xc3 && t[1] == 0xa5
+          && t[2] == 10
+          && t[3] == 0xc3 && t[4] == 0xa4 && t[5] == 0x7f
+          && t[6] == 0
+        );
+}

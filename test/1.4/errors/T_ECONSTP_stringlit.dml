@@ -1,0 +1,15 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+// Bug 21367; see also 1.2/methods/call_stringlit
+method m(char *s) {
+}
+
+method init() {
+    /// ERROR ECONSTP
+    m("foo");
+}

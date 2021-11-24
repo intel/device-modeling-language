@@ -1,0 +1,136 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+// This file contains code that is converted differently depending on the
+// --compat flag to port-dml
+
+import "porting.dml";
+
+bank b2 {
+    register r size 1 @ 0 {
+        field f2 @ [0] {
+            method read_access() -> (uint64 value) {
+                log info: "read_access";
+            }
+            method write_access(value) {
+                log info: "write_access %d", value;
+            }
+        }
+        method before_write(memop, msb1, lsb, foo) {
+            log info: "before %d", foo;
+        }
+        method after_write(memop) {
+            log info: "after write";
+        }
+        method before_read(memop) {
+            log info: "before read";
+        }
+        method after_read(memop) {
+            log info: "after read";
+        }
+        method before_set() {
+            log info: "before set";
+        }
+        method after_set() {
+            log info: "after set";
+        }
+        method after_soft_reset() {
+            log info: "after soft";
+        }
+        method after_hard_reset() {
+            log info: "after hard";
+        }
+    }
+    register r2 size 1 @ 1 {
+        method before_read(memop) {
+            log info: "before read";
+        }
+    }
+    register r3 size 1 @ 2 {
+        method before_write(memop, msb1, lsb, foo) {
+            log info: "before %d", foo;
+        }
+    }
+    register r4 size 1 @ 3 {
+        method after_read(memop) {
+            log info: "after read";
+        }
+    }
+    register r5 size 1 @ 4 {
+        method after_write(memop) {
+            log info: "after";
+        }
+    }
+    register r7 size 1 @ 6 {
+        method read_access(generic_transaction_t *memop,
+                           msb1, lsb) -> (uint64 value) {
+            log info: "read_access";
+        }
+        method write_access(generic_transaction_t *memop,
+                            msb1, lsb, uint64 value) {
+            log info: "write_access %d", value;
+        }
+    }
+}
+
+bank access {
+    method access(generic_transaction_t *memop, physical_address_t offset,
+                  physical_address_t size) {
+        log info: "hello";
+    }
+}
+
+bank miss {
+    method miss_read_access(physical_address_t offset, physical_address_t size)
+        -> (bool success, uint64 value) {
+        success = true;
+        value = 5;
+    }
+
+    method miss_write_access(physical_address_t offset, physical_address_t size,
+                             uint64 value) -> (bool success) {
+        success = value == 5;
+    }
+}
+
+bank read_access_memop {
+    method read_access_memop(generic_transaction_t *memop,
+                             physical_address_t offset,
+                             physical_address_t size) {
+        log info: "hello";
+    }
+}
+
+bank write_access_memop {
+    method write_access_memop(generic_transaction_t *memop,
+                              physical_address_t offset,
+                              physical_address_t size, uint64 value) {
+        log info: "hello";
+    }
+}
+
+bank rw_access {
+    method read_access(generic_transaction_t *memop,
+                       physical_address_t offset,
+                       physical_address_t size)
+        -> (bool success, uint64 value) {
+        log info: "hello";
+    }
+
+    method write_access(generic_transaction_t *memop,
+                        uint64 offset, physical_address_t size, uint64 value)
+        -> (bool ok) {
+        ok = true;
+        log info: "hello";
+    }
+}
+
+bank miss_access {
+    method miss_access(memop, physical_address_t offset,
+                       physical_address_t size) {
+        log info: "hello";
+    }
+}

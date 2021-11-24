@@ -1,0 +1,53 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+template t {
+    event ev {
+        parameter desc = "from desc param";
+        parameter timebase = "cycles";
+
+        method event(void *data) {
+            $last_ev = cast(data, uintptr_t);
+        }
+
+        method destroy(void *data) {
+            $last_destroy = cast(data, uintptr_t);
+        }
+     }
+
+    attribute last_ev {
+        parameter allocate_type = "uint32";
+    }
+
+    attribute last_destroy {
+        parameter allocate_type = "uint32";
+    }
+
+    attribute post {
+        parameter configuration = "pseudo";
+        parameter desc = "When set to [cycle, data], a new event with the"
+            + " given data is posted on the given cycle";
+        parameter type = "[ii]";
+        method set(attr_value_t val) {
+            local uintptr_t data = SIM_attr_integer(SIM_attr_list_item(val, 1));
+            inline $ev.post(SIM_attr_integer(SIM_attr_list_item(val, 0)),
+                            cast(data, void *));
+        }
+    }
+
+    attribute remove {
+        parameter configuration = "pseudo";
+        parameter type = "i";
+        method set(attr_value_t val) {
+            local uintptr_t data = SIM_attr_integer(val);
+            call $ev.remove(cast(data, void *));
+        }
+     }
+}
+
+is t;
+port a[i in 0..1][j in 0..1] { is t; }

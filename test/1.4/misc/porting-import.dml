@@ -1,0 +1,27 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+// dummy import to test that inserted import aligns with existing imports
+import "dml-builtins.dml";
+import "porting-imported.dml";
+
+is hard_reset;
+method hard_reset() {
+    default();
+}
+is soft_reset;
+method soft_reset() {
+    default();
+}
+
+bank b {
+    register r {
+        method from_import() {}
+    }
+    register r4 {
+        method from_import2() {}
+    }
+}

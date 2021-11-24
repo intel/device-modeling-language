@@ -1,0 +1,23 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+header %{
+static int crashnburn(void)
+{
+    printf("CRASH!\n");
+    return 0;
+}
+%}
+extern int crashnburn();
+
+method test -> (bool b) {
+    /// GREP CRASH!
+    local int data = crashnburn();
+    local int ignore = 17;
+    b = true;
+}

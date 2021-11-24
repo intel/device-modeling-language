@@ -1,0 +1,19 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+bank b[2];
+method init() {
+    local bool b;
+    /// ERROR EBSLICE
+    b[0:0];
+    local int a[2];
+    /// ERROR EBSLICE
+    a[0, be];
+    /// ERROR ENVAL
+    [0][0, le];
+    /// ERROR EARRAY
+    $b[3, be];
+}

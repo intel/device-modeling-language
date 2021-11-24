@@ -1,0 +1,29 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+bank b {
+    parameter x = $this;
+    parameter y = 1;
+    group g {
+        group x {
+            parameter y = 2;
+        }
+        parameter z = $x.y;
+        if (defined($z)) { }
+        method m() {
+            if ($z == 1) {
+                // should be no error!
+                // currently gives an error, bug 23542
+                error;
+            }
+        }
+    }
+}
+method init {
+    call $b.g.m();
+}

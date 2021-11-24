@@ -1,0 +1,44 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+extern const int foo;
+
+typedef struct { int a; bool b; const int c; } a_t;
+
+typedef const int const_int_t;
+
+method init() {
+    /// ERROR ECONST
+    foo = 5;
+
+    local a_t x;
+    /// ERROR ECONST
+    x.c = 4;
+
+    {
+        local const a_t *p = &x;
+        // no error
+        p->a == 1;
+        /// ERROR ECONST
+        p->a = 1;
+        /// ERROR ECONST
+        p->b = true;
+    }
+
+    {
+        local a_t *const p = &x;
+        // no error
+        p == NULL;
+        /// ERROR ECONST
+        p = NULL;
+    }
+
+    // bug 24069
+    local const_int_t y;
+    /// ERROR ECONST
+    y = 3;
+}

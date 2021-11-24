@@ -1,0 +1,40 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+template x {
+    /// ERROR ENSHARED
+    param a = 1;
+    #if (false) {
+        /// ERROR ENSHARED
+        method b() {}
+        /// ERROR ENSHARED
+        attribute c is (uint64_attr);
+        /// ERROR ENSHARED
+        session int d;
+        /// ERROR ENSHARED
+        saved int e;
+    }
+}
+template y is x {
+    shared method m() {
+        /// ERROR ENSHARED
+        a;
+        /// ERROR ENSHARED
+        b();
+        /// ERROR ENSHARED
+        c.val;
+        /// ERROR ENSHARED
+        d;
+        /// ERROR ENSHARED
+        e;
+    }
+}
+
+param a = 1;
+method b() {}
+attribute c is (uint64_attr);

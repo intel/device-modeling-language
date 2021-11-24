@@ -1,0 +1,21 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+import "simics/devs/interrupt.dml";
+
+connect C;
+
+connect D {
+    interface simple_interrupt;
+}
+
+method test -> (bool ok) {
+    ok = ($C.obj == NULL);
+
+    if (ok && !ok) // run-time false
+        $D.simple_interrupt.interrupt(1);
+}

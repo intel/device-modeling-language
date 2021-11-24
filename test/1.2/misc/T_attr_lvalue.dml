@@ -1,0 +1,21 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+// bug 18234
+
+attribute a[4] {
+    parameter allocate_type = "uint8";
+    method set_attribute(attr_value_t val) -> (set_error_t err) {
+        local void *p;
+        p = &val; // CC error: lvalue required as unary ‘&’ operand
+    }
+}
+
+method test -> (bool ok) {
+    ok = true;
+}

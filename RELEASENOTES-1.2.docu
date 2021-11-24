@@ -1,0 +1,147 @@
+<!--
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+-->
+
+<rn id="dml-1.2">
+  <name>DML 1.2</name>
+  <build-id value="6012"><add-note> Fixed a bug that caused a crash on the
+    expression
+    <tt>1 &lt;&lt; 64</tt> <bug number="1306575446"/>. </add-note></build-id>
+  <build-id value="6018"><add-note> The <tt>read</tt> and <tt>write</tt>
+    templates have been moved from
+    utility.dml to always be included into 1.2 DML files. Additionally
+    they are now inherited by all registers and fields by default.
+    If you now see a name clash on <tt>read</tt> or <tt>write</tt>
+    templates, you will need to rename your user-code
+    defined templates. </add-note></build-id>
+  <build-id value="6019"><add-note> The <tt>get</tt> and <tt>set</tt> methods
+    are now shared in attributes
+    inheriting from the dml 1.4 utility templates
+    (<tt>bool_attr</tt> etc.). </add-note></build-id>
+  <build-id value="6024"><add-note> The <tt>import</tt> statement has been
+    changed: If the path
+    starts with <tt>./</tt>, the path is now interpreted relative to
+    the directory of the importing file
+    <bug number="2209506845"/>. </add-note></build-id>
+  <build-id value="6024"><add-note> Fixed a bug that caused a bad warning and
+    incorrect code when
+    the operand to <tt>sizeof</tt> is an identifier that can be
+    resolved both to a value and to a type. </add-note></build-id>
+  <build-id value="6026"><add-note> The project build environment is now
+    sensitive to an environment
+    variable <tt>DMLC_PORTING_TAG_FILE</tt>, which should be a
+    filename. When defined, DMLC will create the file if it doesn't
+    already exists, and then append data to the end of the file,
+    containing machine-readable instructions on how to port the
+    device to DML 1.4.  The typical use case is to set this variable
+    when building one or more modules, and feed the resulting file
+    as input to the <tt>port-dml.py</tt> script.
+    The -P command-line argument has also been changed: it now takes
+    a filename argument, and can be used without -T. </add-note></build-id>
+  <build-id value="6031"><add-note> Changed the order in which registers are
+    being reset upon
+    hard_reset or soft_reset, and the ordering of the
+    parameters <tt>mapped_registers</tt>
+    and <tt>unmapped_registers</tt>. The order is still considered
+    undefined, but in practice it now changes less randomly, and is
+    equal on Simics 5 and Simics 6. </add-note></build-id>
+  <build-id value="6031"><add-note> Fixed a bug in nested <tt>foreach</tt>
+    loops when traversing
+    register arrays inside bank arrays
+    <bug number="1809370911"/>. </add-note></build-id>
+  <build-id value="6036"><add-note> It is now permitted to use the
+    <tt>nothrow</tt> annotation on a
+    method override even if the overridden method does not. This is
+    sometimes useful while porting a large code base to DML 1.4,
+    because it allows <fun>get</fun> and <fun>set</fun> methods in
+    common code to be declared as non-throwing, which is required
+    by the DML 1.4 standard library. </add-note></build-id>
+  <build-id value="6036"><add-note> Fixed a language inconsistency: When DML
+    1.4 code contains an
+    <tt>if</tt> statement inside a method body, and this code is
+    imported from a DML 1.2 file, then the statement used to be
+    interpreted as a DML 1.2 <tt>if</tt> statement; it is now
+    interpreted as a DML 1.4 <tt>if</tt> statement as expected.
+    The difference is that if the <tt>if</tt> condition is constant,
+    then DML 1.2 would discard the dead branch without checking for
+    errors, while 1.4 evaluates both the live and dead branch.
+    This change can give new compile errors in existing code; in
+    this case, you can normally resolve the problem by
+    changing <tt>if</tt> to <tt>#if</tt>. </add-note></build-id>
+  <build-id value="6041"><add-note> Field arrays are now fully supported and
+    documented,
+    and don't give compile warnings. </add-note></build-id>
+  <build-id value="6041"><add-note> Fixed a DMLC crash when generating porting
+    tags. </add-note></build-id>
+  <build-id value="6041"><add-note> Add porting rule for uses of 1-bit fields
+    as booleans;
+    converts <tt>if (f)</tt> into <tt>if (f != 0)</tt>. </add-note></build-id>
+  <build-id value="6048"><add-note> Fixed a problem with the template
+    <tt>custom_time_event</tt>
+    from <tt>dml12-compatibility.dml</tt>. </add-note></build-id>
+  <build-id value="6049"><add-note> Applying bitwise not (<tt>~</tt>) on a
+    boolean value
+    now gives a compile error. Previously it resulted in an
+    unconditionally true value, which is not what
+    you want. </add-note></build-id>
+  <build-id value="6050"><add-note> Fixed an issue with using endian integers
+    as arguments in pointer
+    arithmetic. </add-note></build-id>
+  <build-id value="6050"><add-note> Fixed an issue preventing assignment from
+    const layout-typed pointers. </add-note></build-id>
+  <build-id value="6053"><add-note> Taking the address of a bitfield type in a
+    layout will now correctly give
+    you a pointer of the bitfield type. </add-note></build-id>
+  <build-id value="6054"><add-note>Fixed a crash on methods marked
+    <tt>nothrow</tt> and
+    multiple return arguments, returning a typed template or struct type
+    <bug number="18012036595"/>. </add-note></build-id>
+  <build-id value="6054"><add-note>The file <tt>dml12-compatibility.dml</tt>
+    now adds a
+    parameter <tt>val</tt> to <tt>field</tt> objects. </add-note></build-id>
+  <build-id value="6059"><add-note>Unmapped registers names are now properly
+    anonymized according
+    to _confidentiality
+    <bug number="1508117636"/>. </add-note></build-id>
+  <build-id value="6066"><add-note> Fixed a regression in use cases where
+    <tt>if</tt> has a
+    constant condition, and the taken branch consists of a variable
+    declaration. I.e., if the code <tt>if (true) local int x;</tt>
+    appears in a scope, then the variable <tt>x</tt> is now added to
+    that scope <bug number="18013028128"/>. </add-note></build-id>
+  <build-id value="6079"><add-note> If a <tt>static</tt> variable is
+    declared within a method declared under an object array, it will
+    now result in a separate instance of the variable for each
+    instance of the containing object.
+    <bug number="SIMICS-13738"/>. </add-note></build-id>
+  <build-id value="6082"><add-note> It is no longer possible to
+      override the <tt>loggroup</tt> parameter inside a <tt>group</tt>
+      object. </add-note></build-id>
+  <build-id value="6082"><add-note> Added documentation of the <tt>nothrow</tt>
+      annotation for methods <bug number="18012035545"/>. </add-note></build-id>
+  <build-id value="6096"><add-note> Fixed a compile error when a DML
+      1.2 device imports a DML 1.4 file that declares a <tt>saved</tt>
+      variable inside a register or field
+      <bug number="SIMICS-17201"/>. </add-note></build-id>
+  <build-id value="6100"><add-note> Fixed an issue causing assertion error
+      when accessing the register info of a 1.2 multi-dimensional bank array
+      <bug number="SIMICS-17308"/>. </add-note></build-id>
+  <build-id value="6122"><add-note> Added the <tt>--state-change-dml12</tt>
+      flag, allowing the use of an incomplete version of state change notifiers
+      in DML 1.2 devices<bug number="SIMICS-17952"/>.</add-note></build-id>
+  <build-id value="6124"><add-note> Fixed an issue when using the
+      <tt>--state-change-dml12</tt> flag together with the
+      <tt>--split-c-file</tt> flag
+      <bug number="SIMICS-17975"/>.</add-note></build-id>
+  <build-id value="next"><add-note> Fixed a few issues where confidential
+      information could be leaked through non-confidential children of
+      confidential objects. Specifically, these issues occurred with event
+      objects belonging to confidential registers, <tt>after</tt> calls to
+      methods belonging to confidential objects, and accessing <tt>qname</tt> of
+      non-confidential children belonging to confidential objects.
+
+      A warning is now emitted when <tt>qname</tt> of a non-confidential child
+      of a confidential object is used outside of <tt>log</tt> statements
+      <bug number="SIMICS-18428"/>.</add-note></build-id>
+</rn>

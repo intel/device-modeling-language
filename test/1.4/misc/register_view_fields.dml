@@ -1,0 +1,27 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+import "utility.dml";
+
+bank b {
+    param register_size = 4;
+
+    register R1 @ 0x00 is (read, write) {
+        // While we exclude the default field which is generated
+        // unless fields are provided, a fully encompassing lone field
+        // should be included in the register info returned by the
+        // register-view interface
+        field all @ [31:0] is (read, write);
+    }
+    register R2 @ 0x04 is (read, write) {
+        field g @ [7] is (read, write) "7";
+        field d[i < 2] @ [4+i] is (read, write) "4";
+        field c @ [3] is (read, write) "3";
+        field ab @ [2:0] is (read, write) "12";
+    }
+    register R3 @ 0x08 is (read, write) {}
+}

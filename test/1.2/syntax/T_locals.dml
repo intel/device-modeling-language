@@ -1,0 +1,31 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+// Test declaration of local variables
+
+method test -> (bool ok) {
+    ok = true;
+
+    {
+        local bool ok = false;
+        local bool notok = !ok; // This refers to the same scope
+        assert !ok;
+        assert notok;
+        local bool also = true;
+
+        local const bool yes = true;
+        local struct { int i; } s1;
+        local const struct { int i; } *s2p;
+
+        local typeof s1 s3;
+
+        local const layout "big-endian" {
+            uint32 x;
+        } *l = cast(s2p, const void *);
+    }
+}

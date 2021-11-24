@@ -1,0 +1,22 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+// This tests what happens when non-inlined constant input parameters
+// are reassigned.
+
+method m(int x) {
+    x = 17;
+}
+
+constant c = 2;
+
+method test -> (bool b) {
+    call $m(1);
+    call $m(c);
+    b = true;
+}

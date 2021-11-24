@@ -1,0 +1,408 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "simics/simulator-api.dml";
+import "utility.dml";
+import "testing.dml";
+
+// Generated event classes for after:ed methods.
+extern event_class_t *_evclass_u_a_r_m;
+extern event_class_t *_evclass_u_a_r_fa_m;
+
+// secrecy levels
+constant Top_Secret = 3;
+constant Restricted = 2;
+constant Confidential = 1;
+constant Public =0;
+
+// this could also be specified in the Makefile
+// as -D_build_confidentiality=1
+parameter _build_confidentiality = Confidential;
+
+template top_secret {
+    parameter _confidentiality = Top_Secret;
+}
+
+template restricted {
+    parameter _confidentiality = Restricted;
+}
+
+template confidential {
+    parameter _confidentiality = Confidential;
+}
+
+template nonsecret {
+    parameter _confidentiality = Public;
+}
+
+template reg {
+    parameter size = 2;
+    parameter hidden = $this._confidentiality > Confidential;
+    parameter aname = ($this.hidden ? "_r0x" + #$offset : $name);
+    parameter internal = false;
+
+    field f[7:0];
+    field fa[i in 0..2] @ [$i*2+9:$i*2+8];
+}
+
+template top_secret_reg {
+    is reg;
+    is top_secret;
+}
+
+template public_reg {
+    is reg;
+    is nonsecret;
+}
+
+method bankobj(const char *bankname) -> (conf_object_t *obj) nothrow {
+    obj = SIM_object_descendant(SIM_object_descendant($dev.obj, "bank"),
+                                bankname);
+}
+
+template test_bank {
+    register r @ 4 is (reg);
+    register t @ 6 is (top_secret_reg);
+    register p @ 8 is (public_reg);
+}
+
+// hidden bank
+bank a {
+    is top_secret;
+    is test_bank;
+}
+
+// hidden
+bank b {
+    is restricted;
+    is test_bank;
+}
+
+// no hidden
+bank c {
+    is confidential;
+    is test_bank;
+}
+
+// no hidden
+bank d {
+    is nonsecret;
+    is test_bank;
+}
+
+// Test unmapped registers
+template unmapped_reg is unmapped {
+    parameter size = 2;
+    parameter _confidentiality = Restricted;
+    field f[7:0];
+    field fa[i in 0..2] @ [$i*2+9:$i*2+8];
+}
+
+bank u {
+    // Previously, similarly named registers in different groups would
+    // generate conflicting attribute accessor functions
+    // HSDES-1508117636
+    group a {
+        register r is unmapped_reg {
+            parameter aname = "_ur0";
+
+            event e {
+                method extern describe_event(void *data)
+                    -> (char *description) {
+                    description = MM_STRDUP("confidential");
+                }
+            }
+            method m() {}
+
+            field fa[i in 0..2] {
+                group g;
+                method m() {}
+            }
+        }
+    }
+    group b {
+        register r is unmapped_reg {
+            parameter aname = "_ur1";
+        }
+    }
+    register ra0[3] size 1 {
+        parameter _confidentiality = Restricted;
+        parameter offset = $i == 1 ? undefined : $i;
+        // For confidential register arrays, anonymous name of
+        // first element is used
+        parameter aname = "_r0x0";
+    }
+    register ra1[3] size 1 {
+        parameter _confidentiality = Restricted;
+        parameter offset = $i == 0 ? undefined : $i + 3;
+        // For confidential register arrays, anonymous name of
+        // first element is used
+        parameter aname = "_ur3";
+    }
+}
+
+method check_event_name(event_class_t *evclass, const char *expected_name,
+                        const char *obj_name) {
+    if (strcmp(evclass->name, expected_name) != 0) {
+        log error: "%s event class name is %s, and not the expected %s",
+                   obj_name, evclass->name, expected_name;
+    }
+}
+
+method test -> (bool ok)
+{
+    ok = false;
+    foreach b in ([$a, $b, $c, $d]) {
+        local conf_object_t *obj = $bankobj(b.name);
+        foreach x in ([b.r, b.t, b.p]) {
+            // check attribute name
+            x.f = 0xcc;
+            local int v = SIM_attr_integer(SIM_get_attribute(obj, x.aname));
+            if (v != 0xcc) {
+                log error: "%s value=%x", x.qname, v;
+                return;
+            }
+
+            // check attribute internal flag
+            local bool is_internal = (
+                SIM_get_attribute_attributes(SIM_object_class(obj), x.aname)
+                & Sim_Attr_Internal) != 0;
+            if (is_internal != x.hidden) {
+                log error: "%s %sinternal", x.qname, is_internal? "" : " not";
+                return;
+            }
+        }
+    }
+    local conf_object_t *u_obj = $bankobj($u.name);
+    foreach x in ([$u.a.r, $u.b.r]) {
+        // check attribute name
+        x.f = 0xcc;
+        local int v;
+        v = SIM_attr_integer(SIM_get_attribute(u_obj, x.aname));
+        if (v != 0xcc) {
+            log error: "%s value=%x", x.qname, v;
+            return;
+        }
+
+        // check attribute internal flag
+        local bool is_internal = (
+            SIM_get_attribute_attributes(SIM_object_class(u_obj), x.aname)
+            & Sim_Attr_Internal) != 0;
+        if (!is_internal) {
+            log error: "%s not internal", x.qname;
+            return;
+        }
+    }
+
+    // Check confidential for partially-mapped register array
+    foreach r in ([$u.ra0, $u.ra1]) {
+        local int v;
+        local int i;
+        for (i = 0; i < 3; ++i) {
+            r[i] = 0xcc;
+            v = SIM_attr_integer(
+                SIM_attr_list_item(SIM_get_attribute(u_obj, r[i].aname), i));
+            if (v != 0xcc) {
+                log error: "%s value=%x", r[i].qname, v;
+                return;
+            }
+            // check attribute internal flag
+            local bool is_internal = (
+                SIM_get_attribute_attributes(
+                    SIM_object_class(u_obj), r[i].aname)
+                & Sim_Attr_Internal) != 0;
+            if (!is_internal) {
+                log error: "%s not internal", r[i].qname;
+                return;
+            }
+        }
+    }
+
+    // check register log name
+
+    /// GREP .* a_r name is _r0x4
+    log "info": "a_r name is %s", $a.r.name;
+    /// GREP .* b_r name is _r0x4
+    log "info": "b_r name is %s", $b.r.name;
+    /// GREP .* c_r name is r
+    log "info": "c_r name is %s", $c.r.name;
+    /// GREP .* d_r name is r
+    log "info": "d_r name is %s", $d.r.name;
+
+    /// GREP .* a_t name is _r0x6
+    log "info": "a_t name is %s", $a.t.name;
+    /// GREP .* b_t name is _r0x6
+    log "info": "b_t name is %s", $b.t.name;
+    /// GREP .* c_t name is _r0x6
+    log "info": "c_t name is %s", $c.t.name;
+    /// GREP .* d_t name is _r0x6
+    log "info": "d_t name is %s", $d.t.name;
+
+    /// GREP .* a_p name is p
+    log "info": "a_p name is %s", $a.p.name;
+    /// GREP .* b_p name is p
+    log "info": "b_p name is %s", $b.p.name;
+    /// GREP .* c_p name is p
+    log "info": "c_p name is %s", $c.p.name;
+    /// GREP .* d_p name is p
+    log "info": "d_p name is %s", $d.p.name;
+
+    /// GREP .* u_a_r name is _ur0
+    log "info": "u_a_r name is %s", $u.a.r.name;
+    /// GREP .* u_b_r name is _ur1
+    log "info": "u_b_r name is %s", $u.b.r.name;
+    /// GREP .* u_ra0 0 name is _r0x0
+    log "info": "u_ra0 0 name is %s", $u.ra0[0].name;
+    /// GREP .* u_ra0 1 name is _r0x0
+    log "info": "u_ra0 1 name is %s", $u.ra0[1].name;
+    /// GREP .* u_ra1 0 name is _ur3
+    log "info": "u_ra1 0 name is %s", $u.ra1[0].name;
+    /// GREP .* u_ra1 1 name is _ur3
+    log "info": "u_ra1 1 name is %s", $u.ra1[1].name;
+
+    // check register log qname
+
+    /// GREP .* a_r qname is a\._r0x4
+    log "info": "a_r qname is %s", $a.r.qname;
+    /// GREP .* b_r qname is b\._r0x4
+    log "info": "b_r qname is %s", $b.r.qname;
+    /// GREP .* c_r qname is c\.r
+    log "info": "c_r qname is %s", $c.r.qname;
+    /// GREP .* d_r qname is d\.r
+    log "info": "d_r qname is %s", $d.r.qname;
+
+    /// GREP .* a_t qname is a\._r0x6
+    log "info": "a_t qname is %s", $a.t.qname;
+    /// GREP .* b_t qname is b\._r0x6
+    log "info": "b_t qname is %s", $b.t.qname;
+    /// GREP .* c_t qname is c\._r0x6
+    log "info": "c_t qname is %s", $c.t.qname;
+    /// GREP .* d_t qname is d\._r0x6
+    log "info": "d_t qname is %s", $d.t.qname;
+
+    /// GREP .* a_p qname is a\.p
+    log "info": "a_p qname is %s", $a.p.qname;
+    /// GREP .* b_p qname is b\.p
+    log "info": "b_p qname is %s", $b.p.qname;
+    /// GREP .* c_p qname is c\.p
+    log "info": "c_p qname is %s", $c.p.qname;
+    /// GREP .* d_p qname is d\.p
+    log "info": "d_p qname is %s", $d.p.qname;
+
+    /// GREP .* u_a_r qname is u\.a\._ur0
+    log "info": "u_a_r qname is %s", $u.a.r.qname;
+    /// GREP .* u_b_r qname is u\.b\._ur1
+    log "info": "u_b_r qname is %s", $u.b.r.qname;
+    /// GREP .* u_ra0 0 qname is u\._r0x0
+    log "info": "u_ra0 0 qname is %s", $u.ra0[0].qname;
+    /// GREP .* u_ra0 1 qname is u\._r0x0
+    log "info": "u_ra0 1 qname is %s", $u.ra0[1].qname;
+    /// GREP .* u_ra1 0 qname is u\._ur3
+    log "info": "u_ra1 0 qname is %s", $u.ra1[0].qname;
+    /// GREP .* u_ra1 1 qname is u\._ur3
+    log "info": "u_ra1 1 qname is %s", $u.ra1[1].qname;
+
+    // check field log name
+
+    /// GREP .* a_r_f name is _b7_0
+    log "info": "a_r_f name is %s", $a.r.f.name;
+    /// GREP .* a_r_fa 0 name is _b9_8
+    log "info": "a_r_fa 0 name is %s", $a.r.fa[0].name;
+    /// GREP .* a_r_fa 2 name is _b9_8
+    log "info": "a_r_fa 2 name is %s", $a.r.fa[2].name;
+    /// GREP .* b_r_f name is _b7_0
+    log "info": "b_r_f name is %s", $b.r.f.name;
+    /// GREP .* c_r_f name is f
+    log "info": "c_r_f name is %s", $c.r.f.name;
+    /// GREP .* d_r_f name is f
+    log "info": "d_r_f name is %s", $d.r.f.name;
+
+    /// GREP .* a_t_f name is _b7_0
+    log "info": "a_t_f name is %s", $a.t.f.name;
+    /// GREP .* b_t_f name is _b7_0
+    log "info": "b_t_f name is %s", $b.t.f.name;
+    /// GREP .* c_t_f name is _b7_0
+    log "info": "c_t_f name is %s", $c.t.f.name;
+    /// GREP .* d_t_f name is _b7_0
+    log "info": "d_t_f name is %s", $d.t.f.name;
+
+    /// GREP .* a_p_f name is f
+    log "info": "a_p_f name is %s", $a.p.f.name;
+    /// GREP .* b_p_f name is f
+    log "info": "b_p_f name is %s", $b.p.f.name;
+    /// GREP .* c_p_f name is f
+    log "info": "c_p_f name is %s", $c.p.f.name;
+    /// GREP .* d_p_f name is f
+    log "info": "d_p_f name is %s", $d.p.f.name;
+
+    /// GREP .* u_a_r_f name is _b7_0
+    log "info": "u_a_r_f name is %s", $u.a.r.f.name;
+    /// GREP .* u_b_r_f name is _b7_0
+    log "info": "u_b_r_f name is %s", $u.b.r.f.name;
+    /// GREP .* a_r_fa 0 name is _b9_8
+    log "info": "u_a_r_fa 0 name is %s", $a.r.fa[0].name;
+    /// GREP .* a_r_fa 2 name is _b9_8
+    log "info": "u_a_r_fa 2 name is %s", $a.r.fa[2].name;
+
+    // check field log qname
+
+    /// GREP .* a_r_f qname is a\._r0x4\._b7_0
+    log "info": "a_r_f qname is %s", $a.r.f.qname;
+    /// GREP .* b_r_f qname is b\._r0x4\._b7_0
+    log "info": "b_r_f qname is %s", $b.r.f.qname;
+    /// GREP .* c_r_f qname is c\.r\.f
+    log "info": "c_r_f qname is %s", $c.r.f.qname;
+    /// GREP .* d_r_f qname is d\.r\.f
+    log "info": "d_r_f qname is %s", $d.r.f.qname;
+
+    /// GREP .* a_t_f qname is a\._r0x6\._b7_0
+    log "info": "a_t_f qname is %s", $a.t.f.qname;
+    /// GREP .* b_t_f qname is b\._r0x6\._b7_0
+    log "info": "b_t_f qname is %s", $b.t.f.qname;
+    /// GREP .* c_t_f qname is c\._r0x6\._b7_0
+    log "info": "c_t_f qname is %s", $c.t.f.qname;
+    /// GREP .* d_t_f qname is d\._r0x6\._b7_0
+    log "info": "d_t_f qname is %s", $d.t.f.qname;
+
+    /// GREP .* a_p_f qname is a\.p\.f
+    log "info": "a_p_f qname is %s", $a.p.f.qname;
+    /// GREP .* b_p_f qname is b\.p\.f
+    log "info": "b_p_f qname is %s", $b.p.f.qname;
+    /// GREP .* c_p_f qname is c\.p\.f
+    log "info": "c_p_f qname is %s", $c.p.f.qname;
+    /// GREP .* d_p_f qname is d\.p\.f
+    log "info": "d_p_f qname is %s", $d.p.f.qname;
+
+    // TODO: Should we hide group names also for qname?
+    /// GREP .* u_a_r_f qname is u\.a\._ur0\._b7_0
+    log "info": "u_a_r_f qname is %s", $u.a.r.f.qname;
+    /// GREP .* u_b_r_f qname is u\.b\._ur1\._b7_0
+    log "info": "u_b_r_f qname is %s", $u.b.r.f.qname;
+
+
+    /// GREP .* u_b_r_f qname is u\.b\._ur1\._b7_0
+    log "info": "u_b_r_f qname is %s", $u.b.r.f.qname;
+
+    /// GREP .* u_a_r_e qname is u\.a\._ur0\.e
+    log "info": "u_a_r_e qname is %s", $u.a.r.e.qname;
+    /// GREP .* u_a_r_fa 1_g qname is u\.a\._ur0\._b9_8\[1\].g
+    log "info": "u_a_r_fa 1_g qname is %s", $u.a.r.fa[1].g.qname;
+
+    // Avoid DCE
+    local bool execute = false;
+    if (execute) {
+        after (0) call $u.a.r.m();
+        after (0) call $u.a.r.fa[1].m();
+    }
+
+    call $check_event_name($u.a.r.e.evclass, "u.a._ur0.e", "u.a.r.e");
+    call $check_event_name(_evclass_u_a_r_m, "u.a._ur0.m", "u.a.r.m");
+    call $check_event_name(_evclass_u_a_r_fa_m, "u.a._ur0._b9_8[$i].m",
+                           "u.a.r.fa[$i].m");
+
+
+    ok = true;
+}

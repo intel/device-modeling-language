@@ -1,0 +1,51 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+/// ERROR EDATAINIT
+data int a[3] = {1, 2};
+
+/// ERROR EDATAINIT
+data struct {int i; int j;} s = {1,};
+
+/// ERROR EDATAINIT
+data bitfields 32 {
+    uint3 x @ [31:29];
+    uint16 y @ [23:8];
+    uint8 z @ [7:0];
+} bf = {0, 0};
+
+// This works now /// ERROR EDATAINIT
+data layout "big-endian" {
+        uint16 x;
+        uint16 y;
+        uint32 z;
+} d = {0, 0, 0};
+
+data int i;
+/// ERROR EDATAINIT
+data int j = $i;
+
+extern typedef struct { int j; } e0_t;
+/// ERROR EDATAINIT
+data e0_t e0 = {0, 0};
+extern typedef struct { struct { int j; } j; } e1_t;
+/// ERROR EDATAINIT
+data e1_t e2 = {{0, 0}};
+
+method init {
+    local int d = 2;
+    /// ERROR EDATAINIT
+    local int a[d] = {1, 2};
+
+    local struct {
+        int i;
+    /// ERROR EDATAINIT
+    } simple_struct = {d,};
+
+    /// ERROR EDATAINIT
+    static int y = $i;
+}

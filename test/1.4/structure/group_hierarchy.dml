@@ -1,0 +1,109 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+import "simics/simulator/conf-object.dml";
+
+template event_boilerplate is custom_time_event {
+    method event(void *x) {}
+    method get_event_info(void *x) -> (attr_value_t) {
+        return SIM_make_attr_nil();
+    }
+    method set_event_info(attr_value_t x) -> (void *) {
+        return NULL;
+    }
+    method destroy(void *x) {}
+}
+
+group g {
+    attribute a is (uint64_attr) { group g { method m() {} } }
+
+    event e is (event_boilerplate) {
+        group g {
+            method m() {}
+        }
+    }
+
+    connect c {
+        interface i {
+            group g {
+                method m() {}
+            }
+        }
+        group g {
+            method m() {}
+        }
+    }
+}
+
+attribute a is (uint64_attr) { group g { method m() {} } }
+
+connect c {
+    interface i {
+        group g {
+            method m() {}
+        }
+    }
+    group g {
+        method m() {}
+    }
+}
+
+typedef struct {
+    void (*m)(conf_object_t *, int m);
+} i_interface_t;
+
+port p {
+    implement i {
+        method m(int m) {}
+        group g {
+            // this compiles, which proves that implement objects do not
+            // look recursively for method implementations
+            method m() {}
+            attribute a is (uint64_attr) { group g { method m() {} } }
+            saved int s;
+            session int x = 5;
+        }
+        attribute a is (uint64_attr);
+    }
+    group g;
+}
+
+bank b {
+    group gh {
+        register r size 4 @ 0 {
+            #if (!dml_1_2) {
+                // group inside register is disallowed in DML 1.2
+                group gg {
+                    field f @ [0] {
+                        group g {
+                            saved int i = 2;
+                            method m() {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+    register r size 4 @ 4 {
+        #if (!dml_1_2) {
+            group g;
+        }
+        field f @ [0] {
+            group g;
+        }
+    }
+}
+
+method init() {
+    local conf_class_t *cls = SIM_get_class("test");
+    assert SIM_class_has_attribute(cls, "g_a");
+    assert SIM_class_has_attribute(cls, "a");
+    local conf_class_t *p = SIM_get_class("test.p");
+    assert SIM_class_has_attribute(p, "i_a");
+    assert SIM_class_has_attribute(p, "i_g_a");
+    assert SIM_class_has_attribute(p, "i_g_s");
+    assert dev.p.i.g.x == 5;
+}

@@ -1,0 +1,89 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+import "testing.dml";
+
+typedef layout "big-endian" {
+    uint24 m;
+    uint56 a[2];
+    bitfields 16 {
+        uint8 m @ [11:4];
+    } b;
+} be_l;
+
+typedef layout "little-endian" {
+    uint24 m;
+    uint56 a[2];
+    bitfields 16 {
+        uint8 m @ [11:4];
+    } b;
+} le_l;
+
+method betest() throws
+{
+    local be_l b;
+    b.m = 10;
+    b.a[0] = 11;
+    b.a[1] = 12;
+    b.b.m = 0x7f;
+
+    local uint24_be_t *bm = &b.m;
+    local uint56_be_t *ba0 = &b.a[0];
+    local uint56_be_t *ba1 = &b.a[1];
+    local uint16_be_t *bb = &b.b;
+
+    // Test reading
+    expect(*bm == 10, "be member reference read");
+    expect(*ba0 == 11, "be member array 0 reference read");
+    expect(*ba1 == 12, "be member array 1 reference read");
+    expect(*bb == 0x07f0, "be member bitfield reference read");
+
+    // Test writing
+    *bm = 1;
+    *ba0 = 2;
+    *ba1 = 3;
+    *bb = 0xff00;
+    expect(b.m == 1, "be member reference write");
+    expect(b.a[0] == 2, "be member array 0 reference write");
+    expect(b.a[1] == 3, "be member array 1 reference write");
+    expect(b.b.m == 0xf0, "be member bitfield reference write");
+}
+
+method letest() throws
+{
+    local le_l l;
+    l.m = 10;
+    l.a[0] = 11;
+    l.a[1] = 12;
+    l.b.m = 0x7f;
+
+    local uint24_le_t *lm = &l.m;
+    local uint56_le_t *la0 = &l.a[0];
+    local uint56_le_t *la1 = &l.a[1];
+    local uint16_le_t *lb = &l.b;
+
+    // Test reading
+    expect(*lm == 10, "le member reference read");
+    expect(*la0 == 11, "le member array 0 reference read");
+    expect(*la1 == 12, "le member array 1 reference read");
+    expect(*lb == 0x07f0, "le member bitfield reference read");
+
+    // Test writing
+    *lm = 1;
+    *la0 = 2;
+    *la1 = 3;
+    *lb = 0xff00;
+    expect(l.m == 1, "le member reference write");
+    expect(l.a[0] == 2, "le member array 0 reference write");
+    expect(l.a[1] == 3, "le member array 1 reference write");
+    expect(l.b.m == 0xf0, "le member bitfield reference write");
+}
+
+method test() throws
+{
+    betest();
+    letest();
+}

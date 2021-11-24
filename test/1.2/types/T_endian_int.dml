@@ -1,0 +1,176 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+// Test functionality of EndianInt types in various contexts
+
+dml 1.2;
+
+device test;
+
+import "testing.dml";
+
+header %{
+bool coerce_vargs(uint64 coerce, ...) {
+    va_list varargs;
+    va_start(varargs, coerce);
+    uint64 var_arg = va_arg(varargs, uint64);
+    va_end(varargs);
+    bool ok = 1;
+    ok = ok & (coerce == 0xFFFFFFF);
+    ok = ok & (var_arg == 0xFFFFFF0);
+    return ok;
+}
+%}
+
+extern bool coerce_vargs(uint64, ...);
+
+typedef struct {
+  int64_be_t int64be;
+  int64_le_t int64lea[2];
+} be_struct;
+
+method int_arg(int64 arg) -> (int64 res) {
+    assert arg == 10;
+    // recreate endian int locally, and return
+    res = cast(arg, int64_le_t);
+}
+
+method test() -> (bool ok) {
+    ok = true;
+    // Check integer coercing in initializers
+    local int64_be_t int64be   = 0x7f;
+    local int64_le_t int64le   = 0x7f;
+    local uint64_le_t uint64le = 0x7f;
+    local int8_be_t int8be   = 0x7f;
+    local int8_le_t int8le   = 0x7f;
+    local uint8_be_t uint8be = 0x7f;
+    // These should all trivially be true;
+    ok = ok && (int64be == 0x7f);
+    ok = ok && (int64be == int64le);
+    ok = ok && (int64be == uint64le);
+    ok = ok && (int64be == int8be);
+    ok = ok && (int64be == int8le);
+    ok = ok && (int64be == uint8be);
+    // Sanity check some transitive, reflexive, and commutative properties
+    ok = ok && (int64be == int64be);
+    ok = ok && (int64le == int64be);
+    ok = ok && (uint64le == int64be);
+    ok = ok && (int64le == uint64le);
+    ok = ok && (uint64le == int8be);
+    ok = ok && (int8be == uint64le);
+    ok = ok && (int8be == uint8be);
+
+    // Check integer coercing in operations
+    ok = ok && (int64be == 0x7f);
+    ok = ok && ((int64be + 0x10) == 0x8f);
+    ok = ok && ((int64be - 0x10) == 0x6f);
+    ok = ok && ((int64be * 1) == 0x7f);
+    ok = ok && ((int64be / 2) == 0x3f);
+
+    // Check that shorthand variable statements work
+    local int64_be_t var = 10;
+    var += 5;
+    ok = ok && (var == 15);
+    var -= 10;
+    ok = ok && (var == 5);
+    var *= 4;
+    ok = ok && (var == 20);
+    var /= 5;
+    ok = ok && (var == 4);
+    var %= 3;
+    ok = ok && (var == 1);
+
+    local int i = 10;
+    i += var;
+    ok = ok && (i == 11);
+    i -= var;
+    ok = ok && (i == 10);
+    i *= var;
+    ok = ok && (i == 10);
+    i /= var;
+    ok = ok && (i == 10);
+    i %= var;
+    ok = ok && (i == 0);
+
+    // Check rudimentary pointer arithmetic
+    local int iarr[3] = {0, 1, 2};
+    local int *iarrp = &iarr[1];
+    var = 1;
+    ok = ok && (iarrp + var) == &iarr[2];
+    ok = ok && (var + iarrp) == &iarr[2];
+    ok = ok && (iarrp - var) == &iarr[0];
+
+    // Check endianint as struct member
+    local be_struct bes;
+    local be_struct bes2;
+    local be_struct *besp = &bes;
+    bes.int64be = 5;
+    bes.int64lea[0] = 10;
+    bes.int64lea[1] = 15;
+    ok = ok && (bes.int64be == 5);
+    ok = ok && (bes.int64lea[0] == 10);
+    ok = ok && (bes.int64lea[1] == 15);
+    ok = ok && (besp->int64be == 5);
+    ok = ok && (besp->int64lea[0] == 10);
+    ok = ok && (besp->int64lea[1] == 15);
+    besp->int64be = 10;
+    ok = ok && (bes.int64be == 10);
+    ok = ok && (besp->int64be == 10);
+    besp->int64lea[1] = 5;
+    ok = ok && (bes.int64lea[1] == 5);
+    ok = ok && (besp->int64lea[1] == 5);
+    bes2 = bes;
+    ok = ok && (bes2.int64be == 10);
+    ok = ok && (bes2.int64lea[0] == 10);
+    ok = ok && (bes2.int64lea[1] == 5);
+
+    // Method call with eint->int arg coercion, and int->eint return coercion
+    local uint48_le_t result;
+    var = 10;
+    call $int_arg(var) -> (result);
+    ok = ok && result == 10;
+
+    // Function call with varargs eint->int coercion
+    ok = ok && coerce_vargs(cast(0xFFFFFFF, uint56_be_t),
+                             cast(0xFFFFFF0, uint56_le_t));
+
+    // Check log info formatting
+    log "info", 1: "eint: %d", var;
+
+    // Check bitslicing operations
+    local uint24_le_t ule24;
+    ule24 = 0xf2f0f1;
+    ok = ok && (ule24[7:0] == 0xf1);
+    ule24[15:8] = 0xf;
+    ok = ok && (ule24 == 0xf20ff1);
+
+    // Check casts, only concerned about compilation
+    i = 5;
+    local int48_be_t i48be;
+    // Implicit
+    i48be = 5;
+    // Explicit
+    i48be = cast(5, int48_be_t);
+    // From variable, implicit
+    i48be = i;
+    // From variable, explicit
+    i48be = cast(i, int48_be_t);
+    // Other way around
+    i = i48be;
+    i = cast(i48be, int);
+
+    // Check ternary if
+    ok = ok && (i == 8 ? i48be : i) == 5;
+    ok = ok && (i == 8 ? i : i48be) == 5;
+
+    // Check endian int as array index
+    local int8 arr[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+    ok = ok && arr[i48be] == 5;
+
+    // Check implicit coerce to bitfield
+    // Only concerned about compilation
+    local bitfields 48 {
+       uint4 a @ [5:2];
+    } bt = i48be;
+}

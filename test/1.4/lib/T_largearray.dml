@@ -1,0 +1,27 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+import "utility.dml";
+
+bank b {
+    param register_size = 4;
+    register a[i < 10000] @ 50000 + (4 * i) is read_only;
+    register b[i < 10000] @ 90000 + (4 * i) is read_only;
+
+    register c[i < 10000] @ 150000 + (8 * i) is read_only;
+    register d[i < 10000] @ 150004 + (8 * i) is read_only;
+
+    // Trigger many reads from within DML, to avoid spending time in Python
+    // wrappers. Access with different offsets, to mess up branch prediction.
+    method read(uint64 offset, uint64 be, void *aux) -> (uint64) throws {
+        local uint64 val;
+        for (local uint64 i=0; i < 1000000; i++) {
+            val = default(offset + (i * 2876) % 40000, be, aux);
+        }
+        return val;
+    }
+}

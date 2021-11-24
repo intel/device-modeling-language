@@ -1,0 +1,32 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+import "testing.dml";
+
+method test() throws {
+    local uint64 a = -1;
+    /// WARNING WNEGCONSTCOMP
+    expect(a != -1, "identity compare");
+    /// WARNING WNEGCONSTCOMP
+    expect(a > -1, "greater than");
+    /// WARNING WNEGCONSTCOMP
+    expect(!(a < -1), "smaller than");
+    /// WARNING WNEGCONSTCOMP
+    expect(a >= -1, "greater than or equals");
+    /// WARNING WNEGCONSTCOMP
+    expect(!(a <= -1), "smaller than or equals");
+
+    // Sanity
+    local int64 b = -1;
+    // No warning
+    expect(b == -1, "int64 identity");
+    // No warning
+    expect(!(b < -1), "int64 lessthan");
+
+    // Test workaround
+    expect(a == cast(-1, uint64), "identity compare with cast");
+}

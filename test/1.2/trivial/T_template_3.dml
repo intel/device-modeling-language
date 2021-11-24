@@ -1,0 +1,21 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+template t {
+    parameter value;
+    method test -> (bool result) {
+	result = ($value == 4711);
+    }
+}
+
+template u {
+    parameter value = 4711;
+    is t;
+}
+
+is u;

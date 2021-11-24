@@ -1,0 +1,89 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "utility.dml";
+
+bank ro {
+    parameter register_size = 4;
+    register r1 is (constant,unmapped) {
+        parameter value = 1;
+        parameter regnum = 3;
+    }
+    register r2 is (constant,unmapped) {
+        parameter value = 2;
+        parameter regnum = 5;
+    }
+    register r3[i in 0..3] is (constant,unmapped) {
+        parameter value = 3;
+        parameter regnum = 9 - $i;
+    }
+    group g1[i in 0..3] {
+        register r4 is (constant,unmapped) {
+            parameter value = 4;
+            parameter regnum = 10 + $i;
+        }
+        register r17[j in 0..4] is (constant, unmapped) {
+            parameter value = 19;
+            parameter regnum = 100 + $i * 10 + $j;
+        }
+    }
+    group g2 {
+        register r1 is (constant,unmapped) {
+            parameter value = 5;
+            parameter regnum = 14;
+        }
+    }
+    register r[i in 0..1][j in 0..1] is (constant, unmapped) {
+        parameter regnum = 16 + 2 * $i + $j;
+        parameter value = 16;
+    }
+}
+
+bank rw {
+    parameter register_size = 4;
+    register r1 is (unmapped) {
+        parameter regnum = 3;
+    }
+    register r2 is (unmapped) {
+        parameter regnum = 5;
+    }
+    register r3[i in 0..3] is (unmapped) {
+        parameter regnum = 6 + $i;
+    }
+    group g1[i in 0..3] {
+        register r4 is (unmapped) {
+            parameter regnum = 10 + $i;
+        }
+        group h[j in 0..1] {
+            register r[k in 0..1] is (unmapped) {
+                parameter regnum = 16 + $i * 4 + $j * 2 + $k;
+                parameter value = 13;
+            }
+        }
+    }
+    group g2 {
+        register r1 is (unmapped) {
+            parameter regnum = 14;
+        }
+    }
+    register r[i in 0..1][j in 0..1] is (unmapped) {
+        parameter regnum = 32 + 2 * $i + $j;
+        parameter value = 15;
+    }
+}
+
+bank hole {
+    register r[3] size 1 is (unmapped) {
+        parameter regnum = $i == 1 ? undefined : $i;
+    }
+}
+
+method init() {
+    // int_register method definitions are intercepted by the compiler. Verify
+    // that they can be inlined
+    local const char *dummy;
+    inline $hole.int_register.get_name(0) -> (dummy);
+}

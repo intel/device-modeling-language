@@ -1,0 +1,36 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+typedef bitfields 32 {
+    /// ERROR EBFLD
+    double x @ [31:0];
+} t0;
+
+typedef bitfields 32 {
+    /// ERROR EBFLD
+    uint16 x @ [16:0];
+} t1;
+
+typedef bitfields 10 {
+    /// ERROR EBFLD
+    uint9 x @ [9:0];
+} t2;
+
+// Bug 10110
+
+/// ERROR EBFLD
+typedef bitfields 72 {
+    uint64 x @ [63:0];
+    uint8 y @ [71:64];
+} t3;
+
+// Must use explicit ints
+typedef uint8 uint8_t;
+typedef bitfields 8 {
+    /// ERROR EBFLD
+    uint8_t x @ [7:0];
+} t4;

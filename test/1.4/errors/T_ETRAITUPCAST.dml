@@ -1,0 +1,29 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+template a_t {}
+template b_t {}
+template c_t is b_t {}
+
+port p {
+    is c_t;
+}
+
+method init() {
+    /// ERROR ETEMPLATEUPCAST
+    cast(p, a_t);
+    // no error
+    cast(p, b_t);
+    local c_t c = cast(p, c_t);
+    /// ERROR ETEMPLATEUPCAST
+    cast(c, a_t);
+    // no error
+    cast(c, b_t);
+    /// ERROR ETEMPLATEUPCAST
+    cast(4, a_t);
+}

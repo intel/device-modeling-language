@@ -1,0 +1,106 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+event cycle_event {
+    parameter timebase = "cycles";
+}
+
+event second_event {
+    parameter timebase = "seconds";
+}
+
+event cycle_events[i in 0..1][j in 0..1] {
+    parameter timebase = "cycles";
+}
+
+event second_events[i in 0..1][j in 0..1] {
+    parameter timebase = "seconds";
+}
+
+method test -> (bool ok)
+{
+    local bool posted;
+    local uint32 x;
+
+    ok = true;
+
+    // Cycle
+    inline $cycle_event.posted(NULL) -> (posted);
+    ok = ok && !posted;
+    inline $cycle_event.post(14, NULL);
+    inline $cycle_event.posted(NULL) -> (posted);
+    ok = ok && posted;
+
+    inline $cycle_event.posted(&x) -> (posted);
+    ok = ok && !posted;
+    inline $cycle_event.post(14, &x);
+    inline $cycle_event.posted(&x) -> (posted);
+    ok = ok && posted;
+
+    // Second
+    inline $second_event.posted(NULL) -> (posted);
+    ok = ok && !posted;
+
+    inline $second_event.post(14.5, NULL);
+
+    inline $second_event.posted(NULL) -> (posted);
+    ok = ok && posted;
+    inline $second_event.posted(&x) -> (posted);
+    ok = ok && !posted;
+    inline $second_event.post(14.5, &x);
+    inline $second_event.posted(&x) -> (posted);
+    ok = ok && posted;
+
+    // array - Cycle
+    inline $cycle_events[0][0].posted(NULL) -> (posted);
+    ok = ok && !posted;
+    inline $cycle_events[0][0].post(14, NULL);
+    inline $cycle_events[0][0].posted(NULL) -> (posted);
+    ok = ok && posted;
+
+    inline $cycle_events[0][0].posted(&x) -> (posted);
+    ok = ok && !posted;
+    inline $cycle_events[0][0].post(14, &x);
+    inline $cycle_events[0][0].posted(&x) -> (posted);
+    ok = ok && posted;
+
+    inline $cycle_events[0][1].posted(NULL) -> (posted);
+    ok = ok && !posted;
+    inline $cycle_events[1][0].posted(NULL) -> (posted);
+    ok = ok && !posted;
+
+    inline $cycle_events[1][0].post(14, NULL);
+    inline $cycle_events[1][0].posted(NULL) -> (posted);
+    ok = ok && posted;
+    inline $cycle_events[1][1].posted(NULL) -> (posted);
+    ok = ok && !posted;
+
+    // array - Second
+    inline $second_events[0][0].posted(NULL) -> (posted);
+    ok = ok && !posted;
+    inline $second_events[0][0].post(14.5, NULL);
+    inline $second_events[0][0].posted(NULL) -> (posted);
+    ok = ok && posted;
+
+    inline $second_events[0][0].posted(&x) -> (posted);
+    ok = ok && !posted;
+    inline $second_events[0][0].post(14.5, &x);
+    inline $second_events[0][0].posted(&x) -> (posted);
+    ok = ok && posted;
+
+    inline $second_events[0][1].posted(NULL) -> (posted);
+    ok = ok && !posted;
+    inline $second_events[1][0].posted(NULL) -> (posted);
+    ok = ok && !posted;
+
+    inline $second_events[1][0].post(14.5, NULL);
+    inline $second_events[1][0].posted(NULL) -> (posted);
+    ok = ok && posted;
+    inline $second_events[1][1].posted(NULL) -> (posted);
+    ok = ok && !posted;
+}

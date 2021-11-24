@@ -1,0 +1,21 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+bitorder be;
+import "testing.dml";
+
+// Big-endian representation for temporary buffer
+typedef layout "big-endian" {
+    uint64 value;
+} be_uint64;
+
+method test -> (bool ok)
+{
+    local be_uint64 op;
+    op.value = 0;
+    op.value[48:55] = 0x11;
+    ok = (op.value == 0x1100);
+}

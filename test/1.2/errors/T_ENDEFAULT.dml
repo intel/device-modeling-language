@@ -1,0 +1,30 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+method foo() {
+    /// ERROR ENDEFAULT
+    call default();
+}
+
+method bar() {
+    /// ERROR ENDEFAULT
+    inline default();
+}
+
+/// WARNING WEXPERIMENTAL
+trait t {
+    method m() {
+        /// ERROR ENDEFAULT
+        call default();
+    }
+}
+
+method test -> (bool ok) {
+    call $foo();
+    inline $bar();
+}

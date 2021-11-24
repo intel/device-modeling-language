@@ -1,0 +1,32 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+// Test the current expected functionality of the 'stringify' construct
+
+dml 1.4;
+
+device test;
+
+import "testing.dml";
+
+bank b {
+    register r size 4 @ 18 is (read, write) {
+        param name = parent.name + "_r_" + stringify(this.offset);
+    }
+}
+
+param string_val = "foo";
+param int_val    = 5;
+param float_val  = 0.5;
+
+method test() throws {
+     /// GREP .* string_val evaluated to "foo"
+     log info: "string_val evaluated to %s", stringify(string_val);
+     /// GREP .* int_val evaluated to 5
+     log info: "int_val evaluated to %s", stringify(int_val);
+     /// GREP .* float_val evaluated to 0.5
+     log info: "float_val evaluated to %s", stringify(float_val);
+     /// GREP .* register name became b_r_18
+     log info: "register name became %s", b.r.name;
+}

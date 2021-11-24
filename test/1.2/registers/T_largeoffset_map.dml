@@ -1,0 +1,58 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+import "io-memory.dml";
+
+// Test is not relevant to 1.4
+
+constant R_ADDR = 0x100000024;
+constant R_VAL = 0xdeadbeef;
+
+bank b {
+    parameter function = 0;
+    register r size 4 @ R_ADDR {
+        method read -> (val) {
+            val = R_VAL;
+        }
+    }
+}
+
+// "mapped" by function number
+method test_1 -> (bool ok) {
+    local map_info_t minfo;
+    local generic_transaction_t mop;
+    local exception_type_t ex;
+    local uint32 val;
+
+    mop.physical_address = R_ADDR;
+    mop.size = 4;
+    mop.real_address = cast(&val, uint8 *);
+    call $io_memory.operation(&mop, minfo) -> (ex);
+
+    ok = (ex == Sim_PE_No_Exception) && (val == R_VAL);
+}
+
+// "mapped" by bank name
+method test_2 -> (bool ok) {
+    local map_info_t minfo;
+    local generic_transaction_t mop;
+    local exception_type_t ex;
+    local uint32 val;
+
+    mop.physical_address = R_ADDR;
+    mop.size = 4;
+    mop.real_address = cast(&val, uint8 *);
+    call $b.io_memory.operation(&mop, minfo) -> (ex);
+
+    ok = (ex == Sim_PE_No_Exception) && (val == R_VAL);
+}
+
+method test -> (bool ok) {
+    call $test_1 -> (ok);
+    if (ok)
+        call $test_2 -> (ok);
+}

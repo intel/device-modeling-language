@@ -1,0 +1,52 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+import "simics/devs/signal.dml";
+import "simics/devs/ethernet.dml";
+
+// must define class 'signal_stub' before instantiating
+/// INSTANTIATE-MANUALLY
+
+connect validate {
+    method validate(conf_object_t *obj) -> (bool) {
+        return obj == dev.obj
+            && (this.port == NULL || strcmp(this.port, "foo") == 0);
+    }
+}
+
+connect ifaces {
+    interface ethernet_cable { param required = true; }
+    // default: required
+    interface ethernet_common;
+    // not required
+    interface signal { param required = false; }
+}
+
+group sub[i < 2] {
+    connect obj is init_as_subobj {
+        param configuration = "optional";
+        param classname = "signal_stub";
+        param name = "renamed";
+        interface signal;
+    }
+}
+
+connect noconf is init_as_subobj {
+    param classname = "signal_stub";
+    interface signal;
+}
+
+attribute invoke is (write_only_attr) {
+    param type = "n";
+    method set(attr_value_t val) throws {
+        ifaces.ethernet_cable.link_status(true);
+        if (ifaces.signal.val)
+            ifaces.signal.signal_raise();
+        sub[1].obj.signal.signal_raise();
+    }
+}

@@ -1,0 +1,33 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// ERROR EEXPORT
+inline method m1(inline x) {}
+/// ERROR EEXPORT
+export m1 as "m1";
+
+/// ERROR EEXPORT
+method m2(uint64 x) throws {}
+/// ERROR EEXPORT
+export m2 as "m2";
+
+/// ERROR EEXPORT
+method m3() -> (uint64, uint64) {
+    return (0, 0);
+}
+/// ERROR EEXPORT
+export m3 as "m3";
+
+template t {
+    // TODO: should this work?
+    shared method s() {}
+}
+is t;
+
+/// ERROR ENOBJ
+export s as "t_s";

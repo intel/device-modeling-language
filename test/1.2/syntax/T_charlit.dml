@@ -1,0 +1,23 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+method test -> (bool ok) {
+    local int c1 = 'a';
+    local int c2 = '"';
+    local int c3 = '\\';
+    local int c4 = '\n';
+    local int c5 = '\r';
+    local int c6 = '\t';
+    local int c7 = '\b';
+    local int c8 = ' ';
+    local int c9 = '~';
+    ok = (c1 == 97 && c2 == 34 && c3 == 92
+          && c4 == 10 && c5 == 13 && c6 == 9 && c7 == 8 && c8 == 32
+          && c9 == 126
+          && sizeof '*' == sizeof 42);
+}

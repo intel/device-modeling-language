@@ -1,0 +1,161 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+import "utility.dml";
+
+// Simple types
+saved int saved_int = 2;
+
+saved int24 saved_int24 = -5;
+
+saved bool saved_bool = true;
+
+saved float saved_float = 0.5;
+
+// Storage types
+typedef struct {
+    int i;
+} inner_i_t;
+// This checks that we do not get duplicate serialization functions from
+// nested types
+typedef struct {
+    int i;
+    int a[2];
+    inner_i_t inner1;
+    inner_i_t inner2;
+} i_ii_t;
+
+saved struct { i_ii_t v0; int i; } saved_struct;
+
+saved int saved_array[4];
+
+// The unused sessions in these objects will complicate the strides of the
+// struct arrays in the device
+port port_array[i < 4] {
+    saved int v = i;
+    session int s = i;
+    group array_saved_int[j < 3] {
+        saved int v = (i+1) * 3 + j;
+        session int s = (i+1) * 3 + j;
+    }
+}
+
+bank b[i < 4] {
+    session int filler;
+    register r size 4 is unmapped {
+        session int filler;
+        field f[j < 3] @ [j] {
+            saved int v = i * 3 + j ;
+        }
+    }
+}
+
+// TODO: vect
+
+saved int24_le_t saved_int24_le = -8;
+saved uint48_be_t saved_uint48_be = 3;
+
+saved bitfields 24 {
+    uint20 c @ [23:4];
+} saved_bitfields;
+
+typedef layout "little-endian" {
+    uint56 i;
+} inner_layout_t;
+
+saved layout "big-endian" {
+    int32 i32;
+    inner_layout_t il;
+    bitfields 24 {
+        uint24 f @ [23:0];
+    } b24;
+} saved_layout;
+
+// saved from template
+template saved_template {
+    param initial_value default 0;
+    saved int v = initial_value;
+}
+port p_saved1 is saved_template;
+port p_saved2 is saved_template {
+    param initial_value = 4;
+}
+
+attribute test_initial is write_only_attr {
+    param type = "n";
+
+    method set(attr_value_t _) throws {
+        assert saved_int == 2;
+        assert saved_int24 == -5;
+        assert saved_bool == true;
+        assert saved_float == 0.5;
+        // No initial test for the struct or array
+        for (local int i = 0; i < 4; i++) {
+            assert port_array[i].v == i;
+            for (local int j = 0; j < 3; j++) {
+                assert port_array[i].array_saved_int[j].v == (i + 1) * 3 + j;
+                assert b[i].r.f[j].v == i * 3 + j;
+            }
+        }
+        assert saved_int24_le == -8;
+        assert saved_uint48_be == 3;
+        // No initial test for bitfields or layout
+        assert p_saved1.v == 0;
+        assert p_saved2.v == 4;
+    }
+}
+
+attribute test_later is write_only_attr {
+    param type = "n";
+
+    method set(attr_value_t _) throws {
+        assert saved_int == 4;
+        assert saved_int24 == -8388608;
+        assert saved_bool == false;
+        assert saved_float == -0.5;
+
+        assert saved_struct.i == 4;
+        assert saved_struct.v0.i == 0;
+        assert saved_struct.v0.a[0] == -1;
+        assert saved_struct.v0.a[1] == 2;
+        assert saved_struct.v0.inner1.i == 3;
+        assert saved_struct.v0.inner2.i == -2;
+
+        for (local int i = 0; i < 4; i++) {
+            assert saved_array[i] == 3-i;
+        }
+
+        for (local int i = 0; i < 4; i++) {
+            assert port_array[i].v == i;
+        }
+
+        local const int matrix[4][3] =
+            {{1, 5, 6},
+             {8, -1, 10},
+             {12, 0, 14},
+             {0, 4, -8}};
+
+        for (local int i = 0; i < 4; i++) {
+            for (local int j = 0; j < 3; j++) {
+                assert port_array[i].array_saved_int[j].v == matrix[i][j];
+                assert b[i].r.f[j].v == matrix[i][j];
+            }
+        }
+
+        assert saved_int24_le == -1044736;
+        assert saved_uint48_be == 0xF00F00F00;
+
+        assert saved_bitfields == 0xF0F0FF;
+        assert saved_layout.i32 == -5;
+        assert saved_layout.il.i == 0xFF0FF00F0;
+        assert saved_layout.b24 == 0xFF00F0;
+
+        assert p_saved1.v == -5;
+        assert p_saved2.v == 5;
+    }
+}

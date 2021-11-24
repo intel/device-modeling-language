@@ -1,0 +1,45 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+import "testing.dml";
+
+constant b = 2;
+constant d = 2;
+
+param c = 3;
+
+port p {
+    param a = 4;
+    param b = 4;
+    method m() throws {
+        local int a = 5;
+        log info: "%d %d %d %d", a, b, c, d;
+        if (a != 5) throw;
+        if (b != 4) throw;
+        if (c != 3) throw;
+        if (d != 2) throw;
+    }
+}
+
+// no name collision
+bank x {
+    group a_b {
+        group c {
+            session int i;
+        }
+    }
+    group a {
+        group b_c {
+            session int i;
+        }
+    }
+}
+
+method test() throws {
+    p.m();
+}

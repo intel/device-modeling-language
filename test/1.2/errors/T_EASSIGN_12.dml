@@ -1,0 +1,13 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device eassign;
+
+// bug 5090
+method init {
+    local bool b;
+    /// ERROR EASSIGN
+    true && b = true;
+}

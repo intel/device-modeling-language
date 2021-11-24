@@ -1,0 +1,36 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// COMPILE-ONLY
+
+bank regs {
+    register r size 1 @ 0 {
+        /// WARNING WNOIS
+        method read() -> (uint64) { return 0; }
+        /// WARNING WNOIS
+        method read_field(uint64 bits, void *aux) -> (uint64) { return 0; }
+        /// WARNING WNOIS
+        method write(uint64 val) { }
+        /// WARNING WNOIS
+        method write_field(uint64 val, uint64 bits, void *aux) {}
+        field f @ [0:0] {
+            /// WARNING WNOIS
+            method read() -> (uint64) { return 0; }
+            /// WARNING WNOIS
+            method read_field(uint64 bits, void *aux) -> (uint64) { return 0; }
+            /// WARNING WNOIS
+            method write(uint64 val) { }
+            /// WARNING WNOIS
+            method write_field(uint64 val, uint64 bits, void *aux) {}
+            /// WARNING WNOIS
+            method set(uint64 val) { }
+            /// WARNING WNOIS
+            method get() -> (uint64) { return 0; }
+        }
+    }
+}

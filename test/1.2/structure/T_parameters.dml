@@ -1,0 +1,112 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+/// COMPILE-ONLY
+
+parameter val1 = 4711;
+if ($val1 != 4711) { error; }
+
+parameter val2 default 4711;
+if ($val2 != 4711) { error; }
+
+// In DML 1.2, a non-default assignment overrides any default
+// assignments, disregarding template hierarchy.
+parameter val3 default 4711;
+parameter val3 = 42;
+if ($val3 != 42) { error; }
+
+parameter val4;
+parameter val4 = 42;
+if ($val4 != 42) { error; }
+
+template val5_7 { parameter val5 = 7; }
+parameter val5 default 4711;
+parameter val5 default 42;
+is val5_7;
+if ($val5 != 7) { error; }
+
+// references to objects or object arrays, both with and without storage,
+// are permitted as parameter values
+port p { parameter p = 1; }
+port ps[3] { parameter p = $i + 1; }
+bank b { register r size 2 @ undefined; }
+parameter objref = $p;
+parameter objarr = $ps;
+parameter regref = $b.r;
+method init() {
+    if ($objref.p != 1) { error; }
+    if ($regref.size != 2) { error; }
+    if ($objarr[2].p != 3) { error; }
+}
+
+template t1 {
+    parameter val default 1;
+    parameter val;
+}
+
+template t2 {
+    is t1;
+    /// WARNING WEXPERIMENTAL
+    parameter val default 2;
+    parameter val;
+}
+
+port p1 {
+    is t1;
+    if ($val != 1) { error; }
+}
+port p2 {
+    is t2;
+    if ($val != 2) { error; }
+}
+port p3 {
+    is t2;
+    /// WARNING WEXPERIMENTAL
+    parameter val default 3;
+    if ($val != 3) { error; }
+}
+port p4 {
+    is t2;
+    parameter val = 4;
+    parameter val;
+    if ($val != 4) { error; }
+}
+
+template t4 {
+    group g {
+        is t2;
+        /// WARNING WEXPERIMENTAL
+        parameter val default 3;
+        if ($val != 3) { error; }
+    }
+}
+bank b {
+    is t4;
+}
+
+template t3 {
+    // conflicts with definition in t2
+    parameter val default 3;
+}
+template t5 {
+    is t2;
+    is t3;
+    // Resolve ambiguity by overriding
+    /// WARNING WEXPERIMENTAL
+    parameter val default 5;
+}
+port p5 {
+    is t5;
+    if ($val != 5) { error; }
+}
+
+port p6[i in 0.. 10] {
+    parameter allocate_type = "bool";
+    // this used do cause an ICE, because i is evaluated with static index
+    parameter p = $p6[$i].m();
+    method m() -> (bool x) nothrow {}
+}

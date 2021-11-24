@@ -1,0 +1,52 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+method test -> (bool ok) {
+    local char a[10];
+    local char *p1;
+    local char *p2;
+    local int i;
+    local uint24_le_t le;
+    local uint24_be_t be;
+
+    ok = true;
+
+    i = 17;
+    ok = ok && (i++ == 17);
+    ok = ok && (i-- == 18);
+    ok = ok && (++i == 18);
+    ok = ok && (--i == 17);
+
+    le = 0xffffff;
+    ok = ok && le++ == 0xffffff;
+    ok = ok && le-- == 0;
+    ok = ok && ++le == 0;
+    ok = ok && --le == 0xffffff;
+
+    be = 0xffffff;
+    ok = ok && be++ == 0xffffff;
+    ok = ok && be-- == 0;
+    ok = ok && ++be == 0;
+    ok = ok && --be == 0xffffff;
+
+    // These are undefined in C:
+    //ok = ok && (i++ < i);
+    //ok = ok && (i-- > i);
+    //ok = ok && (++i == i);
+    //ok = ok && (--i == i);
+
+    p1 = &a[5];
+    p2 = p1;
+    ok = ok && (p1 < ++p2);
+    p2 = p1;
+    ok = ok && (p1 > --p2);
+    p2 = p1;
+    ok = ok && (p1 == p2++);
+    p2 = p1;
+    ok = ok && (p1 == p2--);
+}

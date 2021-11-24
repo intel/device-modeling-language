@@ -1,0 +1,19 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+/// COMPILE-ONLY
+
+// bug 21367: in DML 1.2, string literals are allowed as non-const method
+// parameters.  This is not allowed in 1.4; see 1.4/errors/ECONSTP_stringlit
+
+method m(char *s) {
+}
+
+method init() {
+    call $m("foo");
+}

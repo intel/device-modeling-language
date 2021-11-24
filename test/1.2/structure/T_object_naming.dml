@@ -1,0 +1,23 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+// bug 4582: Register names appear as identifiers in generated C code, causing
+// problems if the identifier is defined by a macro in C
+
+header %{
+    #define foobar 18
+%}
+
+/// COMPILE-ONLY
+bank {
+    parameter register_size = 2;
+    register T_OBJECT_NAMING_STRUCT_H @ undefined;
+    register MM_MALLOC @ undefined;
+    register ERROR @ undefined;
+    register OUT @ undefined;
+    register foobar @ undefined;
+}

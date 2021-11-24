@@ -1,0 +1,45 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+method test -> (bool ok) {
+    local int i = 0;
+    local bool t;
+    local uint16 u16;
+    local uint64 u64;
+
+    // The semantics of ~ in DML 1.1 are sometimes weird, but this
+    // test tries to capture what it actually looks like.
+
+    ok = true;
+    
+    t = (~0 == 0xffffffff);
+    log "info": "%d - %s", ++i, t ? "ok" : "ERROR";
+    if (!t) ok = false;
+    
+    t = (~1 == 0xfffffffe);
+    log "info": "%d - %s", ++i, t ? "ok" : "ERROR";
+    if (!t) ok = false;
+    
+    t = (~cast(1,uint16) == 0xfffffffe);
+    log "info": "%d - %s", ++i, t ? "ok" : "ERROR";
+    if (!t) ok = false;
+    
+    t = (~cast(1,uint64) == 0xfffffffffffffffe);
+    log "info": "%d - %s", ++i, t ? "ok" : "ERROR";
+    if (!t) ok = false;
+    
+    u16 = 1;
+    t = (~u16 == 0xfffffffe);
+    log "info": "%d - %s", ++i, t ? "ok" : "ERROR";
+    if (!t) ok = false;
+    
+    u64 = 1;
+    t = (~u64 == 0xfffffffffffffffe);
+    log "info": "%d - %s", ++i, t ? "ok" : "ERROR";
+    if (!t) ok = false;
+}

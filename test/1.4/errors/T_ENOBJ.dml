@@ -1,0 +1,27 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+import "utility.dml";
+
+template foo_t {}
+
+param param = 4;
+bank b {
+    register r[i < 4] size 1 is (unmapped, read, write, foo_t);
+}
+
+method init() {
+    /// ERROR ENOBJ
+    each foo_t in (param);
+    /// ERROR ENOBJ
+    each foo_t in (b.r);
+    // no error
+    each foo_t in (b.r[0]);
+}
+
+/// ERROR ENOBJ
+export 5 as "b_c";

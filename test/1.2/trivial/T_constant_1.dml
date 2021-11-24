@@ -1,0 +1,15 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+constant c = 4711;
+// see also T_EUNDEF for an invalid nested list
+constant c2 = [[4, 7], 11];
+
+method test -> (bool result) {
+    result = c == 4711 && c2[0][1] == 7;
+}

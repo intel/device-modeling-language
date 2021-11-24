@@ -1,0 +1,46 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device etype;
+
+typedef struct { int i; } t_t;
+data t_t tt;
+
+method init {
+    /// ERROR ENBOOL
+    if (4)
+        ;
+
+    /// ERROR ENBOOL
+    if (1.1)
+        ;
+
+    local uint8 x = 0;
+    /// ERROR ENBOOL
+    if (x[2:1])
+        ;
+
+    // Disallowed even though it's a single bit, because it is not expressed as
+    // a constant expression
+    /// ERROR ENBOOL
+    if (x[x:x])
+        ;
+
+    local t_t t;
+    /// ERROR ENBOOL
+    if (t)
+        ;
+    // bug 24107
+    /// ERROR ENBOOL
+    if (!$tt) ;
+
+    local void *p;
+    /// ERROR ENBOOL
+    if (*p)
+        ;
+
+    /// ERROR ENBOOL
+    select a in ([2]) where (a) {} else {}
+}

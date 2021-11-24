@@ -1,0 +1,28 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+bank b[2] {
+    register r[i in 0..1][j in 0..1] size 1 @ undefined;
+}
+method test() -> (bool ok) {
+    local int accessed;
+    // test that all indices are traversed
+    // HSD-ES 1809370911
+    foreach b in ($banks) {
+        foreach r in (b.unmapped_registers) {
+            local int idx;
+            idx[0] = r.j;
+            idx[1] = r.i;
+            idx[2] = r.bank.i;
+            log info: "%d", idx;
+            assert !accessed[idx];
+            accessed[idx] = 1;
+        }
+    }
+    ok = accessed == 0xff;
+}

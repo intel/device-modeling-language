@@ -1,0 +1,22 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+extern int i;
+
+// bug 25200
+/// ERROR ENCONST
+data int d[i];
+/// ERROR ENCONST
+method m1(int x[i]) {}
+/// ERROR ENCONST
+method m2() -> (int x[i]) {}
+
+method init() {
+    // no error
+    local int d[i];
+}

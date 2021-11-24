@@ -1,0 +1,61 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+import "utility.dml";
+
+/// ERROR EANAME
+attribute access_count is uint64_attr;
+
+bank build {
+    // clashing proxy attribute
+    /// ERROR EANAME
+    register id size 1 is unmapped;
+    /// ERROR EANAME
+    register build_id size 1 is unmapped;
+}
+
+port syms {
+    /// ERROR EANAME
+    saved int access_count;
+    /// ERROR EANAME
+    saved int attributes;
+    /// ERROR EANAME
+    saved int build_id;
+    /// ERROR EANAME
+    saved int class_desc;
+    /// ERROR EANAME
+    saved int classname;
+    /// ERROR EANAME
+    saved int component;
+    /// ERROR EANAME
+    saved int component_slot;
+    /// ERROR EANAME
+    saved int iface;
+    /// ERROR EANAME
+    saved int log_buffer;
+    /// ERROR EANAME
+    saved int log_buffer_size;
+    /// ERROR EANAME
+    saved int log_group_mask;
+    /// ERROR EANAME
+    saved int log_groups;
+    /// ERROR EANAME
+    saved int log_level;
+    /// ERROR EANAME
+    saved int log_type_mask;
+    /// ERROR EANAME
+    saved int ports;
+    /// ERROR EANAME
+    saved int object_id;
+    /// ERROR EANAME
+    saved int queue;
+}
+
+/// ERROR EANAME
+attribute x is (uint64_attr) {
+    param name = "name";
+}

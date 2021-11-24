@@ -1,0 +1,64 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+header %{
+#if defined(DMLSYSC)
+    typedef int myint;
+#else
+    typedef int32 myint;
+#endif
+%}
+extern typedef int32 myint;
+
+method assert_eq(v1, v2) { if (v1 != v2) throw; }
+
+method test -> (bool ok) {
+    local int32 i;
+    local double f;
+    local myint ii;
+
+    ok = true;
+
+    try {
+        i = 17;
+        i = - i;
+        inline $assert_eq(i, -17);
+
+        f = 17.0;
+        f = - f;
+        inline $assert_eq(f, -17.0);
+
+        i = 17;
+        ii = - i;
+        inline $assert_eq(ii, -17);
+
+        ii = 17;
+        i = - ii;
+        inline $assert_eq(i, -17);
+
+        f = 17.0;
+        i = - f;
+        inline $assert_eq(i, -17);
+
+        i = 17;
+        i = + i;
+        inline $assert_eq(i, 17);
+
+        ii = 17;
+        ii = + ii;
+        inline $assert_eq(ii, 17);
+
+        f = 17.0;
+        f = + f;
+        inline $assert_eq(f, 17.0);
+
+    } catch {
+        ok = false;
+    }
+}
+

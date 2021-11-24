@@ -1,0 +1,11 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+parameter documentation = "long description";
+
+port doc_only { parameter documentation = "long description 2"; }
+bank doc_desc "short desc" { parameter documentation = "long description 3"; }

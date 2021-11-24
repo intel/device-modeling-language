@@ -1,0 +1,41 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+import "testing.dml";
+import "utility.dml";
+
+parameter register_size = 4;
+
+bank regs {
+    register r1 @ 0x10 is (unimplemented);
+    register r2 @ 0x20 is (_read_unimplemented);
+    register r3 @ 0x30 is (_write_unimplemented);
+    register r4 @ 0x40 is (_read_unimplemented, read_only);
+    register r5 @ 0x50 is (_write_unimplemented, write_only);
+}
+
+bank with_fields {
+    register r6 @ 0x10 is (unimplemented) {
+        /// WARNING WWRNSTMT
+        field f[0] is (unimplemented);
+    }
+
+    register r7 @ 0x20 {
+        // No warning here
+        field f[0] is (unimplemented);
+    }
+}
+
+method test -> (bool ok) {
+    ok = true;
+
+    foreach r in ($regs.mapped_registers) {
+        if (!defined r.limitations)
+            ok = false;
+    }
+}

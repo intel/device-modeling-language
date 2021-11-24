@@ -1,0 +1,39 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "simics/devs/signal.dml";
+
+port prt[4] {
+    attribute raised {
+        parameter allocate_type = "bool";
+    }
+    implement signal {
+        method signal_raise {
+            log "info": "RAISE %d", $i;
+            $raised = true;
+        }
+        method signal_lower {
+            log "info": "LOWER %d", $i;
+            $raised = false;
+        }
+    }
+}
+
+port prtarr[i in 0..3][j in 0..2] {
+    attribute raised {
+        parameter allocate_type = "bool";
+    }
+    implement signal {
+        method signal_raise {
+            log "info": "RAISE %d", $i * 4 + $j;
+            $raised = true;
+        }
+        method signal_lower {
+            log "info": "LOWER %d", $i * 4 + $j;
+            $raised = false;
+        }
+    }
+}

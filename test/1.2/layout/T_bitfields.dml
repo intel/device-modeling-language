@@ -1,0 +1,41 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+// bug 8020
+
+typedef bitfields 32 {
+    uint7 a @ [9:3];
+} bf_t;
+
+method test -> (bool ok) {
+    local uint32 x = 0b00000000000000000000000100011000;
+    local bf_t y = x;
+    local bitfields 12 {
+        uint8 a @ [11:4];
+        uint4 b @ [3:0];
+    } z = y;
+    local uint32 a = y;
+    local uint16 b = y;
+    local uint32 c = y;
+
+    local bitfields 64 {
+        uint64 a @ [63:0];
+    } xx = 0xdeadbeefdeadbeef;
+
+    log "info": "x = %u", x;
+    log "info": "y = %u", y;
+    log "info": "z = %u", z;
+    log "info": "y.a = %u", y.a;
+    log "info": "z.a = %u", z.a;
+    log "info": "z.b = %u", z.b;
+    ok = ((y.a == 0b0100011) &&
+          (z.a == 0b00010001) &&
+          (z.b == 0b1000) &&
+          (a == x) &&
+          (xx.a == 0xdeadbeefdeadbeef));
+}

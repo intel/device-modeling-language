@@ -1,0 +1,28 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+/// COMPILE-ONLY
+
+struct foo_interface_t {
+    int (*f)(conf_object_t *obj, int x);
+}
+
+// need SC interface definition for C++ to compile
+header %{
+#if defined(DMLSYSC)
+namespace dml {
+    struct foo_interface_t : sc_core::sc_interface {
+        virtual int f(int x) = 0;
+    };
+}
+#endif
+%}
+
+connect c {
+    interface foo {
+        parameter required = false;
+    }
+}

@@ -1,0 +1,21 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+// a template is not allowed to reference itself, not even in an 'in each'
+// block
+template sub { }
+template cyclic_in_each {
+    #if (false) {
+        attribute a {
+            in each sub {
+                /// ERROR ECYCLICTEMPLATE
+                is cyclic_in_each;
+            }
+        }
+    }
+}

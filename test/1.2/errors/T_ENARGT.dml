@@ -1,0 +1,40 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+
+import "simics/devs/signal.dml";
+
+port p0 {
+    implement signal {
+        /// ERROR ENARGT
+        method signal_raise() -> (r) {
+            r = 0;
+        }
+    }
+}
+
+port p1 {
+    implement signal {
+        /// ERROR ENARGT
+        method m(x) {
+        }
+    }
+}
+
+/// ERROR ENARGT
+method m1(x) {
+}
+/// ERROR ENARGT
+method m2() -> (x) {
+}
+
+method init {
+    /// ERROR ENARGT
+    call $m1(1);
+    local int i;
+    /// ERROR ENARGT
+    call $m2 -> (i);
+}

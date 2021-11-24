@@ -1,0 +1,11 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+method common_throws() throws default {
+}
+
+method common_no_inline(char *(**b)(int i)) default {
+}

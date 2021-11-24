@@ -1,0 +1,64 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+header %{
+    int fn(void);
+%}
+footer %{
+    int fn(void) {
+        static int next = 0;
+        ++next;
+        return next;
+    }
+%}
+extern int fn(void);
+
+method test -> (bool ok) {
+    local int x = 17;
+    local double d = 12.34;
+    local float f = 34.25;
+    local int ia[8];
+    local int *ip;
+    ok = true;
+
+    // Bug #5627
+    ok = ok &&
+        (x * 8 - 1) == 135 &&
+        (8 * x - 1) == 135 &&
+        (x + 8 - 1) == 24  &&
+        (x - 8 - 1) == 8   &&
+        (8 + x - 1) == 24  &&
+        (8 - x - 1) == -10;
+
+    // Type promotions (bug #6853)
+    ok = ok &&
+        (255 / 125.0e6) > 0 &&
+        (d * f) > 0 &&
+        (1.5 - 1) == 0.5;
+
+    // Pointers (bug #7497)
+    ip = &ia[1];
+    ok = ok &&
+        (ip - ip) == 0 &&
+        (ia - ia) == 0 &&
+        (ip - ia) == 1 &&
+        (ia + 1) == ip &&
+        (ip - 1) == ia;
+
+    // side-effects in live expressions are not optimized out
+    ok = ok
+        && fn() == 1
+        && fn() * 0 == 0
+        && (fn() & 0) == 0
+        && ((fn()!=0 && false) || true)
+        && fn() == 5;
+    // ... but dead subexpressions are eliminated early
+    false && undefined;
+    true || undefined;
+    true ? true : undefined;
+}

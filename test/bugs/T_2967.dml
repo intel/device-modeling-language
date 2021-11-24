@@ -1,0 +1,16 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+/// COMPILE-ONLY
+bank regs {
+    group port[i in 0..2] {
+        register r size 4 @ undefined {
+            method after_set {
+                log "info": "%d", $i;
+            }
+        }
+    }
+}

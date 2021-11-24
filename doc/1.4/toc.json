@@ -1,0 +1,31 @@
+{
+    "anchor": "users_guides",
+    "file": "index.md",
+    "numbering": true,
+    "children": [
+        {"file": "introduction.md",
+         "numbering": true},
+        {"file": "running-dmlc.md",
+         "numbering": true},
+        {"file": "language.md",
+         "numbering": true},
+        {"file": "dml-builtins.md",
+         "numbering": true},
+        {"file": "utility.md",
+         "numbering": true},
+        {"file": "messages.md",
+         "numbering": true,
+         "appendix": true},
+        {"file": "changes.md",
+         "numbering": true,
+         "appendix": true,
+         "children": [
+             {"file": "port-dml.md", "numbering": true},
+             {"file": "changes-auto.md", "numbering": true},
+             {"file": "changes-manual.md", "numbering": true}
+         ]},
+        {"file": "grammar.md",
+         "numbering": true,
+         "appendix": true}
+    ]
+}

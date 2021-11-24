@@ -1,0 +1,28 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+attribute not_zero is uint64_attr {
+    method set(attr_value_t val) throws {
+        default(val);
+        local uint64 u = 1;
+        local int64 s = 1;
+        assert u / this.val == 0;
+        assert u % this.val == 0;
+        assert s / this.val == 0;
+        assert s % this.val == 0;
+        this.val = 5;
+    }
+}
+attribute not_negative is int64_attr {
+    method set(attr_value_t val) throws {
+        default(val);
+        assert 1 << this.val == 0;
+        assert 1 >> this.val == 0;
+        this.val = 5;
+    }
+}

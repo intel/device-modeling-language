@@ -1,0 +1,49 @@
+/*
+  © 2010-2021 Intel Corporation
+  SPDX-License-Identifier: 0BSD
+*/
+
+// This module defines the io_memory interface
+
+dml 1.2;
+
+import "simics/devs/io-memory.dml";
+
+// If defined, the given bank matches any function number.
+parameter default_bank default undefined;
+
+implement io_memory {
+    method operation(generic_transaction_t *mem_op,
+                     map_info_t map_info) -> (exception_type_t ex) default {
+        ex = Sim_PE_No_Exception;
+        if (defined $dev.default_bank) {
+            select bank in ($banks) where (defined bank.function) {
+                error "Some bank defines the function parameter while the default_bank parameter is defined";
+            } else {
+                try
+                    call $dev.default_bank.access(
+                        mem_op,
+                        (SIM_get_mem_op_physical_address(mem_op)
+                         - map_info.base + map_info.start),
+                        SIM_get_mem_op_size(mem_op));
+                catch
+                    ex = Sim_PE_IO_Not_Taken;
+            }
+        } else {
+            select bank in ($banks) where (
+              defined bank.function && map_info.function == bank.function) {
+                try
+                    call bank.access(mem_op,
+                                     (SIM_get_mem_op_physical_address(mem_op)
+                                      - map_info.base + map_info.start),
+                                     SIM_get_mem_op_size(mem_op));
+                catch
+                    ex = Sim_PE_IO_Not_Taken;
+            } else {
+                log error: "Access to invalid function %d using %s interface",
+                    map_info.function, IO_MEMORY_INTERFACE;
+                ex = Sim_PE_IO_Not_Taken;
+            }
+        }
+    }
+}

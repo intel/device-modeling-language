@@ -1,0 +1,16 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+// See bug 5607
+
+method test -> (bool ok) {
+    local uint32 x;
+    x[31:4] = 17;
+    x[3:0] = 0;
+    ok = (x == 0x110);
+}

@@ -1,0 +1,52 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+event foo {
+    parameter timebase = "cycles";
+}
+
+event bar[i in 0..1][j in 0..1] {
+    parameter timebase = "cycles";
+}
+
+method test -> (bool ok)
+{
+    local int x;
+    local int nexttime;
+
+    inline $foo.post(14, NULL);
+    inline $foo.post(18, &x);
+
+    ok = true;
+    inline $foo.next(NULL) -> (nexttime);
+    ok = ok && (nexttime == 14);
+    inline $foo.next(&x) -> (nexttime);
+    ok = ok && (nexttime == 18);
+
+    inline $bar[0][0].next(NULL) -> (nexttime);
+    ok = ok && (nexttime == -1);
+    inline $bar[0][0].post(7, NULL);
+    inline $bar[0][0].post(9, &x);
+    inline $bar[0][0].next(NULL) -> (nexttime);
+    ok = ok && (nexttime == 7);
+    inline $bar[0][0].next(&x) -> (nexttime);
+    ok = ok && (nexttime == 9);
+
+    inline $bar[1][0].next(NULL) -> (nexttime);
+    ok = ok && (nexttime == -1);
+    inline $bar[0][1].next(NULL) -> (nexttime);
+    ok = ok && (nexttime == -1);
+    inline $bar[1][0].post(7, NULL);
+    inline $bar[1][0].post(9, &x);
+    inline $bar[1][0].next(NULL) -> (nexttime);
+    ok = ok && (nexttime == 7);
+    inline $bar[1][0].next(&x) -> (nexttime);
+    ok = ok && (nexttime == 9);
+    inline $bar[0][1].next(NULL) -> (nexttime);
+    ok = ok && (nexttime == -1);
+}

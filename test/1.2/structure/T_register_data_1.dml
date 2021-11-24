@@ -1,0 +1,49 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+/// COMPILE-ONLY
+
+// Test that registers can contain 'data'.
+bank {
+    register r1 size 4 @ 0 {
+        parameter allocate = true;
+        data uint16 d;
+        method read -> (value) {
+            value = $d;
+        }
+        method write(value) {
+            $d = value;
+        }
+    }
+
+    register r2 size 4 @ 4 {
+        parameter allocate = false;
+        data uint16 d;
+        method read -> (value) {
+            value = $d;
+        }
+        method write(value) {
+            $d = value;
+        }
+        method get -> (value) {
+            value = $d;
+        }
+        method set(value) {
+            $d = value;
+        }
+    }
+
+    register r3[i in 0..3][j in 0..1] size 4 @ 24 + 4 * (2 * $i + $j) {
+        parameter allocate = true;
+        data uint16 d;
+        method read -> (value) {
+            value = $d;
+        }
+        method write(value) {
+            $d = value;
+        }
+    }
+}

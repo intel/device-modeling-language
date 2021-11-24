@@ -1,0 +1,18 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+import "testing.dml";
+
+method test() throws {
+       local uint8 a[2];
+       local uint8* aref = &a[0];
+       expect(aref == &a[0], "arrey ref address");
+       aref++;
+       expect(aref == &a[1], "incremented array ref address");
+       aref--;
+       expect(aref == &a[0], "decremented array ref address");
+}

@@ -1,0 +1,38 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+bank b {
+    parameter register_size = 4;
+    register ra @ undefined;
+}
+
+bank {
+    if (defined($name)) { error; }
+    method get_qname() -> (const char *s) { s = strdup($qname); }
+    method print() {
+        // Messages in anonymous banks are logged on the device object
+        /// GREP \[obj info\] hello
+        log info: "hello";
+    }
+}
+
+if ($name != "test") { error; }
+
+method test -> (bool ok)
+{
+    $print();
+    local const char *s;
+    call $get_qname() -> (s);
+    ok = strcmp($b.ra.fields[0].qname, "b.ra") == 0
+        && strcmp($b.ra.fields[0].name, "ra") == 0
+        && strcmp(s, "") == 0
+        && strcmp($qname, "test") == 0;
+
+    // Does not crash dmlc, intelbug 1806043154
+    call $b.ra.fields[0].hard_reset();
+}

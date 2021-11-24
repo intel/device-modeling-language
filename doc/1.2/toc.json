@@ -1,0 +1,26 @@
+{
+    "anchor": "users_guides",
+    "file": "index.md",
+    "numbering": true,
+    "children": [
+        {"file": "introduction.md",
+         "numbering": true},
+        {"file": "object-model.md",
+         "numbering": true},
+        {"file": "language.md",
+         "numbering": true},
+        {"file": "libraries.md",
+         "numbering": true},
+        {"file": "standard-templates.md",
+         "numbering": true},
+        {"file": "limitations.md",
+         "numbering": true,
+         "appendix": true},
+        {"file": "messages.md",
+         "numbering": true,
+         "appendix": true},
+        {"file": "grammar.md",
+         "numbering": true,
+         "appendix": true}
+    ]
+}

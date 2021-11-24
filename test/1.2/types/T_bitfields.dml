@@ -1,0 +1,61 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+import "testing.dml";
+
+// Test bitfield integer coerce semantics
+typedef bitfields 24 {
+    uint24 a @ [23:0];
+} bitfield_24;
+
+
+typedef bitfields 32 {
+    uint32 a @ [31:0];
+} bitfield_32;
+
+// for now, this is how we get a pointer to an endian bitfield
+typedef layout "big-endian" {
+    bitfield_32 f32;
+} le_t;
+
+
+// Test single-bit wide bitranges
+typedef bitfields 16 {
+    uint1 a @ [1];
+    uint1 b @ [4];
+    uint1 c @ [8];
+} bitfield_16;
+
+method test() -> (ok) {
+    local bitfield_24 f24 = 0xf00;
+    local bitfield_32 f32 = 0xf0f0;
+    local uint32 i32 = 0xf;
+
+    assert f24 + f32 == 0xfff0;
+    assert f24 + i32 == 0xf0f;
+    assert f32 + i32 == 0xf0ff;
+
+    assert f32 - f24 == 0xe1f0;
+    assert f32 - i32 == 0xf0e1;
+    assert f24 - i32 == 0xef1;
+
+    assert f32 / f24 == 0x10;
+    assert f32 / i32 == 0x1010;
+    assert f24 / i32 == 0x100;
+
+    assert f32 % f24 == 0xf0;
+    assert f32 % i32 == 0x0;
+    assert f24 % i32 == 0x0;
+
+    local bitfield_16 f16 = ~0;
+    f16.a = 0;
+    f16.b = 0;
+    f16.c = 0;
+
+    assert f16 == cast(~0 ^ (1 << 1) ^ (1 << 4) ^ (1 << 8), uint16);
+    ok = true;
+}

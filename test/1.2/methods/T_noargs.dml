@@ -1,0 +1,26 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+import "testing.dml";
+
+data int val;
+
+method m1() nothrow {
+    $val = 1;
+}
+
+method m2() {
+    $val = 2;
+}
+
+method test() -> (bool ok) {
+    $m1();
+    ok = $val == 1;
+    $m2();
+    ok = ok && $val == 2;
+}
