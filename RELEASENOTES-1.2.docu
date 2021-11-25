@@ -134,7 +134,7 @@
       <tt>--state-change-dml12</tt> flag together with the
       <tt>--split-c-file</tt> flag
       <bug number="SIMICS-17975"/>.</add-note></build-id>
-  <build-id value="next"><add-note> Fixed a few issues where confidential
+  <build-id value="6132"><add-note> Fixed a few issues where confidential
       information could be leaked through non-confidential children of
       confidential objects. Specifically, these issues occurred with event
       objects belonging to confidential registers, <tt>after</tt> calls to
