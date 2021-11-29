@@ -3164,6 +3164,11 @@ int size = sizeoftype io_memory_interface_t;
 Semantically, <code>sizeoftype <em>type</em></code> is equivalent to the C
 expression <code>sizeof (<em>type</em>)</code>.
 
+DML does not know the sizes of all types statically; DML usually regards a
+`sizeoftype` expression as non-constant and delegates size calculations
+to the C compiler. DML does evaluate the sizes of integer types, layout types,
+and constant-sized arrays thereof, as constants.
+
 ### Defined Expressions
 
 <pre>
