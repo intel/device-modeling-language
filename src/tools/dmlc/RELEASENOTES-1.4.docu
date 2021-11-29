@@ -234,4 +234,9 @@
       implementation of the <tt>description</tt> method of the
       <tt>register_view</tt> interface.
   </add-note></build-id>
+  <build-id value="next"><add-note> Optimized the DML-provided
+      implementation of the <tt>register_info</tt> and the
+      <tt>number_of_registers</tt> methods of the
+      <tt>register_view</tt> interface <bug number="SIMICS-18427"/>.
+  </add-note></build-id>
 </rn>
