@@ -7,7 +7,7 @@ import itertools
 import collections
 import abc
 import os
-from . import objects, logging, crep, codegen, toplevel
+from . import objects, logging, crep, codegen, toplevel, topsort
 from .logging import *
 from .codegen import *
 from .symtab import *
@@ -355,6 +355,80 @@ def merge_method_impl_maps(site, parents):
                         site, None, mname,
                         unmerged_impl.name, merged_impls[mname].name))
     return merged_impls
+
+class MethodHandle(object):
+    def __init__(self, site, name, rank, overridable):
+        self.site = site
+        self.name = name
+        self.rank = rank
+        self.overridable = overridable
+
+class TraitMethodHandle(MethodHandle):
+    def __init__(self, trait_method, rank):
+        MethodHandle.__init__(self, trait_method.site, trait_method.name,
+                            rank, trait_method.overridable)
+        self.trait_method = trait_method
+
+def sort_method_implementations(implementations):
+    '''Given a list of (Rank, ast.method) pairs, return a pair
+    (default_map, method_order), where default_map is a dict mapping
+    ast.method to list of ast.method it overrides, and method_order is
+    a topological ordering of methods based on this graph.'''
+
+    rank_to_method = {}
+    for impl in implementations:
+        if impl.rank in rank_to_method:
+            # two conflicting method definitions in the same block
+            raise ENAMECOLL(impl.site, rank_to_method[impl.rank].site,
+                            impl.name)
+        rank_to_method[impl.rank] = impl
+
+    ranks = set(rank_to_method)
+
+    # The subset of the ancestry graph where implementations of this
+    # method can be found
+    ancestry = {rank: rank.inferior.intersection(ranks)
+                for rank in ranks}
+
+    # None represents a fictional declaration that overrides all real
+    # implementations
+    ancestry[None] = ranks
+
+    # Transitive reduction, naive O(n^3) algorithm.
+    minimal_ancestry = {rank: ancestry[rank].difference(*(
+        ancestry[p] for p in ancestry[rank]))
+                        for rank in ancestry}
+
+    if len(minimal_ancestry[None]) > 1:
+        # There is no single method implementation that overrides all
+        # other implementations
+        def is_default(r):
+            return rank_to_method[r].overridable
+
+        [r1, r2] = sorted(minimal_ancestry[None], key=is_default)[:2]
+        raise EAMBINH(rank_to_method[r1].site,
+                      rank_to_method[r2].site,
+                      rank_to_method[r1].name,
+                      r1.desc, r2.desc,
+                      is_default(r1))
+
+    # Ancestry graph translated back to method ASTs. Maps method to
+    # list of default methods.
+    method_map = {
+        rank_to_method[r]: [rank_to_method[x] for x in minimal_ancestry[r]]
+        for r in ranks}
+    method_order = list(reversed(topsort.topsort(method_map)))
+
+    if dml.globals.dml_version == (1, 2):
+        m = method_order[0]
+        if len(implementations) > 2:
+            report(WEXPERIMENTAL(
+                m.site, "more than one level of method overrides"))
+        if len(implementations) == 2 and m.overridable:
+            report(WEXPERIMENTAL(
+                m.site, "method with two default declarations"))
+
+    return (method_map, method_order)
 
 class SubTrait(object):
     '''Logic shared between nodes and traits, which both can inherit
