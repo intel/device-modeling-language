@@ -119,6 +119,15 @@ def end_site(site):
         site = site.site
     assert lexspan_map
     if site not in lexspan_map:
+        # lexspan_map is uninitialized when an AST is loaded from
+        # .dmlast. Luckily, this is not a problem in practice, since
+        # lexspan_map is only used for porting messages, and .dmlast
+        # is only created for files that nobody wants to auto-port.
+        # We still produce a well-formed site, to avoid confusing
+        # port-dml's tag parser
+        if os.path.isfile(site.filename() + 'ast'):
+            return SimpleSite(site.filename() + ':1:1')
+        # unknown...
         return None
     (_, end) = lexspan_map[site]
     return DumpableSite(site.file_info, end)
