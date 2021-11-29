@@ -7,12 +7,37 @@ dml 1.4;
 device test;
 
 import "testing.dml";
+import "simics/simulator/conf-object.dml";
+
+loggroup lg1;
 
 method test() throws {
     local uint64 i = 7;
-    local uint8 j = 3;
-    /// GREP .*<0000003>
-    log info: "<%0*d>", i, j;
-    /// GREP .*z8
-    log info: "z%d", sizeof(i);
+    local uint8 j = 5;
+    // types of %d and %* args are automatic, regardless of type
+    /// GREP .*arg 64 <0000007>
+    log info: "arg 64 <%0*d>", i, i;
+    /// GREP .*arg 8 <    5>
+    log info: "arg 8 <%*d>", j, j;
+
+    local int side_effect = 0;
+    local int two = 2;
+    // filtered on log level: not logged, side effect does not happen
+    log info, two: "not logged %d", ++side_effect;
+    assert side_effect == 0;
+    local int level = 1;
+    /// GREP .*log on level, #1
+    log info, level: "log on level, #%d", ++side_effect;
+    assert side_effect == 1;
+
+    local attr_value_t a = SIM_make_attr_uint64(0);
+    assert SIM_set_attribute(dev.obj, "log_group_mask", &a) == Sim_Set_Ok;
+    // Somewhat unexpected: nothing is logged, but the side-effect does happen
+    log error, 1, lg1: "not logged %d", ++side_effect;
+    assert side_effect == 2;
+    a = SIM_make_attr_uint64(lg1);
+    assert SIM_set_attribute(dev.obj, "log_group_mask", &a) == Sim_Set_Ok;
+    /// GREP .*log on group, #3
+    log info, 1, lg1: "log on group, #%d", ++side_effect;
+    assert side_effect == 3;
 }
