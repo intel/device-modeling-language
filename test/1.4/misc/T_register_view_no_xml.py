@@ -9,7 +9,7 @@ b = SIM_get_port_interface(obj, 'register_view', 'b')
 stest.expect_equal(b.description(), "")
 
 # relies on register-view python implementation
-stest.expect_equal(b.big_endian_bitorder(), False)
+stest.expect_equal(b.big_endian_bitorder(), True)
 
 stest.expect_equal(b.number_of_registers(), 1)
 stest.expect_true(b.register_info(0) != None)
