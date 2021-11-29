@@ -1097,6 +1097,21 @@ class PortingConvert(CTestCase):
                            join(testdir, '1.2', 'misc', 'porting.dml'),
                            destfile, expfile, stdout, stderr, [])
 
+    def run_dmlc(self, filename, dmlc_extraargs):
+        # A reasonable setting of DMLC_PATHSUBST would disrupt this
+        # test by adjusting porting tag generation on utility.dml.
+        # We work around this by temporarily unsetting the variable.
+        var = 'DMLC_PATHSUBST'
+        prev = os.environ.get(var)
+        if prev:
+            os.environ[var] = ''
+        try:
+            return super(PortingConvert, self).run_dmlc(
+                filename, dmlc_extraargs)
+        finally:
+            if prev:
+                os.environ[var] = prev
+
 class PortingConvertFail(PortingConvert):
     __slots__ = ()
     port_dml_status = 1
@@ -1181,6 +1196,7 @@ all_tests.append(PortingConvert(
        ('dml-builtins.dml', None, 'PWUNUSED'),
        ('dml-builtins.dml', None, 'PNO_WUNUSED'),
        ('utility.dml', None, 'PWUNUSED'),
+       ('utility.dml', None, 'PVAL'),
        ('utility.dml', None, 'PNO_WUNUSED'),
        ('utility.dml', None, 'POVERRIDE'),
        ('utility.dml', None, 'PRENAME_TEMPLATE'),
