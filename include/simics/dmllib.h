@@ -1834,33 +1834,35 @@ static set_error_t
 _deserialize_array_aux(attr_value_t val, uint8 *data, size_t elem_size,
                        const uint32 *dimsizes, uint32 dims,
                        size_t total_elem_count,
-                       _deserializer_t deserialize_elem) {
+                       _deserializer_t deserialize_elem,
+                       bool elems_are_bytes) {
     uint32 len = *dimsizes;
 
-    // Deserialize the final dimension as bytes if deserialize_elem is NULL
-    if (dims == 1 && !deserialize_elem) {
-        if (unlikely(!SIM_attr_is_data(val))) {
-            SIM_attribute_error("Invalid serialized representation of byte "
-                                "array: not represented as data");
-            return Sim_Set_Illegal_Type;
-        } else if (unlikely(SIM_attr_data_size(val) != len)) {
+    // Allow the final dimension to be represented as data if elems_are_bytes
+    bool data_allowed = elems_are_bytes && dims == 1;
+    if (data_allowed && SIM_attr_is_data(val)) {
+        if (unlikely(SIM_attr_data_size(val) != len)) {
             SIM_c_attribute_error(
-                "Invalid serialized value of byte array: expected %u bytes, "
-                "got %u", len, SIM_attr_data_size(val));
+                "Invalid serialized value of byte array: expected data of %u "
+                "bytes, got %u", len, SIM_attr_data_size(val));
             return Sim_Set_Illegal_Value;
         }
         memcpy(data, SIM_attr_data(val), len);
         return Sim_Set_Ok;
-    }
-
-    if (unlikely(!SIM_attr_is_list(val))) {
-        SIM_attribute_error("Invalid serialized representation of array: "
-                            "not a list");
+    } else if (unlikely(!SIM_attr_is_list(val))) {
+        if (data_allowed) {
+            SIM_attribute_error("Invalid serialized representation of byte "
+                                "array: not a list or data");
+        } else {
+            SIM_attribute_error("Invalid serialized representation of array: "
+                                "not a list");
+        }
         return Sim_Set_Illegal_Type;
     } else if (unlikely(SIM_attr_list_size(val) != len)) {
         SIM_c_attribute_error(
-            "Invalid serialized representation of array: expected %u "
-            "elements, got %u", len, SIM_attr_list_size(val));
+            "Invalid serialized representation of %sarray: expected list of "
+            "%u elements, got %u", data_allowed ? "byte " : "", len,
+            SIM_attr_list_size(val));
         return Sim_Set_Illegal_Type;
     }
     attr_value_t *items = SIM_attr_list(val);
@@ -1872,7 +1874,8 @@ _deserialize_array_aux(attr_value_t val, uint8 *data, size_t elem_size,
         } else {
             error = _deserialize_array_aux(
                 items[i], &data[i*children_elem_count*elem_size], elem_size,
-                dimsizes + 1, dims - 1, children_elem_count, deserialize_elem);
+                dimsizes + 1, dims - 1, children_elem_count, deserialize_elem,
+                elems_are_bytes);
         }
         if (error != Sim_Set_Ok) {
             return error;
@@ -1884,7 +1887,7 @@ _deserialize_array_aux(attr_value_t val, uint8 *data, size_t elem_size,
 UNUSED static set_error_t
 _deserialize_array(attr_value_t in_val, void *out_data, size_t elem_size,
                    const uint32 *dimsizes, uint32 dims,
-                   _deserializer_t deserialize_elem) {
+                   _deserializer_t deserialize_elem, bool elems_are_bytes) {
     ASSERT(dims > 0);
     size_t total_elem_count = 1;
     for (uint32 i = 0; i < dims; ++i) {
@@ -1894,7 +1897,7 @@ _deserialize_array(attr_value_t in_val, void *out_data, size_t elem_size,
     uint8 *temp_out = MM_MALLOC(total_elem_count * elem_size, uint8);
     set_error_t error = _deserialize_array_aux(
         in_val, temp_out, elem_size, dimsizes, dims, total_elem_count,
-        deserialize_elem);
+        deserialize_elem, elems_are_bytes);
     if (error == Sim_Set_Ok) {
         memcpy(out_data, temp_out, total_elem_count*elem_size);
     }

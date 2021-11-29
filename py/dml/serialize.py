@@ -135,6 +135,7 @@ def serialize(real_type, current_expr, target_expr):
                                                          real_type)
         # NULL is used as a signal to serialize the final dimension as a data
         # attribute value.
+        # This is only done for unsigned integer types of width 8 bits.
         serializer_ptr = ('NULL' if (base.is_int and not base.signed
                                      and base.bits == 8)
                           else lookup_serialize(base))
@@ -191,20 +192,20 @@ def deserialize(real_type, current_expr, target_expr):
         (base, dimsizes, sizeof_base,
          dimsizes_expr) = prepare_array_de_serialization(current_site,
                                                          real_type)
-        # NULL is used as a signal to deserialize the final dimension as a data
-        # attribute value.
-        deserializer_ptr = ('NULL' if (base.is_int and not base.signed
-                                       and base.bits == 8)
-                            else lookup_deserialize(base))
-        elem_deserializer = expr.mkLit(current_site, deserializer_ptr,
+        elem_deserializer = expr.mkLit(current_site, lookup_deserialize(base),
                                        TPtr(serializer_t))
+        # elems_are_bytes informs if the final dimension may either be
+        # deserialized as a list or a data attribute value.
+        # This is true for all integer types of width 8 bits
+        elems_are_bytes = ctree.mkBoolConstant(current_site,
+                                               base.is_int and base.bits == 8)
         return call_c_fun(current_site,
                           '_deserialize_array',
                           [current_expr,
                            ctree.mkAddressOf(current_site, target_expr),
                            sizeof_base, dimsizes_expr,
                            ctree.mkIntegerLiteral(current_site, len(dimsizes)),
-                           elem_deserializer])
+                           elem_deserializer, elems_are_bytes])
     elif isinstance(real_type, (TStruct, TVector)):
         return call_c_fun(current_site,
                           lookup_deserialize(real_type),
@@ -241,14 +242,11 @@ def map_dmltype_to_attrtype(site, dmltype):
         # Can only save constant-size arrays
         if not real_type.size.constant:
             raise messages.ESERIALIZE(site, dmltype)
-        # An array of uint8 is represented as data
-        if (real_type.base.is_int and not real_type.base.signed
-            and real_type.base.bits == 8):
-            return 'd'
-        else:
-            arr_attr_type = map_dmltype_to_attrtype(site, real_type.base)
-            arr_length = expr_intval(real_type.size)
-            return '[%s{%s}]' % (arr_attr_type, arr_length)
+        arr_attr_type = map_dmltype_to_attrtype(site, real_type.base)
+        arr_length = expr_intval(real_type.size)
+        # Byte arrays may use data values
+        or_data = '|d' * (real_type.base.is_int and real_type.base.bits == 8)
+        return '[%s{%s}]' % (arr_attr_type, arr_length) + or_data
     if isinstance(real_type, TObjIdentity):
         return '[s[i*]]'
     # TODO should be implemented

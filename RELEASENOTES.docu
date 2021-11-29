@@ -1686,5 +1686,7 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
       methods called with <tt>after</tt> <bug number="SIMICS-18440"/>.
 
       Serialized representation of <tt>uint8[(be|le)_t]</tt> array types has
-      been changed. </add-note></build-id>
+      been changed. The old serialized representation is still accepted for
+      deserialization in order to preserve checkpoint compatibility.
+  </add-note></build-id>
 </rn>
