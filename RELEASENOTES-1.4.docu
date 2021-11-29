@@ -264,4 +264,9 @@
   <build-id value="next"><add-note> The device info XML file is no
       longer needed by DML 1.4 devices. A dummy XML file is still
       created to avoid packaging problems.</add-note></build-id>
+  <build-id value="next"><add-note> Optimized the DML-provided
+      implementation of the <tt>register_info</tt> and the
+      <tt>number_of_registers</tt> methods of the
+      <tt>register_view</tt> interface <bug number="SIMICS-18427"/>.
+  </add-note></build-id>
 </rn>
