@@ -69,6 +69,7 @@ Make: dmlc
     $(HOST)/bin/dml/python/dml/symtab.pyc
     $(HOST)/bin/dml/python/dml/template.pyc
     $(HOST)/bin/dml/python/dml/toplevel.pyc
+    $(HOST)/bin/dml/python/dml/topsort.pyc
     $(HOST)/bin/dml/python/dml/traits.pyc
     $(HOST)/bin/dml/python/dml/types.pyc
     $(HOST)/bin/dml/python/dml/dml12_parsetab.pyc
