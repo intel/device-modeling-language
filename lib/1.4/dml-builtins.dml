@@ -539,7 +539,8 @@ template _conf_attribute {
 
     param configuration             default "optional";
     param persistent                default false;
-    param internal                  default !defined documentation;
+    param internal                  default (!defined documentation
+                                             && !defined desc);
 
     param readable default this.configuration != "none";
     param writable default this.configuration != "none";
@@ -640,8 +641,8 @@ internal [bool]
 
 If this parameter is `true`, the attribute will be treated
 as internal, meaning that it will be excluded from documentation.
-The default value is `true` if the `documentation` parameter
-is defined, and `false` otherwise.
+The default value is `true` if the `documentation` and `desc` parameters
+are undefined, and `false` otherwise.
 </dd></dl>
  */
 template attribute is _conf_attribute {
@@ -2256,7 +2257,7 @@ internal [bool]
 </dt><dd>
 
 Specifies whether the register [attribute](#attribute-objects)
-should be internal.
+should be internal, default is `true`.
 </dd></dl>
 
 The `register` template provides the following
@@ -2305,6 +2306,7 @@ template register is (_conf_attribute, get, set, shown_desc,
     session uint64 val;
 
     param objtype = "register";
+    param internal default true;
     param bank = this._nongroup_parent;
     param bitsize                   = this.size * 8;
     param fields : sequence(field);
