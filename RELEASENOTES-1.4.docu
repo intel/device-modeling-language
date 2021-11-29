@@ -237,4 +237,11 @@
       The internal representation of values of template types has been changed.
       It is no longer allowed to cast such values to integer or pointer types.
   </add-note></build-id>
+  <build-id value="next"><add-note>Attributes that do not define
+      <i>either of</i> the <tt>documentation</tt> parameter or
+      the <tt>desc</tt> parameter are now considered internal by
+      default. Register-attributes are internal by default, regardless
+      if they define <tt>documentation</tt> or <tt>desc</tt>. This can
+      be changed by explicitly overriding the <tt>internal</tt>
+      parameter of the register or attribute.</add-note></build-id>
 </rn>
