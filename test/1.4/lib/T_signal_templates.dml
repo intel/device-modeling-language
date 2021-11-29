@@ -1,0 +1,23 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+/// INSTANTIATE-MANUALLY
+dml 1.4;
+
+device test;
+
+import "utility.dml";
+
+port insig is signal_port;
+connect outsig is signal_connect;
+
+attribute test_outsig is (pseudo_attr, bool_attr) {
+    method set(attr_value_t value) throws {
+        default(value);
+        if (this.val)
+            outsig.set_level(1);
+        else
+            outsig.set_level(0);
+    }
+}
