@@ -1290,7 +1290,7 @@ class DevInfoCompare(BaseTestCase):
             self.expected = '''\
 <?xml version="1.0" encoding="UTF-8"?>
 <device name="test" bitorder="le">
-  <bank name="b" vsize="4 2" byte_order="little-endian" function="3 4 5 6 7 8 9 10">
+  <bank name="b" vsize="4 2" function="3 4 5 6 7 8 9 10">
   </bank>
 </device>
 '''
