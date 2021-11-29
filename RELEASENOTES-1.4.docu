@@ -328,4 +328,8 @@
           return { .len = siz, .data = new uint8[siz] };
       }
       </pre></add-note></build-id>
+  <build-id value="next"><add-note>Added new templates <tt>signal_port</tt>
+      and <tt>signal_connect</tt> which help maintain correct handling of the
+      signal interface, i.e. do not raise signal when already high, and do not
+      lower it when already low.</add-note></build-id>
 </rn>
