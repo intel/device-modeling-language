@@ -463,6 +463,10 @@ The `device` template contains the following parameters:
   wider than a single byte; inherited by `bank` objects. Allowed values are
   `"little-endian"` and `"big-endian"`. The default value is `"little-endian"`.
 
+* `be_bitorder` *[bool]*: The default value of the `be_bitorder` in banks.  The
+  default value is `true` if the DML file containing the `device` statement
+  declares `bitorder be;`, and `false` otherwise.
+
 * `use_io_memory` *[bool]*: The default value of the `use_io_memory` parameter
   in banks. The current default value is `true`, but in future Simics versions
   it will be `false`.
@@ -493,7 +497,8 @@ template device {
     // register defaults
     param register_size             default undefined;
     param byte_order                default "little-endian";
-
+    param _be_bitorder            auto;
+    param be_bitorder             default _be_bitorder;
     param log_group                 = undefined;
 
     param use_io_memory             default simics_api_version == "6"
@@ -1298,6 +1303,18 @@ This parameter must have the same value among all elements in a bank
 array object, i.e., it must not depend on the index of the bank.
 </dd><dt>
 
+be_bitorder [bool]
+</dt><dd>
+
+Controls the preferred bit ordering of registers within this bank.
+Whenever the register is presented to the user as a bitfield, bit 0 refers to
+the least significant bit if the parameter is `false` (the default), and
+to the most significant bit if the parameter is `true`. The parameter is
+only a presentation hint and does not affect the model's behaviour. The
+parameter is technically unrelated to the top-level `bitorder`
+declaration, though in most cases the two should match.
+</dd><dt>
+
 use_io_memory [bool]
 </dt><dd>
 
@@ -1347,6 +1364,8 @@ template bank is (object, shown_desc, _qname) {
     param mappable                  default true;
     param byte_order                default dev.byte_order;
     param _le_byte_order = byte_order == "little-endian";
+    param be_bitorder : bool;
+    param be_bitorder default dev.be_bitorder;
 
     // register defaults
     param register_size             default dev.register_size;
@@ -1976,21 +1995,7 @@ template bank is (object, shown_desc, _qname) {
         // as it stands, DML prevents us from deducing the
         // bitorder directly so we rely on the XML 'guessing'
         method big_endian_bitorder() -> (bool) {
-            local attr_value_t args;
-            args = SIM_make_attr_list(
-                2,
-                SIM_make_attr_string(dev.classname),
-                SIM_make_attr_string(bank.name));
-
-            local attr_value_t ret;
-            ret = VT_call_python_module_function("register_view",
-                                                 "big_endian_bitorder",
-                                                 &args);
-            SIM_attr_free(&args);
-
-            local bool big_endian = SIM_attr_boolean(ret);
-            SIM_attr_free(&ret);
-            return big_endian;
+            return bank.be_bitorder;
         }
         method number_of_registers() -> (uint32) {
             return _num_registers();
