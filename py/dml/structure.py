@@ -678,82 +678,21 @@ def report_poverride(sup, inf, obj_specs):
             report(POVERRIDE_IMPORT(sup_obj.site, inf.desc.text))
 
 def sort_method_implementations(implementations, obj_specs):
-    '''Given a list of (Rank, ast.method) pairs, return a pair
-    (default_map, method_order), where default_map is a dict mapping
-    ast.method to list of ast.method it overrides, and method_order is
-    a topological ordering of methods based on this graph.'''
     if dml.globals.dml_version == (1, 2) and len(implementations) == 2:
         # Backward compatibility: If there is exactly one default and
         # one non-default implementation, then disregard template
         # instantiation relations.
-        [(r1, m1), (r2, m2)] = implementations
-        (_, _, overridable1, _, _) = m1.args
-        (_, _, overridable2, _, _) = m2.args
-        # use fake ranks
-        if overridable1 and not overridable2:
+        [m1, m2] = implementations
+        # create fake ranks to make sure methods end up in the right order
+        if m1.overridable and not m2.overridable:
             if logging.show_porting:
-                report_poverride(r2, r1, obj_specs)
-            implementations = [(r1, m1), (Rank({r1}, r2.desc), m2)]
-        elif not overridable1 and overridable2:
+                report_poverride(m2.rank, m1.rank, obj_specs)
+            m2.rank = Rank({m1.rank}, m2.rank.desc)
+        elif not m1.overridable and m2.overridable:
             if logging.show_porting:
-                report_poverride(r1, r2, obj_specs)
-            implementations = [(Rank({r2}, r1.desc), m1), (r2, m2)]
-
-    rank_to_method = {}
-    for (rank, m) in implementations:
-        if rank in rank_to_method:
-            # two conflicting method definitions in the same block
-            raise ENAMECOLL(m.site, rank_to_method[rank].site, m.args[0])
-        rank_to_method[rank] = m
-
-    ranks = set(rank_to_method)
-
-    # The subset of the ancestry graph where implementations of this
-    # method can be found
-    ancestry = {rank: rank.inferior.intersection(ranks)
-                for rank in ranks}
-
-    # None represents a fictional declaration that overrides all real
-    # implementations
-    ancestry[None] = ranks
-
-    # Transitive reduction, naive O(n^3) algorithm.
-    minimal_ancestry = {tpl: ancestry[tpl].difference(*(
-        ancestry[p] for p in ancestry[tpl]))
-                        for tpl in ancestry}
-
-    if len(minimal_ancestry[None]) > 1:
-        # There is no single method implementation that overrides all
-        # other implementations
-        def is_default(r):
-            (_, _, overridable, _, _) = rank_to_method[r].args
-            return overridable
-
-        [r1, r2] = sorted(minimal_ancestry[None], key=is_default)[:2]
-        raise EAMBINH(rank_to_method[r1].site,
-                      rank_to_method[r2].site,
-                      rank_to_method[r1].args[0],
-                      r1.desc, r2.desc,
-                      is_default(r1))
-
-    # Ancestry graph translated back to method ASTs. Maps method to
-    # list of default methods.
-    method_map = {
-        rank_to_method[r]: [rank_to_method[x] for x in minimal_ancestry[r]]
-        for r in ranks}
-    method_order = list(reversed(topsort.topsort(method_map)))
-
-    if dml.globals.dml_version == (1, 2):
-        m = method_order[0]
-        (_, _, overridable, _, _) = m.args
-        if len(implementations) > 2:
-            report(WEXPERIMENTAL(
-                m.site, "more than one level of method overrides"))
-        if len(implementations) == 2 and overridable:
-            report(WEXPERIMENTAL(
-                m.site, "method with two default declarations"))
-
-    return (method_map, method_order)
+                report_poverride(m1.rank, m2.rank, obj_specs)
+            m1.rank = Rank({m2.rank}, m1.rank.desc)
+    return traits.sort_method_implementations(implementations)
 
 def merge_subobj_defs(def1, def2, parent):
     (objtype, name, arrayinfo, obj_specs1) = def1
@@ -1267,6 +1206,139 @@ def wrap_method_body_in_try(site, overridden_site, obj, name, body):
             'Unexpected exception in %s.%s, ignoring'
             % (obj.logname_anonymized(), name), []))])
 
+class ObjMethodHandle(traits.MethodHandle):
+    shared = False
+    def __init__(self, method_ast, rank):
+        (name, (_, _, throws, _), overridable, _, _) = method_ast.args
+        super(ObjMethodHandle, self).__init__(
+            method_ast.site, name, rank, overridable)
+        self.method_ast = method_ast
+        self.throws = throws
+
+class TraitMethodHandle(traits.MethodHandle):
+    shared = True
+    def __init__(self, trait_method, rank):
+        super(TraitMethodHandle, self).__init__(
+            trait_method.site, trait_method.name,
+            rank, trait_method.overridable)
+        self.trait_method = trait_method
+        self.throws = trait_method.throws
+
+def process_method_implementations(obj, name, implementations,
+                                   shared_impl_traits, obj_specs,
+                                   vtable_nothrow_dml14):
+    # A method can have both shared and non-shared implementations.
+    # We will create a MethodHandle object for either, which
+    # sort_method_implementations() uses to resolve override order.
+    unshared_methods = [
+        ObjMethodHandle(method_ast, rank)
+        for (rank, method_ast) in implementations]
+    shared_methods = [
+        TraitMethodHandle(
+            impl_trait.method_impls[name],
+            dml.globals.templates[impl_trait.name].spec.rank)
+        for impl_trait in shared_impl_traits]
+
+    (default_map, method_order) = sort_method_implementations(
+        unshared_methods + shared_methods, obj_specs)
+
+    impl_to_method = {}
+    for (default_level, impl) in reversed(list(enumerate(
+            method_order))):
+        if impl.shared:
+            if default_map[impl]:
+                # shared method overrides a non-shared method
+                report(ETMETH(
+                    default_map[impl][0].site, impl.site, name))
+            # handled separately
+            continue
+        defaults = default_map[impl]
+        if len(defaults) == 0:
+            default = InvalidDefault(traits.NoDefaultSymbol())
+        elif len(defaults) == 1:
+            if defaults[0].shared:
+                [trait] = shared_impl_traits
+                default = DefaultTraitMethod(
+                    trait.method_impls[name], obj)
+            else:
+                default = DefaultMethodObj(
+                    impl_to_method[defaults[0]])
+        else:
+            default = InvalidDefault(traits.AmbiguousDefaultSymbol(
+                [m.site for m in defaults]))
+        (name, (inp_ast, outp_ast, throws, body), _, _,
+         rbrace_site) = impl.method_ast.args
+        if (impl.method_ast.site.dml_version() == (1, 2) and throws
+            and vtable_nothrow_dml14):
+            body = wrap_method_body_in_try(
+                impl.method_ast.site, vtable_nothrow_dml14,
+                obj, name, body)
+            throws = False
+        for overridden in default_map[impl]:
+            if not overridden.overridable:
+                raise EDMETH(impl.site, overridden.site, name)
+            # the override of trait ASTs is checked later, by
+            # traits.typecheck_method_override
+            if not overridden.shared:
+                # captured with ETMETH above
+                assert not impl.shared
+                typecheck_method_override(impl.method_ast,
+                                          overridden.method_ast)
+            if (impl.method_ast.site.dml_version() == (1, 2) and throws
+                and not overridden.throws
+                and overridden.method_ast.site.dml_version() == (1, 4)):
+                # If a 1.4 library file defines an overrideable
+                # non-throwing method, and a 1.2 device overrides
+                # this, then assume that the method was never
+                # intended to throw, and that the throws ->
+                # nothrow change is part of the migration to 1.4.
+                # We modify the override to nothrow, and patch it
+                # to catch any exceptions.
+                body = wrap_method_body_in_try(
+                    impl.method_ast.site, overridden.method_ast.site,
+                    obj, name, body)
+                throws = False
+            elif throws != overridden.throws:
+                if (dml.globals.dml_version == (1, 2)
+                      and not throws):
+                    # Permit a nonthrowing method to override
+                    # a throwing 1.2 method, with no warning.
+                    # This is needed for some common standard
+                    # library overrides, e.g. read, write,
+                    # get, set, when sharing code between DML
+                    # 1.2 and 1.4,
+                    pass
+                else:
+                    raise EMETH(impl.site, overridden.site,
+                                "different nothrow annotations")
+
+        method = mkmethod(impl.site, rbrace_site,
+                          Location(obj, static_indices(obj)),
+                          obj, name, inp_ast,
+                          outp_ast, throws, body, default,
+                          default_level)
+        impl_to_method[impl] = method
+
+    if dml.globals.dml_version == (1, 2):
+        for (_, method_ast) in implementations:
+            (_, msite, _, _, _, exported, _) = method_ast
+            if exported:
+                if not method.fully_typed:
+                    raise EEXTERN(method.site)
+                func = method_instance(method)
+                mark_method_referenced(func)
+                mark_method_exported(func, crep.cref(method), msite)
+                break
+        # Export hard_reset and soft_reset from device objects in 1.2
+        # automatically
+        if (obj.objtype == 'device' and
+            name in ('hard_reset', 'soft_reset')):
+            func = method_instance(method)
+            mark_method_referenced(func)
+            mark_method_exported(func, crep.cref(method), obj.site)
+
+    return method
+
 ident_re = re.compile(r'[A-Za-z_][\w_]*')
 # Second stage of object creation, protected by error context
 # TODO: we should probably split up mkobj into several methods with
@@ -1414,7 +1486,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             for trait in ancestors:
                 if name in trait.vtable_methods:
                     (tsite, _, _, throws_in_vtable) = trait.vtable_methods[name]
-                    # Whether an 1.4 file declares the method as
+                    # Whether a 1.4 file declares the method as
                     # non-throwing in a vtable
                     vtable_nothrow_dml14 = (
                         tsite if (trait.site.dml_version() == (1, 4)
@@ -1435,121 +1507,12 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                 report(WNOIS(mast.site, name))
 
         try:
-            if name in trait_method_impls:
-                # Add an artificial method AST node as placeholder for
-                # the trait's method implementation.
-                impl_trait = trait_method_impls[name]
-                rank = dml.globals.templates[impl_trait.name].spec.rank
-                # Hack: we exclude some fields, such as signature and
-                # body, because they are never used (tmeth_ast is
-                # never used to create a Method object)
-                # Note: impl.throws is used for a DML 1.2 compatibility hack
-                impl = impl_trait.method_impls[name]
-                tmeth_ast = ast.method(
-                    impl.site, name, (None, None, impl.throws, None),
-                    impl.overridable, False, impl.site)
-
-                implementations.append((rank, tmeth_ast))
-            else:
-                tmeth_ast = None
-
-            (default_map, method_order) = sort_method_implementations(
-                implementations, obj_specs)
-            if tmeth_ast:
-                if default_map[tmeth_ast]:
-                    # trait method overrides a template method
-                    report(ETMETH(
-                        default_map[tmeth_ast][0].site, tmeth_ast.site, name))
-                    continue
-
-            ast_to_method = {}
-            for (default_level, method_ast) in reversed(list(enumerate(
-                    method_order))):
-                if method_ast is tmeth_ast:
-                    assert not default_map[method_ast]
-                    # handled separately
-                    continue
-                defaults = default_map[method_ast]
-                if len(defaults) == 0:
-                    default = InvalidDefault(traits.NoDefaultSymbol())
-                elif len(defaults) == 1:
-                    if defaults[0] is tmeth_ast:
-                        trait = trait_method_impls[name]
-                        default = DefaultTraitMethod(
-                            trait.method_impls[name], obj)
-                    else:
-                        default = DefaultMethodObj(ast_to_method[defaults[0]])
-                else:
-                    default = InvalidDefault(traits.AmbiguousDefaultSymbol(
-                        [m.site for m in defaults]))
-                (name, (inp_ast, outp_ast, throws, body), _, _,
-                 rbrace_site) = method_ast.args
-                if (method_ast.site.dml_version() == (1, 2) and throws
-                    and vtable_nothrow_dml14):
-                    body = wrap_method_body_in_try(
-                        method_ast.site, vtable_nothrow_dml14,
-                        obj, name, body)
-                    throws = False
-                for overridden_ast in default_map[method_ast]:
-                    (_, (_, _, overridden_throws, _), overridable, _,
-                     _) = overridden_ast.args
-                    if not overridable:
-                        raise EDMETH(method_ast.site, overridden_ast.site, name)
-                    # the override of tmeth_ast is checked later, by
-                    # traits.typecheck_method_override
-                    if overridden_ast is not tmeth_ast:
-                        typecheck_method_override(method_ast, overridden_ast)
-                    if (method_ast.site.dml_version() == (1, 2) and throws
-                        and not overridden_throws
-                        and overridden_ast.site.dml_version() == (1, 4)):
-                        # If a 1.4 library file defines an overrideable
-                        # non-throwing method, and a 1.2 device overrides
-                        # this, then assume that the method was never
-                        # intended to throw, and that the throws ->
-                        # nothrow change is part of the migration to 1.4.
-                        # We modify the override to nothrow, and patch it
-                        # to catch any exceptions.
-                        body = wrap_method_body_in_try(
-                            method_ast.site, overridden_ast.site,
-                            obj, name, body)
-                        throws = False
-                    elif throws != overridden_throws:
-                        if (dml.globals.dml_version == (1, 2)
-                              and not throws):
-                            # Permit a nonthrowing method to override
-                            # a throwing 1.2 method, with no warning.
-                            # This is needed for some common standard
-                            # library overrides, e.g. read, write,
-                            # get, set, when sharing code between DML
-                            # 1.2 and 1.4,
-                            pass
-                        else:
-                            raise EMETH(method_ast.site, overridden_ast.site,
-                                        "different nothrow annotations")
-
-                method = mkmethod(method_ast.site, rbrace_site,
-                                  obj_scope, obj, name, inp_ast,
-                                  outp_ast, throws, body, default,
-                                  default_level)
-                ast_to_method[method_ast] = method
-
-            if dml.globals.dml_version == (1, 2):
-                for (_, msite, _, _, _, exported, _) in method_order:
-                    if exported:
-                        if not method.fully_typed:
-                            raise EEXTERN(method.site)
-                        func = method_instance(method)
-                        mark_method_referenced(func)
-                        mark_method_exported(func, crep.cref(method), msite)
-                        break
-                # Export hard_reset and soft_reset from device objects in 1.2
-                # automatically
-                if (obj.objtype == 'device' and
-                    name in ('hard_reset', 'soft_reset')):
-                    func = method_instance(method)
-                    mark_method_referenced(func)
-                    mark_method_exported(func, crep.cref(method), obj.site)
-
+            method = process_method_implementations(
+                obj, name, implementations,
+                [trait_method_impls[name]]
+                if name in trait_method_impls else [],
+                obj_specs,
+                dml.globals.dml_version == (1, 2) and vtable_nothrow_dml14)
         except DMLError as e:
             report(e)
         else:
