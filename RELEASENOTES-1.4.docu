@@ -237,4 +237,10 @@
       The internal representation of values of template types has been changed.
       It is no longer allowed to cast such values to integer or pointer types.
   </add-note></build-id>
+  <build-id value="next"><add-note>Added a new
+      template <tt>state_signal</tt> which implements a signal
+      interface with saved state. It logs an <tt>error</tt> if the
+      signal is raised or lowered when already high or low. The
+      templates <tt>hreset</tt>, <tt>sreset</tt> and <tt>poreset</tt>
+      use the <tt>state_signal</tt> template.</add-note></build-id>
 </rn>

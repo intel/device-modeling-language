@@ -57,6 +57,7 @@ def test_some(mem, obj, port, allow_partial, allow_overlapping,
     def access(offset, length, partial = False, overlapping = False,
                illegal = False):
         obj.ports.HRESET.signal.signal_raise()
+        obj.ports.HRESET.signal.signal_lower()
         write(offset, length, partial, overlapping, illegal)
         read(offset, length, partial, overlapping, illegal)
 

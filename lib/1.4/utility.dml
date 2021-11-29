@@ -192,14 +192,49 @@ template _init_val_power_on_reset is (init_val, power_on_reset) {
     }
 }
 
+/**
+### state_signal
+
+<section>
+
+#### Description
+
+Implements a signal interface with saved state. The current state of the signal
+is stored in the saved boolean `high` and an error is logged if the signal is
+raised or lowered when already high or low. The methods `signal_raise` and
+`signal_lower` can be overridden to add side effects.
+
+#### Related Templates
+
+poreset, hreset, sreset
+
+</section>
+*/
+template state_signal {
+    implement signal {
+        saved bool high;
+        method signal_raise() default {
+            if (high)
+                log error: "%s raised when already high", qname;
+            else
+                high = true;
+        }
+        method signal_lower() default {
+            if (!high)
+                log error: "%s lowered when already low", qname;
+            else
+                high = false;
+        }
+    }
+}
+
 // Instantiate this on top level to support power-on reset.
 template poreset is power_on_reset {
-    port POWER {
+    port POWER is state_signal {
         implement signal {
             method signal_raise() {
+                default();
                 dev.power_on_reset();
-            }
-            method signal_lower() {
             }
         }
     }
@@ -234,12 +269,11 @@ template _init_val_hard_reset is (init_val, hard_reset) {
 
 // Instantiate this on top level to support hard reset.
 template hreset is hard_reset {
-    port HRESET {
+    port HRESET is state_signal {
         implement signal {
             method signal_raise() {
+                default();
                 dev.hard_reset();
-            }
-            method signal_lower() {
             }
         }
     }
@@ -301,19 +335,18 @@ for power-on reset, hard reset and soft reset, respectively.
 
 #### Related Templates
 
-power\_on\_reset, hard\_reset, soft\_reset
+state\_signal, power\_on\_reset, hard\_reset, soft\_reset
 
 </section>
 */
 
 // Instantiate this on top level to support soft reset.
 template sreset is soft_reset {
-    port SRESET {
+    port SRESET is state_signal {
         implement signal {
             method signal_raise() {
+                default();
                 dev.soft_reset();
-            }
-            method signal_lower() {
             }
         }
     }

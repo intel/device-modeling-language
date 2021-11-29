@@ -1,0 +1,51 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+import "utility.dml";
+
+saved bool on_raise_called;
+saved bool on_lower_called;
+
+method on_raise() {
+    on_raise_called = true;
+}
+
+method on_lower() {
+    on_lower_called = true;
+}
+
+port both is state_signal {
+    implement signal {
+        method signal_raise() {
+            default();
+            on_raise_called = true;
+        }
+        method signal_lower() {
+            default();
+            on_lower_called = true;
+        }
+    }
+}
+
+port up is state_signal {
+    implement signal {
+        method signal_raise() {
+            default();
+            on_raise_called = true;
+        }
+    }
+}
+
+port down is state_signal {
+    implement signal {
+        method signal_lower() {
+            default();
+            on_lower_called = true;
+        }
+    }
+}
