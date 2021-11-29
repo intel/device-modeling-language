@@ -948,6 +948,8 @@ def make_autoparams(obj, index_vars, index_var_sites):
             autoparams['index'] = SimpleParamExpr(mkUndefined(site))
     else:
         autoparams['indices'] = IndexListParamExpr(site, index_params)
+        autoparams['_be_bitorder'] = SimpleParamExpr(
+            mkBoolConstant(site, site.bitorder() == 'be'))
 
     if obj.objtype == 'device':
         autoparams['obj'] = SimpleParamExpr(mkDeviceObject(site))

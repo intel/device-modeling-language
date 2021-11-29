@@ -1,0 +1,15 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+bitorder be;
+
+/// COMPILE-ONLY
+
+// the be_bitorder parameter can be explicitly overridden on top level,
+// and this override is inherited by banks.
+// Other properties of this parameter are tested by register view tests.
+param be_bitorder = false;
+bank b { #if (this.be_bitorder) { error; } }

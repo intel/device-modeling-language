@@ -4,6 +4,16 @@
 */
 dml 1.4;
 device test;
-bitorder be;
+bitorder le;
 
-bank b {}
+bank b {
+    param be_bitorder = true;
+}
+
+// auto from bitorder declaration
+#if (be_bitorder) { error; }
+
+bank b2 {
+    // inherited from toplevel
+    #if (this.be_bitorder) { error; }
+}

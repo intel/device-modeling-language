@@ -261,4 +261,7 @@
       template <tt>map_target</tt> which can be used
       on <tt>connect</tt> objects to expose methods for reading and
       writing data from/to the connected object.</add-note></build-id>
+  <build-id value="next"><add-note> The device info XML file is no
+      longer needed by DML 1.4 devices. A dummy XML file is still
+      created to avoid packaging problems.</add-note></build-id>
 </rn>
