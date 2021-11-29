@@ -1977,7 +1977,7 @@ template bank is (object, shown_desc, _qname) {
             args = SIM_make_attr_list(
                 2,
                 SIM_make_attr_string(dev.classname),
-                SIM_make_attr_string(bank.name));
+                SIM_make_attr_string(bank.qname));
 
             local attr_value_t ret;
             ret = VT_call_python_module_function("register_view",

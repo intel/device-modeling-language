@@ -230,4 +230,8 @@
   <build-id value="6131"><add-note> It is no longer an error to instantiate
       a non-existing template from within a dead branch of an `#if` block.
   </add-note></build-id>
+  <build-id value="next"><add-note> Fixed a bug in the DML-provided
+      implementation of the <tt>description</tt> method of the
+      <tt>register_view</tt> interface.
+  </add-note></build-id>
 </rn>
