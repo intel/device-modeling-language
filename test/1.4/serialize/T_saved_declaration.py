@@ -17,6 +17,11 @@ obj.saved_float = -0.5
 stest.expect_equal(obj.saved_float, -0.5)
 obj.saved_array = [3, 2, 1, 0]
 stest.expect_equal(obj.saved_array, [3, 2, 1, 0])
+obj.saved_char_array = [3, 2, 1, 0]
+stest.expect_equal(obj.saved_char_array, [3, 2, 1, 0])
+# uint8 arrays are serialized as data instead of list
+obj.saved_byte_array = (3, 2, 1, 0)
+stest.expect_equal(obj.saved_byte_array, (3, 2, 1, 0))
 obj.saved_struct = [[0, [-1, 2], [3], [-2]], 4]
 stest.expect_equal(obj.saved_struct, [[0, [-1, 2], [3], [-2]], 4])
 
@@ -36,6 +41,11 @@ for (i, arr) in enumerate(matrix):
 stest.expect_equal([b.r_f_v for b in obj.bank.b], matrix)
 obj.saved_nested_array = matrix
 stest.expect_equal(obj.saved_nested_array, matrix)
+
+# Only the final dimension of a nested byte array is serialized as data.
+byte_matrix = [tuple(byte & 0xff for byte in row) for row in matrix]
+obj.saved_nested_byte_array = byte_matrix
+stest.expect_equal(obj.saved_nested_byte_array, byte_matrix)
 
 obj.saved_int24_le = 0xF00F00 #-1044736 in dml
 stest.expect_equal(obj.saved_int24_le, -1044736)

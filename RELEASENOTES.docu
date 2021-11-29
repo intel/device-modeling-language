@@ -1684,5 +1684,7 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
   <build-id value="next"><add-note> Addressed code generation efficiency issues
       when using array types in <tt>saved</tt> variables or parameters to
       methods called with <tt>after</tt> <bug number="SIMICS-18440"/>.
-  </add-note></build-id>
+
+      Serialized representation of <tt>uint8[(be|le)_t]</tt> array types has
+      been changed. </add-note></build-id>
 </rn>

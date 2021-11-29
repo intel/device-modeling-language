@@ -41,6 +41,14 @@ saved int saved_nested_array[4][3];
 // large (nested) arrays are generated efficiently, and do not hang dmlc/gcc
 saved int64 saved_big_array[8][8192];
 
+// uint8 array types -- both implicit and explicit endian -- are serialized as
+// data in the final dimension
+saved uint8 saved_byte_array[4];
+saved uint8_be_t saved_nested_byte_array[4][3];
+
+// no other array types are serialized as data
+saved char saved_char_array[4];
+
 // The unused sessions in these objects will complicate the strides of the
 // struct arrays in the device
 port port_array[i < 4] {
@@ -162,6 +170,8 @@ attribute test_later is write_only_attr {
 
         for (local int i = 0; i < 4; i++) {
             assert saved_array[i] == 3-i;
+            assert saved_byte_array[i] == 3-i;
+            assert saved_char_array[i] == 3-i;
         }
 
         for (local int i = 0; i < 4; i++) {
@@ -179,6 +189,8 @@ attribute test_later is write_only_attr {
                 assert port_array[i].array_saved_int[j].v == matrix[i][j];
                 assert b[i].r.f[j].v == matrix[i][j];
                 assert saved_nested_array[i][j] == matrix[i][j];
+                assert saved_nested_byte_array[i][j]
+                    == cast(matrix[i][j], uint8);
             }
         }
 

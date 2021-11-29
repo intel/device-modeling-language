@@ -133,7 +133,13 @@ def serialize(real_type, current_expr, target_expr):
         (base, dimsizes, sizeof_base,
          dimsizes_expr) = prepare_array_de_serialization(current_site,
                                                          real_type)
-        elem_serializer = expr.mkLit(current_site, lookup_serialize(base),
+        # NULL is used as a signal to serialize the final dimension as a data
+        # attribute value.
+        serializer_ptr = ('NULL' if (base.is_int and not base.signed
+                                     and base.bits == 8)
+                          else lookup_serialize(base))
+
+        elem_serializer = expr.mkLit(current_site, serializer_ptr,
                                      TPtr(serializer_t))
         apply_expr = apply_c_fun(current_site, '_serialize_array',
                                  [ctree.mkAddressOf(current_site,
@@ -185,8 +191,13 @@ def deserialize(real_type, current_expr, target_expr):
         (base, dimsizes, sizeof_base,
          dimsizes_expr) = prepare_array_de_serialization(current_site,
                                                          real_type)
-        elem_deserializer = expr.mkLit(current_site, lookup_deserialize(base),
-                                       TPtr(deserializer_t))
+        # NULL is used as a signal to deserialize the final dimension as a data
+        # attribute value.
+        deserializer_ptr = ('NULL' if (base.is_int and not base.signed
+                                       and base.bits == 8)
+                            else lookup_deserialize(base))
+        elem_deserializer = expr.mkLit(current_site, deserializer_ptr,
+                                       TPtr(serializer_t))
         return call_c_fun(current_site,
                           '_deserialize_array',
                           [current_expr,
@@ -230,9 +241,14 @@ def map_dmltype_to_attrtype(site, dmltype):
         # Can only save constant-size arrays
         if not real_type.size.constant:
             raise messages.ESERIALIZE(site, dmltype)
-        arr_attr_type = map_dmltype_to_attrtype(site, real_type.base)
-        arr_length = expr_intval(real_type.size)
-        return '[%s{%s}]' % (arr_attr_type, arr_length)
+        # An array of uint8 is represented as data
+        if (real_type.base.is_int and not real_type.base.signed
+            and real_type.base.bits == 8):
+            return 'd'
+        else:
+            arr_attr_type = map_dmltype_to_attrtype(site, real_type.base)
+            arr_length = expr_intval(real_type.size)
+            return '[%s{%s}]' % (arr_attr_type, arr_length)
     if isinstance(real_type, TObjIdentity):
         return '[s[i*]]'
     # TODO should be implemented

@@ -1793,6 +1793,12 @@ _serialize_array_aux(const uint8 *data, size_t elem_size,
                      const uint32 *dimsizes, uint32 dims,
                      uint64 total_elem_count, _serializer_t serialize_elem) {
     uint32 len = *dimsizes;
+
+    // Serialize the final dimension as bytes if serialize_elem is NULL
+    if (dims == 1 && !serialize_elem) {
+        return SIM_make_attr_data(len, data);
+    }
+
     size_t children_elem_count = total_elem_count/len;
 
     attr_value_t val = SIM_alloc_attr_list(len);
@@ -1830,6 +1836,23 @@ _deserialize_array_aux(attr_value_t val, uint8 *data, size_t elem_size,
                        size_t total_elem_count,
                        _deserializer_t deserialize_elem) {
     uint32 len = *dimsizes;
+
+    // Deserialize the final dimension as bytes if deserialize_elem is NULL
+    if (dims == 1 && !deserialize_elem) {
+        if (unlikely(!SIM_attr_is_data(val))) {
+            SIM_attribute_error("Invalid serialized representation of byte "
+                                "array: not represented as data");
+            return Sim_Set_Illegal_Type;
+        } else if (unlikely(SIM_attr_data_size(val) != len)) {
+            SIM_c_attribute_error(
+                "Invalid serialized value of byte array: expected %u bytes, "
+                "got %u", len, SIM_attr_data_size(val));
+            return Sim_Set_Illegal_Value;
+        }
+        memcpy(data, SIM_attr_data(val), len);
+        return Sim_Set_Ok;
+    }
+
     if (unlikely(!SIM_attr_is_list(val))) {
         SIM_attribute_error("Invalid serialized representation of array: "
                             "not a list");
