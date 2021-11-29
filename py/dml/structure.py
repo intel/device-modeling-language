@@ -10,6 +10,7 @@ import re
 from . import objects, logging, crep, ast
 from . import traits
 from . import toplevel
+from . import topsort
 from .logging import *
 from .codegen import *
 from .symtab import *
@@ -321,8 +322,8 @@ def sort_type_declarations(new_typedefs, anonymous_structs):
         except DMLError as e:
             report(e)
     try:
-        type_order = template.topsort(deps)
-    except template.CycleFound as e:
+        type_order = topsort.topsort(deps)
+    except topsort.CycleFound as e:
         report(ETREC([typedefs[n].declaration_site for n in e.cycle
                       if n in typedefs],
                      typedefs[e.cycle[0]]))
@@ -740,7 +741,7 @@ def sort_method_implementations(implementations, obj_specs):
     method_map = {
         rank_to_method[r]: [rank_to_method[x] for x in minimal_ancestry[r]]
         for r in ranks}
-    method_order = list(reversed(template.topsort(method_map)))
+    method_order = list(reversed(topsort.topsort(method_map)))
 
     if dml.globals.dml_version == (1, 2):
         m = method_order[0]

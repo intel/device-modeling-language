@@ -17,6 +17,7 @@ PYFILES := dml/__init__.py			\
           dml/ctree.py				\
           dml/template.py			\
           dml/toplevel.py			\
+          dml/topsort.py			\
           dml/traits.py				\
           dml/types.py				\
           dml/dmllex.py				\
