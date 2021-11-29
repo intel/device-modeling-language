@@ -34,6 +34,8 @@ stest.expect_equal([p.array_saved_int_v for p in obj.port.port_array], matrix)
 for (i, arr) in enumerate(matrix):
     obj.bank.b[i].r_f_v = arr
 stest.expect_equal([b.r_f_v for b in obj.bank.b], matrix)
+obj.saved_nested_array = matrix
+stest.expect_equal(obj.saved_nested_array, matrix)
 
 obj.saved_int24_le = 0xF00F00 #-1044736 in dml
 stest.expect_equal(obj.saved_int24_le, -1044736)

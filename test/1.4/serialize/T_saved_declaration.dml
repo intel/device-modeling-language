@@ -35,6 +35,11 @@ typedef struct {
 saved struct { i_ii_t v0; int i; } saved_struct;
 
 saved int saved_array[4];
+saved int saved_nested_array[4][3];
+
+// This declaration only exists to test that de/serialization functions for
+// large (nested) arrays are generated efficiently, and do not hang dmlc/gcc
+saved int64 saved_big_array[8][8192];
 
 // The unused sessions in these objects will complicate the strides of the
 // struct arrays in the device
@@ -173,6 +178,7 @@ attribute test_later is write_only_attr {
             for (local int j = 0; j < 3; j++) {
                 assert port_array[i].array_saved_int[j].v == matrix[i][j];
                 assert b[i].r.f[j].v == matrix[i][j];
+                assert saved_nested_array[i][j] == matrix[i][j];
             }
         }
 
