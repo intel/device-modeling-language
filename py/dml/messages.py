@@ -1679,7 +1679,7 @@ class WNEGCONSTCOMP(DMLWarning):
         DMLWarning.__init__(self, site)
         self.expr = expr
         self.ty = ty
-    fmt = ("Comparing negative constant to signed integer has a constant "
+    fmt = ("Comparing negative constant to unsigned integer has a constant "
            + "result")
     def log(self):
         DMLError.log(self)
