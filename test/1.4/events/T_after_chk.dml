@@ -1,0 +1,60 @@
+/*
+  © 2021-2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+template t {
+    attribute flag is bool_attr;
+
+    attribute storage is uint64_attr;
+
+    method m1() {
+        log info: "running m1";
+        flag.val = true;
+    }
+
+    method m2(uint64 v) {
+        log info: "running m2 with v = %d", v;
+        storage.val = v;
+    }
+
+    method post_m1() {
+        after 0.1 s: m1();
+    }
+
+    method post_m2(uint64 v) {
+        after 0.1 s: m2(v);
+    }
+}
+
+is t;
+
+group g is t;
+
+port p[i < 2][j < 2] is t;
+
+attribute exec_afters is write_only_attr {
+    param type = "n";
+    method set(attr_value_t val) throws {
+        log info: "running exec_afters";
+        dev.post_m1();
+        g.post_m1();
+        p[0][1].post_m1();
+        p[1][1].post_m1();
+        post_m2(1);
+        g.post_m2(1);
+        p[0][1].post_m2(4);
+        p[1][1].post_m2(4);
+    }
+}
+
+attribute cancel_afters is write_only_attr {
+    param type = "n";
+    method set(attr_value_t val) throws {
+        log info: "running cancel_afters";
+        g.cancel_after();
+        p[0][1].cancel_after();
+    }
+}

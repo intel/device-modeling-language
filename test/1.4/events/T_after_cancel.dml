@@ -1,0 +1,155 @@
+/*
+  © 2021-2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+import "testing.dml";
+
+template domain {
+    shared method post_single_operator_dbl_shared(bool use_cycles, double t) {
+        if (use_cycles) {
+            after cast(t, uint64) cycles: single_operator.dbl();
+        } else {
+            after t s: single_operator.dbl();
+        }
+    }
+
+    method post_single_operator_dbl_unshared(bool use_cycles, double t) {
+        if (use_cycles) {
+            after cast(t, uint64) cycles: single_operator.dbl();
+        } else {
+            after t s: single_operator.dbl();
+        }
+    }
+
+    shared method post_single_operator_modify_shared(
+        bool use_cycles, double t, int v) {
+        if (use_cycles) {
+            after cast(t, uint64) cycles: single_operator.modify(v);
+        } else {
+            after t s: single_operator.modify(v);
+        }
+    }
+
+    method post_single_operator_modify_unshared(
+        bool use_cycles, double t, int v) {
+        if (use_cycles) {
+            after cast(t, uint64) cycles: single_operator.modify(v);
+        } else {
+            after t s: single_operator.modify(v);
+        }
+    }
+
+    shared method post_multi_operator_dbl_shared(
+        bool use_cycles, double t, int i, int j) {
+        if (use_cycles) {
+            after cast(t, uint64) cycles: multi_operator[i][j].dbl();
+        } else {
+            after t s: multi_operator[i][j].dbl();
+        }
+    }
+
+    method post_multi_operator_dbl_unshared(
+        bool use_cycles, double t, int i, int j) {
+        if (use_cycles) {
+            after cast(t, uint64) cycles: multi_operator[i][j].dbl();
+        } else {
+            after t s: multi_operator[i][j].dbl();
+        }
+    }
+
+    shared method post_multi_operator_modify_shared(
+        bool use_cycles, double t, int i, int j, int v) {
+        if (use_cycles) {
+            after cast(t, uint64) cycles: multi_operator[i][j].modify(v);
+        } else {
+            after t s: multi_operator[i][j].modify(v);
+        }
+    }
+
+    method post_multi_operator_modify_unshared(
+        bool use_cycles, double t, int i, int j, int v) {
+        if (use_cycles) {
+            after cast(t, uint64) cycles: multi_operator[i][j].modify(v);
+        } else {
+            after t s: multi_operator[i][j].modify(v);
+        }
+    }
+}
+
+in each group {
+    is domain;
+}
+
+group dom_A {
+    group subgroup;
+}
+
+param dom_B = dom_A.subgroup;
+
+template ttest is (write_only_attr) {
+    param type = "n";
+    shared method set(attr_value_t val) throws {
+        run();
+    }
+    shared method run() throws;
+}
+
+// cancellation works correctly no matter use of indices or params
+attribute test_1 is (ttest) {
+    method run() throws {
+        after 0.1 s: single_operator.dbl();
+        dom_A.post_single_operator_dbl_shared(false, 0.1);
+        dom_A.post_single_operator_dbl_unshared(false, 0.1);
+        dom_B.post_single_operator_dbl_shared(false, 0.1);
+        dom_B.post_single_operator_dbl_unshared(false, 0.1);
+
+        after 0.1 s: single_operator.modify(3);
+        dom_A.post_single_operator_modify_shared(false, 0.1, 3);
+        dom_A.post_single_operator_modify_unshared(false, 0.1, 3);
+        dom_B.post_single_operator_modify_shared(false, 0.1, 3);
+        dom_B.post_single_operator_modify_unshared(false, 0.1, 3);
+
+        after 0.1 s: multi_operator[0][1].dbl();
+        dom_A.post_multi_operator_dbl_shared(false, 0.1, 0, 1);
+        dom_A.post_multi_operator_dbl_unshared(false, 0.1, 0, 1);
+        dom_B.post_multi_operator_dbl_shared(false, 0.1, 0, 1);
+        dom_B.post_multi_operator_dbl_unshared(false, 0.1, 0, 1);
+
+        after 0.1 s: multi_operator[0][1].modify(3);
+        dom_A.post_multi_operator_modify_shared(false, 0.1, 0, 1, 3);
+        dom_A.post_multi_operator_modify_unshared(false, 0.1, 0, 1, 3);
+        dom_B.post_multi_operator_modify_shared(false, 0.1, 0, 1, 3);
+        dom_B.post_multi_operator_modify_unshared(false, 0.1, 0, 1, 3);
+
+        dom_A.cancel_after();
+    }
+}
+
+// cancellation/post-checks works on all time units
+attribute test_2 is (ttest) {
+    method run() throws {
+        dom_A.post_single_operator_dbl_shared(true, 100000);
+        dom_A.post_multi_operator_modify_shared(true, 100000, 0, 1, 5);
+        dom_B.post_single_operator_modify_shared(true, 100000, 5);
+        dom_B.post_multi_operator_dbl_shared(true, 100000, 0, 1);
+        dom_B.cancel_after();
+    }
+}
+
+template operator is (int64_attr) {
+    method modify(int v) {
+        this.val *= v;
+    }
+    method dbl() {
+        this.val *= 2;
+    }
+}
+
+attribute multi_operator[i < 2][j < 2] is (operator);
+attribute single_operator is (operator);
+
+method test() throws {
+    return;
+}
