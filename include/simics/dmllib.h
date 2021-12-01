@@ -1780,6 +1780,11 @@ _get_port_saved_variable(lang_void *saved_access, conf_object_t *_portobj,
                                   acc->getter);
 }
 
+
+UNUSED static uint64 _identity_to_key(_identity_t id) {
+        return (uint64)id.id << 32 | (uint64)id.encoded_index;
+}
+
 // The internal format for ht is:
 // dict(trait_identifier -> dict(statement_idx -> bool))
 UNUSED static uint64 _select_log_level(ht_int_table_t *ht,

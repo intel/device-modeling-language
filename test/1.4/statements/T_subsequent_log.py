@@ -53,6 +53,5 @@ obj.log_level = 1
 with LogCapture() as capture:
     obj.test_multi_inheritance = True
     messages = capture.messages
-    stest.expect_true(len(messages), 2)
+    stest.expect_true(len(messages), 1)
     stest.expect_true("multiply inherited" in messages[0])
-    stest.expect_true("multiply inherited" in messages[1])

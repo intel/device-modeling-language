@@ -36,6 +36,17 @@ template y is x {}
 template z is x {}
 group g is (y,z);
 
+template at {
+    shared method m() {
+        log info, 1 then 5: "shared in array";
+    }
+}
+group a[i < 2][j < 2] is at {
+    method m2() {
+        log info, 1 then 5: "array method";
+    }
+}
+
 attribute test is bool_attr {
     method set(attr_value_t val) throws {
         once();
@@ -51,10 +62,6 @@ attribute test is bool_attr {
     }
 }
 
-// Known issue: statements that in traits that are multiply inherited can log
-// with the same log level twice depending on how the trait is accessed
-// This will be fixed when we update the tracking to use trait identity
-// see: SIMICS-6998
 attribute test_multi_inheritance is bool_attr {
     method set(attr_value_t val) throws {
         cast(g, y).m();
