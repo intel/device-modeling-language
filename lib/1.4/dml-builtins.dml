@@ -137,6 +137,8 @@ extern void _callback_after_write(conf_object_t *bank,
                                   _connection_vect_t *connections,
                                   _callback_vect_t *anonymous_callbacks);
 
+extern void _cancel_simple_events(conf_object_t *obj, _identity_t id);
+
 /**
 # Libraries and Built-ins
 
@@ -411,7 +413,11 @@ which cannot be overridden:
   `register regs[i < 4][j < 11];` defines two index parameters, `i` and `j`.
   In this case, the `indices` parameter is `[i, j]`.
 
-There are no methods common for all objects, but the methods `init`
+The `object` template provides the non-overridable method `cancel_after()`,
+which cancels all pending events posted using `after` which are associated with
+the object (any events associated with subobjects are unaffected).
+
+There are no other methods common for all objects, but the methods `init`
 and `post_init` are automatically called on all objects that implement
 the [`init`](#init) and [`post_init`](#post_init) template, respectively.
 
@@ -432,6 +438,10 @@ template object is (name, desc, documentation, limitations) {
     param qname                     auto;
 
     param dev                       = defined parent #? parent.dev #: this;
+
+    shared method cancel_after() {
+        _cancel_simple_events(dev.obj, cast(this, _identity_t));
+    }
 }
 
 /**

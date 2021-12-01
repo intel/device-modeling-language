@@ -527,7 +527,8 @@ def mkExpressionStatement(site, expr):
 
 class After(Statement):
     @auto_init
-    def __init__(self, site, unit, delay, method, fun, indices, inargs): pass
+    def __init__(self, site, unit, delay, domains, method, eventinfo, indices,
+                 inargs): pass
     def toc(self):
         self.linemark()
         objarg = '&_dev->obj'
@@ -536,40 +537,35 @@ class After(Statement):
             + '''not set, ignoring delayed call to method '''
             + f''''{self.method.logname_anonymized([])}'");\n''')
         out('else {\n', preindent=-1, postindent=1)
-        if self.indices or self.inargs:
+        if self.indices or self.inargs or self.domains:
+            out('_simple_event_data_t *_data = MM_ZALLOC(1, '
+                + '_simple_event_data_t);\n')
+
+            if self.indices:
+                out(f'uint32 *_event_indices = MM_MALLOC({len(self.indices)}, '
+                    + 'uint32);\n')
+                for (i, index_expr) in enumerate(self.indices):
+                    out(f'_event_indices[{i}] = {index_expr.read()};\n')
+                out('_data->indices = _event_indices;\n')
+
             if self.inargs:
-                # _in_p_attrs deliberately named to avoid possible name
-                # conflicts with _in_param_*
-                out(f'attr_value_t _in_p_attrs[{len(self.inargs)}];\n')
-                for (i, (arg, (pname, ptype))) in enumerate(
-                        zip(self.inargs, self.method.inp)):
-                    ptype = safe_realtype(ptype)
-                    out(f'{ptype} _in_param_{pname} = {arg.read()};\n')
-                    out(f'{serialize.lookup_serialize(ptype)}'
-                        + f'(&_in_param_{pname}, &_in_p_attrs[{i}]);\n')
-            out('attr_value_t *_data = MM_MALLOC(1, attr_value_t);\n')
+                args_struct = self.eventinfo['args_type'].label + "_t"
+                out('%s _event_args = {%s};\n'
+                    % (args_struct,
+                       ', '.join(arg.read() for arg in self.inargs)))
+                out('_data->args = MM_MALLOC(1, '
+                    + f'{args_struct});\n')
+                out(f'*({args_struct} *)_data->args = _event_args;\n')
 
-            index_attr_list = [f'SIM_make_attr_uint64({i.read()})'
-                               for i in self.indices]
-            param_attr_list = [f'_in_p_attrs[{i}]'
-                               for i in range(len(self.inargs))]
+            if self.domains:
+                out('_identity_t *_event_domains = '
+                    + f'MM_MALLOC({len(self.domains)}, _identity_t);\n')
+                for (i, domain) in enumerate(self.domains):
+                    out(f'_event_domains[{i}] = {domain.read()};\n')
+                out(f'_data->no_domains = {len(self.domains)};\n')
+                out('_data->domains = _event_domains;\n')
 
-            # If both indices and params are present, serialized representation
-            # is '[index_attr_list, param_attr_list]'
-            #
-            # If only indices or params are present, then the representation is
-            # flattened to a single list.
-            if self.indices and self.inargs:
-                out('*_data = SIM_make_attr_list(2, '
-                    + f'SIM_make_attr_list({len(self.indices)}, '
-                    + f'{", ".join(index_attr_list)}), '
-                    + f'SIM_make_attr_list({len(self.inargs)}, '
-                    + f'{", ".join(param_attr_list)}));\n')
-            else:
-                out('*_data = SIM_make_attr_list'
-                    + f'({len(self.indices) + len(self.inargs)}, '
-                    + f'{", ".join(index_attr_list + param_attr_list)});\n')
-            data = '_data'
+            data = '(lang_void *)_data'
         else:
             data = 'NULL'
         out(f'SIM_event_post_{self.unit}(SIM_object_clock({objarg}), '
@@ -577,8 +573,7 @@ class After(Statement):
             + f'{self.delay.read()}, {data});\n')
         out("}\n", preindent = -1)
 
-def mkAfter(site, unit, delayexpr, method, fun, indices, inargs):
-    return After(site, unit, delayexpr, method, fun, indices, inargs)
+mkAfter = After
 
 class If(Statement):
     @auto_init

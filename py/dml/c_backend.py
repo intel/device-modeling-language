@@ -319,6 +319,14 @@ def generate_hfile(device, headers, filename):
 
     for (name, t) in list(dml.globals.traits.items()):
         t.type().print_vtable_struct_declaration()
+    out('\n')
+
+    for args_type in (eventinfo['args_type']
+                      for (method, eventinfo) in simple_events.items()
+                      if method.inp):
+        args_type.print_struct_definition()
+        out(f'typedef struct {args_type.label} {args_type.label}_t;\n')
+    out('\n')
 
 
     print_device_substruct(device)
@@ -917,119 +925,124 @@ def generate_implements(code, device):
         except DMLError as e:
             report(e)
 
-def simple_event_fun_deconstruct_data(method, data):
-    if method.dimensions > 0 and len(method.inp) > 0:
-        out(f'ASSERT(SIM_attr_list_size({data}) == 2);\n')
-        out(f'attr_value_t indices = SIM_attr_list_item({data}, 0);\n')
-        out(f'attr_value_t params = SIM_attr_list_item({data}, 1);\n')
-    elif method.dimensions > 0 or len(method.inp) > 0:
-        varname = 'indices' if method.dimensions > 0 else 'params'
-        out(f'attr_value_t {varname} = {data};\n')
+def generate_simple_event_only_domains_funs():
+    start_function_definition(
+        'attr_value_t _simple_event_only_domains_get_value('
+        + 'conf_object_t *_obj, lang_void *data)')
+    out('{\n', postindent=1)
+    out('return _serialize_simple_event_data(0, NULL, _id_infos, '
+        + '(_simple_event_data_t *)data);\n')
+    out('}\n\n', preindent=-1)
 
-    if method.dimensions > 0:
-        out(f'ASSERT(SIM_attr_list_size(indices) == {method.dimensions});\n')
-
-    if len(method.inp) > 0:
-        out(f'ASSERT(SIM_attr_list_size(params) == {len(method.inp)});\n')
+    start_function_definition(
+        'lang_void *_simple_event_only_domains_set_value('
+        + 'conf_object_t *_obj, attr_value_t val)')
+    out('{\n', postindent=1)
+    out('_simple_event_data_t *out;\n')
+    out('set_error_t error = _deserialize_simple_event_data(NULL, 0, 0, NULL, '
+        + '&_id_info_ht, val, &out);\n')
+    out('if (error != Sim_Set_Ok) {\n', postindent=1)
+    out('out = NULL;\n')
+    out('}\n', preindent=-1)
+    out('return out;\n')
+    out('}\n\n', preindent=-1)
 
 def generate_simple_events(device):
-    handled = set()
-    done = False
+    for (method, info) in simple_events.items():
+        site = method.site
 
-    while not done:
-        done = True
-        items = list(simple_events.items())
-        for method, fun in items:
-            if method in handled:
-                continue
-            site = method.site
-            done = False
-            handled.add(method)
+        start_function_definition(
+            f'void {info["callback"]}(conf_object_t *_obj, '
+            + 'lang_void *_data)')
+        out('{\n', postindent = 1)
+        out(crep.structtype(device) + ' *_dev UNUSED = ('
+            + crep.structtype(device) + '*)_obj;\n')
 
-            (callback_fun, destroy_fun, get_value_fun, set_value_fun) = fun
+        out('_simple_event_data_t *data = '
+            + '(_simple_event_data_t *)_data;\n')
+
+        # If data is NULL, report it and use emergency indices/args
+        if method.dimensions > 0 or len(method.inp) > 0:
+            out('if (!data) {', postindent=1)
+            out('const char *msg = "Failed deserialization of after event '
+                + 'data. Using emergency indices/arguments.";\n')
+            out('VT_critical_error(msg, msg);\n')
+            out('}', preindent=-1)
+
+        if method.dimensions > 0:
+            out('const uint32 *_indices = data ? data->indices '
+                + (': (const uint32 [%s]) { 0 };\n'
+                   % (method.dimensions,)))
+
+        if len(method.inp) > 0:
+            args_struct_t = info['args_type'].label + '_t'
+            out('const %s *_args = data ? data->args : &(%s) { 0 };\n'
+                % (args_struct_t, args_struct_t))
+
+        indices = tuple(mkLit(site, f'_indices[{i}]', TInt(32, False))
+                        for i in range(method.dimensions))
+        params = tuple(mkLit(site, f'_args->{pname}', ptype)
+                       for (pname, ptype) in method.inp)
+        with LogFailure(site, method, indices):
+            code = codegen_call(site, method, indices, params, ())
+        code = mkCompound(site, [code])
+        code.toc()
+        out('if (data) {\n', postindent=1)
+        out('_free_simple_event_data(*data);\n')
+        out('MM_FREE(data);\n')
+        out('}\n', preindent=-1)
+        output_dml_state_change("_dev")
+        out('}\n\n', preindent = -1)
+        splitting_point()
+
+        if method.dimensions > 0 or len(method.inp) > 0:
             start_function_definition(
-                f'void {callback_fun}(conf_object_t *_obj, void *_data)')
+                f'attr_value_t {info["get_value"]}'
+                + '(conf_object_t *_obj, lang_void *data)')
             out('{\n', postindent = 1)
-            out(crep.structtype(device) + ' *_dev UNUSED = ('
-                + crep.structtype(device) + '*)_obj;\n')
-            scope = Symtab(global_scope)
-
-            if method.dimensions > 0 or len(method.inp) > 0:
-                out('ASSERT(_data);\n')
-                simple_event_fun_deconstruct_data(method,
-                                                  '*(attr_value_t*)_data');
-
-                if len(method.inp) > 0:
-                    # _p_attrs deliberately named to avoid possible name
-                    # conflicts with _param_*
-                    out(f'attr_value_t _p_attrs[{len(method.inp)}];\n')
-                    for i in range(len(method.inp)):
-                        out(f'_p_attrs[{i}] = '
-                            + f'SIM_attr_list_item(params, {i});\n')
-
-                    for (i, (pname, ptype)) in enumerate(method.inp):
-                        ptype = safe_realtype(ptype)
-                        out(f'{ptype} _param_{pname};\n')
-                        out(f'{serialize.lookup_deserialize(ptype)}'
-                            + f'(&_p_attrs[{i}], &_param_{pname});\n')
-
-                indices = tuple(mkLit(site,
-                                    'SIM_attr_integer(SIM_attr_list_item('
-                                    + f'indices, {i}))',
-                                    TInt(32, False))
-                              for i in range(method.dimensions))
-                params = tuple(mkLit(site, f'_param_{pname}', ptype)
-                               for pname, ptype in method.inp)
-                with LogFailure(site, method, indices):
-                    code = codegen_call(site, method, indices, params, ())
-                code = mkCompound(site, declarations(scope) + [code])
-                code.toc()
-                out('SIM_attr_free((attr_value_t*)_data);\n');
-                out('MM_FREE(_data);\n');
-            else:
-                with LogFailure(site, method, ()):
-                    code = codegen_inline(site, method, (), [], [])
-                code = mkCompound(site, declarations(scope) + [code])
-                code.toc()
-                output_dml_state_change("_dev")
+            out(('return _serialize_simple_event_data(%d, %s, _id_infos, '
+                 + '(_simple_event_data_t *)data);\n')
+                % (method.dimensions,
+                   (serialize.lookup_serialize(info['args_type'])
+                    if method.inp else 'NULL')))
             out('}\n\n', preindent = -1)
             splitting_point()
 
-            if method.dimensions > 0 or len(method.inp) > 0:
-                start_function_definition(
-                    f'void {destroy_fun}(conf_object_t *_obj, void *data)')
-                out('{\n', postindent = 1)
-                out('ASSERT(data);\n')
-                simple_event_fun_deconstruct_data(method,
-                                                  '*(attr_value_t*)data');
-                out('SIM_attr_free((attr_value_t*)data);\n');
-                out('MM_FREE(data);\n');
-                out('}\n\n', preindent = -1)
-                splitting_point()
-
-                start_function_definition(
-                    f'attr_value_t {get_value_fun}'
-                    + '(conf_object_t *_obj, void *data)')
-                out('{\n', postindent = 1)
-                out('ASSERT(data);\n')
-                simple_event_fun_deconstruct_data(method,
-                                                  '*(attr_value_t*)data');
-                out('return SIM_attr_copy(*(attr_value_t*)data);\n');
-                out('}\n\n', preindent = -1)
-                splitting_point()
-
-                start_function_definition(
-                    f'void *{set_value_fun}'
-                    + '(conf_object_t *_obj, attr_value_t val)')
-                out('{\n', postindent = 1)
-                simple_event_fun_deconstruct_data(method, 'val');
-                out('attr_value_t *data = MM_MALLOC(1, attr_value_t);\n');
-                out('*data = SIM_attr_copy(val);\n');
-                out('return data;\n');
-                out('}\n\n', preindent = -1)
-                splitting_point()
+            start_function_definition(
+                f'lang_void *{info["set_value"]}'
+                + '(conf_object_t *_obj, attr_value_t val)')
+            out('{\n', postindent = 1)
+            out('_simple_event_data_t *out;\n')
+            out(('set_error_t error = _deserialize_simple_event_data(%s, '
+                 + '%d, %s, %s, &_id_info_ht, val, &out);\n')
+                % ((('(const uint32 []) {%s}'
+                     % (', '.join(map(str, method.dimsizes)),))
+                    if method.dimensions > 0 else 'NULL'),
+                   method.dimensions,
+                   (f'sizeof({info["args_type"].label}_t)'
+                    if method.inp else 0),
+                   (serialize.lookup_deserialize(info['args_type'])
+                    if method.inp else 'NULL'),
+                   ))
+            out('if (error != Sim_Set_Ok) {\n', postindent=1)
+            out('out = NULL;\n')
+            out('}\n', preindent=-1)
+            out('return (lang_void *) out;\n')
+            out('}\n\n', preindent = -1)
+            splitting_point()
 
     reset_line_directive()
+
+def generate_simple_events_control_methods():
+    start_function_definition(
+        'void _cancel_simple_events(conf_object_t *_obj, _identity_t domain)')
+    out('{\n', postindent = 1)
+    for (method, _) in list(simple_events.items()):
+        out('SIM_event_cancel_time('
+            + f'SIM_object_clock(_obj), {crep.get_evclass(method)}, _obj, '
+            + '_simple_event_predicate, (lang_void *) &domain);\n')
+    out('}\n\n', preindent = -1)
+    splitting_point()
 
 def event_callbacks(event, indices):
     method_names = (
@@ -1076,10 +1089,13 @@ def generate_register_events(device):
                        ', '.join(
                            cname
                            for (_, cname) in event_callbacks(event, indices))))
-        for (method, fun) in list(simple_events.items()):
-            out('%s = SIM_register_event("%s", class, 0, %s, %s, %s, %s, NULL);\n'
+        for (method, info) in list(simple_events.items()):
+            out(('%s = SIM_register_event("%s", class, 0, %s, %s, %s, %s, '
+                 + 'NULL);\n')
                 % ((crep.get_evclass(method),
-                    method.logname_anonymized()) + fun))
+                    method.logname_anonymized())
+                   + tuple(info[fun] for fun in ('callback', 'destroy',
+                                                 'get_value', 'set_value'))))
 
     out('}\n\n', preindent = -1)
     splitting_point()
@@ -2470,6 +2486,8 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     for ((node, trait), subobjs) in list(EachIn.instances.items()):
         generate_each_in_table(node, trait, subobjs)
     generate_simple_events(device)
+    generate_simple_event_only_domains_funs()
+    generate_simple_events_control_methods()
     generate_init_identity_hashtable()
     generate_register_events(device)
     generate_init_port_objs(device)
