@@ -6,6 +6,10 @@
 dml 1.4;
 
 import "simics/devs/signal.dml";
+import "simics/devs/ram.dml";
+import "simics/devs/memory-space.dml";
+import "simics/devs/translator.dml";
+import "simics/model-iface/transaction.dml";
 
 template _reg_or_field {
     param is_register : bool;
@@ -1210,5 +1214,163 @@ template bank_obj is (bank, name) {
     shared method bank_obj() -> (conf_object_t *) {
         // Defer to default implementation
         return _bank_obj();
+    }
+}
+
+/**
+   ## Connect related templates
+
+   ### map\_target
+
+   A `connect` object can instantiate the template `map_target`. The template
+   defines a default implementation of `validate` which verifies that the
+   object can be used to create a map target, i.e. the Simics API
+   `SIM_new_map_target` returns a valid pointer. The template provides a
+   session variable `map_target` of the type `map_target_t *` which can be used
+   to issue transactions to the connected object.
+
+   The template defines the following methods:
+*/
+template map_target is (connect, _qname) {
+    session map_target_t *map_target;
+
+    interface ram { param required = false; }
+    interface rom  { param required = false; }
+    interface io_memory  { param required = false; }
+    interface port_space { param required = false; }
+    interface translator { param required = false; }
+    interface transaction_translator { param required = false; }
+    interface transaction { param required = false; }
+    interface memory_space { param required = false; }
+
+    method validate(conf_object_t *obj) -> (bool) default {
+        if (port) {
+            SIM_attribute_error(
+                "port interfaces are not supported, use port objects instead");
+            return false;
+        }
+        local map_target_t *tmp = SIM_new_map_target(obj, NULL, NULL);
+        if (!tmp) {
+            SIM_clear_exception();
+            SIM_attribute_error(SIM_last_error());
+            return false;
+        }
+        SIM_free_map_target(tmp);
+        return true;
+    }
+
+    method set(conf_object_t *obj) {
+        SIM_free_map_target(this.map_target);
+        default(obj);
+        this.map_target = obj ? SIM_new_map_target(obj, NULL, NULL) : NULL;
+    }
+
+    /**
+       * `read(uint64 addr, uint64 size) -> (uint64) throws`
+
+         Reads `size` bytes starting at `addr` in the connected object. Size
+         must be 8 or less. Throws an exception if the read fails.
+     */
+    shared method read(uint64 addr, uint64 size) -> (uint64) throws {
+        if (size > 8) {
+            log error: "%s.read: size must be less than or equal to 8",
+                _qname();
+            throw;
+        }
+        local uint8 val[size];
+        local atom_t atoms[4] = {
+            ATOM_data(val),
+            ATOM_size(size),
+            ATOM_initiator(dev.obj),
+            ATOM_list_end(0)
+        };
+        local transaction_t t;
+        t.atoms = atoms;
+        if (issue(&t, addr) != Sim_PE_No_Exception)
+            throw;
+        return SIM_get_transaction_value_le(&t);
+    }
+
+    /**
+       * `read_bytes(uint64 addr, uint64 size, uint8 *bytes) throws`
+
+         Reads `size` bytes into `bytes`, starting at `addr` in the connected
+         object. Throws an exception if the read fails.
+    */
+    shared method read_bytes(uint64 addr, uint64 size, uint8 *bytes) throws {
+        local atom_t atoms[4] = {
+            ATOM_data(bytes),
+            ATOM_size(size),
+            ATOM_initiator(dev.obj),
+            ATOM_list_end(0),
+        };
+        local transaction_t t;
+        t.atoms = atoms;
+        if (issue(&t, addr) != Sim_PE_No_Exception)
+            throw;
+    }
+
+    /**
+       * `write(uint64 addr, uint64 size, uint64 value) throws`
+
+         Writes `value` of `size` bytes, starting at `addr` in the connected
+         object. Size must be 8 or less. Throws an exception if the write fails.
+    */
+    shared method write(uint64 addr, uint64 size, uint64 value) throws {
+        if (size > 8) {
+            log error: "%s.write: size must be less than or equal to 8",
+                _qname();
+            throw;
+        }
+        local uint8 buf[size];
+        local atom_t atoms[5] = {
+            ATOM_data(buf),
+            ATOM_size(size),
+            ATOM_flags(Sim_Transaction_Write),
+            ATOM_initiator(dev.obj),
+            ATOM_list_end(0)
+        };
+        local transaction_t t;
+        t.atoms = atoms;
+        SIM_set_transaction_value_le(&t, value);
+        if (issue(&t, addr) != Sim_PE_No_Exception)
+            throw;
+    }
+
+    /**
+       * `write_bytes(uint64 addr, uint64 size, const uint8 *bytes) throws`
+
+         Writes `size` bytes from `bytes`, starting at `addr` in the connected
+         object. Throws an exception if the write fails.
+    */
+    shared method write_bytes(uint64 addr, uint64 size,
+                              const uint8 *bytes) throws {
+        local atom_t atoms[5] = {
+            ATOM_flags(Sim_Transaction_Write),
+            ATOM_data(cast(bytes, uint8 *)),  // we trust Simics not to touch it
+            ATOM_size(size),
+            ATOM_initiator(dev.obj),
+            ATOM_list_end(0),
+        };
+        local transaction_t t;
+        t.atoms = atoms;
+        if (issue(&t, addr) != Sim_PE_No_Exception)
+            throw;
+    }
+
+    /**
+       * `issue(transaction_t *t, uint64 addr) -> (exception_type_t)`
+
+         Provides a shorthand to the API function `SIM_issue_transaction`.
+    */
+    shared method issue(transaction_t *t, uint64 addr) -> (exception_type_t);
+    method issue(transaction_t *t, uint64 addr) -> (exception_type_t) {
+        #if (configuration == "optional") {
+            if (!map_target) {
+                log error: "%s not set, transaction terminated", _qname();
+                return Sim_PE_IO_Not_Taken;
+            }
+        }
+        return SIM_issue_transaction(map_target, t, addr);
     }
 }
