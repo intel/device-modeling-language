@@ -55,3 +55,12 @@ with LogCapture() as capture:
     messages = capture.messages
     stest.expect_true(len(messages), 1)
     stest.expect_true("multiply inherited" in messages[0])
+
+with LogCapture() as capture:
+    obj.test_arrays = True
+    messages = capture.messages
+    stest.expect_true(len(messages), 8)
+    for mess in messages[0:4]:
+        stest.expect_true("shared in array" in mess)
+    for mess in messages[4:]:
+        stest.expect_true("array method" in mess)

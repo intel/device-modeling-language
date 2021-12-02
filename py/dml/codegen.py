@@ -1570,15 +1570,15 @@ def stmt_log(stmt, location, scope):
         global log_index
         table_ptr = TPtr(TNamed("ht_int_table_t"))
         table = mkLit(site, '&(_dev->_subsequent_log_ht)', table_ptr)
+        # Acquire a key based on obj or trait identity
         if location.method():
-            key = mkLit(site, '(uint64)NULL', TInt(64, False))
+            identity = ObjIdentity(site, location.node.parent, location.indices)
         else:
-            # Acquire a key based on trait identity
             identity = TraitObjIdentity(site, lookup_var(site, scope, "this"))
-            key = mkApply(site,
-                          mkLit(site, "_identity_to_key",
-                                TFunction([TObjIdentity()], TInt(64, False))),
-                          [identity])
+        key = mkApply(site,
+                      mkLit(site, "_identity_to_key",
+                            TFunction([TObjIdentity()], TInt(64, False))),
+                      [identity])
 
         once_lookup = mkLit(
             site, "_select_log_level",

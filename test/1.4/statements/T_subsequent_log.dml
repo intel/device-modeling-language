@@ -70,3 +70,20 @@ attribute test_multi_inheritance is bool_attr {
         cast(g, z).m();
     }
 }
+
+attribute test_arrays is bool_attr {
+    method set(attr_value_t val) throws {
+        for (local int i = 0; i < 2; i++) {
+            for (local int j = 0; j < 2; j++) {
+                cast(a[i][j], at).m();
+                cast(a[i][j], at).m();
+            }
+        }
+        for (local int i = 0; i < 2; i++) {
+            for (local int j = 0; j < 2; j++) {
+                a[i][j].m2();
+                a[i][j].m2();
+            }
+        }
+    }
+}

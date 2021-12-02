@@ -249,4 +249,8 @@
       statement could fail to switch log levels when used within
       a shared method and called through trait references.
   </add-note></build-id>
+  <build-id value="next"><add-note> Fixed an issue where a log
+      statement could incorrectly switch log levels when used within
+      a method declared within an object array.
+  </add-note></build-id>
 </rn>
