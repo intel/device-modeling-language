@@ -253,4 +253,8 @@
       statement could incorrectly switch log levels when used within
       a method declared within an object array.
   </add-note></build-id>
+  <build-id value="next"><add-note> Writes outside fields in a register will
+      now by default log one <tt>spec-violation</tt> message on log level 1
+      on first such write, and no logging on further such writes.
+  </add-note></build-id>
 </rn>

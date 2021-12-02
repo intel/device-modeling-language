@@ -28,6 +28,11 @@ bank b {
         field write_unimpl   @ [2] is (write_unimpl, read);
         field silent_unimpl  @ [3] is (silent_unimpl);
     }
+
+    register fields3_2[i < 2] size 1 @ 128 + i {
+        field x @ [2] is (read, write);
+        field y @ [5] is (read, write);
+    }
 }
 
 method init() {
