@@ -257,4 +257,8 @@
       now by default log one <tt>spec-violation</tt> message on log level 1
       on first such write, and no logging on further such writes.
   </add-note></build-id>
+  <build-id value="next"><add-note> Added a
+      template <tt>map_target</tt> which can be used
+      on <tt>connect</tt> objects to expose methods for reading and
+      writing data from/to the connected object.</add-note></build-id>
 </rn>
