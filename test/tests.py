@@ -57,11 +57,6 @@ dmlc = [join(simics_root_path(), host_type(), "bin", "py3",
              "mini-python" + exe_sfx),
         join(project_host_path(), "bin", "dml", "python")]
 
-if not is_windows():
-    dmlc_lib_path = ":".join(
-        [join(simics_root_path(), host_type(), p) for p in ('bin', 'sys/lib')]
-        + [os.environ.get('LD_LIBRARY_PATH', '')])
-
 # map from test fullname (subtest name) to timeout multiplier
 dmlc_timeout_multipliers = {"1.2/registers/largearray": 3,
                             }
