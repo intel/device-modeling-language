@@ -69,14 +69,27 @@ def dmlc_reaper_args(exitcode_file, timeout_multiplier = 1):
 common_cflags = ["-O2", "-std=gnu99", '-Wall', '-Werror', '-Wpointer-arith',
                  '-Wwrite-strings', '-Wformat-nonliteral',]
 if is_windows():
-    cc = [testparams.mingw_cc()]
+    cc_executable = testparams.mingw_cc()
     cflags = common_cflags + [
         "-DUSE_MODULE_HOST_CONFIG", "-D__USE_MINGW_ANSI_STDIO=1"]
     ldflags = [f"-L{testparams.mingw_root()}/lib/gcc/x86_64-w64-mingw32/lib"]
 else:
-    cc = [join(package_path(), "gcc_6.4.0", "bin", "gcc")]
+    cc_executable = join(package_path(), "gcc_6.4.0", "bin", "gcc")
     cflags = ['-g', '-fPIC', '-Wundef'] + common_cflags
     ldflags = []
+if os.path.isfile(cc_executable):
+    cc = [cc_executable]
+else:
+    cc = [os.environ.get('CC', 'gcc')]
+    def gcc_version():
+        result = subprocess.run(
+            cc + ['--version'], capture_output=True)
+        testparams.pr(f"GCC stdout: {result.stdout}")
+        testparams.pr(f"GCC stderr: {result.stderr}")
+        if result.returncode:
+            testparams.fail(f"returncode {result.returncode}")
+    testparams.run_testfun(gcc_version)
+
 cflags_shared = ["-shared"]
 
 os.environ['DMLC_DEBUG'] = 't'
