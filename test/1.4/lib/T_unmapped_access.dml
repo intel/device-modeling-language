@@ -36,6 +36,7 @@ template log_unmapped_bit_write is register {
 
 bank b {
     register r1 is partially_mapped_register;
+    register r1_2 is partially_mapped_register;
     register r2 is partially_mapped_register {
         field g @ [7:4];
     }
@@ -62,19 +63,25 @@ bank b {
 
 method test() throws {
     // Check regular register semantics
-    /// GREP \[obj spec-viol\] .*b.r1, bits 15:0 .*written = 0b1111111111111111, previous.*= 0b0000111100001111.*
+    /// GREP \[obj spec-viol\] .*b.r1, bitranges;.*
+    /// GREP .*15:0 .*written = 0b1111111111111111, previous.*= 0b0000111100001111.*
     b.r1.write_register(0xffffffff, 0xffffffff, NULL);
-    // Check that split ranges give split spec-viols
-    /// GREP \[obj spec-viol\] .*b.r1, bits 15:8 .*written = 0b11111111, previous.*= 0b00001111.*
-    /// GREP \[obj spec-viol\] .*b.r1, bits 3:0 .*written = 0b1111, previous.*= 0b0000.*
-    b.r1.write_register(0xffffffff, 0x0000ff0f, NULL);
-    b.r1.write_register(0xf0f0f0f0, 0xffffffff, NULL);
-    expect(b.r1.read_register(0xfffffff00, NULL) == 0xf0f0f000,
+    // No log on second write
+    b.r1.write_register(0xffffffff, 0xffffffff, NULL);
+
+    // Check split ranges
+    /// GREP \[obj spec-viol\] .*b.r1, bitranges;.*
+    /// GREP .*15:8 .*written = 0b11111111, previous.*= 0b00001111.*
+    /// GREP .*3:0 .*written = 0b1111, previous.*= 0b0000.*
+    b.r1_2.write_register(0xffffffff, 0x0000ff0f, NULL);
+    b.r1_2.write_register(0xf0f0f0f0, 0xffffffff, NULL);
+    expect(b.r1_2.read_register(0xfffffff00, NULL) == 0xf0f0f000,
            "default read partially mapped reg");
 
     // segmented by field bit range
-    /// GREP \[obj spec-viol\] .*b.r2, bits 15:8 .*written = 0b11110000, previous.*= 0b00001111.*
-    /// GREP \[obj spec-viol\] .*b.r2, bits 3:0 .*written = 0b1111, previous.*= 0b0000.*
+    /// GREP \[obj spec-viol\] .*b.r2, bitranges;.*
+    /// GREP .*15:8 .*written = 0b11110000, previous.*= 0b00001111.*
+    /// GREP .*3:0 .*written = 0b1111, previous.*= 0b0000.*
     b.r2.write_register(0x0f0f0f0f, 0xffffffff, NULL);
     expect(b.r2.read_register(0xfffffffff, NULL) == 0x0f0ff000,
            "default read segmented partially mapped reg");

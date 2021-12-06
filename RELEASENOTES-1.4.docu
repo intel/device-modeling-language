@@ -243,5 +243,18 @@
       default. Register-attributes are internal by default, regardless
       if they define <tt>documentation</tt> or <tt>desc</tt>. This can
       be changed by explicitly overriding the <tt>internal</tt>
-      parameter of the register or attribute.</add-note></build-id>
+      parameter of the register or attribute.
+  </add-note></build-id>
+  <build-id value="next"><add-note> Fixed an issue where a log
+      statement could fail to switch log levels when used within
+      a shared method and called through trait references.
+  </add-note></build-id>
+  <build-id value="next"><add-note> Fixed an issue where a log
+      statement could incorrectly switch log levels when used within
+      a method declared within an object array.
+  </add-note></build-id>
+  <build-id value="next"><add-note> Writes outside fields in a register will
+      now by default log one <tt>spec-violation</tt> message on log level 1
+      on first such write, and no logging on further such writes.
+  </add-note></build-id>
 </rn>

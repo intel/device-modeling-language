@@ -2573,16 +2573,18 @@ template register is (_conf_attribute, get, set, shown_desc,
         local int lsb = _enabled_bytes_to_offset(enabled_bits) * 8;
 
         // If any bits are written outside fields, then that's fine as long as
-        // they match the current storage. If not, signal a spec-viol.  TODO:
-        // only signal the spec-viol once (US1576)
+        // they match the current storage. If not, signal a spec-viol.
         local uint64 write_outside_fields
             = ((enabled_bits & value) ^
                (this.val & value)) << lsb;
 
         if (write_outside_fields != 0) {
             local int unmapped_msb = -1;
+            local strbuf_t ranges;
+            sb_init(&ranges);
+            // Collect the unmapped ranges that were written to, and format them
+            // into a log message
             for (local int i = this.bitsize; i >= -1; i--) {
-                // One message for each bitrange where any bit was changed.
                 if (i >= 0 && enabled_bits[i]) {
                     if (unmapped_msb < 0)
                         unmapped_msb = i;
@@ -2598,17 +2600,20 @@ template register is (_conf_attribute, get, set, shown_desc,
                             current[bit - i - 1]
                                 = this.val[bit] ? '1' : '0';
                         }
+                        sb_addfmt(&ranges, "\n\t%d:%d (value written = 0b%s,"
+                                  + " previous value = 0b%s)",
+                                  unmapped_msb, cast(i + 1, int),
+                                  written, current);
                         written[unmapped_msb - i] = 0;
                         current[unmapped_msb - i] = 0;
-                        log spec_viol:
-                            "Write outside fields in register %s,"
-                            + " bits %d:%d (value written = 0b%s,"
-                            + " previous value = 0b%s)",
-                            _qname(), unmapped_msb, i + 1, written, current;
                     }
                     unmapped_msb = -1;
                 }
             }
+            log spec_viol, 1 then 5:
+                "Write outside fields in register %s, bitranges;%s",
+                _qname(), sb_str(&ranges);
+            sb_free(&ranges);
         }
     }
 
