@@ -2,9 +2,9 @@ name: Blocking Issues
 
 on:
   issues:
-    types: [closed]
+    types: [closed, opened, edited, reopened]
   pull_request_target:
-    types: [opened, edited]
+    types: [closed, opened, edited, reopened]
 
 jobs:
   blocking_issues:
