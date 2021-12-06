@@ -5,14 +5,6 @@
 # docs: None
 # comment:
 
-Group: dml-api-header(name)
-  $(HOST)/bin/dml/api/4.8/1.2/simics/{name}
-  $(HOST)/bin/dml/api/4.8/1.4/simics/{name}
-  $(HOST)/bin/dml/api/5/1.2/simics/{name}
-  $(HOST)/bin/dml/api/5/1.4/simics/{name}
-  $(HOST)/bin/dml/api/6/1.2/simics/{name}
-  $(HOST)/bin/dml/api/6/1.4/simics/{name}
-
 Group: dmllib(name)
   $(HOST)/bin/dml/{name}.dml
   $(HOST)/bin/dml/{name}.dmlast
