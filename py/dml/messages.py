@@ -1,7 +1,8 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
-from .logging import DMLError, DMLWarning, SimpleSite, PortingMessage, ICE
+from .logging import (DMLError, DMLWarning, SimpleSite, PortingMessage, ICE,
+                      dollar)
 
 def truncate(s, maxlen):
     "Make sure that s is not longer than maxlen"
@@ -1549,7 +1550,7 @@ class WDUPEVENT(DMLWarning):
     fmt = "duplicate event checkpoint names: %s"
     def __init__(self, site, objlist):
         DMLWarning.__init__(self, site,
-                            ", ".join("$" + o.logname()
+                            ", ".join(dollar(self.site) + o.logname()
                                       for o in objlist))
 
 class WSIZEOFTYPE(DMLWarning):

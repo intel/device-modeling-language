@@ -14,6 +14,8 @@ __all__ = (
     'set_include_tag',
     'ErrorContext',
 
+    'dollar',
+
     'FileInfo',
     'Site',
     'SimpleSite',
@@ -83,6 +85,9 @@ def report_error():
     failure += 1
     if failure == max_errors:
         exit(2)
+
+def dollar(site):
+    return '$' * (site.dml_version() == (1, 2))
 
 # Error messages
 #
