@@ -1360,9 +1360,10 @@ SPDX-License-Identifier: MPL-2.0
             # data file
             'test/XFAIL',
             # config files
-            '.github/workflows/blocking-issues.yml',
             '.github/workflows/dependent-issues.yml',
         }
+        for f in ignorelist:
+            assert (root / f).is_file(), f
         nonexisting = ignorelist.difference(files)
         assert not nonexisting, nonexisting
         for f in files:
