@@ -5,7 +5,7 @@ import unittest
 
 import random
 import collections
-from dml.topsort import topsort, CycleFound
+from dml.template import topsort, CycleFound
 
 class Test_topsort(unittest.TestCase):
     def verify_graph(self, g):

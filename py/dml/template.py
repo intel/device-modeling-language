@@ -12,11 +12,41 @@ import dml.globals
 import dml.traits
 
 __all__ = (
+    'topsort',
     'Rank',
     'RankDesc',
     'ObjectSpec',
     'process_templates',
 )
+
+class CycleFound(Exception):
+    def __init__(self, cycle):
+        self.cycle = cycle
+    def __str__(self):
+        return str(self.cycle)
+
+def topsort(graph):
+    """Topologically sort a graph. The graph is represented by a dict
+    where the keys are the set of nodes, and the values are lists of
+    edge targets from the respective node."""
+    visited = set()
+    result = []
+    def traverse(node, path):
+        '''Topologically sort the subgraph reachable from node (minus
+        already visited nodes): Traverse the graph depth-first,
+        appending yet unvisited nodes in 'result'. The deepest nodes
+        in the depth-first search are added first.'''
+        if node in path:
+            raise CycleFound(path[path.index(node):])
+        for n in graph[node]:
+            if n not in visited:
+                traverse(n, path + [node])
+        visited.add(node)
+        result.append(node)
+    for node in graph:
+        if node not in visited:
+            traverse(node, [])
+    return result
 
 class RankDesc(object):
     '''Description of a rank. Its purpose is to help identifying how to
@@ -307,8 +337,8 @@ def process_templates(template_decls):
                 template_decls[missing] = (site, [], None)
             return process_templates(template_decls)
     try:
-        template_order = dml.topsort.topsort(required_templates)
-    except dml.topsort.CycleFound as e:
+        template_order = topsort(required_templates)
+    except CycleFound as e:
         is_sites = []
         # find the sites of the 'is' statements that give a cycle
         for (c, p) in zip(e.cycle, e.cycle[1:] + [e.cycle[0]]):
