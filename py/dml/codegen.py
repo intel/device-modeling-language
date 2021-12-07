@@ -8,6 +8,7 @@ import contextlib
 from functools import reduce
 import itertools
 import os
+import math
 
 from . import objects, crep, ctree, ast, int_register, logging, serialize
 from . import dmlparse
@@ -709,7 +710,7 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
     if isinstance(asttype[0], tuple):
         tag, info = asttype[0]
         if tag == 'struct':
-            members = []
+            members = {}
             for (_, msite, name, type_ast) in info:
                 (member_struct_defs, member_type) = eval_type(
                     type_ast, msite, location, scope, extern)
@@ -718,7 +719,7 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
                 if isinstance(member_type, TObjIdentity):
                     raise ICE(msite, ('_identity_t is not allowed as part of '
                                       + 'struct or array'))
-                members.append((name, member_type))
+                members[name] = member_type
                 struct_defs.extend(member_struct_defs)
             if extern:
                 id = typename or TExternStruct.unique_id()
@@ -736,11 +737,11 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
                 raise ELAYOUT(site, "extern layout not permitted,"
                               + " use 'struct { }' instead")
             endian, fields = info
-            members = []
+            members = {}
             for (_, msite, name, type_ast) in fields:
                 (member_struct_defs, member_type) = eval_type(
                     type_ast, msite, location, scope, False)
-                members.append((msite, name, member_type))
+                members[name] = (msite, member_type)
                 struct_defs.extend(member_struct_defs)
             if not members:
                 raise EEMPTYSTRUCT(site)
@@ -750,7 +751,7 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
             width, fields = info
             if width > 64:
                 raise EBFLD(site, "bitfields width is > 64")
-            members = []
+            members = {}
             for ((_, fsite, name, t), astmsb, astlsb) in fields:
                 msb = expr_intval(codegen_expression(astmsb, location, scope))
 
@@ -765,7 +766,7 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
                 if mtype.bits != msb - lsb + 1:
                     raise EBFLD(fsite, "field %s has wrong size" % name)
 
-                members.append((name, mtype, msb, lsb))
+                members[name] = (mtype, msb, lsb)
             etype = TInt(width, False, members)
         elif tag == 'typeof':
             expr = codegen_expression_maybe_nonvalue(info, location, scope)
@@ -943,6 +944,110 @@ class SimpleEvents(object):
 
 simple_events = SimpleEvents()
 
+def check_designated_initializers(site, etype, init_asts):
+    shallow_real_etype = safe_realtype_shallow(etype)
+    duplicates = set()
+    bad_fields = set()
+    remaining = set(shallow_real_etype.members)
+    for (field, init) in init_asts:
+        if field not in shallow_real_etype.members:
+            bad_fields.add(field)
+        elif field not in remaining:
+            duplicates.add(field)
+        else:
+            remaining.remove(field)
+    if (duplicates or bad_fields or remaining):
+        raise EDATAINIT(site,
+                        ''.join("\nduplicate initializer for "
+                                + f"member '{field}'"
+                                for field in duplicates)
+                        + ''.join(f"\n'{field}' is not a member of "
+                                  + f"{etype}"
+                                  for field in bad_fields)
+                        + ("\nmissing initializer(s) for field(s) "
+                           + ", ".join(f"'{field}'"
+                                       for field in remaining)
+                           if remaining else '')
+                        )
+
+def loss_on_truncation(v, bits, signed):
+    if not math.isfinite(v) or int(v) != v:
+        return True
+    # Special-case: casting negative floats to unsigned target is UB
+    if not signed and isinstance(v, float) and v < 0:
+        return True
+    v = int(v)
+    if signed:
+        if bits == 0:
+            # Only accept 0 for assignments to a theoretical int0
+            return v != 0
+        # If the bit width is == 1, bump up the upper range by one.
+        # This allows assignments of 1 to int1 without indicating
+        # truncation loss.
+        return not ((-1 << (bits - 1)) <= v < (1 << (bits - 1)) + (bits == 1))
+    else:
+        # loss_on_truncation is more lenient with unsigned targets: it's
+        # designed to permit bitwise not of any integer within the
+        # representable range. E.g. for uint8 the min permitted constant
+        # without indicating loss on truncation is ~255 == -256.
+        return not ((-1 << bits) <= v < (1 << bits))
+
+def mk_bitfield_compound_initializer_expr(site, etype, inits, location, scope,
+                                          static):
+    bitfields_expr = mkIntegerLiteral(site, 0)
+    for ((ft, msb, lsb), e) in inits:
+        real_ft = safe_realtype(ft)
+
+        if e.kind == 'initializer_scalar':
+            e = e.args[0]
+            og_expr = codegen_expression(e, location, scope)
+            if static and not og_expr.constant:
+                raise EDATAINIT(e.site, 'non-constant expression')
+            expr = source_for_assignment(e.site, ft, og_expr)
+
+            # TODO this warning and check could be generalized and moved to
+            # 'source_for_assignment' -- however, currently
+            # 'source_for_assignment' has no clearly defined semantics and is
+            # used all over the place, leading to unexpected WASTRUNCs in
+            # certain corner cases.
+            # Once these issues with 'source_for_assignment' have been
+            # addressed, this warning and check should be moved there.
+            if (isinstance(og_expr, (FloatConstant, IntegerConstant))
+                and loss_on_truncation(og_expr.value, msb - lsb + 1,
+                                       real_ft.signed)):
+                report(WASTRUNC(e.site, ft))
+        else:
+            if not real_ft.is_bitfields:
+                designated = e.kind == 'initializer_designated_struct'
+                raise EDATAINIT(site,
+                                f'{"designated " * designated}compound '
+                                + 'initializer not supported for type '
+                                + str(ft))
+            init_asts = e.args[0]
+            if e.kind == 'initializer_compound':
+                if len(real_ft.members) != len(init_asts):
+                    raise EDATAINIT(e.site, 'mismatched number of fields')
+                inits = zip((t[1:] for t in real_ft.members_qualified),
+                            init_asts)
+            else:
+                assert e.kind == 'initializer_designated_struct'
+                check_designated_initializers(e.site, ft, init_asts)
+                inits = ((real_ft.get_member_qualified(field), init)
+                         for (field, init) in init_asts)
+
+            expr = mk_bitfield_compound_initializer_expr(
+                e.site, ft, inits, location, scope, static)
+
+        # source_for_assignment doesn't always truncate when compat_dml12_int
+        # is in play
+        if dml.globals.compat_dml12_int(e.site):
+            expr = mkCast(e.site, expr, ft)
+
+        shifted = mkShL(e.site, expr, mkIntegerLiteral(e.site, lsb))
+        bitfields_expr = mkBitOr(e.site, bitfields_expr, shifted)
+
+    return source_for_assignment(site, etype, bitfields_expr)
+
 def eval_initializer(site, etype, astinit, location, scope, static):
     """Deconstruct an AST for an initializer, and return a
        corresponding initializer object. Report EDATAINIT errors upon
@@ -958,59 +1063,80 @@ def eval_initializer(site, etype, astinit, location, scope, static):
        except that array size must be explicitly specified and the
        number of initializers must match the number of elements of
        compound data types."""
-    def do_eval(etype, astinit, const):
-        if not isinstance(astinit, list):
-            expr = codegen_expression(astinit, location, scope)
-            if const and not expr.constant:
+    def do_eval(etype, astinit):
+        shallow_real_etype = safe_realtype_shallow(etype)
+        if astinit.kind == 'initializer_scalar':
+            expr = codegen_expression(astinit.args[0], location, scope)
+            if static and not expr.constant:
                 raise EDATAINIT(astinit.site, 'non-constant expression')
+
             return ExpressionInitializer(
                 source_for_assignment(astinit.site, etype, expr))
+        elif astinit.kind == 'initializer_designated_struct':
+            init_asts = astinit.args[0]
+            if isinstance(shallow_real_etype, StructType):
+                check_designated_initializers(astinit.site, etype, init_asts)
+                inits = {field: do_eval(shallow_real_etype
+                                        .get_member_qualified(field),
+                                        init)
+                         for (field, init) in init_asts}
+                return DesignatedStructInitializer(site, inits)
+            elif shallow_real_etype.is_int and shallow_real_etype.is_bitfields:
+                check_designated_initializers(astinit.site, etype, init_asts)
+                return ExpressionInitializer(
+                    mk_bitfield_compound_initializer_expr(
+                        astinit.site, etype,
+                        ((shallow_real_etype.get_member_qualified(field), init)
+                         for (field, init) in init_asts),
+                        location, scope, static))
+            else:
+                raise EDATAINIT(site,
+                                'designated compound initializer not '
+                                + f'supported for type {etype}')
+
+        assert astinit.kind == 'initializer_compound'
+        init_asts = astinit.args[0]
         if isinstance(etype, TArray):
             assert isinstance(etype.size, Expression)
             if etype.size.constant:
                 alen = etype.size.value
             else:
                 raise EDATAINIT(site, 'variable length array')
-            if alen != len(astinit):
+            if alen != len(init_asts):
                 raise EDATAINIT(site, 'mismatched array size')
-            init = tuple([do_eval(etype.base, e, const) for e in astinit])
+            init = tuple(do_eval(etype.base, e) for e in init_asts)
             return CompoundInitializer(site, init)
         elif isinstance(etype, TStruct):
-            if len(etype.members) != len(astinit):
+            if len(etype.members) != len(init_asts):
                 raise EDATAINIT(site, 'mismatched number of fields')
-            init = tuple([do_eval(m[1], e, True)
-                          for m, e in zip(etype.members, astinit)])
+            init = tuple(do_eval(mt, e)
+                         for ((_, mt), e) in zip(etype.members_qualified,
+                                                 init_asts))
             return CompoundInitializer(site, init)
         elif isinstance(etype, TExternStruct):
-            if len(etype.members) != len(astinit):
+            if len(etype.members) != len(init_asts):
                 raise EDATAINIT(site, 'mismatched number of fields')
-            init = {m[0]: do_eval(m[1], e, True)
-                    for m, e in zip(etype.members, astinit)}
+            init = {mn: do_eval(mt, e)
+                    for ((mn, mt), e) in zip(etype.members_qualified,
+                                             init_asts)}
             return DesignatedStructInitializer(site, init)
         elif etype.is_int and etype.is_bitfields:
-            if len(etype.members) != len(astinit):
+            if len(etype.members) != len(init_asts):
                 raise EDATAINIT(site, 'mismatched number of fields')
-            val = 0
-            for ((_, t, msb, lsb), e) in zip(etype.members, astinit):
-                if isinstance(e, list):
-                    raise EDATAINIT(e.site,
-                        'scalar required for bitfield initializer')
-                expr = codegen_expression(e, location, scope)
-                if not isinstance(expr, IntegerConstant):
-                    raise EDATAINIT(e.site, 'integer constant required')
-                if (msb - lsb + 1) < expr.value.bit_length():
-                    raise EASTYPE(e.site, t, expr)
-                val |= expr.value << lsb
-            return ExpressionInitializer(mkIntegerConstant(site, val, val < 0))
+            return ExpressionInitializer(
+                mk_bitfield_compound_initializer_expr(
+                    site, etype,
+                    zip((t[1:] for t in etype.members_qualified), init_asts),
+                    location, scope, static))
         elif isinstance(etype, TNamed):
-            return do_eval(safe_realtype(etype), astinit, const)
+            return do_eval(safe_realtype(etype), astinit)
         else:
             raise EDATAINIT(site,
                 'compound initializer not supported for type %s' % etype)
-    return do_eval(etype, astinit, static)
+    return do_eval(etype, astinit)
 
 def get_initializer(site, etype, astinit, location, scope):
-    """Return an expression to use as initializer for a variable.
+    """Return an expression to use as initializer for a local variable.
     The 'init' is the ast for an initializer given in the source, or None.
     This also checks for and invalid 'etype'."""
     # Check that the type is defined
@@ -1290,13 +1416,13 @@ def stmt_hashif(stmt, location, scope):
 def try_codegen_invocation(site, apply_ast, outarg_asts, location, scope):
     '''Generate a method call statement if apply_ast is a method call,
     otherwise None'''
-    if isinstance(apply_ast, list):
+    if apply_ast.kind != 'initializer_scalar':
         # compound initializer
         return None
-    if apply_ast.kind != 'apply':
+    if apply_ast.args[0].kind != 'apply':
         return None
     # possibly a method invocation
-    (meth_ast, inarg_asts) = apply_ast.args
+    (meth_ast, inarg_asts) = apply_ast.args[0].args
     meth_expr = codegen_expression_maybe_nonvalue(meth_ast, location, scope)
     if (isinstance(meth_expr, NonValue)
         and not isinstance(meth_expr, (
@@ -1394,7 +1520,8 @@ def stmt_assign(stmt, location, scope):
 
     for tgt_list in tgt_asts:
         if len(tgt_list) != 1:
-            if not isinstance(src_ast, list) and src_ast.kind == 'apply':
+            if (src_ast.kind == 'initializer_scalar'
+                and src_ast.args[0].kind == 'apply'):
                 report(ERETLVALS(site, 1, len(tgt_list)))
             else:
                 report(ESYNTAX(
@@ -1431,7 +1558,9 @@ def stmt_assignop(stmt, location, scope):
         # destructive hack
         return stmt_assign(
             ast.assign(site, [[tgt_ast]],
-                       ast.binop(site, tgt_ast, op[:-1], src_ast)),
+                       ast.initializer_scalar(
+                           site,
+                           ast.binop(site, tgt_ast, op[:-1], src_ast))),
             location, scope)
     src = codegen_expression(src_ast, location, scope)
     ttype = tgt.ctype()
@@ -1453,7 +1582,10 @@ def stmt_expression(stmt, location, scope):
     [expr] = stmt.args
     # a method invocation with no return value looks like an
     # expression statement to the grammar
-    invocation = try_codegen_invocation(stmt.site, expr, [], location, scope)
+    invocation = try_codegen_invocation(stmt.site,
+                                        ast.initializer_scalar(stmt.site,
+                                                               expr),
+                                        [], location, scope)
     if invocation:
         return [invocation]
     return [mkExpressionStatement(stmt.site,

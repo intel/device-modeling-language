@@ -273,4 +273,11 @@
       interface (the parameter <tt>use_io_memory</tt>
       is <tt>false</tt>) now handle accesses that are bigger than 8
       bytes.</add-note></build-id>
+  <build-id value="next"><add-note> Added simple C99-style designated
+      initializers, which may be used together with <tt>struct</tt>-like types
+      <bug number="SIMICS-17252"/>. For example, the following is now supported:
+      <pre>
+      local size_t size = get_size();
+      local buffer_t buf = {.len = size, .data = new uint8[size]};
+      </pre></add-note></build-id>
 </rn>

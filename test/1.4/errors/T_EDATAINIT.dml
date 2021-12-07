@@ -1,0 +1,74 @@
+/*
+  © 2021-2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// COMPILE-ONLY
+
+typedef struct {
+    int32 x;
+    struct {
+        int32 i;
+        int32 j;
+    } y;
+} struct_t;
+
+typedef bitfields 64 {
+    int32 x @[63:32];
+    bitfields 32 {
+        int16 i @ [31:16];
+        int16 j @ [15:0];
+    } y @[31:0];
+} bitfields_t;
+
+// no error
+session struct_t a = { .x = 0, .y = { .i = 0, .j = 0} };
+
+/// ERROR EDATAINIT
+session struct_t b = { .x = 0 };
+
+session struct_t c = {
+    .x = 0,
+    /// ERROR EDATAINIT
+    .y = { .i = 0 }
+};
+
+/// ERROR EDATAINIT
+session struct_t d = { .x = 0, .y = { .i = 0, .j = 0}, .x = 0 };
+
+/// ERROR EDATAINIT
+session struct_t e = { .x = 0, .y = { .i = 0, .j = 0}, .bad = 0 };
+
+session struct_t f = {
+    .x = 0,
+    /// ERROR EDATAINIT
+    .y = { .i = 0, .j = 0, .bad = 0 }
+};
+
+// no error
+session bitfields_t j = { .x = 0, .y = { .i = 0, .j = 0} };
+session bitfields_t k = { .x = 0, .y = 0 };
+
+/// ERROR EDATAINIT
+session bitfields_t l = { .x = 0 };
+
+/// ERROR EDATAINIT
+session bitfields_t m = { .x = 0, .y = 0, .x = 0 };
+
+/// ERROR EDATAINIT
+session bitfields_t n = { .x = 0, .y = 0, .bad = 0 };
+
+session bitfields_t o = {
+    .x = 0,
+    /// ERROR EDATAINIT
+    .y = { .i = 0 }
+};
+
+session bitfields_t p = {
+    .x = 0,
+    /// ERROR EDATAINIT
+    .y = { .i = 0, .j = 0, .bad = 0 }
+};

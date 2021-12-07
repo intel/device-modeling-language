@@ -1689,4 +1689,11 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
       been changed. The old serialized representation is still accepted for
       deserialization in order to preserve checkpoint compatibility.
   </add-note></build-id>
+  <build-id value="next"><add-note> Added support for non-constant
+      compound initializers inside methods. For example, the following
+      is now supported:
+      <pre>
+      local size_t size = get_size();
+      local buffer_t buf = {size, new uint8[size]};
+      </pre></add-note></build-id>
 </rn>

@@ -1687,6 +1687,14 @@ class WNEGCONSTCOMP(DMLWarning):
         self.print_site_message(
             self.expr.site, "Consider 'cast(%s, %s)'" % (self.expr, self.ty))
 
+class WASTRUNC(DMLWarning):
+    """The source of an assignment is a constant value that can't fit in the
+    type of the target, and is thus truncated. This warning can be silenced by
+    explicitly casting the expression to the target type.
+    """
+    fmt = ("The assignment source is a constant value which does not fit "
+           + "the assign target of type '%s', and will thus be truncated")
+
 class WREDUNDANTLEVEL(DMLWarning):
     """`X then Y` log level syntax has no effect when the
     first and subsequent levels are the same.
