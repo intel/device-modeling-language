@@ -1660,13 +1660,16 @@ _callback_after_write(conf_object_t *bank,
                                   Callback_After_Write);
 }
 
+typedef set_error_t (*_deserializer_t)(attr_value_t *val, void *addr);
+typedef void (*_serializer_t)(const void *addr, attr_value_t *val);
+
 UNUSED static set_error_t
 _set_device_member(attr_value_t val,
                    char *ptr,
                    const uint32 *dimension_sizes,
                    const uint32 *dimension_strides,
                    unsigned int remaining_dimensions,
-                   set_error_t (*setter)(attr_value_t *val, void *addr)) {
+                   _deserializer_t setter) {
         if (remaining_dimensions == 0) {
                 return setter(&val, (void*)ptr);
         } else {
@@ -1690,10 +1693,10 @@ _get_device_member(char *ptr,
                    const uint32 *dimension_sizes,
                    const uint32 *dimension_strides,
                    unsigned int remaining_dimensions,
-                   void (*getter)(void *addr, attr_value_t *target)) {
+                   _serializer_t getter) {
         attr_value_t to_return;
         if (remaining_dimensions == 0) {
-                getter((void*)ptr, &to_return);
+                getter((const void *)ptr, &to_return);
         } else {
                 to_return = SIM_alloc_attr_list(dimension_sizes[0]);
                 attr_value_t im_attr;
@@ -1713,13 +1716,13 @@ _get_device_member(char *ptr,
 typedef struct {
         ptrdiff_t relative_base;
         // excluding port dimensions
-        unsigned int ndims;
+        unsigned int    ndims;
         // excluding port dimensions
-        const uint32 *dimension_sizes;
+        const uint32    *dimension_sizes;
         // including port dimensions
-        const uint32 *dimension_strides;
-        set_error_t (*setter)(attr_value_t *val, void *addr);
-        void (*getter)(void *addr, attr_value_t *val);
+        const uint32    *dimension_strides;
+        _deserializer_t setter;
+        _serializer_t   getter;
 } _saved_userdata_t;
 
 UNUSED static set_error_t
@@ -1784,6 +1787,124 @@ _get_port_saved_variable(lang_void *saved_access, conf_object_t *_portobj,
 UNUSED static uint64 _identity_to_key(_identity_t id) {
         return (uint64)id.id << 32 | (uint64)id.encoded_index;
 }
+
+static attr_value_t
+_serialize_array_aux(const uint8 *data, size_t elem_size,
+                     const uint32 *dimsizes, uint32 dims,
+                     uint64 total_elem_count, _serializer_t serialize_elem) {
+    uint32 len = *dimsizes;
+
+    // Serialize the final dimension as bytes if serialize_elem is NULL
+    if (dims == 1 && !serialize_elem) {
+        return SIM_make_attr_data(len, data);
+    }
+
+    size_t children_elem_count = total_elem_count/len;
+
+    attr_value_t val = SIM_alloc_attr_list(len);
+    attr_value_t *items = SIM_attr_list(val);
+
+    for (uint32 i = 0; i < len; ++i) {
+        if (dims == 1) {
+            serialize_elem(&data[i*elem_size], &items[i]);
+        } else {
+            items[i] = _serialize_array_aux(
+                data + children_elem_count * elem_size * i, elem_size,
+                dimsizes + 1, dims - 1, children_elem_count, serialize_elem);
+        }
+    }
+    return val;
+}
+
+UNUSED static attr_value_t
+_serialize_array(const void *data, size_t elem_size,
+                 const uint32 *dimsizes, uint32 dims,
+                 _serializer_t serialize_elem) {
+    ASSERT(dims > 0);
+    size_t total_elem_count = 1;
+    for (uint32 i = 0; i < dims; ++i) {
+        total_elem_count *= dimsizes[i];
+    }
+    return _serialize_array_aux((const uint8 *)data, elem_size, dimsizes, dims,
+                                total_elem_count, serialize_elem);
+}
+
+
+static set_error_t
+_deserialize_array_aux(attr_value_t val, uint8 *data, size_t elem_size,
+                       const uint32 *dimsizes, uint32 dims,
+                       size_t total_elem_count,
+                       _deserializer_t deserialize_elem,
+                       bool elems_are_bytes) {
+    uint32 len = *dimsizes;
+
+    // Allow the final dimension to be represented as data if elems_are_bytes
+    bool data_allowed = elems_are_bytes && dims == 1;
+    if (data_allowed && SIM_attr_is_data(val)) {
+        if (unlikely(SIM_attr_data_size(val) != len)) {
+            SIM_c_attribute_error(
+                "Invalid serialized value of byte array: expected data of %u "
+                "bytes, got %u", len, SIM_attr_data_size(val));
+            return Sim_Set_Illegal_Value;
+        }
+        memcpy(data, SIM_attr_data(val), len);
+        return Sim_Set_Ok;
+    } else if (unlikely(!SIM_attr_is_list(val))) {
+        if (data_allowed) {
+            SIM_attribute_error("Invalid serialized representation of byte "
+                                "array: not a list or data");
+        } else {
+            SIM_attribute_error("Invalid serialized representation of array: "
+                                "not a list");
+        }
+        return Sim_Set_Illegal_Type;
+    } else if (unlikely(SIM_attr_list_size(val) != len)) {
+        SIM_c_attribute_error(
+            "Invalid serialized representation of %sarray: expected list of "
+            "%u elements, got %u", data_allowed ? "byte " : "", len,
+            SIM_attr_list_size(val));
+        return Sim_Set_Illegal_Type;
+    }
+    attr_value_t *items = SIM_attr_list(val);
+    size_t children_elem_count = total_elem_count/len;
+    for (uint32 i = 0; i < len; ++i) {
+        set_error_t error;
+        if (dims == 1) {
+            error = deserialize_elem(&items[i], &data[i*elem_size]);
+        } else {
+            error = _deserialize_array_aux(
+                items[i], &data[i*children_elem_count*elem_size], elem_size,
+                dimsizes + 1, dims - 1, children_elem_count, deserialize_elem,
+                elems_are_bytes);
+        }
+        if (error != Sim_Set_Ok) {
+            return error;
+        }
+    }
+    return Sim_Set_Ok;
+}
+
+UNUSED static set_error_t
+_deserialize_array(attr_value_t in_val, void *out_data, size_t elem_size,
+                   const uint32 *dimsizes, uint32 dims,
+                   _deserializer_t deserialize_elem, bool elems_are_bytes) {
+    ASSERT(dims > 0);
+    size_t total_elem_count = 1;
+    for (uint32 i = 0; i < dims; ++i) {
+        total_elem_count *= dimsizes[i];
+    }
+
+    uint8 *temp_out = MM_MALLOC(total_elem_count * elem_size, uint8);
+    set_error_t error = _deserialize_array_aux(
+        in_val, temp_out, elem_size, dimsizes, dims, total_elem_count,
+        deserialize_elem, elems_are_bytes);
+    if (error == Sim_Set_Ok) {
+        memcpy(out_data, temp_out, total_elem_count*elem_size);
+    }
+    MM_FREE(temp_out);
+    return error;
+}
+
 
 // The internal format for ht is:
 // dict(trait_identifier -> dict(statement_idx -> bool))
