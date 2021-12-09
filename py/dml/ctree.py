@@ -3459,7 +3459,7 @@ class NodeRef(Expression):
     def __str__(self):
         name = self.node.logname(self.indices)
         if name:
-            return '$'+name
+            return dollar(self.site)+name
         else:
             assert dml.globals.dml_version == (1, 2)
             return '$<anonymous %s>' % self.node.objtype
@@ -3624,7 +3624,7 @@ class NodeArrayRef(NonValue):
                       % (node,))
     def __str__(self):
         name = self.node.logname(self.indices)
-        return '$' + name
+        return dollar(self.site) + name
     def exc(self):
         return EARRAY(self.site, self.node)
 
@@ -3983,7 +3983,7 @@ class QName(Expression):
     @auto_init
     def __init__(self, site, node, relative, indices): pass
     def __str__(self):
-        return '$%s.qname' % (self.node)
+        return dollar(self.site) + '%s.qname' % (self.node)
     def read(self):
         if (dml.globals.dml_version == (1, 2)
             and self.node.logname() != self.node.logname_anonymized()):
@@ -4036,7 +4036,7 @@ class HiddenName(StringConstant):
     def __init__(self, site, value, node):
         assert(node.objtype in ('register', 'field'))
     def __str__(self):
-        return '$%s.name' % (self.node,)
+        return dollar(self.site) + '%s.name' % (self.node,)
     def read(self):
         report(WCONFIDENTIAL(self.site))
         return self.quoted
@@ -4052,7 +4052,7 @@ class HiddenQName(Expression):
     def __init__(self, site, node, indices):
         assert(node.objtype in ('register', 'field'))
     def __str__(self):
-        return '$%s.qname' % (self.node)
+        return dollar(self.site) + '%s.qname' % (self.node)
     def read(self):
         return QName(self.site, self.node, 'device', self.indices).read()
     def fmt(self):

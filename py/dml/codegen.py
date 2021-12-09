@@ -458,7 +458,7 @@ def expr_objectref(tree, location, scope):
     [name] = tree.args
     if not location:
         # This happens when invoked from mkglobals
-        raise ENCONST(tree.site, '$'+name)
+        raise ENCONST(tree.site, dollar(tree.site)+name)
     e = ctree.lookup_component(
         tree.site, location.node, location.indices, name, False)
     if not e:
@@ -2438,7 +2438,7 @@ def codegen_method_func(func):
     method = func.method
 
     indices = tuple(mkLit(method.site, '_idx%d' % i, TInt(32, False),
-                          str="$%s" % (idxvar,))
+                          str=dollar(method.site) + "%s" % (idxvar,))
                     for (i, idxvar) in enumerate(method.parent.idxvars()))
     intercepted = intercepted_method(method)
     if intercepted:
