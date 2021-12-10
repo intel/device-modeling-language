@@ -24,4 +24,14 @@ bank b {
         field ab @ [2:0] is (read, write) "12";
     }
     register R3 @ 0x08 is (read, write) {}
+    register R4 @ 0x0c is (read, write) {
+        field a @ [31] is (read, write);
+        group b {
+            field b[i < 2][j < 2] @ [30 - i * 2 - j] is (read, write);
+        }
+        group c[i < 2][j < 2] {
+            field c[k < 2][l < 2] @ [22 - i * 8 - j * 4 - k * 2 - l] is
+                (read, write);
+        }
+    }
 }
