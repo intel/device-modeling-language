@@ -2116,3 +2116,14 @@ class PRENAME_TEMPLATE(PortingMessage):
     `unimpl`.
     """
     fmt = ""
+
+class PHASHLBRACKET(PortingMessage):
+    """The syntax for compile-time list expressions has changed
+    from `[ ... ]` to `#[ ... ]`. The `[ ... ]` syntax still works, but
+    we plan to restrict it to homogenous lists, i.e. where all elements have
+    the same type.
+
+    Lists are automatically converted unless they consist either only of
+    integer literals, or only of string literals.
+    """
+    fmt = ""
