@@ -1674,6 +1674,17 @@ def expression_paren(t):
 @prod
 def expression_constlist(t):
     'expression : LBRACKET expression_list RBRACKET'
+    s = site(t)
+    exprs = t[2]
+    if logging.show_porting:
+        if not (all(e.kind == 'int' for e in exprs)
+                or all(e.kind == 'string' for e in exprs)):
+            report(PHASHLBRACKET(site(t, 1)))
+    t[0] = ast.list(s, exprs)
+
+@prod_dml14
+def expression_constlist_hash(t):
+    'expression : HASHLBRACKET expression_list RBRACKET'
     t[0] = ast.list(site(t), t[2])
 
 @prod

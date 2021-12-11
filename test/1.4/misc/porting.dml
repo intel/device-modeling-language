@@ -156,6 +156,15 @@ port pp {
     }
 }
 
+// not converted (homogeneous)
+param list1 = [];
+param list2 = [1, 2, 3];
+param list3 = ["a", "b", "c"];
+// converted (heterogeneous)
+param list4 = #[1, "a"];
+// converted (not proven to be homogeneous)
+param list5 = #[0, sixteen];
+
 connect c {
     method set(conf_object_t *obj) {
         log info: "before set conn";
@@ -431,8 +440,8 @@ method init() {
         }
     }
 
-    #select x in ([b.r6, b2.r3]) where (x.val == 5) { x.val = 3; } #else {}
-    #foreach x in ([b.r6, b2.r3]) { x.val = 4; }
+    #select x in (#[b.r6, b2.r3]) where (x.val == 5) { x.val = 3; } #else {}
+    #foreach x in (#[b.r6, b2.r3]) { x.val = 4; }
 
     if (b.r.f3.val != 0 ? b.r.f2[0].val != 0 && b.r.f2[2].val == 0 : false)
         ;
