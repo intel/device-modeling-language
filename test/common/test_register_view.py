@@ -97,3 +97,5 @@ def test(obj):
                         dev_util.Register_LE((obj, 'le', 0x0), 4))
     test_register_value(obj.bank.be.iface.register_view,
                         dev_util.Register_BE((obj, 'be', 0x0), 4))
+    expect_equal(obj.bank.le.iface.register_view.register_info(0)[5], False)
+    expect_equal(obj.bank.be.iface.register_view.register_info(0)[5], True)
