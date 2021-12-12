@@ -1425,43 +1425,42 @@ for version in ['1.2', '1.4']:
         '%s-devinfo-compare' % (version,),
         testname, generate.cfilename + '.xml', version))
 
-for version in ['1.2', '1.4']:
-    all_tests.append(
-        XmlTestCase(
-            ['%s-register-view' % (version,)],
-            join(testdir, version, 'misc', 'register_view.dml'),
-            api_version=latest_api_version,
-            dmlc_extraargs=['--info']))
-    all_tests.append(
-        XmlTestCase(
-            ['%s-register-view-descriptions' % (version,)],
-            join(testdir, version, 'misc', 'register_view_descriptions.dml'),
-            api_version=latest_api_version,
-            dmlc_extraargs=['--info']))
-    all_tests.append(
-        XmlTestCase(
-            ['%s-register-view-bitorder-le' % (version,)],
-            join(testdir, version, 'misc', 'register_view_bitorder_le.dml'),
-            api_version=latest_api_version,
-            dmlc_extraargs=['--info']))
-    all_tests.append(
-        XmlTestCase(
-            ['%s-register-view-bitorder-be' % (version,)],
-            join(testdir, version, 'misc', 'register_view_bitorder_be.dml'),
-            api_version=latest_api_version,
-            dmlc_extraargs=['--info']))
-    all_tests.append(
-        XmlTestCase(
-            ['%s-register-view-inquiry' % (version,)],
-            join(testdir, version, 'misc', 'register_view_inquiry.dml'),
-            api_version=latest_api_version,
-            dmlc_extraargs=['--info']))
-    all_tests.append(
-        XmlTestCase(
-            ['%s-register-view-fields' % (version,)],
-            join(testdir, version, 'misc', 'register_view_fields.dml'),
-            api_version=latest_api_version,
-            dmlc_extraargs=['--info']))
+all_tests.append(
+    XmlTestCase(
+        ['1.2-register-view'],
+        join(testdir, '1.2', 'misc', 'register_view.dml'),
+        api_version=latest_api_version,
+        dmlc_extraargs=['--info']))
+all_tests.append(
+    XmlTestCase(
+        ['1.2-register-view-descriptions'],
+        join(testdir, '1.2', 'misc', 'register_view_descriptions.dml'),
+        api_version=latest_api_version,
+        dmlc_extraargs=['--info']))
+all_tests.append(
+    XmlTestCase(
+        ['1.2-register-view-bitorder-le'],
+        join(testdir, '1.2', 'misc', 'register_view_bitorder_le.dml'),
+        api_version=latest_api_version,
+        dmlc_extraargs=['--info']))
+all_tests.append(
+    XmlTestCase(
+        ['1.2-register-view-bitorder-be'],
+        join(testdir, '1.2', 'misc', 'register_view_bitorder_be.dml'),
+        api_version=latest_api_version,
+        dmlc_extraargs=['--info']))
+all_tests.append(
+    XmlTestCase(
+        ['1.2-register-view-inquiry'],
+        join(testdir, '1.2', 'misc', 'register_view_inquiry.dml'),
+        api_version=latest_api_version,
+        dmlc_extraargs=['--info']))
+all_tests.append(
+    XmlTestCase(
+        ['1.2-register-view-fields'],
+        join(testdir, '1.2', 'misc', 'register_view_fields.dml'),
+        api_version=latest_api_version,
+        dmlc_extraargs=['--info']))
 
 def walk(rootdir):
     # This is similar to os.walk()
