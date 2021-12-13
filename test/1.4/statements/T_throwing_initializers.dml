@@ -1,0 +1,35 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+import "testing.dml";
+
+method demand_a(bool expectation) -> (int) throws {
+    if (!expectation) {
+        throw;
+    }
+    return 2;
+}
+
+method demand_b(bool expectation) -> (int, int) throws {
+    if (!expectation) {
+        throw;
+    }
+    return (3, 5);
+}
+
+method test() throws {
+    local int x = 1;
+    // Throwing methods may be used as initializers in DML 1.4
+    try {
+        local int i = demand_a(true);
+        x *= i;
+        local (int j, int k) = demand_b(true);
+        x *= j * k;
+        local int l = demand_a(false);
+        x *= l;
+    } catch;
+    assert x == 2*3*5;
+}

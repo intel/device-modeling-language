@@ -222,11 +222,7 @@ class GotoExit_dml14(GotoExit):
         super(GotoExit_dml14, self).__init__()
     def codegen_exit(self, site, retvals):
         assert retvals is not None
-        if len(retvals) != len(self.outvars):
-            report(ERETARGS(site, len(self.outvars), len(retvals)))
-            # avoid control flow errors by falling back to statement with
-            # no fall-through
-            return mkAssert(site, mkBoolConstant(site, False))
+        assert len(retvals) == len(self.outvars)
         self.used = True
         return mkCompound(
             site,
@@ -256,7 +252,6 @@ def declarations(scope):
             decls.append(decl)
 
     return decls
-
 
 # Expression dispatch
 
@@ -1166,8 +1161,8 @@ def eval_initializer(site, etype, astinit, location, scope, static):
 
 def get_initializer(site, etype, astinit, location, scope):
     """Return an expression to use as initializer for a local variable.
-    The 'init' is the ast for an initializer given in the source, or None.
-    This also checks for and invalid 'etype'."""
+    The 'init' is the ast for a single initializer given in the source, or
+    None. This also checks for an invalid 'etype'."""
     # Check that the type is defined
     try:
         typ = realtype(etype)
@@ -1244,32 +1239,105 @@ def check_varname(site, name):
 @statement_dispatcher
 def stmt_local(stmt, location, scope):
     # This doesn't occur in DML 1.0
-    [name, asttype, init] = stmt.args
-    if dml.globals.dml_version == (1, 2) and not dml.globals.compat_dml12:
-        check_varname(stmt.site, name)
-    (struct_decls, etype) = eval_type(
-        asttype, stmt.site, location, scope)
-    etype = etype.resolve()
-    rt = safe_realtype_shallow(etype)
-    if isinstance(rt, TArray) and not rt.size.constant and deep_const(rt):
-        raise EVLACONST(stmt.site)
-    init = get_initializer(stmt.site, etype, init, location, scope)
+    [decls, inits] = stmt.args
+    method_call_init = False
+    if inits is None:
+        inits = [None] * len(decls)
+    elif (len(inits) == 1 and inits[0].kind == 'initializer_scalar'
+          and inits[0].args[0].kind == 'apply'):
+        method_call_init = True
+    elif len(decls) != len(inits):
+        raise ESYNTAX(stmt.site, None,
+                      'wrong number of initializers:\n'
+                      + f'{len(decls)} variables declared\n'
+                      + f'{len(inits)} initializers specified')
+    stmts = []
 
-    check_shadowing(scope, name, stmt.site)
+    def convert_decl(decl_ast):
+        (name, asttype) = decl_ast.args
+        if dml.globals.dml_version == (1, 2) and not dml.globals.compat_dml12:
+            check_varname(stmt.site, name)
+        (struct_decls, etype) = eval_type(asttype, stmt.site, location, scope)
+        stmts.extend(mkStructDefinition(site, t) for (site, t) in struct_decls)
+        etype = etype.resolve()
+        rt = safe_realtype_shallow(etype)
+        if isinstance(rt, TArray) and not rt.size.constant and deep_const(rt):
+            raise EVLACONST(stmt.site)
+        check_shadowing(scope, name, stmt.site)
+        return (name, etype)
 
-    sym = scope.add_variable(name, type = etype,
-                             site = stmt.site, init = init,
-                             static = False,
-                             stmt = True,
-                             make_unique=not dml.globals.debuggable)
+    decls = list(map(convert_decl, decls))
 
-    return ([mkStructDefinition(site, t) for (site, t) in struct_decls]
-            + [sym_declaration(sym)])
+    def mk_sym(name, typ):
+        sym = LocalSymbol(name, scope.unique_cname(name), type=typ,
+                          site=stmt.site, stmt=True)
+        stmts.append(sym_declaration(sym))
+        return sym
+
+    def add_var(name, typ, init = None):
+        sym = scope.add_variable(
+            name, type = typ, site = stmt.site, init = init, stmt = True,
+            make_unique=not dml.globals.debuggable)
+        stmts.append(sym_declaration(sym))
+        return sym
+
+    if method_call_init:
+        late_sym_adds = []
+        late_declares = []
+        tgts = []
+
+        for (name, typ) in decls:
+            tgt_typ = safe_realtype_shallow(typ)
+            if tgt_typ.const:
+                nonconst_typ = tgt_typ.clone()
+                nonconst_typ.const = False
+                sym = mk_sym('_tmp_' + name, nonconst_typ)
+                late_declares.append((name, typ, sym))
+            else:
+                sym = mk_sym(name, typ)
+                late_sym_adds.append(sym)
+            tgts.append(mkLocalVariable(stmt.site, sym))
+
+        method_invocation = try_codegen_invocation(stmt.site,
+                                                   inits,
+                                                   tgts, location, scope)
+        if method_invocation is not None and stmt.site.dml_version != (1, 2):
+            stmts.append(method_invocation)
+        else:
+            if len(tgts) != 1:
+                report(ERETLVALS(site, 1, len(tgts)))
+            else:
+                tgt = tgts[0]
+                init = ExpressionInitializer(
+                    codegen_expression(inits[0].args[0], location, scope))
+                stmts.append(mkAssignStatement(tgt.site, tgt, init))
+
+        for (name, typ, temp_sym) in late_declares:
+            init = ExpressionInitializer(mkLocalVariable(stmt.site, temp_sym))
+            add_var(name, typ, init)
+        for sym in late_sym_adds:
+            scope.add(sym)
+    else:
+        # Initializer evaluation and variable declarations are done in separate
+        # passes in order to prevent the newly declared variables from being in
+        # scope when the initializers are evaluated
+        inits = [get_initializer(stmt.site, typ, init, location, scope)
+                 for ((_, typ), init) in zip(decls, inits)]
+        for ((name, typ), init) in zip(decls, inits):
+            add_var(name, typ, init)
+
+    return stmts
 
 @statement_dispatcher
 def stmt_session(stmt, location, scope):
-    [name, asttype, init] = stmt.args
-
+    [decls, inits] = stmt.args
+    if inits is None:
+        inits = itertools.cycle([None])
+    elif len(decls) != len(inits):
+        raise ESYNTAX(stmt.site, None,
+                      'wrong number of initializers:\n'
+                      + f'{len(decls)} variables declared\n'
+                      + f'{len(inits)} initializers specified')
     if location.method() is None:
         # Removing this error would make 'session' compile fine in
         # traits, but it would not work as expected: different
@@ -1277,54 +1345,63 @@ def stmt_session(stmt, location, scope):
         # instance.  TODO: We should either forbid session explicitly
         # (replacing the ICE with a proper error message), or decide
         # and implement some sensible semantics for it.
-        raise ICE(stmt.site, "'session' declaration inside a trait is not"
-                  + " yet allowed")
+        raise ICE(stmt.site, "'session' declaration inside a shared method is "
+                  + "not yet allowed")
     elif (not dml.globals.dml_version == (1, 2)
           and not location.method().fully_typed):
         raise ESTOREDINLINE(stmt.site, 'session')
+    for (decl_ast, init) in zip(decls, inits):
+        (name, asttype) = decl_ast.args
+        (struct_decls, etype) = eval_type(asttype, stmt.site, location,
+                                          global_scope)
+        etype = etype.resolve()
+        TStruct.late_global_struct_defs.extend(struct_decls)
+        if init:
+            try:
+                init = eval_initializer(
+                    stmt.site, etype, init, location, global_scope, True)
+            except DMLError as e:
+                report(e)
+                init = None
+        check_shadowing(scope, name, stmt.site)
 
-    (struct_decls, etype) = eval_type(asttype, stmt.site, location,
-                                      global_scope)
-    etype = etype.resolve()
-    TStruct.late_global_struct_defs.extend(struct_decls)
-    if init:
-        try:
-            init = eval_initializer(
-                stmt.site, etype, init, location, global_scope, True)
-        except DMLError as e:
-            report(e)
-            init = None
-    check_shadowing(scope, name, stmt.site)
-
-    # generate a nested array of variables, indexed into by
-    # the dimensions of the method dimensions
-    static_sym_type = etype
-    for dimsize in reversed(location.method().dimsizes):
-        static_sym_type = TArray(static_sym_type,
-                                 mkIntegerConstant(stmt.site, dimsize, False))
-        # initializer in methods cannot currently depend on indices
-        # so we can replicate the same initializer for all
-        # slots in the array.
-        # TODO: it should be possible to support
-        # index-dependent initialization now, though
-        if init is not None:
-            init = CompoundInitializer(stmt.site, [init] * dimsize)
-    static_sym_name = dml.globals.device.get_unique_static_name(name)
-    static_sym = StaticSymbol(static_sym_name, static_sym_name,
+        # generate a nested array of variables, indexed into by
+        # the dimensions of the method dimensions
+        static_sym_type = etype
+        for dimsize in reversed(location.method().dimsizes):
+            static_sym_type = TArray(static_sym_type,
+                                     mkIntegerConstant(stmt.site, dimsize,
+                                                       False))
+            # initializer in methods cannot currently depend on indices
+            # so we can replicate the same initializer for all
+            # slots in the array.
+            # TODO: it should be possible to support
+            # index-dependent initialization now, though
+            if init is not None:
+                init = CompoundInitializer(stmt.site, [init] * dimsize)
+        static_sym_name = dml.globals.device.get_unique_static_name(name)
+        static_sym = StaticSymbol(static_sym_name, static_sym_name,
                               static_sym_type, stmt.site, init, stmt)
-    static_var_expr = mkStaticVariable(stmt.site, static_sym)
-    for idx in location.indices:
-        static_var_expr = mkIndex(stmt.site, static_var_expr, idx)
-    local_sym = ExpressionSymbol(name, static_var_expr, stmt.site)
+        static_var_expr = mkStaticVariable(stmt.site, static_sym)
+        for idx in location.indices:
+            static_var_expr = mkIndex(stmt.site, static_var_expr, idx)
+        local_sym = ExpressionSymbol(name, static_var_expr, stmt.site)
 
-    scope.add(local_sym)
-    dml.globals.device.add_static_var(static_sym)
+        scope.add(local_sym)
+        dml.globals.device.add_static_var(static_sym)
 
     return []
 
 @statement_dispatcher
-def stmt_saved_statement(stmt, location, scope):
-    [name, asttype, init] = stmt.args
+def stmt_saved(stmt, location, scope):
+    [decls, inits] = stmt.args
+    if inits is None:
+        inits = itertools.cycle([None])
+    elif len(decls) != len(inits):
+        raise ESYNTAX(stmt.site, None,
+                      'wrong number of initializers:\n'
+                      + f'{len(decls)} variables declared\n'
+                      + f'{len(inits)} initializers specified')
 
     # guaranteed by parser
     assert dml.globals.dml_version != (1, 2)
@@ -1336,55 +1413,58 @@ def stmt_saved_statement(stmt, location, scope):
         # instance.  TODO: We should either forbid session/saved explicitly
         # (replacing the ICE with a proper error message), or decide
         # and implement some sensible semantics for it.
-        raise ICE(stmt.site, "'saved' declaration inside a shared method is not"
-                  + " yet allowed")
+        raise ICE(stmt.site, "'saved' declaration inside a shared method is "
+                  + "not yet allowed")
     elif not location.method().fully_typed:
         raise ESTOREDINLINE(stmt.site, 'saved')
 
-    (struct_decls, etype) = eval_type(asttype, stmt.site, location, scope)
-    TStruct.late_global_struct_defs.extend(struct_decls)
-    etype.resolve()
-    if init:
-        try:
-            init = eval_initializer(
-                stmt.site, etype, init, location, scope, True)
-        except DMLError as e:
-            report(e)
-            init = None
-    check_shadowing(scope, name, stmt.site)
+    for (decl_ast, init) in zip(decls, inits):
+        (name, asttype) = decl_ast.args
+        (struct_decls, etype) = eval_type(asttype, stmt.site, location, scope)
+        TStruct.late_global_struct_defs.extend(struct_decls)
+        etype.resolve()
+        if init:
+            try:
+                init = eval_initializer(
+                    stmt.site, etype, init, location, scope, True)
+            except DMLError as e:
+                report(e)
+                init = None
+        check_shadowing(scope, name, stmt.site)
 
-    # acquire better name
-    node = location.node
-    cname = name
-    while node.objtype != "device":
-        cname = node.name + "_" + cname
-        node = node.parent
-    
-    # generate a nested array of variables, indexed into by
-    # the dimensions of the method dimensions
-    static_sym_type = etype
-    for dimsize in reversed(location.method().dimsizes):
-        static_sym_type = TArray(static_sym_type,
-                                 mkIntegerConstant(stmt.site, dimsize, False))
-        # initializer in methods cannot currently depend on indices
-        # so we can replicate the same initializer for all
-        # slots in the array.
-        # TODO: it should be possible to support
-        # index-dependent initialization now, though
-        if init is not None:
-            init = CompoundInitializer(stmt.site, [init] * dimsize)
-    static_sym_name = dml.globals.device.get_unique_static_name(name)
-    static_sym = StaticSymbol(static_sym_name, static_sym_name,
-                              static_sym_type, stmt.site, init, stmt)
-    static_var_expr = mkStaticVariable(stmt.site, static_sym)
-    for idx in location.indices:
-        static_var_expr = mkIndex(stmt.site, static_var_expr, idx)
-    local_sym = ExpressionSymbol(name, static_var_expr, stmt.site)
-    scope.add(local_sym)
+        # acquire better name
+        node = location.node
+        cname = name
+        while node.objtype != "device":
+            cname = node.name + "_" + cname
+            node = node.parent
 
-    dml.globals.device.add_static_var(static_sym)
-    saved_method_variables.setdefault(location.method(), []).append(
-        (static_sym, name))
+        # generate a nested array of variables, indexed into by
+        # the dimensions of the method dimensions
+        static_sym_type = etype
+        for dimsize in reversed(location.method().dimsizes):
+            static_sym_type = TArray(static_sym_type,
+                                     mkIntegerConstant(stmt.site, dimsize,
+                                                       False))
+            # initializer in methods cannot currently depend on indices
+            # so we can replicate the same initializer for all
+            # slots in the array.
+            # TODO: it should be possible to support
+            # index-dependent initialization now, though
+            if init is not None:
+                init = CompoundInitializer(stmt.site, [init] * dimsize)
+        static_sym_name = dml.globals.device.get_unique_static_name(name)
+        static_sym = StaticSymbol(static_sym_name, static_sym_name,
+                                  static_sym_type, stmt.site, init, stmt)
+        static_var_expr = mkStaticVariable(stmt.site, static_sym)
+        for idx in location.indices:
+            static_var_expr = mkIndex(stmt.site, static_var_expr, idx)
+        local_sym = ExpressionSymbol(name, static_var_expr, stmt.site)
+        scope.add(local_sym)
+
+        dml.globals.device.add_static_var(static_sym)
+        saved_method_variables.setdefault(location.method(), []).append(
+            (static_sym, name))
     return []
 
 @statement_dispatcher
@@ -1445,9 +1525,13 @@ def stmt_hashif(stmt, location, scope):
     else:
         return []
 
-def try_codegen_invocation(site, apply_ast, outargs, location, scope):
-    '''Generate a method call statement if apply_ast is a method call,
-    otherwise None'''
+def try_codegen_invocation(site, init_ast, outargs, location, scope):
+    '''Generate a method call statement if the initializer init_ast is a
+    single method call, otherwise None'''
+    if len(init_ast) > 1:
+        # multi initializer
+        return None
+    apply_ast = init_ast[0]
     if apply_ast.kind != 'initializer_scalar':
         # compound initializer
         return None
@@ -1524,60 +1608,87 @@ def try_codegen_invocation(site, apply_ast, outargs, location, scope):
             codegen_expression(inarg_ast, location, scope)
             for inarg_ast in inarg_asts]
     if meth_node.fully_typed:
-        return codegen_call(site, meth_node, indices,
-                            inargs, outargs)
+        return codegen_call(site, meth_node, indices, inargs, outargs)
     else:
-        return common_inline(site, meth_node, indices,
-                              inargs, outargs)
+        return common_inline(site, meth_node, indices, inargs, outargs)
 
 @statement_dispatcher
 def stmt_assign(stmt, location, scope):
-    (kind, site, tgt_asts, src_ast) = stmt
-    # tgt_asts is a list of lists of expressions; [[a, b], [c, d]]
-    # corresponds to "(a, b) = (c, d) = "
-    tgts = [[codegen_expression(tgt_ast, location, scope)
-             for tgt_ast in tgt_tup] for tgt_tup in tgt_asts]
-
-    for tgt in itertools.chain(*tgts):
+    (_, site, tgt_ast, src_asts) = stmt
+    assert tgt_ast.kind in ('assign_target_chain', 'assign_target_tuple')
+    tgts = [codegen_expression(ast, location, scope)
+            for ast in tgt_ast.args[0]]
+    for tgt in tgts:
         if deep_const(tgt.ctype()):
             raise ECONST(tgt.site)
+    if tgt_ast.kind == 'assign_target_chain':
+        method_tgts = [tgts[0]]
+    else:
+        method_tgts = tgts
 
-    method_invocation = try_codegen_invocation(site, src_ast, tgts[0],
+    # TODO support multiple assign sources. It should be generalized.
+    method_invocation = try_codegen_invocation(site, src_asts, method_tgts,
                                                location, scope)
     if method_invocation:
-        if len(tgts) != 1:
+        if tgt_ast.kind == 'assign_target_chain' and len(tgts) != 1:
             report(ESYNTAX(
-                tgts[1][0].site, '=',
+                tgt_ast.args[0][1].site, '=',
                 'assignment chain not allowed as method invocation target'))
         return [method_invocation]
-
-    for tgt_list in tgt_asts:
-        if len(tgt_list) != 1:
-            if (src_ast.kind == 'initializer_scalar'
-                and src_ast.args[0].kind == 'apply'):
-                report(ERETLVALS(site, 1, len(tgt_list)))
-            else:
-                report(ESYNTAX(
-                    tgt_list[0].site, '(',
-                    'only method calls can have multiple assignment targets'))
+    if tgt_ast.kind == 'assign_target_chain':
+        if len(src_asts) > 1:
+            report(ESYNTAX(site, '(',
+                           'wrong number of simultaneous assign targets for '
+                           + f'initializer: Expected {src_asts}, got 1'))
             return []
 
-    init = eval_initializer(
-        site, tgts[-1][0].ctype(), src_ast, location, scope, False)
+        stmts = []
+        lscope = Symtab(scope)
+        init = eval_initializer(
+            site, tgts[-1].ctype(), src_asts[0], location, scope, False)
 
-    lscope = Symtab(scope)
-    stmts = []
-    for (i, [tgt]) in enumerate(reversed(tgts[1:])):
-        name = 'tmp%d' % (i,)
-        sym = lscope.add_variable(
-            name, type=tgt.ctype(), site=tgt.site, init=init, static=False,
-            stmt=True)
-        init = ExpressionInitializer(mkLocalVariable(tgt.site, sym))
-        stmts.extend([sym_declaration(sym),
-                      mkAssignStatement(tgt.site, tgt, init)])
-    stmts.append(mkAssignStatement(tgts[0][0].site, tgts[0][0], init))
+        for (i, tgt) in enumerate(reversed(tgts[1:])):
+            name = 'tmp%d' % (i,)
+            sym = lscope.add_variable(
+                name, type=tgt.ctype(), site=tgt.site, init=init, static=False,
+                stmt=True)
+            init = ExpressionInitializer(mkLocalVariable(tgt.site, sym))
+            stmts.extend([sym_declaration(sym),
+                          mkAssignStatement(tgt.site, tgt, init)])
+        return stmts + [mkAssignStatement(tgts[0].site, tgts[0], init)]
+    else:
+        # Guaranteed by grammar
+        assert tgt_ast.kind == 'assign_target_tuple' and len(tgts) > 1
+        if (len(src_asts) == 1 and src_asts[0].kind == 'initializer_scalar'
+            and src_asts[0].args[0].kind == 'apply'):
+            report(ERETLVALS(site, 1, len(tgts)))
+            return []
+        elif len(src_asts) != len(tgts):
+            report(ESYNTAX(site, '(',
+                           'wrong number of simultaneous assign targets for '
+                           + f'initializer: Expected {src_asts}, got '
+                           + str(tgts)))
+            return []
 
-    return stmts
+        stmts = []
+        lscope = Symtab(scope)
+        syms = []
+        for (i, (tgt, src_ast)) in enumerate(zip(tgts, src_asts)):
+            init = eval_initializer(site, tgt.ctype(), src_ast, location,
+                                    scope, False)
+            name = 'tmp%d' % (i,)
+            sym = lscope.add_variable(
+                    name, type=tgt.ctype(), site=tgt.site, init=init,
+                    static=False, stmt=True)
+            syms.append(sym)
+
+        stmts.extend(map(sym_declaration, syms))
+        stmts.extend(
+            mkAssignStatement(
+                tgt.site, tgt, ExpressionInitializer(mkLocalVariable(tgt.site,
+                                                                     sym)))
+            for (tgt, sym) in zip(tgts, syms))
+        return stmts
 
 @statement_dispatcher
 def stmt_assignop(stmt, location, scope):
@@ -1589,10 +1700,10 @@ def stmt_assignop(stmt, location, scope):
     if isinstance(tgt, ctree.BitSlice):
         # destructive hack
         return stmt_assign(
-            ast.assign(site, [[tgt_ast]],
-                       ast.initializer_scalar(
+            ast.assign(site, ast.assign_target_chain(site, [tgt_ast]),
+                       [ast.initializer_scalar(
                            site,
-                           ast.binop(site, tgt_ast, op[:-1], src_ast))),
+                           ast.binop(site, tgt_ast, op[:-1], src_ast))]),
             location, scope)
     src = codegen_expression(src_ast, location, scope)
     ttype = tgt.ctype()
@@ -1615,8 +1726,8 @@ def stmt_expression(stmt, location, scope):
     # a method invocation with no return value looks like an
     # expression statement to the grammar
     invocation = try_codegen_invocation(stmt.site,
-                                        ast.initializer_scalar(stmt.site,
-                                                               expr),
+                                        [ast.initializer_scalar(stmt.site,
+                                                                expr)],
                                         [], location, scope)
     if invocation:
         return [invocation]
@@ -1656,10 +1767,57 @@ def stmt_return_dml12(stmt, location, scope):
 
 @statement_dispatcher
 def stmt_return(stmt, location, scope):
-    [args] = stmt.args
-    return [codegen_exit(
-        stmt.site, [codegen_expression(arg, location, scope)
-                    for arg in args])]
+    [inits] = stmt.args
+    if isinstance(ExitHandler.current, GotoExit_dml14):
+        outp_typs = [var.ctype() for var in ExitHandler.current.outvars]
+    elif isinstance(ExitHandler.current, ReturnExit):
+        outp_typs = [typ for (_, typ) in ExitHandler.current.outp]
+    else:
+        raise ICE(stmt.site, ("Unexpected ExitHandler "
+                              + f"'{type(ExitHandler.current).__name__}'"))
+
+    if (len(inits) == 1 and inits[0].kind == 'initializer_scalar'
+        and inits[0].args[0].kind == 'apply'):
+        outp = None
+        meth_expr = codegen_expression_maybe_nonvalue(
+            inits[0].args[0].args[0], location, scope)
+        site = meth_expr.site
+        if isinstance(meth_expr, TraitMethodRef):
+            outp = meth_expr.outp
+        elif isinstance(meth_expr, NodeRef):
+            (meth_node, indices) = meth_expr.get_ref()
+            if meth_node.objtype == 'method':
+                outp = meth_node.outp
+        if outp is not None:
+            lscope = Symtab(scope)
+            outarg_syms = [
+                lscope.add_variable(f'tmp{i}', type=typ, site=site,
+                                    static=False, stmt=True)
+                for (i, (_, typ)) in enumerate(outp)]
+            outargs = [mkLocalVariable(site, sym) for sym in outarg_syms]
+            method_invocation = try_codegen_invocation(site, inits, outargs,
+                                                       location, scope)
+            if method_invocation is not None:
+                if len(outargs) != len(outp_typs):
+                    report(ERETARGS(stmt.site, len(outp_typs), len(outargs)))
+                    # avoid control flow errors by falling back to statement
+                    # with no fall-through
+                    return mkAssert(stmt.site,
+                                    mkBoolConstant(stmt.site, False))
+
+
+                return ([sym_declaration(sym) for sym in outarg_syms]
+                        + [method_invocation,
+                           codegen_exit(stmt.site, outargs)])
+
+    if len(inits) != len(outp_typs):
+        report(ERETARGS(stmt.site, len(outp_typs), len(inits)))
+        return [mkAssert(stmt.site, mkBoolConstant(stmt.site, False))]
+
+    return [codegen_exit(stmt.site,
+                         [eval_initializer(stmt.site, typ, init, location,
+                                           scope, False).as_expr(typ)
+                          for (init, typ) in zip(inits, outp_typs)])]
 
 @statement_dispatcher
 def stmt_assert(stmt, location, scope):

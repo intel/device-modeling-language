@@ -396,14 +396,24 @@ def object_session(t):
 @prod
 def session_decl(t):
     'session_decl : data named_cdecl SEMI'
-    (_, _, name, typ) = t[2]
-    t[0] = ast.session(site(t), name, typ, None)
+    t[0] = ast.session(site(t), [t[2]], None)
 
 @prod
 def session_decl_init(t):
     'session_decl : data named_cdecl EQUALS initializer SEMI'
-    (_, _, name, typ) = t[2]
-    t[0] = ast.session(site(t), name, typ, t[4])
+    t[0] = ast.session(site(t), [t[2]], t[4])
+
+@prod_dml14
+def session_decl_many(t):
+    'session_decl : data LPAREN cdecl_list_nonempty RPAREN SEMI'
+    cdecl_list_enforce_named(t[3])
+    t[0] = ast.session(site(t), t[3], None)
+
+@prod_dml14
+def session_decl_many_init(t):
+    'session_decl : data LPAREN cdecl_list_nonempty RPAREN EQUALS initializer SEMI'
+    cdecl_list_enforce_named(t[3])
+    t[0] = ast.session(site(t), t[3], t[6])
 
 @prod_dml14
 def object_saved(t):
@@ -413,14 +423,24 @@ def object_saved(t):
 @prod_dml14
 def saved_decl(t):
     'saved_decl : SAVED named_cdecl SEMI'
-    (_, _, name, typ) = t[2]
-    t[0] = ast.saved(site(t), name, typ, None)
+    t[0] = ast.saved(site(t), [t[2]], None)
 
 @prod_dml14
 def saved_decl_init(t):
     'saved_decl : SAVED named_cdecl EQUALS initializer SEMI'
-    (_, _, name, typ) = t[2]
-    t[0] = ast.saved(site(t), name, typ, t[4])
+    t[0] = ast.saved(site(t), [t[2]], t[4])
+
+@prod_dml14
+def saved_decl_many(t):
+    'saved_decl : SAVED LPAREN cdecl_list_nonempty RPAREN SEMI'
+    cdecl_list_enforce_named(t[3])
+    t[0] = ast.saved(site(t), t[3], None)
+
+@prod_dml14
+def saved_decl_many_init(t):
+    'saved_decl : SAVED LPAREN cdecl_list_nonempty RPAREN EQUALS initializer SEMI'
+    cdecl_list_enforce_named(t[3])
+    t[0] = ast.saved(site(t), t[3], t[6])
 
 @prod
 def object3(t):
@@ -613,8 +633,7 @@ def trait_session(t):
     # We don't support session variable initializers yet, because it's
     # not sufficiently obvious in what scope they should be evaluated.
     'trait_stmt : SESSION named_cdecl SEMI'
-    (_, _, name, typ) = t[2]
-    t[0] = [ast.session(site(t), name, typ, None)]
+    t[0] = [ast.session(site(t), [t[2]], None)]
 
 @prod_dml14
 def template_stmts_none(t):
@@ -998,15 +1017,19 @@ def method_params_maybe_untyped(t):
     'method_params_maybe_untyped : LPAREN cdecl_or_ident_list RPAREN method_outparams throws'
     t[0] = (t[2], t[4], t[5])
 
-@prod
-def method_params_typed(t):
-    'method_params_typed : LPAREN cdecl_list RPAREN method_outparams throws'
-    for (i, (kind, psite, name, typ)) in enumerate(t[2]):
+
+def cdecl_list_enforce_named(decls):
+    for (i, (kind, psite, name, typ)) in enumerate(decls):
         assert kind == 'cdecl'
         if not name:
             report(ESYNTAX(psite, None,
                            'name omitted in parameter declaration'))
-            t[2][i] = ast.cdecl(psite, '_name_omitted%d' % (i,), typ)
+            decls[i] = ast.cdecl(psite, '_name_omitted%d' % (i,), typ)
+
+@prod
+def method_params_typed(t):
+    'method_params_typed : LPAREN cdecl_list RPAREN method_outparams throws'
+    cdecl_list_enforce_named(t[2])
     t[0] = (t[2], t[4], t[5])
 
 @prod_dml12
@@ -1788,36 +1811,46 @@ def bracketed_string_bracketed(t):
 # data object initializer
 
 @prod
-def initializer_scalar(t):
-    'initializer : expression'
+def single_initializer_scalar(t):
+    'single_initializer : expression'
     t[0] = ast.initializer_scalar(site(t), t[1])
 
 @prod
-def initializer_compound(t):
-    '''initializer : LBRACE initializer_list RBRACE
-                   | LBRACE initializer_list COMMA RBRACE'''
+def single_initializer_compound(t):
+    '''single_initializer : LBRACE single_initializer_list RBRACE
+                          | LBRACE single_initializer_list COMMA RBRACE'''
     t[0] = ast.initializer_compound(site(t), t[2])
 
+@prod
+def initializer_single(t):
+    'initializer : single_initializer'
+    t[0] = [t[1]]
+
+@prod_dml14
+def initializer_tuple(t):
+    '''initializer : LPAREN single_initializer COMMA single_initializer_list RPAREN'''
+    '''            | LPAREN single_initializer COMMA single_initializer_list COMMA RPAREN'''
+    t[0] = [t[2]] + t[4]
 
 @prod
-def initializer_list_one(t):
-    'initializer_list : initializer'
+def single_initializer_list_one(t):
+    'single_initializer_list : single_initializer'
     t[0] = [t[1]]
 
 @prod
-def initializer_list_many(t):
-    'initializer_list : initializer_list COMMA initializer'
+def single_initializer_list_many(t):
+    'single_initializer_list : single_initializer_list COMMA single_initializer'
     t[0] = t[1] + [t[3]]
 
 @prod_dml14
 def initializer_designated_struct(t):
-    '''initializer : LBRACE designated_struct_initializer_list RBRACE
-                   | LBRACE designated_struct_initializer_list COMMA RBRACE'''
+    '''single_initializer : LBRACE designated_struct_initializer_list RBRACE
+                          | LBRACE designated_struct_initializer_list COMMA RBRACE'''
     t[0] = ast.initializer_designated_struct(site(t), t[2])
 
 @prod_dml14
 def designated_struct_initializer(t):
-    '''designated_struct_initializer : PERIOD ident EQUALS initializer'''
+    '''designated_struct_initializer : PERIOD ident EQUALS single_initializer'''
     t[0] = (t[2], t[4])
 
 @prod_dml14
@@ -1829,7 +1862,6 @@ def designated_struct_initializer_list_one(t):
 def designated_struct_initializer_list_many(t):
     '''designated_struct_initializer_list : designated_struct_initializer_list COMMA designated_struct_initializer'''
     t[0] = t[1] + [t[3]]
-
 
 # statement
 
@@ -1849,12 +1881,6 @@ def statement_decl(t):
     t[0] = t[1]
 
 @prod_dml14
-def saved_stmt(t):
-    'statement_except_hashif : saved_decl'
-    name, typ, init = t[1].args
-    t[0] = ast.saved_statement(site(t), name, typ, init)
-
-@prod_dml14
 def statement_assignment(t):
     '''statement_except_hashif : assign_stmt SEMI'''
     t[0] = t[1]
@@ -1865,30 +1891,30 @@ def statement_assignop(t):
     t[0] = t[1]
 
 @prod_dml14
-def assign_stmt(t):
+def assign_stmt_chain(t):
     '''assign_stmt : assign_chain'''
     (tgts, src) = t[1]
-    t[0] = ast.assign(site(t), tgts, src)
+    t[0] = ast.assign(site(t), ast.assign_target_chain(site(t), tgts), src)
+
+@prod_dml14
+def assign_stmt_tuple_deconstruction(t):
+    '''assign_stmt : tuple_literal EQUALS initializer'''
+    t[0] = ast.assign(site(t), ast.assign_target_tuple(site(t), t[1]), t[3])
 
 @prod_dml14
 def assign_chain_many(t):
-    '''assign_chain : assign_target EQUALS assign_chain'''
+    '''assign_chain : expression EQUALS assign_chain'''
     (tgts, src) = t[3]
     t[0] = ([t[1]] + tgts, src)
 
 @prod_dml14
 def assign_chain_one(t):
-    '''assign_chain : assign_target EQUALS initializer'''
+    '''assign_chain : expression EQUALS initializer'''
     t[0] = ([t[1]], t[3])
 
 @prod_dml14
-def assign_target_one(t):
-    '''assign_target : expression'''
-    t[0] = [t[1]]
-
-@prod_dml14
-def assign_target_many(t):
-    'assign_target : LPAREN expression COMMA expression_list_ntc_nonempty RPAREN'
+def tuple_literal(t):
+    'tuple_literal : LPAREN expression COMMA expression_list_ntc_nonempty RPAREN'
     t[0] = [t[2]] + t[4]
 
 @prod
@@ -2248,7 +2274,7 @@ def return_statement_noargs(t):
 
 @prod_dml14
 def return_statement_args(t):
-    '''statement_except_hashif : RETURN assign_target SEMI'''
+    '''statement_except_hashif : RETURN initializer SEMI'''
     t[0] = ast.return_(site(t), t[2])
 
 @prod
@@ -2334,24 +2360,52 @@ def static(t):
     t[0] = 'session'
 
 @prod
-def local(t):
-    '''local : local_keyword cdecl
-             | static cdecl'''
+def local_decl_kind(t):
+    '''local_decl_kind : local_keyword
+                       | static'''
+    t[0] = t[1]
+
+@prod
+def local_one(t):
+    '''local : local_decl_kind cdecl'''
     (_, tsite, name, typ) = t[2]
     assert typ
     if not name:
         raise ESYNTAX(tsite, ";", "variable name omitted")
-    t[0] = ast.get(t[1])(site(t), name, typ, None)
+    t[0] = ast.get(t[1])(site(t), [t[2]], None)
+
+@prod_dml14
+def saved_local_one(t):
+    '''local : SAVED cdecl'''
+    local_one(t)
 
 @prod
-def local_static(t):
-    '''local : local_keyword cdecl EQUALS initializer
-             | static cdecl EQUALS initializer'''
-    (_, _, name, typ) = t[2]
+def local_one_init(t):
+    '''local : local_decl_kind cdecl EQUALS initializer'''
+    (name, typ) = t[2].args
     assert typ
     if not name:
         raise ESYNTAX(site(t, 3), "=", "variable name omitted")
-    t[0] = ast.get(t[1])(site(t), name, typ, t[4])
+    t[0] = ast.get(t[1])(site(t), [t[2]], t[4])
+
+@prod_dml14
+def saved_local_one_init(t):
+    '''local : SAVED cdecl EQUALS initializer'''
+    local_one_init(t)
+
+@prod_dml14
+def local_decl_multiple(t):
+    '''local : local_decl_kind LPAREN cdecl_list_nonempty RPAREN
+             | SAVED LPAREN cdecl_list_nonempty RPAREN'''
+    cdecl_list_enforce_named(t[3])
+    t[0] = ast.get(t[1])(site(t), t[3], None)
+
+@prod_dml14
+def local_one_multiple_init(t):
+    '''local : local_decl_kind LPAREN cdecl_list_nonempty RPAREN EQUALS initializer
+             | SAVED LPAREN cdecl_list_nonempty RPAREN EQUALS initializer'''
+    cdecl_list_enforce_named(t[3])
+    t[0] = ast.get(t[1])(site(t), t[3], t[6])
 
 @prod
 def objident_list_one(t):

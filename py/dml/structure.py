@@ -435,15 +435,15 @@ def wrap_sites(obj_spec, issite, tname):
                 shallow_wrapped.append(
                     ast.error(TemplateSite(site, issite, tname), msg))
             elif asttype == 'session':
-                (_, site, name, typ, init) = stmt
+                (_, site, decls, inits) = stmt
                 shallow_wrapped.append(
                     ast.session(TemplateSite(site, issite, tname),
-                                name, typ, init))
+                                decls, inits))
             elif asttype == 'saved':
-                (_, site, name, typ, init) = stmt
+                (_, site, decls, inits) = stmt
                 shallow_wrapped.append(
                     ast.saved(TemplateSite(site, issite, tname),
-                              name, typ, init))
+                              decls, inits))
             else:
                 raise ICE(issite, 'unknown node type %r %r' % (asttype, stmt))
         composite_wrapped = [
@@ -744,8 +744,7 @@ def method_is_std(node, methname):
     return meth.site.filename().endswith("dml-builtins.dml")
 
 def mkdata(spec, parent):
-    objtype, site, name, typ, astinit = spec
-    assert objtype == 'session'
+    site, name, typ, astinit = spec
 
     parent_scope = Location(parent, static_indices(parent))
     (struct_defs, dtype) = eval_type(
@@ -762,8 +761,7 @@ def mkdata(spec, parent):
     return obj
 
 def mksaved(spec, parent):
-    objtype, site, name, typ, astinit = spec
-    assert objtype == 'saved'
+    site, name, typ, astinit = spec
 
     parent_scope = Location(parent, static_indices(parent))
     (struct_defs, dtype) = eval_type(typ, site, parent_scope, global_scope)
@@ -1405,8 +1403,8 @@ def mkobj2(obj, obj_specs, params, each_stmts):
 
     # name -> list of (Rank, ast.method)
     method_asts = {}
-    session_asts = {}
-    saved_asts = {}
+    sessions = {}
+    saved = {}
     # list of export stmnts
     exports = []
     for (stmts, rank) in shallow_subobjs:
@@ -1425,19 +1423,40 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                 else:
                     method_asts[name].append((rank, s))
             elif s.kind == 'session':
-                (name, _, _) = s.args
-                if name in symbols:
-                    report(ENAMECOLL(s.site, symbols[name], name))
+                (decls, inits) = s.args
+                if inits is not None and len(decls) != len(inits):
+                    report(ESYNTAX(s.site, None,
+                                   'wrong number of initializers:\n'
+                                   + f'{len(decls)} variables declared\n'
+                                   + f'{len(inits)} initializers specified'))
                 else:
-                    symbols[name] = s.site
-                    session_asts[name] = s
+                    if inits is None:
+                        inits = [None]*len(decls)
+                    for (decl_ast, init_ast) in zip(decls, inits):
+                        (name, typ_ast) = decl_ast.args
+                        if name in symbols:
+                            report(ENAMECOLL(s.site, symbols[name], name))
+                        else:
+                            symbols[name] = s.site
+                            sessions[name] = (s.site, name, typ_ast, init_ast)
+
             elif s.kind == 'saved':
-                (name, _, _) = s.args
-                if name in symbols:
-                    report(ENAMECOLL(s.site, symbols[name], name))
+                (decls, inits) = s.args
+                if inits is not None and len(decls) != len(inits):
+                    report(ESYNTAX(s.site, None,
+                                   'wrong number of initializers:\n'
+                                   + f'{len(decls)} variables declared\n'
+                                   + f'{len(inits)} initializers specified'))
                 else:
-                    symbols[name] = s.site
-                    saved_asts[name] = s
+                    if inits is None:
+                        inits = [None]*len(decls)
+                    for (decl_ast, init_ast) in zip(decls, inits):
+                        (name, typ_ast) = decl_ast.args
+                        if name in symbols:
+                            report(ENAMECOLL(s.site, symbols[name], name))
+                        else:
+                            symbols[name] = s.site
+                            saved[name] = (s.site, name, typ_ast, init_ast)
             elif s.kind == 'export':
                 exports.append(s)
             else:
@@ -1558,18 +1577,18 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                     [(obj.site, dml.globals.templates['field'])], [], [], [])],
                 obj, each_stmts))
 
-    for name in sorted(session_asts):
-        session_ast = session_asts[name]
+    for name in sorted(sessions):
+        session_spec = sessions[name]
         try:
-            subobj = mkdata(session_ast, obj)
+            subobj = mkdata(session_spec, obj)
         except DMLError as e:
             report(e)
         else:
             subobjs.append(subobj)
-    for name in sorted(saved_asts):
-        saved_ast = saved_asts[name]
+    for name in sorted(saved):
+        saved_spec = saved[name]
         try:
-            subobj = mksaved(saved_ast, obj)
+            subobj = mksaved(saved_spec, obj)
         except DMLError as e:
             report(e)
         else:
@@ -2575,6 +2594,12 @@ def mkmethod(site, rbrace_site, location, parent_obj, name, inp_ast,
             if t.is_int and t.is_endian:
                 raise EEARG(site)
 
+    for (n, t) in outp:
+        # See SIMICS-19028
+        if t and deep_const(t):
+            raise ICE(site,
+                      'Methods with (partially) const output/return '
+                      + 'values are not yet supported.')
     if default_level:
         name += "___default%d" % (default_level,)
     method = objects.Method(name, site, parent_obj,

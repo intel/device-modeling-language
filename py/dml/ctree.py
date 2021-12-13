@@ -3368,7 +3368,7 @@ class TraitMethodRef(NonValue):
     def apply(self, args):
         '''Return expression for application as a function'''
         if self.throws or len(self.outp) > 1:
-            raise EAPPLY(self, 'method')
+            raise EAPPLYMETH(self.site, self)
         # Run typecheck before coercing endian integers, slightly better
         # error messages
         typecheck_inargs(self.site, args, self.inp, 'method')
@@ -3496,8 +3496,9 @@ class NodeRef(Expression):
         return (self.node, self.indices)
     def apply(self, args):
         '''Apply as an expression'''
-        if (self.node.objtype == 'method' and not self.node.throws
-            and len(self.node.outp) < 2):
+        if self.node.objtype == 'method':
+            if self.node.throws or len(self.node.outp) > 1:
+                raise EAPPLYMETH(self.site, self.node.name)
             return codegen_call_expr(self.site, self.node, self.indices, args)
         raise EAPPLY(self, self.node.objtype + " object")
 
@@ -3542,7 +3543,7 @@ class NodeRefWithStorage(NodeRef, LValue):
     def apply(self, args):
         if self.node.objtype == 'method':
             assert dml.globals.dml_version == (1, 2)
-            raise EAPPLY(self, "method")
+            raise EAPPLYMETH(self.site, self.node.name)
         # storage might be a function pointer
         return mkApply(self.site, self, args)
 
@@ -4123,6 +4124,8 @@ class ExpressionInitializer(Initializer):
         self.expr.decref()
     def read(self):
         return self.expr.read()
+    def as_expr(self, typ):
+        return source_for_assignment(self.expr.site, typ, self.expr)
     def assign_to(self, dest, typ):
         # Assigns to (partially) const-qualified targets can happen as part of
         # initializing (partially) const-qualified session variables. To allow
@@ -4161,6 +4164,8 @@ class CompoundInitializer(Initializer):
             i.decref()
     def read(self):
         return '{' + ", ".join(i.read() for i in self.init) + '}'
+    def as_expr(self, typ):
+        return CompoundLiteral(self.site, self, typ)
     def assign_to(self, dest, typ):
         '''output C statements to assign an lvalue'''
         # (void *) cast to avoid GCC erroring if the target type is (partially)
@@ -4211,6 +4216,8 @@ class DesignatedStructInitializer(Initializer):
     def read(self):
         return '{%s}' % (
             ", ".join(f'.{m}={i.read()}' for (m, i) in self.init.items()))
+    def as_expr(self, typ):
+        return CompoundLiteral(self.site, self, typ)
     def assign_to(self, dest, typ):
         '''output C statements to assign an lvalue'''
         typ = safe_realtype(typ)
@@ -4250,6 +4257,8 @@ class MemsetInitializer(Initializer):
         pass
     def read(self):
         return '{0}'
+    def as_expr(self, typ):
+        return CompoundLiteral(self.site, self, typ)
     def assign_to(self, dest, typ):
         '''output C statements to assign an lvalue'''
         assert isinstance(safe_realtype(typ),
@@ -4259,6 +4268,17 @@ class MemsetInitializer(Initializer):
         # (partially) const-qualified. See ExpressionInitializer.assign_to
         out('memset((void *)&%s, 0, sizeof(%s));\n'
             % (dest.read(), typ.declaration('')))
+
+class CompoundLiteral(Expression):
+    @auto_init
+    def __init__(self, site, init, type):
+        assert isinstance(init, (CompoundInitializer,
+                                 DesignatedStructInitializer,
+                                 MemsetInitializer))
+    def __str__(self):
+        return 'cast(%s, %s)' % (self.init, self.type)
+    def read(self):
+        return f'({self.type.declaration("")}) {self.init.read()}'
 
 class StructDefinition(Statement):
     """A C struct definition appearing in a local scope, like

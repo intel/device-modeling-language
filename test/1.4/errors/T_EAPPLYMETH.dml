@@ -1,0 +1,37 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+template t {
+    shared method multi_out() -> (int, int) default { return (0, 0); }
+    shared method throwing() throws default { }
+}
+
+template u is t {
+    shared method multi_out() -> (int, int) default {
+        /// ERROR EAPPLYMETH
+        default() + 1;
+        return (0, 0);
+    }
+    shared method throwing() throws default {
+        /// ERROR EAPPLYMETH
+        default() + 1;
+    }
+}
+
+is u;
+
+port p;
+
+method init() {
+    local u x = cast(dev, u);
+    /// ERROR EAPPLYMETH
+    x.multi_out() + 1;
+    /// ERROR EAPPLYMETH
+    x.throwing() + 1;
+    /// ERROR EAPPLYMETH
+    local (int a, int b) = (throwing(), 4);
+}

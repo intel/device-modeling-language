@@ -109,7 +109,7 @@ class Symtab(object):
                                site=site, stmt=stmt)
         else:
             if make_unique:
-                cname = 'v%d_%s' % (self.idx, name)
+                cname = self.unique_cname(name)
             else:
                 cname = name
             if init:
@@ -120,6 +120,9 @@ class Symtab(object):
                               site=site, stmt=stmt)
         self.add(sym)
         return sym
+
+    def unique_cname(self, name):
+        return f'v{self.idx}_{name}'
 
 class MethodParamScope(Symtab):
     '''Scope for method parameters.  Used to identify when local

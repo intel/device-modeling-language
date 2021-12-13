@@ -1,0 +1,54 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+import "testing.dml";
+
+template t {
+    saved   (int i, float j) = (1, 2);
+    session (int k, float l) = (3, 4);
+
+    session (int q, float r);
+}
+
+group b is t {
+    saved (int m, float n) = (5, 6);
+    session (int o, float p) = (7, 8);
+
+    session (int s, float t);
+}
+
+method wrapper() -> (bool, int) {
+    return (false, 4);
+}
+
+method test() throws {
+    cast(b, t).q = 9;
+    b.r = 10;
+    b.s = 11;
+    b.t = 12;
+    local (bool x, int y) = (false, 4);
+    assert !x;
+    assert y == 4;
+
+    local (bool v, int w) = wrapper();
+    assert !v;
+    assert w == 4;
+
+    local (bool nc1, const int c1) = (false, 4);
+    local (bool nc2, const int c2) = wrapper();
+    assert !nc1 && c1 == 4;
+    assert !nc2 && c2 == 4;
+
+    assert b.i == 1 && b.j == 2;
+    assert b.k == 3 && b.l == 4;
+    assert b.m == 5 && b.n == 6;
+    assert b.o == 7 && b.p == 8;
+    assert b.q == 9 && b.r == 10;
+    assert b.s == 11 && b.t == 12;
+    assert cast(b, t).i == 1 && cast(b, t).j == 2;
+    assert cast(b, t).k == 3 && cast(b, t).l == 4;
+    assert cast(b, t).q == 9 && cast(b, t).r == 10;
+}

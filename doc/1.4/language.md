@@ -1646,30 +1646,33 @@ In DML 1.4, methods can be `exported` using the
 
 ## Session variables
 
-A *session* declaration creates a named storage location for an
-arbitrary run-time value. The name belongs to the same namespace as
+A *session* declaration creates a number of named storage locations for
+arbitrary run-time values. The names belongs to the same namespace as
 objects and methods. The general form is:
 
 <pre>
-session <em>declaration</em> = <em>initializer</em>;
+session <em>declarations</em> = <em>initializer</em>;
 </pre>
 
-where *`= initializer`* is optional
-and *`declaration`* is similar to a C variable
-declaration; for example,
+where *`= initializers`* is optional
+and *`declarations`* is a variable declaration similar to C, or
+a sequence of such declarations; for example,
 
 ```
 session int id = 1;
 session bool active;
 session double table[4] = {0.1, 0.2, 0.4, 0.8};
+session (int x, int y) = (4, 3);
 session conf_object_t *obj;
 ```
 
-In the absence of explicit initializer expression, a default
-"all zero" initializer will be applied to the declared object.
+In the absence of explicit initializer expressions, a default
+"all zero" initializer will be applied to each declared object.
 
-Note that the number of elements in the initializer must match with
-the number of elements or fields of the type of the *session*
+Note that the number of initializers -- together given as a tuple
+-- must match the number of declared variables.
+In addition, the number of elements in each initializer must match with
+the number of elements or fields of the type of the declared *session*
 variable. This also implies that each sub-element, if itself being a
 compound data structure, must also be enclosed in braces.
 
@@ -2594,12 +2597,20 @@ DML deviates from the C language in a number of ways:
   }
   ```
 
-  (only one variable can be introduced per declaration). Session and saved
-  variables have a similar meaning to static variables as in C:
-  they retain value over function calls.
+  Session and saved variables have a similar meaning to static variables as in
+  C: they retain value over function calls.
   However, such variables in DML are allocated per device object, and are not
   globally shared between device instances.
 
+  Unlike C, multiple simultaneous variable declaration and
+  initialization is done through tuple syntax:
+  <pre>
+  method m() {
+      local (int n, bool b) = (0, true);
+      local (float f, void *p);
+      ...
+  }
+  </pre>
 * Plain C functions (i.e., not DML methods) can be called using normal
   function call syntax, as in `f(x)`.
 
@@ -2661,10 +2672,18 @@ DML deviates from the C language in a number of ways:
   SRC_FILES=foo.c bar.dml
   ```
 
-* Assignments (`=`) are required to be separate statements. You are still allowed to assign multiple variables in one statement, as in:
+* Assignments (`=`) are required to be separate statements.
+  You are still allowed to assign multiple variables in one statement, as in:
   ```
   i = j = 0;
   ```
+
+* Multiple simultaneous assignment can be performed in one statement
+  through tuple syntax, allowing e.g. the following:
+  ```
+  (i, j) = (j, i);
+  ```
+  However, such assignments are not allowed to be chained.
 
 * If a method can throw exceptions, or if it has more than one return argument, then the call must be a separate statement. If it has one or more return values, these must be assigned. If a method has multiple return arguments, these are enclosed in a parenthesis, as in:
   ```
@@ -2828,21 +2847,13 @@ method m() -> (int) { ... }
 if (m() + i == 13) { ... }
 ```
 
-<div class="note">
-
-**Note:** We plan to unify the syntax for method call statements, with the
-syntaxes for ordinary assignment and variable initialization, US16. This
-would permit the following:
-
+Method calls can be used to initialize multiple simultaneously declared
+variables, e.g.:
 ```
 // declare multiple variables, and
 // initialize them from one method call
 local (int i, uint8 j) = m(e1);
-// assign multiple values in one statement
-(x, y) = (1, 4);
 ```
-
-</div>
 
 ### After Statements
 

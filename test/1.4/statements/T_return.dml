@@ -1,0 +1,40 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+import "testing.dml";
+
+typedef struct {
+    int i;
+    bool b;
+} s_t;
+
+// Argument of return statements can be any initializer
+
+method construct(int i, bool b) -> (s_t) {
+    return { .b = b, .i = i };
+}
+
+method demand(bool expectation, int i, int j) -> (int, int) throws {
+    if (!expectation) {
+        throw;
+    }
+    return (i, j);
+}
+
+method m() -> (int, int) throws {
+    try {
+        return demand(false, 1, 2);
+    } catch {
+        return demand(true, 3, 4);
+    }
+}
+
+method test() throws {
+    local (int i, int j) = m();
+    assert i == 3 && j == 4;
+    local s_t s = construct(4, true);
+    assert s.i == 4 && s.b == true;
+}

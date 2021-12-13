@@ -1,0 +1,29 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// ERROR ESYNTAX
+session (int s1, float s2) = 1;
+/// ERROR ESYNTAX
+session (int s3, float s4) = (1, 2, 3);
+
+method init() {
+    /// ERROR ESYNTAX
+    local (int l1, float l2) = 1;
+    /// ERROR ESYNTAX
+    local (int l3, float l4) = (1, 2, 3);
+    /// ERROR ESYNTAX
+    session (int s5, float s6) = 1;
+    /// ERROR ESYNTAX
+    session (int s7, float s8) = (1, 2, 3);
+
+    local (int x, int y, int z);
+    /// ERROR ESYNTAX
+    (x, y) = 1;
+    /// ERROR ESYNTAX
+    (x, y) = (1, 2, 3);
+}

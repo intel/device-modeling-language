@@ -45,4 +45,9 @@ method init() {
         session int s = z;
     }
     g[0].m();
+
+    /// ERROR EIDENT
+    local int v = v;
+    /// ERROR EIDENT
+    local (int a, int b) = (4, a);
 }
