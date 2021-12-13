@@ -1176,7 +1176,9 @@ bank. The `aux` parameter is NULL by default, and is passed on to bank methods.
 In order to pass additional information on the access down to register and
 field methods, one can override `transaction_access`, decode needed information
 from the incoming transaction, and call `default` with the extracted
-information in the `aux` argument.
+information in the `aux` argument. Accesses that bigger than 8 bytes are split
+into smaller sized chunks before being completed, the exact details of which
+are *undefined*.
 </dd><dt>
 
 <small>write(uint64 offset, uint64 value, uint64 enabled\_bytes,
@@ -1888,6 +1890,57 @@ template bank is (object, shown_desc, _qname) {
     shared method transaction_access(transaction_t *t, uint64 offset,
                                      void *aux) -> (exception_type_t) default {
         local uint64 size = SIM_transaction_size(t);
+
+        if (size <= 8) {
+            return _transaction_access(t, offset, aux) ?
+                Sim_PE_No_Exception : Sim_PE_IO_Not_Taken;
+        }
+
+        local transaction_flags_t flags;
+        if (SIM_transaction_is_inquiry(t))
+            flags |= Sim_Transaction_Inquiry;
+
+        local uint8 buf[size];
+        if (SIM_transaction_is_write(t)) {
+            local buffer_t bytes;
+            bytes.data = buf;
+            bytes.len = size;
+            SIM_get_transaction_bytes(t, bytes);
+            flags |= Sim_Transaction_Write;
+        }
+
+        local int sz = 8 - (offset % 8);
+        local uint64 offs = 0;
+        while (offs < size) {
+            local atom_t atoms[4] = {
+                ATOM_data(&buf[offs]),
+                ATOM_size(sz),
+                ATOM_flags(flags),
+                ATOM_list_end(0)
+            };
+            /* don't link to the original transaction, because then we'll get
+               double byte-swapping, if that's present. */
+            local transaction_t tmp;
+            tmp.atoms = atoms;
+            if (!_transaction_access(&tmp, offset + offs, aux))
+                return Sim_PE_IO_Not_Taken;
+            offs += sz;
+            sz = 8 > (size - offs) ? (size - offs) : 8;
+        }
+
+        if (SIM_transaction_is_read(t)) {
+            local bytes_t bytes;
+            bytes.data = buf;
+            bytes.len = size;
+            SIM_set_transaction_bytes(t, bytes);
+        }
+
+        return Sim_PE_No_Exception;
+    }
+
+    shared method _transaction_access(transaction_t *t, uint64 offset,
+                                      void *aux) -> (bool) {
+        local uint64 size = SIM_transaction_size(t);
         local bool inquiry = SIM_transaction_is_inquiry(t);
         local bool inquiry_override = false;
         if (SIM_transaction_is_read(t) && !inquiry) {
@@ -1963,7 +2016,7 @@ template bank is (object, shown_desc, _qname) {
         if (!inquiry && !success) {
             this._log_miss(SIM_transaction_is_read(t), size, offset);
         }
-        return success ? Sim_PE_No_Exception : Sim_PE_IO_Not_Taken;
+        return success;
     }
 
     shared method _first_dot_idx(const char *s) -> (int) {
