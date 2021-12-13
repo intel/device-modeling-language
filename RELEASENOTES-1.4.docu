@@ -269,4 +269,8 @@
       <tt>number_of_registers</tt> methods of the
       <tt>register_view</tt> interface <bug number="SIMICS-18427"/>.
   </add-note></build-id>
+  <build-id value="next"><add-note>Banks that use the transaction
+      interface (the parameter <tt>use_io_memory</tt>
+      is <tt>false</tt>) now handle accesses that are bigger than 8
+      bytes.</add-note></build-id>
 </rn>
