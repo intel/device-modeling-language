@@ -77,7 +77,6 @@ else
 method init() {
     local int a;
     local int b;
-    // We may allow this syntax in the future, e.g. "(a, b) = (b, a);"
     /// ERROR ESYNTAX
     (a, b) = 5;
 
@@ -88,8 +87,6 @@ method init() {
     } catch {}
     /// ERROR ESYNTAX
     a = b = inlined(0);
-    /// ERROR ESYNTAX
-    (a, b) = (a, b) = multi_out();
     // No error here: nonthrowing() is an expression
     a = b = simple();
 

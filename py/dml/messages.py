@@ -633,6 +633,26 @@ class EAPPLY(DMLError):
             ftype = fun.ctype()
         DMLError.__init__(self, fun, fun, ftype)
 
+class EAPPLYMETH(DMLError):
+    """
+    Calls to inline methods, methods that may throw, or methods that have
+    multiple output parameters cannot be used as arbitrary expressions. In DML
+    1.2, any such method must be called via the `call` or `inline` statements,
+    and in DML 1.4 any such method must be called either as a standalone
+    statement, or as an initializer (e.g., RHS of an assignment or argument of
+    a `return` statement).
+    """
+    fmt = "call to method '%s' in unsupported context\n%s"
+    def __init__(self, site, fun):
+        if site.dml_version() == (1, 2):
+            suggestion = ("use the 'call' or 'inline' statements to call "
+                          + "this method")
+        else:
+            suggestion = ("perform this method call either as a standalone "
+                          + "statement or as an initializer (e.g., as the RHS "
+                          + "of an assignment)")
+        DMLError.__init__(self, site, fun, suggestion)
+
 class EIDENT(DMLError):
     """
     The identifier has not been declared anywhere.

@@ -8,13 +8,6 @@ import "testing.dml";
 
 extern FOO;
 
-// methods can only be used in call expressions if they don't throw, and have
-// less than two outputs
-method throwing {
-}
-method multi_out() -> (int x, int y) nothrow {
-}
-
 event e;
 
 method test -> (bool ok)
@@ -26,10 +19,6 @@ method test -> (bool ok)
     local bool b;
     /// ERROR EAPPLY
     b();
-    /// ERROR EAPPLY
-    $throwing() + 1;
-    /// ERROR EAPPLY
-    $multi_out() + 1;
     /// ERROR EAPPLY
     1();
     /// ERROR EAPPLY

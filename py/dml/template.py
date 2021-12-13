@@ -110,8 +110,12 @@ class ObjectSpec(object):
             symbols[p.args[0]] = ('param', p.site)
         for (_, shallow, composite) in self.blocks:
             for sub in shallow:
-                if sub.kind in ['method', 'session', 'saved']:
+                if sub.kind in ['method']:
                     symbols[sub.args[0]] = (sub.kind, sub.site)
+                elif sub.kind in ['session', 'saved']:
+                    for decl_ast in sub.args[0]:
+                        (name, _) = decl_ast.args
+                        symbols[name] = (sub.kind, sub.site)
                 else:
                     assert sub.kind == 'error'
             for (_, name, _, specs) in composite:

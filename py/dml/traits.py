@@ -59,12 +59,14 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                 methods[mname] = (ast.site, inp, outp, throws, overridable,
                                   body, rbrace_site)
             elif ast.kind in ('session', 'saved'):
-                (sname, type_ast, _) = ast.args
-                (struct_defs, stype) = eval_type(
-                    type_ast, ast.site, None, global_scope)
-                TStruct.late_global_struct_defs.extend(struct_defs)
-                check_namecoll(sname, ast.site)
-                sessions[sname] = (ast.site, stype)
+                (decls, _) = ast.args
+                for decl_ast in decls:
+                    (sname, type_ast) = decl_ast.args
+                    (struct_defs, stype) = eval_type(
+                        type_ast, ast.site, None, global_scope)
+                    TStruct.late_global_struct_defs.extend(struct_defs)
+                    check_namecoll(sname, ast.site)
+                    sessions[sname] = (ast.site, stype)
             elif ast.kind == 'typedparam':
                 (declsite, pname, type_ast) = ast.args
                 (struct_defs, ptype) = eval_type(type_ast, declsite, None,
@@ -182,6 +184,13 @@ class TraitMethod(TraitVTableItem):
         else:
             default = NoDefaultSymbol()
             # TODO: we should also have a clause for AmbiguousDefault here
+
+        for (n, t) in self.outp:
+            # See SIMICS-19028
+            if deep_const(t):
+                raise ICE(site,
+                          'Methods with (partially) const output/return '
+                          + 'values are not yet supported.')
 
         body = codegen_method(
             self.site, self.inp, self.outp, self.throws, self.astbody,

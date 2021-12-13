@@ -1,0 +1,50 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+import "testing.dml";
+
+
+method m() -> (int) {
+    return 1;
+}
+
+method mt() -> (int) throws {
+    return 1;
+}
+
+method m2() -> (int, int) {
+    return (1, 2);
+}
+
+method test() throws {
+    // Newly declared variables should not be in scope within their
+    // initializers
+    local (int x, bool y) = (1, false);
+    {
+        local int x = x + 1;
+        assert x == 2;
+    }
+    {
+        local (int x, bool y) = (cast(y, uint1), x == 1);
+        assert x == 0 && y;
+    }
+    // Methods should be able to be shadowed without issue
+    {
+        local int m = m();
+        assert m == 1;
+        local int mt = mt();
+        assert mt == 1;
+        local (int m2, int v) = m2();
+        assert m2 == 1 && v == 2;
+    }
+    // Original identifiers aren't lost
+    assert x == 1 && !y;
+    assert m() == 1;
+    local int a = mt();
+    local (int b, int c) = m2();
+    assert a == 1 && b == 1 && c == 2;
+}

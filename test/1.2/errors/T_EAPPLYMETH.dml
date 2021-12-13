@@ -1,0 +1,27 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+device test;
+import "testing.dml";
+
+// methods can only be used in call expressions if they don't throw, have less than two outputs, and are not inline
+// methods
+method throwing {
+}
+method multi_out() -> (int x, int y) nothrow {
+}
+
+method inlined(x) -> (uint64 y) {
+}
+
+method test -> (bool ok)
+{
+    /// ERROR EAPPLYMETH
+    $throwing() + 1;
+    /// ERROR EAPPLYMETH
+    $multi_out() + 1;
+    /// ERROR EAPPLYMETH
+    $inlined(2) + 1;
+}
