@@ -2180,7 +2180,7 @@ def mkAssignOp(site, target, source):
     target_type = target.ctype()
 
     source = source_for_assignment(site, target_type, source)
-    if safe_realtype(target_type).const:
+    if deep_const(target_type):
         raise ECONST(site)
     return AssignOp(site, target, source)
 
@@ -2596,10 +2596,11 @@ class BitSlice(Expression):
     def __init__(self, site, expr, msb, lsb, size, mask):
         # lsb is None if i[bitnum] (as opposed to i[msb:lsb]) notation was used
         if size:
+            const = deep_const(self.expr.ctype())
             if size.constant:
-                self.type = TInt(size.value, False)
+                self.type = TInt(size.value, False, const=const)
             else:
-                self.type = TInt(64, False)
+                self.type = TInt(64, False, const=const)
 
         self.read_expr = mkBitAnd(site, mkShR(site, expr, lsb or msb), mask)
 
@@ -2614,7 +2615,6 @@ class BitSlice(Expression):
 
     def read(self):
         return mkCast(self.site, self.read_expr, self.ctype()).read()
-
     @property
     def writable(self):
         return self.expr.writable
@@ -4122,7 +4122,22 @@ class ExpressionInitializer(Initializer):
     def read(self):
         return self.expr.read()
     def assign_to(self, dest, typ):
-        mkCopyData(self.expr.site, self.expr, dest).toc()
+        # Assigns to (partially) const-qualified targets can happen as part of
+        # initializing (partially) const-qualified session variables. To allow
+        # for such assigns while avoiding GCC errors, memcpy is used together
+        # with a cast to (void *).
+        # Since session variables are allocated on the heap, this should *not*
+        # be UB as long as the session variable hasn't been initialized
+        # previously.
+        site = self.expr.site
+        if deep_const(typ):
+            out('memcpy((void *)&%s, (%s){%s}, sizeof %s);\n'
+                % (dest.read(),
+                   TArray(typ, mkIntegerLiteral(site, 1)).declaration(''),
+                   mkCast(site, self.expr, typ).read(),
+                   dest.read()))
+        else:
+            mkCopyData(site, self.expr, dest).toc()
 
 class CompoundInitializer(Initializer):
     '''Initializer for a variable of struct or array type, using the
@@ -4146,15 +4161,18 @@ class CompoundInitializer(Initializer):
         return '{' + ", ".join(i.read() for i in self.init) + '}'
     def assign_to(self, dest, typ):
         '''output C statements to assign an lvalue'''
+        # (void *) cast to avoid GCC erroring if the target type is (partially)
+        # const-qualified. See ExpressionInitializer.assign_to
         if isinstance(typ, TNamed):
-            out('%s = (%s)%s;\n' %
-                (dest.read(), typ.declaration(''), self.read()))
+            out('memcpy((void *)&%s, &(%s)%s, sizeof %s);\n' %
+                (dest.read(), typ.declaration(''), self.read(),
+                 dest.read()))
         elif isinstance(typ, TArray):
-            out('memcpy(%s, (%s)%s, sizeof %s);\n'
+            out('memcpy((void *)%s, (%s)%s, sizeof %s);\n'
                 % (dest.read(), typ.declaration(''),
                    self.read(), dest.read()))
         elif isinstance(typ, TStruct):
-            out('memcpy(&%s, (%s){%s}, sizeof %s);\n' % (
+            out('memcpy((void *)&%s, (%s){%s}, sizeof %s);\n' % (
                 dest.read(),
                 TArray(typ, mkIntegerLiteral(self.site, 1)).declaration(''),
                 self.read(), dest.read()))
@@ -4195,7 +4213,9 @@ class DesignatedStructInitializer(Initializer):
         '''output C statements to assign an lvalue'''
         typ = safe_realtype(typ)
         if isinstance(typ, StructType):
-            out('memcpy(&%s, (%s){%s}, sizeof %s);\n' % (
+            # (void *) cast to avoid GCC erroring if the target type is
+            # (partially) const-qualified. See ExpressionInitializer.assign_to
+            out('memcpy((void *)&%s, (%s){%s}, sizeof %s);\n' % (
                 dest.read(),
                 TArray(typ, mkIntegerLiteral(self.site, 1)).declaration(''),
                 self.read(), dest.read()))
@@ -4233,7 +4253,9 @@ class MemsetInitializer(Initializer):
         assert isinstance(safe_realtype(typ),
                           (TExternStruct, TStruct, TArray, TEndianInt, TTrait,
                            TObjIdentity))
-        out('memset(&%s, 0, sizeof(%s));\n'
+        # (void *) cast to avoid GCC erroring if the target type is
+        # (partially) const-qualified. See ExpressionInitializer.assign_to
+        out('memset((void *)&%s, 0, sizeof(%s));\n'
             % (dest.read(), typ.declaration('')))
 
 class StructDefinition(Statement):
@@ -4265,8 +4287,10 @@ class Declaration(Statement):
     def toc(self):
         self.linemark()
 
-        if isinstance(self.init, MemsetInitializer):
-            # ducks a GCC warning
+        if (isinstance(self.init, MemsetInitializer)
+            and not deep_const(self.type)):
+            # ducks a potential GCC warning, and also serves to
+            # zero-initialize VLAs
             self.type.print_declaration(self.name, unused = self.unused)
             self.init.assign_to(mkLit(self.site, self.name, self.type),
                                 self.type)

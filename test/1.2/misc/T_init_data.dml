@@ -7,7 +7,9 @@ device test;
 import "testing.dml";
 
 data int simple_int = 17;
+data const int const_int = 17;
 data int simple_array[4] = {0, 256, 128, 4096};
+data const int const_array[4] = {0, 256, 128, 4096};
 data int d2_array[2][4] = {
     {1, 2, 3, 4},
     {5, 6, 7, 8}
@@ -21,6 +23,12 @@ struct simple_struct_t {
     bool b;
 }
 data simple_struct_t simple_struct = {42, true};
+
+struct const_struct_t {
+    int i;
+    const bool b;
+}
+data const_struct_t const_struct = {42, true};
 
 struct a_struct_t {
     int i;
@@ -51,11 +59,24 @@ method test -> (bool ok) {
     if (!ok)
         return;
 
+    // const scalar
+    ok = $const_int == 17;
+    if (!ok)
+        return;
+
     // simple array
     ok = $simple_array[0] == 0
       && $simple_array[1] == 256
       && $simple_array[2] == 128
       && $simple_array[3] == 4096;
+    if (!ok)
+        return;
+
+    // const array
+    ok = $const_array[0] == 0
+      && $const_array[1] == 256
+      && $const_array[2] == 128
+      && $const_array[3] == 4096;
     if (!ok)
         return;
 
@@ -78,9 +99,16 @@ method test -> (bool ok) {
       && $str_array[1][1] == 0x0;
     if (!ok)
         return;
-    
+
     // simple struct
     ok = $simple_struct.i == 42 && $simple_struct.b == true;
+    if (!ok)
+        return;
+
+    // const struct
+    ok = $const_struct.i == 42 && $const_struct.b == true;
+    $const_struct.i = -24;
+    ok = $const_struct.i == -24 && $const_struct.b == true;
     if (!ok)
         return;
 

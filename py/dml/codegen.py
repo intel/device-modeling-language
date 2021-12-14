@@ -819,7 +819,7 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
                 else:
                     raise expr.exc()
             else:
-                etype = expr.ctype()
+                etype = expr.ctype().clone()
             if not etype:
                 raise ICE(site, "No type for expression: %s (%r)"
                            % (expr, expr))
@@ -1260,6 +1260,9 @@ def stmt_local(stmt, location, scope):
     (struct_decls, etype) = eval_type(
         asttype, stmt.site, location, scope)
     etype = etype.resolve()
+    rt = safe_realtype_shallow(etype)
+    if isinstance(rt, TArray) and not rt.size.constant and deep_const(rt):
+        raise EVLACONST(stmt.site)
     init = get_initializer(stmt.site, etype, init, location, scope)
 
     check_shadowing(scope, name, stmt.site)
@@ -1452,7 +1455,7 @@ def stmt_hashif(stmt, location, scope):
     else:
         return []
 
-def try_codegen_invocation(site, apply_ast, outarg_asts, location, scope):
+def try_codegen_invocation(site, apply_ast, outargs, location, scope):
     '''Generate a method call statement if apply_ast is a method call,
     otherwise None'''
     if apply_ast.kind != 'initializer_scalar':
@@ -1477,9 +1480,6 @@ def try_codegen_invocation(site, apply_ast, outarg_asts, location, scope):
             # Shared methods marked as 'throws' count as
             # unconditionally throwing
             EBADFAIL_dml12.throwing_methods[location.method()] = site
-        outargs = [
-            codegen_expression(outarg_ast, location, scope)
-            for outarg_ast in outarg_asts]
         inargs = [
             codegen_expression(inarg_ast, location, scope)
             for inarg_ast in inarg_asts]
@@ -1495,9 +1495,6 @@ def try_codegen_invocation(site, apply_ast, outarg_asts, location, scope):
         # let the caller represent the method invocation as an
         # expression instead
         return None
-    outargs = [
-        codegen_expression(outarg_ast, location, scope)
-        for outarg_ast in outarg_asts]
     if dml.globals.dml_version == (1, 2):
         # some methods in the 1.2 lib (e.g. register.read_access) require
         # args to be undefined, so we must permit this when calling
@@ -1548,12 +1545,19 @@ def stmt_assign(stmt, location, scope):
     (kind, site, tgt_asts, src_ast) = stmt
     # tgt_asts is a list of lists of expressions; [[a, b], [c, d]]
     # corresponds to "(a, b) = (c, d) = "
-    method_invocation = try_codegen_invocation(site, src_ast, tgt_asts[0],
+    tgts = [[codegen_expression(tgt_ast, location, scope)
+             for tgt_ast in tgt_tup] for tgt_tup in tgt_asts]
+
+    for tgt in itertools.chain(*tgts):
+        if deep_const(tgt.ctype()):
+            raise ECONST(tgt.site)
+
+    method_invocation = try_codegen_invocation(site, src_ast, tgts[0],
                                                location, scope)
     if method_invocation:
-        if len(tgt_asts) != 1:
+        if len(tgts) != 1:
             report(ESYNTAX(
-                tgt_asts[1][0].site, '=',
+                tgts[1][0].site, '=',
                 'assignment chain not allowed as method invocation target'))
         return [method_invocation]
 
@@ -1568,15 +1572,12 @@ def stmt_assign(stmt, location, scope):
                     'only method calls can have multiple assignment targets'))
             return []
 
-    tgts = [codegen_expression(tgt_ast, location, scope)
-            for [tgt_ast] in tgt_asts]
-
     init = eval_initializer(
-        site, tgts[-1].ctype(), src_ast, location, scope, False)
+        site, tgts[-1][0].ctype(), src_ast, location, scope, False)
 
     lscope = Symtab(scope)
     stmts = []
-    for (i, tgt) in enumerate(reversed(tgts[1:])):
+    for (i, [tgt]) in enumerate(reversed(tgts[1:])):
         name = 'tmp%d' % (i,)
         sym = lscope.add_variable(
             name, type=tgt.ctype(), site=tgt.site, init=init, static=False,
@@ -1584,7 +1585,7 @@ def stmt_assign(stmt, location, scope):
         init = ExpressionInitializer(mkLocalVariable(tgt.site, sym))
         stmts.extend([sym_declaration(sym),
                       mkAssignStatement(tgt.site, tgt, init)])
-    stmts.append(mkAssignStatement(tgts[0].site, tgts[0], init))
+    stmts.append(mkAssignStatement(tgts[0][0].site, tgts[0][0], init))
 
     return stmts
 
@@ -1593,6 +1594,8 @@ def stmt_assignop(stmt, location, scope):
     (kind, site, tgt_ast, op, src_ast) = stmt
 
     tgt = codegen_expression(tgt_ast, location, scope)
+    if deep_const(tgt.ctype()):
+        raise ECONST(tgt.site)
     if isinstance(tgt, ctree.BitSlice):
         # destructive hack
         return stmt_assign(

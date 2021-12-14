@@ -1,0 +1,39 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+typedef struct {
+    struct {
+        const int y;
+    } x[4];
+} s_t;
+
+typedef layout "little-endian" {
+    layout "little-endian" {
+        const int32 y;
+    } x[4];
+} lo_t;
+
+// no error
+saved int a;
+
+/// ERROR ESAVEDCONST
+saved const int b;
+
+/// ERROR ESAVEDCONST
+saved const int c[4];
+
+/// ERROR ESAVEDCONST
+saved s_t d;
+
+/// ERROR ESAVEDCONST
+saved lo_t e;
+
+// no error
+session const int g;
+session const int h[4];
+session s_t i;
+session lo_t j;

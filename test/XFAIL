@@ -54,9 +54,6 @@
 # bug 25244
 1.2/errors/ETREC_layout
 
-# bug 25248
-1.2/statements/local_const_struct
-
 # bug 7099
 1.2/methods/inline_array
 

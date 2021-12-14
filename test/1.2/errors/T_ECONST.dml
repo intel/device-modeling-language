@@ -16,8 +16,13 @@ method init() {
     foo = 5;
 
     local a_t x;
+    local a_t y;
+    // no error
+    x.a = 4;
     /// ERROR ECONST
     x.c = 4;
+    /// ERROR ECONST
+    x = y;
 
     {
         local const a_t *p = &x;
@@ -38,7 +43,7 @@ method init() {
     }
 
     // bug 24069
-    local const_int_t y;
+    local const_int_t z;
     /// ERROR ECONST
-    y = 3;
+    z = 3;
 }
