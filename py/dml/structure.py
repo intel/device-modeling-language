@@ -763,6 +763,8 @@ def mksaved(spec, parent):
     (struct_defs, dtype) = eval_type(typ, site, parent_scope, global_scope)
     TStruct.late_global_struct_defs.extend(struct_defs)
     dtype.resolve()
+    if deep_const(dtype):
+        raise ESAVEDCONST(site, dtype)
     obj = objects.Saved(name, dtype, astinit, site, parent)
     if astinit:
         dml.globals.device.add_init_data(obj)

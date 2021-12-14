@@ -1700,4 +1700,10 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
       <tt>foreach</tt> statements in DML 1.2 and <tt>#foreach</tt> statements in
       DML 1.4 <bug number="1309451301"/>.
   </add-note></build-id>
+  <build-id value="next"><add-note> (Partially) const-qualified <tt>session</tt>
+      variables no longer result in invalid generated C
+      <bug number="SIMICS-9440"/>.</add-note></build-id>
+  <build-id value="next"><add-note> Implicitly initialized <tt>local</tt>
+      variables of (partially) const-qualified struct type no longer result in
+      invalid generated C <bug number="SIMICS-10197"/>.</add-note></build-id>
 </rn>

@@ -6,6 +6,5 @@ dml 1.2;
 device test;
 /// COMPILE-ONLY
 method init() {
-    // CC fails, bug 25248
     local const struct { int i; } x;
 }

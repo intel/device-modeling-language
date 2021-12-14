@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import dml.types as dt
+import dml.globals
 from dml import ctree
 from dml import logging
 from dml import types
@@ -24,7 +25,8 @@ class TestClone(unittest.TestCase):
                     dt.TTrait(object()),
                     dt.TStruct({"name": types.TInt(32, False)}),
                     dt.TLayout("big-endian", {}),
-                    dt.TFunction([], dt.TVoid())):
+                    dt.TFunction([], dt.TVoid()),
+                    dt.TDevice("a")):
             typ_clone = typ.clone()
             self.assertEqual(
                 types.realtype(typ_clone).cmp(types.realtype(typ)), 0)
@@ -39,6 +41,7 @@ class TestClone(unittest.TestCase):
         self.assertEqual(typ.cmp(typ_clone), 0)
         self.assertEqual(typ_clone.cmp(typ), 0)
         self.assertEqual(typ.const, True)
+        dml.globals.dml_version = (1, 2)
         # types which do not support clone
         with self.assertRaises(logging.ICE):
-            dt.TDevice("a").clone()
+            dt.TUnknown().clone()

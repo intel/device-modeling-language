@@ -1439,6 +1439,21 @@ class EVLALEN(DMLError):
     """
     fmt = "'.len' cannot be used with variable-length arrays"
 
+class ESAVEDCONST(DMLError):
+    """
+    Declaring a saved variable with a type that is (partially) const-qualified
+    is not allowed, as they can be modified due to checkpoint restoration.
+    """
+    fmt = "saved variable declared with (partially) const-qualified type %s"
+
+class EVLACONST(DMLError):
+    """
+    Variable length arrays may not be declared const-qualified or with a base
+    type that is (partially) const-qualified.
+    """
+    fmt = ("variable length array declared with (partially) const-qualified "
+           + "type")
+
 #
 # WARNINGS (keep these as few as possible)
 #

@@ -11,6 +11,7 @@ __all__ = (
     'realtype',
     'safe_realtype_shallow',
     'safe_realtype',
+    'deep_const',
     'type_union',
     'compatible_types',
     'typedefs',
@@ -138,6 +139,23 @@ def conv_const(const, t):
         t = t.clone()
         t.const = True
     return t
+
+def deep_const(origt):
+    subtypes = [origt]
+    while subtypes:
+        st = safe_realtype_shallow(subtypes.pop())
+        if st.const:
+            return True
+        if isinstance(st, (TArray, TVector)):
+            subtypes.append(st.base)
+        elif isinstance(st, StructType):
+            subtypes.extend(st.members.values())
+        # TODO This should be added once the types of bitfields member are
+        # respected by subreferences to them (SIMICS-18394 and SIMICS-8857).
+        # elif st.is_int and st.is_bitfields:
+        #     subtypes.extend(typ for (typ, _, _) in st.members.values())
+
+    return False
 
 class DMLType(metaclass=abc.ABCMeta):
     '''The type of a value (expression or declaration) in DML. One DML
@@ -267,9 +285,10 @@ class TDevice(DMLType):
     This is the type of $dev. No other values have this type.
     """
     __slots__ = ('name',)
-    def __init__(self, name):
+    def __init__(self, name, const=False):
         DMLType.__init__(self)
         self.name = name
+        self.const = const
     def __repr__(self):
         return 'TDevice(%s)' % repr(self.name)
     def describe(self):
@@ -286,7 +305,7 @@ class TDevice(DMLType):
     def declaration(self, var):
         return (self.name + ' *' + var)
     def clone(self):
-        raise ICE(self.declaration_site, "cannot clone %r type" % self)
+        return TDevice(self.name, self.const)
 
 # Hack: some identifiers that are valid in DML are not allowed in C,
 # either because they are reserved words or because they clash with
@@ -652,6 +671,12 @@ class TArray(DMLType):
     def declaration(self, var):
         return self.base.declaration(self.const_str + var
                                      + '[' + self.size.read() + ']')
+
+    def print_declaration(self, var, init = None, unused = False):
+        # VLA:s may not have an initializer
+        assert not init or self.size.constant
+        DMLType.print_declaration(self, var, init, unused)
+
     def sizeof(self):
         if not self.size.constant:
             # variable-sized array, sizeof is not known
@@ -971,7 +996,7 @@ class TLayout(TStruct):
                 or (dml.globals.compat_dml12_int(site)
                     and isinstance(rt, TSize))):
                 toret = TEndianInt(rt.bits, rt.signed,
-                                   self.endian, rt.members)
+                                   self.endian, rt.members, rt.const)
                 return (toret, toret)
             if isinstance(rt, TEndianInt):
                 return (rt, rt)
