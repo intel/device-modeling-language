@@ -1379,28 +1379,39 @@ template bank is (object, shown_desc, _qname) {
     // this carried semantics in DML 1.2; deprecated in 1.4
     param _confidentiality          = undefined;
 
-    // would be great if we could index a sequence
-    shared method _get_register(uint32 reg) -> (register) throws default {
-        local uint32 num = 0;
-        foreach r in (this._each_register) {
-            if (r.offset != unmapped_offset) {
-                if (num == reg) {
-                    return r;
+    session register *_reginfo_cache;
+    session uint64 _reginfo_cache_size = 0;
+
+    shared method _build_register_cache() {
+        if (_reginfo_cache == NULL) {
+            foreach r in (this._each_register) {
+                if (r.offset != unmapped_offset) {
+                    _reginfo_cache_size++;
                 }
-                num++;
+            }
+            _reginfo_cache = new register[_reginfo_cache_size];
+            local uint64 num = 0;
+            foreach r in (this._each_register) {
+                if (r.offset != unmapped_offset) {
+                    _reginfo_cache[num] = r;
+                    num++;
+                }
             }
         }
-        throw;
+    }
+
+    // would be great if we could index a sequence
+    shared method _get_register(uint32 reg) -> (register) throws default {
+        _build_register_cache();
+        if (reg >= _reginfo_cache_size) {
+            throw;
+        }
+        return _reginfo_cache[reg];
     }
 
     shared method _num_registers() -> (uint32) {
-        local uint32 num = 0;
-        foreach r in (this._each_register) {
-            if (r.offset != unmapped_offset) {
-                num++;
-            }
-        }
-        return num;
+        _build_register_cache();
+        return _reginfo_cache_size;
     }
 
     // Given two address intervals, return the location of their intersection,
