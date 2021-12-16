@@ -1371,6 +1371,12 @@ template map_target is (connect, _qname) {
                 return Sim_PE_IO_Not_Taken;
             }
         }
-        return SIM_issue_transaction(map_target, t, addr);
+        local exception_type_t exc = SIM_issue_transaction(map_target, t, addr);
+        local bool fail = exc != Sim_PE_No_Exception;
+        log info, (fail ? 2 : 4) : "%s%s %d bytes @ 0x%x in %s",
+            fail ? "failed to " : "",
+            SIM_transaction_is_read(t) ? "read" : fail ? "write" : "wrote",
+            SIM_transaction_size(t), addr, SIM_object_name(obj);
+        return exc;
     }
 }
