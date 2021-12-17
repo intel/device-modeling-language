@@ -42,6 +42,7 @@ extern char *_DML_describe_uint64_event(const char *base, uint64 data);
 
 extern size_t strlen(const char *s);
 extern char *strcpy(char *s, const char *s);
+extern void *memcpy(void *dest, const void *src, size_t n);
 
 extern typedef struct {
 } _callback_entry_t;
@@ -1760,17 +1761,27 @@ template bank is (object, shown_desc, _qname) {
         else
             return SIM_get_mem_op_value_be(memop);
     }
-    shared method _transaction_set_read_value(transaction_t *t, uint64 val) {
-        if (this._le_byte_order)
-            SIM_set_transaction_value_le(t, val);
-        else
-            SIM_set_transaction_value_be(t, val);
+    shared method _set_read_value(uint64 size, uint8 *buf, uint64 val) {
+        assert size <= 8;
+        if (this._le_byte_order) {
+            local uint64_le_t v = val;
+            memcpy(buf, &v, size);
+        } else {
+            local uint64_be_t v = val;
+            memcpy(buf, cast(&v, char *) + 8 - size, size);
+        }
     }
-    shared method _transaction_write_value(transaction_t *t) -> (uint64) {
-        if (this._le_byte_order)
-            return SIM_get_transaction_value_le(t);
-        else
-            return SIM_get_transaction_value_be(t);
+    shared method _write_value(uint64 size, const uint8 *buf) -> (uint64) {
+        assert size <= 8;
+        if (this._le_byte_order) {
+            local uint64_le_t v;
+            memcpy(&v, buf, size);
+            return v;
+        } else {
+            local uint64_be_t v;
+            memcpy(cast(&v, char *) + 8 - size, buf, size);
+            return v;
+        }
     }
 
     shared method _log_miss(bool is_read, int size, uint64 offset) {
@@ -1890,44 +1901,29 @@ template bank is (object, shown_desc, _qname) {
     shared method transaction_access(transaction_t *t, uint64 offset,
                                      void *aux) -> (exception_type_t) default {
         local uint64 size = SIM_transaction_size(t);
-
-        if (size <= 8) {
-            return _transaction_access(t, offset, aux) ?
-                Sim_PE_No_Exception : Sim_PE_IO_Not_Taken;
-        }
-
-        local transaction_flags_t flags;
-        if (SIM_transaction_is_inquiry(t))
-            flags |= Sim_Transaction_Inquiry;
-
         local uint8 buf[size];
         if (SIM_transaction_is_write(t)) {
             local buffer_t bytes;
             bytes.data = buf;
             bytes.len = size;
             SIM_get_transaction_bytes(t, bytes);
-            flags |= Sim_Transaction_Write;
         }
-
-        local int sz = 8 - (offset % 8);
-        local uint64 offs = 0;
-        while (offs < size) {
-            local atom_t atoms[4] = {
-                ATOM_data(&buf[offs]),
-                ATOM_size(sz),
-                ATOM_flags(flags),
-                ATOM_list_end(0)
-            };
-            /* don't link to the original transaction, because then we'll get
-               double byte-swapping, if that's present. */
-            local transaction_t tmp;
-            tmp.atoms = atoms;
-            if (!_transaction_access(&tmp, offset + offs, aux))
+        local bool inquiry = SIM_transaction_is_inquiry(t);
+        local bool is_read = SIM_transaction_is_read(t);
+        if (size <= 8) {
+            if (!_transaction_access(is_read, inquiry, offset, size, buf, aux))
                 return Sim_PE_IO_Not_Taken;
-            offs += sz;
-            sz = 8 > (size - offs) ? (size - offs) : 8;
+        } else {
+            local int sz = 8 - (offset % 8);
+            local uint64 offs = 0;
+            while (offs < size) {
+                if (!_transaction_access(is_read, inquiry, offset + offs, sz,
+                                         buf + offs, aux))
+                    return Sim_PE_IO_Not_Taken;
+                offs += sz;
+                sz = 8 > (size - offs) ? (size - offs) : 8;
+            }
         }
-
         if (SIM_transaction_is_read(t)) {
             local bytes_t bytes;
             bytes.data = buf;
@@ -1938,12 +1934,11 @@ template bank is (object, shown_desc, _qname) {
         return Sim_PE_No_Exception;
     }
 
-    shared method _transaction_access(transaction_t *t, uint64 offset,
-                                      void *aux) -> (bool) {
-        local uint64 size = SIM_transaction_size(t);
-        local bool inquiry = SIM_transaction_is_inquiry(t);
+    shared method _transaction_access(
+        bool is_read, bool inquiry, uint64 offset, uint64 size, uint8 *buf,
+        void *aux) -> (bool) {
         local bool inquiry_override = false;
-        if (SIM_transaction_is_read(t) && !inquiry) {
+        if (is_read && !inquiry) {
             _callback_before_read(this._bank_obj(), &inquiry_override, &offset,
                                   size, &_connections, &_before_read_callbacks);
             if (inquiry_override) {
@@ -1953,7 +1948,7 @@ template bank is (object, shown_desc, _qname) {
 
         local bool success = true;
         if (inquiry) {
-            if (SIM_transaction_is_read(t)) {
+            if (is_read) {
                 local uint64 value;
                 try {
                     value = this.get(offset, size);
@@ -1968,14 +1963,14 @@ template bank is (object, shown_desc, _qname) {
                 }
 
                 if (success) {
-                    this._transaction_set_read_value(t, value);
+                    this._set_read_value(size, buf, value);
                 }
             } else {
-                local uint64 writevalue = this._transaction_write_value(t);
+                local uint64 writevalue = this._write_value(size, buf);
                 this.set(offset, size, writevalue);
             }
         } else {
-            if (SIM_transaction_is_read(t)) {
+            if (is_read) {
                 local uint64 value = 0;
                 try {
                     value = this.read(offset, _mask(size), aux);
@@ -1988,10 +1983,10 @@ template bank is (object, shown_desc, _qname) {
                                      &_after_read_callbacks);
 
                 if (success) {
-                    this._transaction_set_read_value(t, value);
+                    this._set_read_value(size, buf, value);
                 }
             } else {
-                local uint64 writevalue = this._transaction_write_value(t);
+                local uint64 writevalue = this._write_value(size, buf);
 
                 local bool suppress = false;
                 _callback_before_write(
@@ -2007,14 +2002,14 @@ template bank is (object, shown_desc, _qname) {
             }
         }
 
-        if (!SIM_transaction_is_read(t) && !inquiry) {
+        if (!is_read && !inquiry) {
             _callback_after_write(this._bank_obj(), &offset, size,
                                   &success, &_connections,
                                   &_after_write_callbacks);
         }
 
         if (!inquiry && !success) {
-            this._log_miss(SIM_transaction_is_read(t), size, offset);
+            this._log_miss(is_read, size, offset);
         }
         return success;
     }
