@@ -269,4 +269,8 @@
       <tt>number_of_registers</tt> methods of the
       <tt>register_view</tt> interface <bug number="SIMICS-18427"/>.
   </add-note></build-id>
+  <build-id value="next"><add-note> Fix issue where the DML-provided
+      implementation of <tt>register_info</tt> in the
+      <tt>register_view interface</tt> would provide incorrect names for fields
+      in field arrays<bug number="SIMICS-18244"/>.</add-note></build-id>
 </rn>
