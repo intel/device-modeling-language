@@ -7,7 +7,7 @@ dml 1.4;
 
 device test;
 
-bank b {
+template tpl is bank {
     param use_io_memory = false;
 
     method transaction_access(transaction_t *t, uint64 offset,
@@ -56,4 +56,10 @@ bank b {
         if (offset == 13)
             throw;
     }
+}
+
+bank b is tpl;
+
+bank be is tpl {
+    param byte_order = "big-endian";
 }
