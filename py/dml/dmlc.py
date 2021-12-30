@@ -233,6 +233,21 @@ def main(argv):
         '--dep', dest = "makedep", action = 'store',
         help = 'generate makefile dependencies')
 
+    # <dt>--no-dep-phony</dt>
+    # <dd>Avoid addition of a phony target for each dependency other than the main file.</dd>
+    optpar.add_option(
+        '--no-dep-phony', dest = "no_dep_phony", action = 'store_true',
+        help = 'do not generate phony targets for dependencies')
+
+    # <dt>--dep-target</dt>
+    # <dd>Change the target of the rule emitted by dependency generation.
+    # Specify multiple times to have multiple targets.</dd>
+    optpar.add_option(
+        '--dep-target', dest = "dep_target", action = 'append',
+        metavar = 'TARGET',
+        default = [],
+        help = 'change the target of the rule emitted by dependency generation')
+
     # <dt>-T</dt>
     # <dd>Show tags on warning messages. The tags can be used with
     # the <tt>--nowarn</tt> and <tt>--warn</tt> options.</dd>
@@ -497,16 +512,22 @@ def main(argv):
                 # dependencies
                 deplist = set(deplist) - set(future_timestamps)
             deps = ' '.join(path.replace(" ", "\\ ") for path in deplist)
+            if options.dep_target:
+                targetlist = options.dep_target
+            else:
+                targetlist = [options.makedep, f"{outputbase}.c"]
+            targets = ' '.join(path.replace(" ", "\\ ") for path in targetlist)
             if options.makedep_old:
                 f = sys.stdout
             else:
                 f = open(options.makedep, 'w')
             with f:
-                # rebuild from DML if imported file has changed
-                f.write('%s %s.c : %s\n' % (
-                    options.makedep, outputbase, deps))
-                # if imported file vanished, survive and rebuild
-                f.write('%s :\n' % (deps,))
+                f.write('%s : %s\n' % (targets, deps))
+                # By default generate phony targets similar to -MP GCC
+                # argument. Phony targets provide better experience with GNU
+                # Make when dependencies get removed.
+                if not options.no_dep_phony:
+                    f.write('%s :\n' % (deps,))
             sys.exit(0)
 
         dev = process(devname, global_defs, top_tpl, defs)

@@ -259,7 +259,7 @@ def generate_hfile(device, headers, filename):
     reset_line_directive()
     out('\n')
 
-    out('#include "'+structfilename+'"\n\n')
+    out('#include "'+os.path.basename(structfilename)+'"\n\n')
 
     for name in dml.globals.traits:
         out(f'typedef _traitref_t {cident(name)};\n')
@@ -2359,8 +2359,8 @@ def generate_cfile(device, footers,
         ' */',
         '',
         api_define,
-        '#include "%s"' % (hfilename,),
-        '#include "%s"' % (protofilename,),
+        '#include "%s"' % (os.path.basename(hfilename),),
+        '#include "%s"' % (os.path.basename(protofilename),),
         ''])
 
     if c_split_threshold:
