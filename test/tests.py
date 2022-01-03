@@ -1,4 +1,4 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 import sys, time
@@ -23,6 +23,10 @@ import traceback
 
 sys.path.append(join(simics_root_path(), "scripts", "build"))
 import module_id
+
+# Set to true to update the copyright year in source files (manually validate
+# that only correct files where updated)
+update_copyright = False
 
 def host_path():
     return join(testparams.simics_root_path(),
@@ -1324,6 +1328,28 @@ class CopyrightTestCase(BaseTestCase):
         start = int(match.group(1))
         end = start if match.group(2) is None else int(match.group(2))
         if end != this_year:
+            if update_copyright:
+                last_year = str(int(this_year) - 1)
+                updated = False
+                def replace_cr_text(m):
+                    return m.group(1) + str(this_year).encode('utf-8') + m.group(3)
+                with open(path, 'rb') as f:
+                    result = []
+                    for (_, org_line) in enumerate(f):
+                        line = re.sub(
+                            f'© {last_year} '.encode('utf-8'),
+                            f'© {last_year}-{this_year} '.encode('utf-8'),
+                            org_line)
+                        line = re.sub(
+                            r'(.*© \d\d\d\d-)(\d\d\d\d)(.*)$'.encode('utf-8'),
+                            replace_cr_text, line)
+                        result.append(line)
+                        if line != org_line:
+                            updated = True
+                if updated:
+                    with open(path, 'wb') as f:
+                        for line in result:
+                            f.write(line)
             return 'copyright year too old'
         if not 2000 < start <= end:
             return f'strange copyright year: {start}'
