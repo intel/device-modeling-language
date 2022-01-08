@@ -234,14 +234,15 @@ def main(argv):
         help = 'generate makefile dependencies')
 
     # <dt>--no-dep-phony</dt>
-    # <dd>Avoid addition of a phony target for each dependency other than the main file.</dd>
+    # <dd>With --dep, avoid addition of a phony target for each dependency
+    # other than the main file.</dd>
     optpar.add_option(
         '--no-dep-phony', dest = "no_dep_phony", action = 'store_true',
         help = 'do not generate phony targets for dependencies')
 
     # <dt>--dep-target</dt>
-    # <dd>Change the target of the rule emitted by dependency generation.
-    # Specify multiple times to have multiple targets.</dd>
+    # <dd>With --dep, change the target of the rule emitted by dependency
+    # generation. Specify multiple times to have multiple targets.</dd>
     optpar.add_option(
         '--dep-target', dest = "dep_target", action = 'append',
         metavar = 'TARGET',
