@@ -238,7 +238,8 @@ def main(argv):
     # other than the main file.</dd>
     optpar.add_option(
         '--no-dep-phony', dest = "no_dep_phony", action = 'store_true',
-        help = 'do not generate phony targets for dependencies')
+        help = 'With --dep, avoid addition of a phony target for each'
+        + ' dependency other than the main file.')
 
     # <dt>--dep-target</dt>
     # <dd>With --dep, change the target of the rule emitted by dependency
@@ -247,7 +248,9 @@ def main(argv):
         '--dep-target', dest = "dep_target", action = 'append',
         metavar = 'TARGET',
         default = [],
-        help = 'change the target of the rule emitted by dependency generation')
+        help = 'With --dep, change the target of the rule emitted by'
+        + ' dependency generation. Specify multiple times to have multiple'
+        + ' targets.')
 
     # <dt>-T</dt>
     # <dd>Show tags on warning messages. The tags can be used with
