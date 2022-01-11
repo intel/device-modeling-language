@@ -230,14 +230,14 @@
   <build-id value="6131"><add-note> It is no longer an error to instantiate
       a non-existing template from within a dead branch of an `#if` block.
   </add-note></build-id>
-  <build-id value="next"><add-note> Two values of the same template type
+  <build-id value="6133"><add-note> Two values of the same template type
       can now be compared for equality, and are equal when they
       reference the same object <bug number="SIMICS-6998"/>.
 
       The internal representation of values of template types has been changed.
       It is no longer allowed to cast such values to integer or pointer types.
   </add-note></build-id>
-  <build-id value="next"><add-note>Attributes that do not define
+  <build-id value="6133"><add-note>Attributes that do not define
       <i>either of</i> the <tt>documentation</tt> parameter or
       the <tt>desc</tt> parameter are now considered internal by
       default. Register-attributes are internal by default, regardless
@@ -245,31 +245,31 @@
       be changed by explicitly overriding the <tt>internal</tt>
       parameter of the register or attribute.
   </add-note></build-id>
-  <build-id value="next"><add-note> Fixed an issue where a log
+  <build-id value="6133"><add-note> Fixed an issue where a log
       statement could fail to switch log levels when used within
       a shared method and called through trait references.
   </add-note></build-id>
-  <build-id value="next"><add-note> Fixed an issue where a log
+  <build-id value="6133"><add-note> Fixed an issue where a log
       statement could incorrectly switch log levels when used within
       a method declared within an object array.
   </add-note></build-id>
-  <build-id value="next"><add-note> Writes outside fields in a register will
+  <build-id value="6133"><add-note> Writes outside fields in a register will
       now by default log one <tt>spec-violation</tt> message on log level 1
       on first such write, and no logging on further such writes.
   </add-note></build-id>
-  <build-id value="next"><add-note> Added a
+  <build-id value="6135"><add-note> Added a
       template <tt>map_target</tt> which can be used
       on <tt>connect</tt> objects to expose methods for reading and
       writing data from/to the connected object.</add-note></build-id>
-  <build-id value="next"><add-note> The device info XML file is no
+  <build-id value="6135"><add-note> The device info XML file is no
       longer needed by DML 1.4 devices. A dummy XML file is still
       created to avoid packaging problems.</add-note></build-id>
-  <build-id value="next"><add-note> Optimized the DML-provided
+  <build-id value="6135"><add-note> Optimized the DML-provided
       implementation of the <tt>register_info</tt> and the
       <tt>number_of_registers</tt> methods of the
       <tt>register_view</tt> interface <bug number="SIMICS-18427"/>.
   </add-note></build-id>
-  <build-id value="next"><add-note>Banks that use the transaction
+  <build-id value="6137"><add-note>Banks that use the transaction
       interface (the parameter <tt>use_io_memory</tt>
       is <tt>false</tt>) now handle accesses that are bigger than 8
       bytes.</add-note></build-id>
