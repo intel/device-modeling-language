@@ -106,7 +106,7 @@ __all__ = (
     #'Constant',
     'mkIntegerConstant', 'IntegerConstant',
     'mkIntegerLiteral',
-    'mkFloatConstant',
+    'mkFloatConstant', 'FloatConstant',
     'mkStringConstant', 'StringConstant',
     'AbstractList',
     'mkList', 'List',
@@ -2540,7 +2540,7 @@ def mkInterfaceMethodRef(site, iface_node, indices, method_name):
     stype = safe_realtype(stype)
     if not isinstance(stype, StructType):
         raise ENOSTRUCT(site, mkNodeRef(site, iface_node, indices), stype)
-    ftype = stype.member_type(method_name)
+    ftype = stype.get_member_qualified(method_name)
     if not ftype:
         raise EMEMBER(site, struct_name, method_name)
     ftype = safe_realtype(ftype)
@@ -3725,14 +3725,15 @@ def mkSubRef(site, expr, sub, op):
     basetype = basetype.resolve()
 
     if isinstance(basetype, StructType):
-        typ = basetype.member_type(sub)
+        typ = basetype.get_member_qualified(sub)
         if not typ:
             raise EMEMBER(site, baseexpr, sub)
         return StructMember(site, expr, sub, typ, op)
     elif basetype.is_int and basetype.is_bitfields:
-        t, msb, lsb = basetype.member_type_bits(sub)
-        if t == None:
+        member = basetype.members.get(sub)
+        if member is None:
             raise EMEMBER(site, expr, sub)
+        (_, msb, lsb) = member
         return mkBitSlice(site,
                           baseexpr,
                           mkIntegerLiteral(site, msb),
@@ -4166,7 +4167,7 @@ class DesignatedStructInitializer(Initializer):
     def assign_to(self, dest, typ):
         '''output C statements to assign an lvalue'''
         typ = safe_realtype(typ)
-        if isinstance(typ, TExternStruct):
+        if isinstance(typ, StructType):
             out('memcpy(&%s, (%s){%s}, sizeof %s);\n' % (
                 dest.read(),
                 TArray(typ, mkIntegerLiteral(self.site, 1)).declaration(''),

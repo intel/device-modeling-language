@@ -124,7 +124,7 @@ def print_device_substruct(node):
     def composite_ctype(node, unfiltered_members, label=None):
         '''Helper. Unfiltered_members is a list of (name, type) pairs, where
         type=None entries are ignored.'''
-        members = [(name, typ) for (name, typ) in unfiltered_members if typ]
+        members = {name: typ for (name, typ) in unfiltered_members if typ}
         if not members:
             return None
         if not label:
@@ -724,7 +724,7 @@ def generate_implement_method(device, ifacestruct, meth, indices):
         require_fully_typed(None, meth)
 
         # Calculate the expected method signature
-        ifacemethtype = ifacestruct.member_type(meth.name)
+        ifacemethtype = ifacestruct.get_member_qualified(meth.name)
         if not ifacemethtype:
             raise EMEMBER(meth.site, meth.parent.name, meth.name)
         ifacemethtype = safe_realtype(ifacemethtype)

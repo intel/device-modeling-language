@@ -1,0 +1,94 @@
+/*
+  © 2021-2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+import "testing.dml";
+
+typedef struct {
+    int32 x;
+    struct {
+        int32 i;
+        int32 j;
+    } y;
+} struct_t;
+
+header %{
+typedef struct {
+    int32 x;
+    struct {
+        int32 i;
+        int32 j;
+        int32 k;
+    } y;
+    int32 z;
+} ext_struct_t;
+%}
+
+extern typedef struct {
+    int32 x;
+    struct {
+        int32 i;
+        int32 j;
+        // int32 k;
+    } y;
+    // int32 z;
+} ext_struct_t;
+
+typedef layout "little-endian" {
+    int32 x;
+    layout "little-endian" {
+        int32 i;
+        int32 j;
+    } y;
+} layout_t;
+
+typedef bitfields 64 {
+    int32 x @[63:32];
+    int32 y @[31:0];
+} bitfields_t;
+
+method test() throws {
+    local int x = 0;
+    local int i = 0;
+    local int j = 0;
+    local struct_t a = {x++, {++i, j++}};
+    assert x + i + j == 3;
+    assert a.x == 0 && a.y.i == 1 && a.y.j == 0;
+    x = i = j = 0;
+    a = {.y = {.j = j++, .i = ++i}, .x = x++};
+    assert x + i + j == 3;
+    assert a.x == 0 && a.y.i == 1 && a.y.j == 0;
+    x = i = j = 0;
+
+    local ext_struct_t b = {x++, {++i, j++}};
+    assert x + i + j == 3;
+    assert b.x == 0 && b.y.i == 1 && b.y.j == 0;
+    x = i = j = 0;
+    b = {.y = {.j = j++, .i = ++i}, .x = x++};
+    assert x + i + j == 3;
+    assert b.x == 0 && b.y.i == 1 && b.y.j == 0;
+    x = i = j = 0;
+
+    local layout_t c = {x++, {++i, j++}};
+    assert x + i + j == 3;
+    assert c.x == 0 && b.y.i == 1 && b.y.j == 0;
+    x = i = j = 0;
+    c = {.y = {.j = j++, .i = ++i}, .x = x++};
+    assert x + i + j == 3;
+    assert c.x == 0 && b.y.i == 1 && b.y.j == 0;
+    x = i = j = 0;
+
+    local int y = 0;
+    local bitfields_t d = {x++, ++y};
+    assert x + y == 2;
+    assert d.x == 0 && d.y == 1;
+    x = y = 0;
+    d = {.y = ++y, .x = x++};
+    assert x + y == 2;
+    assert d.x == 0 && d.y == 1;
+    x = y = 0;
+}
