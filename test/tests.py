@@ -14,6 +14,7 @@ import difflib
 from pathlib import Path
 from os.path import join, isdir, isfile, exists
 import glob
+import json
 from fnmatch import fnmatch
 from simicsutils.host import host_type, is_windows, batch_suffix
 from simicsutils.internal import package_path
@@ -58,9 +59,15 @@ else:
 bat_sfx = batch_suffix()
 exe_sfx = '.exe' if is_windows() else ""
 
-dmlc = [join(simics_root_path(), host_type(), "bin", "py3",
-             "mini-python" + exe_sfx),
-        join(project_host_path(), "bin", "dml", "python")]
+# Python interpreter for DMLC including args, e.g. '["pypy3", "-X", "utf8"]'
+python = os.environ.get('DMLC_PYTHON')
+if python:
+    python = json.loads(python)
+else:
+    python = [join(simics_root_path(), host_type(), "bin", "py3",
+                   "mini-python" + exe_sfx)]
+
+dmlc = python + [join(project_host_path(), "bin", "dml", "python")]
 
 if not is_windows():
     dmlc_lib_path = ":".join(
