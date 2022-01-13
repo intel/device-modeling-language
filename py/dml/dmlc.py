@@ -194,6 +194,9 @@ def flush_porting_log(tmpfile, porting_filename):
         os.rmdir(lockfile)
 
 def main(argv):
+    # DML files must be utf8, but are generally opened without specifying
+    # the 'encoding' arg. This works only if utf8_mode is enabled.
+    assert sys.flags.utf8_mode
     optpar = optparse.OptionParser(
         """
   dmlc [flags] <file> [output-base]""")
