@@ -919,6 +919,7 @@ class DmlDepBase(CTestCase):
 
 class DmlDep(DmlDepBase):
     '''Stability test, '''
+    __slots__ = ()
     def test(self):
         super(DmlDep, self).test()
 
@@ -979,6 +980,7 @@ all_tests.append(DmlDep(['dmldep'],
 
 class DmlDepArgs(DmlDepBase):
     '''Test optional arguments for dependency generation.'''
+    __slots__ = ()
     def test(self):
         super().test()
         dependencies = self.load_dependencies(self.cfilename + '.dmldep')
