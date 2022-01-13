@@ -6,7 +6,6 @@ import optparse
 import tempfile
 import shutil
 import time
-from simicsutils.internal import api_versions, default_api_version
 from pathlib import Path
 
 from . import structure, logging, messages, ctree, ast, expr_util, toplevel
@@ -20,6 +19,7 @@ import dml.globals
 import dml.dmlparse
 from .logging import *
 from .messages import *
+from .env import api_versions, default_api_version
 
 def prerr(msg):
     sys.stderr.write(msg + "\n")

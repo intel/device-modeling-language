@@ -45,8 +45,7 @@ import sys
 import re
 from itertools import *
 
-from simicsutils.host import is_windows
-
+from .env import is_windows
 from .output import out
 from .messages import *
 from .logging import *
