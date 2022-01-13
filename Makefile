@@ -46,7 +46,8 @@ PYUNIT_FILES := $(wildcard $(DMLC_DIR)/py/dml/*_test.py)
 PYUNIT_TESTED := $(foreach x,$(PYUNIT_FILES),$(basename $(notdir $x))-pyunit-tested)
 
 GEN_PYFILES :=	dml12_parsetab.py \
-		dml14_parsetab.py
+		dml14_parsetab.py \
+		env.py
 
 .SECONDARY: $(GEN_PYFILES)
 
@@ -123,6 +124,9 @@ dml%_parsetab.py $(PYTHONPATH)/dml%_parser.out: \
     | $(OUT_PYFILES) $(filter-out %parsetab.py,$(OUT_GEN_PYFILES))
 	$(info Generating $(@F))
 	$(PYTHON) $< $(PYTHONPATH) $* dml$*_parsetab $(PYTHONPATH)/dml$*_parser.out
+
+env.py: $(SRC_BASE)/$(TARGET)/generate_env.py
+	$(PYTHON) $< $@
 
 # needed by ctree_test.py
 export CC

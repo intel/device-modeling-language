@@ -47,6 +47,7 @@ Make: dmlc
     $(HOST)/bin/dml/python/dml/expr.pyc
     $(HOST)/bin/dml/python/dml/expr_util.pyc
     $(HOST)/bin/dml/python/dml/globals.pyc
+    $(HOST)/bin/dml/python/dml/env.pyc
     $(HOST)/bin/dml/python/dml/info_backend.pyc
     $(HOST)/bin/dml/python/dml/int_register.pyc
     $(HOST)/bin/dml/python/dml/io_memory.pyc

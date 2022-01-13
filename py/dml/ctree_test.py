@@ -8,10 +8,10 @@ import sys
 import subprocess
 import math
 from pathlib import Path
-from simicsutils.host import is_windows
 
 from dml import ctree, types, logging, messages, output, symtab
 from dml.ctree import string_escape, mkCompound, dmldir_macro
+from dml.env import is_windows
 
 def apply(f):
     return f()
