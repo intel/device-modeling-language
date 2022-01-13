@@ -13,6 +13,8 @@ import dml.globals
 from . import dmllex12
 from . import dmllex14
 
+assert lex.__version__ == yacc.__version__ == "3.4"
+
 class UnexpectedEOF(Exception): pass
 
     # Priorities are as described in Harbison & Steele, "C - A Reference
