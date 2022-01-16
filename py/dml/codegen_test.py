@@ -16,7 +16,7 @@ class Test_loss_on_truncation(unittest.TestCase):
             for i in range(-1, 2):
                 no_loss(i, bits)
             max_pos = 2**(bits-signed) - 1
-            # min_neg of unsigneds designed to accept ~max_pos.
+            # min_neg of unsigned designed to accept ~max_pos.
             min_neg = -2**(bits-signed)
             no_loss(max_pos, bits)
             no_loss(min_neg, bits)
