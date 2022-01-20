@@ -37,9 +37,11 @@ __all__ = (
     'mkCompound',
     'mkNull', 'Null',
     'mkLabel',
+    'mkUnrolledLoop',
     'mkGoto',
     'mkReturnFromInline',
     'mkThrow',
+    'mkUnrolledBreak',
     'mkTryCatch',
     'mkInline',
     'mkInlinedMethod',
@@ -356,6 +358,29 @@ class Label(Statement):
 
 mkLabel = Label
 
+class UnrolledLoop(Statement):
+    @auto_init
+    def __init__(self, site, substatements, break_label):
+        assert isinstance(substatements, list)
+
+    def toc(self):
+        out('{\n', postindent = 1)
+        self.toc_inline()
+        out('}\n', preindent = -1)
+
+    def toc_inline(self):
+        for substatement in self.substatements:
+            substatement.toc()
+        if self.break_label is not None:
+            out(f'{self.break_label}: UNUSED;\n')
+
+    def control_flow(self):
+        bodyflow = mkCompound(self.site, self.substatements).control_flow()
+        return bodyflow.replace(fallthrough=(bodyflow.fallthrough
+                                             or bodyflow.br), br=False)
+
+mkUnrolledLoop = UnrolledLoop
+
 class Goto(Statement):
     @auto_init
     def __init__(self, site, label): pass
@@ -378,6 +403,12 @@ class Throw(Goto):
         return ControlFlow(throw=True)
 
 mkThrow = Throw
+
+class UnrolledBreak(Goto):
+    def control_flow(self):
+        return ControlFlow(br=True)
+
+mkUnrolledBreak = UnrolledBreak
 
 class TryCatch(Statement):
     '''A DML try/catch statement. Catch block is represented as an if (false)

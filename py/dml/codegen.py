@@ -76,9 +76,6 @@ def gensym(prefix = '_gensym'):
     gensym_counter += 1
     return prefix + str(gensym_counter)
 
-# The stack of loops
-loop_stack = []
-
 # Keep track of which methods are referenced, thus needing generated code.
 referenced_methods = {}
 method_queue = []
@@ -86,6 +83,45 @@ exported_methods = {}
 
 # Saved variables in methods, method->list of symbols
 saved_method_variables = {}
+
+class LoopContext:
+    '''Class representing loop contexts within methods.
+    LoopContext.current is the nearest enclosing loop context at any given
+    point during code generation.'''
+    current = None
+
+    def __enter__(self):
+        self.prev = LoopContext.current
+        LoopContext.current = self
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        assert LoopContext.current is self
+        LoopContext.current = self.prev
+
+class CLoopContext(LoopContext):
+    '''DML loop context corresponding to a C loop'''
+    def break_(self, site):
+        return [mkBreak(site)]
+
+class NoLoopContext(LoopContext):
+    '''DML loop context corresponding to an inlined method call.
+    This is used to delimit the loop stack between the method containing
+    the inline method call and the method called.'''
+    def break_(self, site):
+        raise EBREAK(site)
+
+class UnrolledLoopContext(LoopContext):
+    '''DML loop context corresponding to an unrolled loop.
+    Uses of `break` is codegen:d as a goto past the unrolled loop.'''
+    count = 0
+    def __init__(self):
+        self.used = False
+        self.id = UnrolledLoopContext.count
+        self.label = f'_unrolledbreak{self.id}'
+        UnrolledLoopContext.count += 1
+
+    def break_(self, site):
+        self.used = True
+        return [mkUnrolledBreak(site, self.label)]
 
 class Failure(metaclass=ABCMeta):
     '''Handle exceptions failure handling is supposed to handle the various kind of
@@ -1934,12 +1970,9 @@ def stmt_foreach_dml12(stmt, location, scope):
         itervar = lookup_var(stmt.site, scope, itername)
         if not itervar:
             raise EIDENT(lst, itername)
-        loop_stack.append('c')
-        try:
+        with CLoopContext():
             res = mkVectorForeach(stmt.site, lst, itervar,
                                   codegen_statement(statement, location, scope))
-        finally:
-            loop_stack.pop()
         return [res]
     else:
         raise ENLST(stmt.site, lst)
@@ -1975,10 +2008,10 @@ def stmt_hashforeach(stmt, location, scope):
 def foreach_constant_list(site, itername, lst, statement, location, scope):
     assert isinstance(lst, AbstractList)
     spec = []
-    try:
-        loop_stack.append('unroll')
+    unroll = UnrolledLoopContext()
+    with unroll:
         for items in lst.iter():
-            loopvars = tuple(mkLit(site, '_ai%d_%d' % (len(loop_stack), dim),
+            loopvars = tuple(mkLit(site, '_ai%d_%d' % (unroll.id, dim),
                                    TInt(32, True))
                              for dim in range(len(items.dimsizes)))
             loopscope = Symtab(scope)
@@ -2005,9 +2038,8 @@ def foreach_constant_list(site, itername, lst, statement, location, scope):
                     stmt)
             spec.append(mkCompound(site, decls + [stmt]))
 
-        return spec
-    finally:
-        loop_stack.pop()
+        return [mkUnrolledLoop(site, spec,
+                               unroll.label if unroll.used else None)]
 
 @statement_dispatcher
 def stmt_while(stmt, location, scope):
@@ -2016,12 +2048,9 @@ def stmt_while(stmt, location, scope):
     if stmt.site.dml_version() == (1, 2) and cond.constant and not cond.value:
         return [mkNull(stmt.site)]
     else:
-        loop_stack.append('c')
-        try:
+        with CLoopContext():
             res = mkWhile(stmt.site, cond,
                           codegen_statement(statement, location, scope))
-        finally:
-            loop_stack.pop()
         return [res]
 
 @statement_dispatcher
@@ -2034,74 +2063,66 @@ def stmt_for(stmt, location, scope):
     else:
         cond = as_bool(codegen_expression(cond, location, scope))
     posts = codegen_statements(posts, location, scope)
-    loop_stack.append('c')
-    try:
+    with CLoopContext():
         res = mkFor(stmt.site, pres, cond, posts,
                     codegen_statement(statement, location, scope))
-    finally:
-        loop_stack.pop()
     return [res]
 
 @statement_dispatcher
 def stmt_dowhile(stmt, location, scope):
     [cond, statement] = stmt.args
     cond = as_bool(codegen_expression(cond, location, scope))
-    loop_stack.append('c')
-    try:
+    with CLoopContext():
         res = mkDoWhile(stmt.site, cond,
                         codegen_statement(statement, location, scope))
-    finally:
-        loop_stack.pop()
     return [res]
 
 @statement_dispatcher
 def stmt_switch(stmt, location, scope):
     [expr, body_ast] = stmt.args
     expr = codegen_expression(expr, location, scope)
-    loop_stack.append('c')
-    if stmt.site.dml_version() != (1, 2):
-        assert body_ast.kind == 'compound'
-        [stmt_asts] = body_ast.args
-        stmts = codegen_statements(stmt_asts, location, scope)
-        if (not stmts
-            or not isinstance(stmts[0], (ctree.Case, ctree.Default))):
-            raise ESWITCH(
-                body_ast.site, "statement before first case label")
-        defaults = [i for (i, sub) in enumerate(stmts)
-                    if isinstance(sub, ctree.Default)]
-        if len(defaults) > 1:
-            raise ESWITCH(stmts[defaults[1]].site, "duplicate default label")
-        if defaults:
-            for sub in stmts[defaults[0]:]:
-                if isinstance(sub, ctree.Case):
-                    raise ESWITCH(sub.site,
-                                  "case label after default label")
-        body = ctree.Compound(body_ast.site, stmts)
-    else:
-        body = codegen_statement(body_ast, location, scope)
-    try:
+    with CLoopContext():
+        if stmt.site.dml_version() != (1, 2):
+            assert body_ast.kind == 'compound'
+            [stmt_asts] = body_ast.args
+            stmts = codegen_statements(stmt_asts, location, scope)
+            if (not stmts
+                or not isinstance(stmts[0], (ctree.Case, ctree.Default))):
+                raise ESWITCH(
+                    body_ast.site, "statement before first case label")
+            defaults = [i for (i, sub) in enumerate(stmts)
+                        if isinstance(sub, ctree.Default)]
+            if len(defaults) > 1:
+                raise ESWITCH(stmts[defaults[1]].site,
+                              "duplicate default label")
+            if defaults:
+                for sub in stmts[defaults[0]:]:
+                    if isinstance(sub, ctree.Case):
+                        raise ESWITCH(sub.site,
+                                      "case label after default label")
+            body = ctree.Compound(body_ast.site, stmts)
+        else:
+            body = codegen_statement(body_ast, location, scope)
+
         res = mkSwitch(stmt.site, expr, body)
-    finally:
-        loop_stack.pop()
     return [res]
 
 @statement_dispatcher
 def stmt_continue(stmt, location, scope):
-    if not loop_stack or loop_stack[-1] == 'method':
+    if (LoopContext.current is None
+        or isinstance(LoopContext.current, NoLoopContext)):
         raise ECONT(stmt.site)
-    elif loop_stack[-1] == 'c':
+    elif isinstance(LoopContext.current, CLoopContext):
         return [mkContinue(stmt.site)]
     else:
         raise ECONTU(stmt.site)
 
 @statement_dispatcher
 def stmt_break(stmt, location, scope):
-    if not loop_stack or loop_stack[-1] == 'method':
+    if LoopContext.current is None:
         raise EBREAK(stmt.site)
-    elif loop_stack[-1] == 'c':
-        return [mkBreak(stmt.site)]
     else:
-        raise EBREAKU(stmt.site)
+        return LoopContext.current.break_(stmt.site)
 
 def eval_call_stmt(method_ast, location, scope):
     '''Given a call (or inline) AST node, deconstruct it and eval the
@@ -2171,11 +2192,8 @@ def common_inline(site, method, indices, inargs, outargs):
                                                indices),
                                  inp, func.outp, func.throws, inargs, outargs)
 
-    loop_stack.append('method')
-    try:
+    with NoLoopContext():
         res = codegen_inline(site, method, indices, inargs, outargs)
-    finally:
-        loop_stack.pop()
     return res
 
 def in_try_block(location):
