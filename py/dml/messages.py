@@ -846,15 +846,6 @@ class EBREAK(DMLError):
     """
     fmt = "nothing to break from"
 
-class EBREAKU(DMLError):
-    """
-    A `break` statement cannot be used in a `foreach`
-    or `select` statement.
-    """
-    fmt = "break is not possible here"
-    def __init__(self, site):
-        DMLError.__init__(self, site)
-
 class ENMETH(DMLError):
     """
     A method name was expected. This might be caused by using

@@ -1696,4 +1696,8 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
       local size_t size = get_size();
       local buffer_t buf = {size, new uint8[size]};
       </pre></add-note></build-id>
+  <build-id value="next"><add-note> <tt>break</tt> may now be used within
+      <tt>foreach</tt> statements in DML 1.2 and <tt>#foreach</tt> statements in
+      DML 1.4 <bug number="1309451301"/>.
+  </add-note></build-id>
 </rn>

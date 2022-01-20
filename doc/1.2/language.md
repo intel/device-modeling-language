@@ -1712,6 +1712,8 @@ statements are *not* evaluated at compile time. (Also
 note the use of `error` above to catch any compile-time
 mistakes.)
 
+The `break` statement can be used within a `foreach` loop to exit it.
+
 ### Select Statements
 
 <pre>

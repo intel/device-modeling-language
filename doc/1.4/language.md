@@ -2993,6 +2993,8 @@ Only `#if` can be used to make such selections; `switch` or
 note the use of `error` above to catch any compile-time
 mistakes.)
 
+The `break` statement can be used within a `#foreach` loop to exit it.
+
 ### Select Statements
 
 <pre>
