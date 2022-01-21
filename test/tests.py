@@ -92,6 +92,9 @@ if is_windows():
     ldflags = [f"-L{testparams.mingw_root()}/lib/gcc/x86_64-w64-mingw32/lib"]
 else:
     cc = [join(package_path(), "gcc_6.4.0", "bin", "gcc")]
+    if not os.path.exists(cc[0]):
+        # If the preferred path does not exist, fall back
+        cc = ["gcc"]
     cflags = ['-g', '-fPIC', '-Wundef'] + common_cflags
     ldflags = []
 cflags_shared = ["-shared"]
