@@ -23,6 +23,11 @@ from testparams import simics_root_path
 import traceback
 from depfile import parse_depfile
 
+class TestFail(Exception):
+    def __init__(self, reason):
+        Exception.__init__(self)
+        self.reason = reason
+
 sys.path.append(join(simics_root_path(), "scripts", "build"))
 import module_id
 
@@ -86,25 +91,23 @@ def dmlc_reaper_args(exitcode_file, timeout_multiplier = 1):
 common_cflags = ["-O2", "-std=gnu99", '-Wall', '-Werror', '-Wpointer-arith',
                  '-Wwrite-strings', '-Wformat-nonliteral',]
 if is_windows():
-    cc = [testparams.mingw_cc()]
+    dmlc_default_cc = testparams.mingw_cc()
     cflags = common_cflags + [
         "-DUSE_MODULE_HOST_CONFIG", "-D__USE_MINGW_ANSI_STDIO=1"]
     ldflags = [f"-L{testparams.mingw_root()}/lib/gcc/x86_64-w64-mingw32/lib"]
 else:
-    cc = [join(package_path(), "gcc_6.4.0", "bin", "gcc")]
-    if not os.path.exists(cc[0]):
-        # If the preferred path does not exist, fall back
-        cc = ["gcc"]
+    dmlc_default_cc = join(package_path(), "gcc_6.4.0", "bin", "gcc")
     cflags = ['-g', '-fPIC', '-Wundef'] + common_cflags
     ldflags = []
+if os.environ.get('DMLC_CC'):
+    cc = [os.environ.get('DMLC_CC')]
+elif os.path.exists(dmlc_default_cc):
+    cc = [dmlc_default_cc]
+else:
+    raise TestFail('gcc not found(specify gcc by env var DMLC_CC)')
 cflags_shared = ["-shared"]
 
 os.environ['DMLC_DEBUG'] = 't'
-
-class TestFail(Exception):
-    def __init__(self, reason):
-        Exception.__init__(self)
-        self.reason = reason
 
 latest_api_version = "6"
 

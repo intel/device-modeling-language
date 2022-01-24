@@ -43,3 +43,6 @@ files.
 ### DMLC_DEBUG
 When set to `1`, unexpected exceptions in the compiler are echoed to
 stderr. The default is to hide tracebacks in a file `dmlc-error.log`.
+
+### DMLC_CC
+Override the default compiler in unit tests.
