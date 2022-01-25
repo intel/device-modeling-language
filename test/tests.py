@@ -95,10 +95,10 @@ if is_windows():
     if not cc:
         try:
             cc = testparams.mingw_cc()
-            cc_not_found = not os.path.exists(cc)
+            cc_found = os.path.exists(cc)
         except Exception:
-            cc_not_found = True
-        if cc_not_found:
+            cc_found = False
+        if not cc_found:
             raise TestFail('gcc not found(specify gcc by env var DMLC_CC)')
         ldflags = [f"-L{testparams.mingw_root()}/lib/gcc/x86_64-w64-mingw32/lib"]
     else:
