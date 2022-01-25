@@ -90,29 +90,29 @@ def dmlc_reaper_args(exitcode_file, timeout_multiplier = 1):
 
 common_cflags = ["-O2", "-std=gnu99", '-Wall', '-Werror', '-Wpointer-arith',
                  '-Wwrite-strings', '-Wformat-nonliteral',]
-cc = [os.environ.get('DMLC_CC')]
+cc = os.environ.get('DMLC_CC')
 if is_windows():
-    if not cc[0]:
+    if not cc:
         try:
-            cc = [testparams.mingw_cc()]
-            cc_not_found = not os.path.exists(cc[0])
-        except FileNotFoundError:
+            cc = testparams.mingw_cc()
+            cc_not_found = not os.path.exists(cc)
+        except Exception:
             cc_not_found = True
         if cc_not_found:
             raise TestFail('gcc not found(specify gcc by env var DMLC_CC)')
-    cflags = common_cflags + [
-        "-DUSE_MODULE_HOST_CONFIG", "-D__USE_MINGW_ANSI_STDIO=1"]
-    if not cc[0]:
         ldflags = [f"-L{testparams.mingw_root()}/lib/gcc/x86_64-w64-mingw32/lib"]
     else:
         ldflags = []
+    cflags = common_cflags + [
+        "-DUSE_MODULE_HOST_CONFIG", "-D__USE_MINGW_ANSI_STDIO=1"]
 else:
-    if not cc[0]:
-        cc = [join(package_path(), "gcc_6.4.0", "bin", "gcc")]
-        if not os.path.exists(cc[0]):
+    if not cc:
+        cc = join(package_path(), "gcc_6.4.0", "bin", "gcc")
+        if not os.path.exists(cc):
             raise TestFail('gcc not found(specify gcc by env var DMLC_CC)')
     cflags = ['-g', '-fPIC', '-Wundef'] + common_cflags
     ldflags = []
+cc = [cc]
 cflags_shared = ["-shared"]
 
 os.environ['DMLC_DEBUG'] = 't'
