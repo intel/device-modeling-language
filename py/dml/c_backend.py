@@ -2133,17 +2133,8 @@ def generate_trait_trampoline(method, vtable_trait):
         [(tname, ttype)] = implicit_inargs
         site = method.site
         obj = method.parent
-        path = obj.traits.ancestry_paths[vtable_trait][0]
         if obj.dimensions:
-            if path[0] is vtable_trait:
-                downcast = tname
-            else:
-                downcast = 'DOWNCAST(%s, %s, %s)' % (
-                    tname, cident(path[0].name),
-                    '.'.join(cident(t.name) for t in path[1:]))
-            out('int _flat_index = ((struct _%s *)%s.trait) - &%s%s;\n' % (
-                cident(path[0].name), downcast, obj.traits.vtable_cname(path[0]),
-                '[0]' * obj.dimensions))
+            out(f'int _flat_index = {tname}.id.encoded_index;\n')
         indices = [
             mkLit(site, '((_flat_index / %d) %% %d)' % (
                 reduce(operator.mul, obj.dimsizes[dim + 1:], 1),
