@@ -601,10 +601,12 @@ _identity_eq(const _identity_t a, const _identity_t b) {
 
 // List of vtables of a specific trait in one specific object
 typedef struct {
-        // first trait vtable instance. Instances are stored linearly in a
-        // possibly multi-dimensional array, with outer index corresponding to
-        // index of outer DML object.
-        uintptr_t base;
+        // *base + base_offset is the pointer to the first trait vtable
+        // instance. Instances are stored linearly in a possibly
+        // multi-dimensional array, with outer index corresponding to index of
+        // outer DML object.
+        uintptr_t *base;
+        uint64 base_offset;
         // total number of elements (product of object's dimsizes)
         uint64 num;
         // offset between two vtable instances; at least sizeof(<vtable type>)
