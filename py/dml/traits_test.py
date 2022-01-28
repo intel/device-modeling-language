@@ -32,7 +32,7 @@ class Test_traits(unittest.TestCase):
             dml.ctree.mkCast(
                 self.site, dml.ctree.mkNodeRef(self.site, self.dev, ()),
                 t.type()).read(),
-            '((t) {(&_tr__dev__t), '
+            '((t) {(&(*_tr__dev__t)), '
             + '((_identity_t) {.id = 0, .encoded_index = 0})})'
             )
 
