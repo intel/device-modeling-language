@@ -2238,7 +2238,7 @@ class AddressOf(UnaryOp):
                and node.name == 'callback' \
                and node.parent.objtype == 'event':
                 return AddressOf(site, mkLit(
-                    site, '_DML_EV_'+crep.cref(node),
+                    site, '_DML_EV_'+crep.cref_method(node),
                     TFunction([TPtr(TNamed('conf_object_t')),
                                TPtr(TVoid())],
                               TVoid())))
@@ -3533,7 +3533,7 @@ class NodeRefWithStorage(NodeRef, LValue):
             from . import codegen
             method = codegen.method_instance(node)
             codegen.mark_method_referenced(method)
-            expr = '_DML_M_' + crep.cref(node)
+            expr = '_DML_M_' + crep.cref_method(node)
         elif node.objtype == 'device':
             assert dml.globals.dml_version == (1, 2)
             return '_dev'

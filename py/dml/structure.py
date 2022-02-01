@@ -1329,7 +1329,7 @@ def process_method_implementations(obj, name, implementations,
                     raise EEXTERN(method.site)
                 func = method_instance(method)
                 mark_method_referenced(func)
-                mark_method_exported(func, crep.cref(method), msite)
+                mark_method_exported(func, crep.cref_method(method), msite)
                 break
         # Export hard_reset and soft_reset from device objects in 1.2
         # automatically
@@ -1337,7 +1337,7 @@ def process_method_implementations(obj, name, implementations,
             name in ('hard_reset', 'soft_reset')):
             func = method_instance(method)
             mark_method_referenced(func)
-            mark_method_exported(func, crep.cref(method), obj.site)
+            mark_method_exported(func, crep.cref_method(method), obj.site)
 
     return method
 
