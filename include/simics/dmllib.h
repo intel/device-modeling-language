@@ -807,7 +807,6 @@ typedef struct {
         get_attr_t get;
         set_attr_t set;
         uint32 array_size;
-        uint32 array_delta;
 } _port_array_attr_t;
 static attr_value_t
 _getattr_from_portobj_array(lang_void *ptr, conf_object_t *obj,
@@ -815,12 +814,11 @@ _getattr_from_portobj_array(lang_void *ptr, conf_object_t *obj,
 {
         ASSERT(SIM_attr_is_nil(*idx));
         _port_array_attr_t *port = (_port_array_attr_t *)ptr;
-        uintptr_t port_obj_ptr_base = (uintptr_t)obj
-                + port->port_obj_base_offset;
+        conf_object_t **port_obj_ptr_base = (conf_object_t **)(
+                (uintptr_t)obj + port->port_obj_base_offset);
         attr_value_t vals = SIM_alloc_attr_list(port->array_size);
         for (uint32 i = 0; i < port->array_size; i++) {
-                conf_object_t *port_obj = *(conf_object_t **)(
-                        port_obj_ptr_base + (uint64)i * port->array_delta);
+                conf_object_t *port_obj = port_obj_ptr_base[i];
                 attr_value_t val = port->get(NULL, port_obj, NULL);
                 if (SIM_attr_is_invalid(val)) {
                         SIM_attr_free(&vals);
@@ -836,11 +834,10 @@ _setattr_from_portobj_array(lang_void *ptr, conf_object_t *obj,
 {
         ASSERT(SIM_attr_is_nil(*idx));
         _port_array_attr_t *port = (_port_array_attr_t *)ptr;
-        uintptr_t port_obj_ptr_base = (uintptr_t)obj
-                + port->port_obj_base_offset;
+        conf_object_t **port_obj_ptr_base = (conf_object_t **)(
+                (uintptr_t)obj + port->port_obj_base_offset);
         for (uint32 i = 0; i < port->array_size; i++) {
-                conf_object_t *port_obj = *(conf_object_t **)(
-                        port_obj_ptr_base + (uint64)i * port->array_delta);
+                conf_object_t *port_obj = port_obj_ptr_base[i];
                 attr_value_t val = SIM_attr_list_item(*vals, i);
                 set_error_t err = port->set(NULL, port_obj, &val, NULL);
                 if (err != Sim_Set_Ok) {
@@ -850,11 +847,10 @@ _setattr_from_portobj_array(lang_void *ptr, conf_object_t *obj,
         return Sim_Set_Ok;
 }
 // port_obj_offset is the offset within the device struct of the first pointer
-// to a port object. Pointers to remaining port object in the array are located
-// array_delta bytes apart.
+// to a port object. Remaining port objects are stored consecutively in memory.
 UNUSED static void
 _register_port_array_attr(conf_class_t *devcls, conf_class_t *portcls,
-                          ptrdiff_t port_obj_offset, ptrdiff_t array_delta,
+                          ptrdiff_t port_obj_offset,
                           uint32 array_size, bool is_bank,
                           const char *portname, const char *attrname,
                           get_attr_t getter, set_attr_t setter,
@@ -867,9 +863,6 @@ _register_port_array_attr(conf_class_t *devcls, conf_class_t *portcls,
         data->get = getter;
         data->set = setter;
         data->array_size = array_size;
-        data->array_delta = array_delta;
-        // storing ptrdiff in uint32, overflow will not happen in practise
-        ASSERT(data->array_delta == array_delta);
         char name[strlen(portname) + strlen(attrname) + 2];
         sprintf(name, "%s_%s", portname, attrname);
         strbuf_t proxy_desc = sb_newf("Proxy attribute for %s.%s[].%s",

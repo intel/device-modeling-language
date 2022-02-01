@@ -117,7 +117,7 @@ def print_device_substruct(node):
     if the node needs no storage.'''
 
     def arraywrap(node, typ):
-        for arraylen in reversed(node.arraylens()):
+        for arraylen in reversed(node.dimsizes):
             typ = TArray(typ, mkIntegerLiteral(node.site, arraylen))
         return typ
 
@@ -133,7 +133,7 @@ def print_device_substruct(node):
                                     for s in crep.ancestor_cnames(node))
         structtype = TStruct(members, label)
         structtype.print_struct_definition()
-        return arraywrap(node, structtype)
+        return structtype
 
     if node.objtype == 'device':
         members = [("obj", conf_object_t)]
@@ -149,7 +149,7 @@ def print_device_substruct(node):
     elif ((node.objtype == 'session' or node.objtype == 'saved')
           or (dml.globals.dml_version == (1, 2)
               and node.objtype == 'interface')):
-        return crep.node_storage_type(node, node.site)
+        return arraywrap(node, crep.node_storage_type(node, node.site))
 
     elif (node.objtype in ('register', 'field')
           and dml.globals.dml_version == (1, 2)):
@@ -162,7 +162,8 @@ def print_device_substruct(node):
             @apply
             def members():
                 if allocate:
-                    yield ('__DMLfield', crep.node_storage_type(node))
+                    yield ('__DMLfield',
+                           arraywrap(node, crep.node_storage_type(node)))
                 for sub in node.get_components():
                     if not sub.ident:
                         # implicit field: Don't add anything, storage
@@ -179,7 +180,7 @@ def print_device_substruct(node):
         else:
             # really a _port_object_t* rather than conf_object_t*, but
             # there is no DML type for the former
-            obj = [("_obj", TPtr(conf_object_t))]
+            obj = [("_obj", arraywrap(node, TPtr(conf_object_t)))]
         return composite_ctype(node,
                                obj + [(crep.cname(sub),
                                        print_device_substruct(sub))
@@ -546,10 +547,10 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
         if port.dimensions == 0:
             register_attribute(node.site, None, "%s_%s" % (port.name, attrname))
             initcode.out(
-                '_register_port_attr(class, %s, offsetof(%s, %s._obj), %s,'
+                '_register_port_attr(class, %s, offsetof(%s, %s), %s,'
                 % (port_class_ident(port),
                    crep.structtype(dml.globals.device),
-                   crep.cref_node(port, ()),
+                   crep.cref_portobj(port, ()),
                    'true' if port.objtype == "bank" else 'false')
                 + ' "%s", "%s", %s, %s, %s, "%s", %s);\n'
                 % (port.name, attrname, getter, setter,
@@ -557,17 +558,16 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
         elif port.dimensions == 1:
             # Generate an accessor attribute for legacy reasons
             register_attribute(node.site, None, "%s_%s" % (port.name, attrname))
-            member = crep.cref_node(
+            member = crep.cref_portobj(
                 port, (mkLit(port.site, '0', TInt(32, False)),))
             (dimsize,) = port.dimsizes
             initcode.out(
-                '_register_port_array_attr(class, %s, offsetof(%s, %s._obj),'
+                '_register_port_array_attr(class, %s, offsetof(%s, %s),'
                 % (port_class_ident(port),
                    crep.structtype(dml.globals.device),
                    member)
-                + ' sizeof(((%s*)0)->%s), %d, %s, "%s", "%s", %s, %s, %s, "%s",'
-                % (crep.structtype(dml.globals.device), member, dimsize,
-                   'true' if port.objtype == "bank" else 'false',
+                + ' %d, %s, "%s", "%s", %s, %s, %s, "%s",'
+                % (dimsize, 'true' if port.objtype == "bank" else 'false',
                    port.name, attrname, getter, setter, attr_flag, attr_type)
                 + ' %s);\n' % (doc.read(),))
         else:
@@ -1491,16 +1491,16 @@ def generate_init_port_objs(device):
             index_array = "%s%s" % (
                 index_enumeration.read(),
                 ''.join('[_i%d]' % (i,) for i in range(port.dimensions)))
-            out('_dev->%s._obj = _init_port_object(&_dev->obj'
-                % (crep.cref_node(port, loop_indices),)
+            out('_dev->%s = _init_port_object(&_dev->obj'
+                % (crep.cref_portobj(port, loop_indices),)
                 + ', sb_str(&portname), %d, %s);\n'
                 % (port.dimensions, index_array))
             out('sb_free(&portname);\n')
             for _ in range(port.dimensions):
                 out('\n}', preindent=-1)
         else:
-            out('_dev->%s._obj = _init_port_object('
-                % (crep.cref_node(port, ()),)
+            out('_dev->%s = _init_port_object('
+                % (crep.cref_portobj(port, ()),)
                 + '&_dev->obj, "%s%s", 0, NULL);\n'
                 % (port_prefix, port.logname_anonymized()))
     out('}\n', preindent=-1)
@@ -1984,7 +1984,7 @@ def init_trait_vtables_for_node(node, param_values, dims, parent_indices):
                     assert session_node.objtype in ('session', 'saved')
                     args.append('offsetof(%s, %s)' % (
                         crep.structtype(dml.globals.device),
-                        crep.cref_node(session_node, indices)))
+                        crep.cref_session(session_node, indices)))
             # initialize vtable instance
             vtable_arg = '&%s%s' % (node.traits.vtable_cname(trait), index_str)
             init_calls.append(
@@ -2069,7 +2069,7 @@ def calculate_saved_userdata(node, dimsizes, attr_name, sym_spec = None):
         # saved variable
         loop_vars = (mkIntegerConstant(decl_site, 0, False),) * node.dimensions
         var_ref = mkNodeRef(node.site, node, loop_vars)
-        device_member = crep.cref_node(node, loop_vars)
+        device_member = crep.cref_session(node, loop_vars)
     else:
         assert False
 
@@ -2077,38 +2077,17 @@ def calculate_saved_userdata(node, dimsizes, attr_name, sym_spec = None):
         crep.structtype(dml.globals.device),
         device_member)
 
-    attr_type = serialize.map_dmltype_to_attrtype(decl_site, var_ref.ctype())
     c_type = var_ref.ctype()
+    attr_type = serialize.map_dmltype_to_attrtype(decl_site, c_type)
 
     for dimension in reversed(dimsizes):
         attr_type = "[%s{%d}]" % (attr_type, dimension)
-    # For variables that are spread out throughout the device struct, build
-    # up the correct strides through their dimensions
-    if node.objtype == 'saved':
-        curr_node = node.parent
-        dimension_strides = []
-        while curr_node.objtype != 'device':
-            # if the current node is not an array, we skip it
-            if curr_node.local_dimensions() == 0:
-                curr_node = curr_node.parent
-                continue
-            loopvars = ((mkIntegerConstant(decl_site, 0, False),) *
-                        curr_node.dimensions)
-            # If size is constant below this point, we stop
-            if not loopvars:
-                break
-            dimension_strides.append("sizeof(((%s*)0)->%s)" % (
-                crep.structtype(dml.globals.device),
-                crep.cref_node(curr_node, loopvars)))
-            curr_node = curr_node.parent
-        dimension_strides = tuple(reversed(dimension_strides))
-    else:
-        # Static variables are easier to access, with a predictable stride
-        dimension_strides = tuple(
-            "sizeof(((%s*)0)->%s%s)" % (
-                crep.structtype(dml.globals.device),
-                device_member, "[0]" * (depth + 1))
-            for depth in range(node.dimensions))
+    dimension_strides = []
+    stride = f'sizeof({c_type.declaration("")})'
+    for dimsize in reversed(node.dimsizes):
+        dimension_strides.append(stride)
+        stride += f' * {dimsize}'
+    dimension_strides = tuple(reversed(dimension_strides))
 
     serialize_name = serialize.lookup_serialize(c_type)
     deserialize_name = serialize.lookup_deserialize(c_type)
