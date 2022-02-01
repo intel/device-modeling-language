@@ -785,9 +785,9 @@ def generate_implement_method(device, ifacestruct, meth, indices):
                             mt, '<return value>', ifacemethtype.output_type,
                             'method')
         if indices is PORTOBJ:
-            name = '_DML_PIFACE_' + crep.cref(meth)
+            name = '_DML_PIFACE_' + crep.cref_method(meth)
         else:
-            name = '_DML_IFACE_' + crep.cref(meth) + "".join([
+            name = '_DML_IFACE_' + crep.cref_method(meth) + "".join([
                 "__%d" % idx for idx in indices])
 
         wrap_method(meth, name, indices)
@@ -1114,7 +1114,7 @@ def event_callbacks(event, indices):
         if not method:
             raise ICE(event.site, 'cannot find method %s' % (method_name))
         result.append((method, '_DML_EV_%s%s' % (
-            crep.cref(method),
+            crep.cref_method(method),
             '_'.join(str(i) for i in indices))))
     return result
 
@@ -1201,15 +1201,15 @@ def generate_register_tables(device):
             dims = r.dimsizes or []
             getter = r.node.get_component('_get64')
             setter = r.node.get_component('_set64')
-            generate_reg_callback(getter, '_DML_MI_%s' % crep.cref(getter),
+            generate_reg_callback(getter, '_DML_MI_%s' % crep.cref_method(getter),
                                   )
-            generate_reg_callback(setter, '_DML_MI_%s' % crep.cref(setter))
+            generate_reg_callback(setter, '_DML_MI_%s' % crep.cref_method(setter))
             name = r.node.logname_anonymized(tuple("" for _ in dims),
                                              relative='bank')
             regs.append((name,
                          len(dims),
-                         '_DML_MI_%s' % crep.cref(getter),
-                         '_DML_MI_%s' % crep.cref(setter)))
+                         '_DML_MI_%s' % crep.cref_method(getter),
+                         '_DML_MI_%s' % crep.cref_method(setter)))
             mark_method_referenced(method_instance(getter))
             mark_method_referenced(method_instance(setter))
             regidxs[r] = i
@@ -2058,7 +2058,7 @@ fields.
 
 def trait_trampoline_name(method, vtable_trait):
     return "%s__trampoline_from_%s" % (
-        crep.cref(method), vtable_trait.name)
+        crep.cref_method(method), vtable_trait.name)
 
 def flatten_object_subtree(node):
     '''return a list of all composite subobjects inside node'''

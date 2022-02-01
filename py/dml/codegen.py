@@ -2868,7 +2868,7 @@ class MethodFunc(object):
         return name
 
     def get_cname(self):
-        base = crep.cref(self.method)
+        base = crep.cref_method(self.method)
         return '_DML_M_' + base + self.suffix
 
 def canonicalize_signature(signature):
