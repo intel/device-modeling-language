@@ -3362,9 +3362,9 @@ class TraitSessionRef(Expression):
         return TPtr(self.type_)
 
     def read(self):
-        return '(%s)((uintptr_t)_dev + %s->%s)' % (
+        return '((%s)((uintptr_t)_dev + %s->%s) + (%s).id.encoded_index)' % (
             TPtr(self.type_).declaration(''), vtable_read(self.traitref),
-            self.name)
+            self.name, self.traitref.read())
 
 class TraitMethodRef(NonValue):
     '''A reference to a bound method in a trait. The expression

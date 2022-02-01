@@ -2101,7 +2101,10 @@ def init_trait_vtables_for_node(node, param_values, dims, parent_indices):
                     assert session_node.objtype in ('session', 'saved')
                     args.append('offsetof(%s, %s)' % (
                         crep.structtype(dml.globals.device),
-                        crep.cref_session(session_node, indices)))
+                        crep.cref_session(
+                            session_node,
+                            (mkIntegerConstant(node.site, 0, False),)
+                            * len(indices))))
             # initialize vtable instance
             vtable_arg = '&%s%s' % (node.traits.vtable_cname(trait), index_str)
             init_calls.append(
