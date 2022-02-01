@@ -53,26 +53,27 @@ port p[i < 2] {
 }
 
 method test() throws {
-    local child c = cast(p[0], child);
+    local child c = cast(p[1], child);
     local base pp;
     local base *ppp = &pp;
     *ppp = cast(cast(c, base), base);
     pp.m(0);
     c.m(0);
     c.o(0);
-    expect(ppp->o(3) == 12, "ppp->o(3) == 12");
-    expect(p[1].o(3) == 16, "p[1].o(3) == 16");;
+    expect(ppp->o(3) == 16, "ppp->o(3) == 16");
+    expect(p[0].o(3) == 12, "p[0].o(3) == 12");;
     // The parameters value is given as a float value 14.2; the parameter's type
     // causes this to be truncated to an integer when referenced
     // dynamically as a trait parameter.
     expect(cast(p[1], child).param == 14, "cast(p[1], child).param == 14");
     expect(p[1].param == 14.2, "p[1].param == 14.2");
-    p[0].d = 4;
-    p[0].e = 5;
+    p[1].d = 4;
+    p[1].e = 5;
+    p[0].d = 6;
     expect(ppp->d == 4, "ppp->d == 4");
     expect(ppp->e == 5, "ppp->e == 5");
-    expect(p[1].traitref_param.d == 4, "p[1].traitref_param.d == 4");
-    expect(p[1].traitref_param.e == 5, "p[1].traitref_param.e == 5");
+    expect(p[1].traitref_param.d == 6, "p[1].traitref_param.d == 6");
+    expect(p[0].traitref_param.e == 5, "p[0].traitref_param.e == 5");
     expect(p[1].param == 14.2, "p[1].param == 14.2");
     p[1].hello();
 }
