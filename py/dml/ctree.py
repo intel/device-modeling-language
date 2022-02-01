@@ -2488,8 +2488,8 @@ def read_iface_struct(iface_noderef):
     interface struct.'''
     if dml.globals.dml_version == (1, 2):
         assert isinstance(iface_noderef, NodeRefWithStorage)
-        return '_dev->' + crep.cref_node(iface_noderef.node,
-                                         iface_noderef.indices)
+        return '_dev->' + crep.cref_session(iface_noderef.node,
+                                            iface_noderef.indices)
     else:
         assert isinstance(iface_noderef, PlainNodeRef)
         struct_name = param_str(iface_noderef.node, '_c_type')
@@ -3523,18 +3523,18 @@ class NodeRefWithStorage(NodeRef, LValue):
             report(PVAL(dmlparse.end_site(self.site)))
         node = self.node
 
-        expr = crep.cref_node(node, self.indices)
         if node.objtype == 'method':
             # enforced by crep.node_storage_type
             assert dml.globals.dml_version == (1, 2)
             from . import codegen
             method = codegen.method_instance(node)
             codegen.mark_method_referenced(method)
-            expr = '_DML_M_' + expr
-        elif expr:
-            expr = '_dev->' + expr
+            expr = '_DML_M_' + crep.cref(node)
+        elif node.objtype == 'device':
+            assert dml.globals.dml_version == (1, 2)
+            return '_dev'
         else:
-            expr = '_dev'
+            expr = '_dev->' + crep.cref_session(node, self.indices)
         return expr
 
     def apply(self, args):
@@ -3560,7 +3560,7 @@ class SessionVariableRef(LValue):
         assert name
         return name
     def read(self):
-        return '_dev->' + crep.cref_node(self.node, self.indices)
+        return '_dev->' + crep.cref_session(self.node, self.indices)
 
 class PlainNodeRef(NodeRef, NonValue):
     pass
