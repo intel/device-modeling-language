@@ -13,7 +13,7 @@ from .messages import *
 
 __all__ = (
     'cname',
-    'cref',
+    'cref_method',
     'cref_portobj',
     'cref_session',
     'ctype',
@@ -101,7 +101,7 @@ def ancestor_cnames(node):
         node = node.parent
     return list(reversed(names))
 
-def cref(method_node):
+def cref_method(method_node):
     assert method_node.objtype == 'method'
     # This might actually conflict, but the chances are small.
     return '__'.join(ancestor_cnames(method_node)[1:])
