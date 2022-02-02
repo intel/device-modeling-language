@@ -2234,8 +2234,7 @@ def foreach_each_in(site, itername, trait, each_in,
     ident = each_in_sym.value
     inner_scope = Symtab(scope)
     trait_type = TTrait(trait)
-    trait_ptr = (f'(struct _{cident(trait.name)} *) '
-                 + '(_list.base + _inner_idx * _list.offset)')
+    trait_ptr = (f'(struct _{cident(trait.name)} *) _list.vtable')
     obj_ref = '(_identity_t) { .id = _list.id, .encoded_index = _inner_idx}'
     inner_scope.add_variable(
         itername, type=trait_type,

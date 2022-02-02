@@ -1051,14 +1051,10 @@ _deserialize_simple_event_data(
 
 // List of vtables of a specific trait in one specific object
 typedef struct {
-        // first trait vtable instance. Instances are stored linearly in a
-        // possibly multi-dimensional array, with outer index corresponding to
-        // index of outer DML object.
-        uintptr_t base;
+        // trait vtable instance
+        void *vtable;
         // total number of elements (product of object's dimsizes)
-        uint64 num;
-        // offset between two vtable instances; at least sizeof(<vtable type>)
-        uint32 offset;
+        uint32 num;
         // The unique object id
         uint32 id;
 } _vtable_list_t;

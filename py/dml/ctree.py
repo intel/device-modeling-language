@@ -3214,8 +3214,7 @@ class ObjTraitRef(Expression):
             indices = tuple(mkLit(self.site, '__indices[%d]' % (i,),
                                   TInt(32, False))
                             for i in range(self.node.dimensions))
-        structref = (self.node.traits.vtable_cname(self.ancestry_path[0])
-                     + ''.join('[%s]' % (i.read(),) for i in indices))
+        structref = self.node.traits.vtable_cname(self.ancestry_path[0])
         pointer = '(&%s)' % ('.'.join([structref] + [
             cident(t.name) for t in self.ancestry_path[1:]]))
         id = ObjIdentity(self.site, self.node, indices).read()
