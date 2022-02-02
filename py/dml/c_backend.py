@@ -1805,16 +1805,13 @@ def generate_each_in_table(node, trait, subnodes):
         # vtables exist, because trait instances are marked referenced
         # when an 'each in' instance is referenced
         ancestry_path = sub.traits.ancestry_paths[trait][0]
-        base = '&%s%s%s' % (
+        base = '&%s%s' % (
             sub.traits.vtable_cname(ancestry_path[0]),
-            '[0]' * sub.dimensions,
             ''.join('.' + cident(t.name)
                     for t in ancestry_path[1:]))
         num = reduce(operator.mul, sub.dimsizes, 1)
         uniq = sub.uniq
-        offset = 'sizeof(struct _%s)' % (cident(ancestry_path[0].name),)
-        items.append("{(uintptr_t)%s, %d, %s, %d}\n"
-                     % (base, num, offset, uniq))
+        items.append("{%s, %d, %d}\n" % (base, num, uniq))
     init = '{\n%s}' % (',\n'.join('    %s' % (item,) for item in items),)
     add_variable_declaration(
         'const _vtable_list_t %s[%d]' % (ident, len(subnodes)), init)
@@ -2066,21 +2063,8 @@ def flatten_object_subtree(node):
         'event', 'port', 'implement', 'attribute', 'connect',
         'interface', 'bank', 'group', 'register', 'field', 'subdevice')
 
-def init_trait_vtables_for_node(node, param_values, dims, parent_indices):
-    init_calls = []
-    if node.isindexed():
-        if all(not o.traits for o in flatten_object_subtree(node)):
-            return
-        indices = ()
-        for (arridx, arrlen) in enumerate(node.arraylens()):
-            idx = "_i%d" % (arridx + node.nonlocal_dimensions())
-            dims = dims + (arrlen,)
-            indices += (mkLit(node.site, idx, TInt(32, True)),)
-        indices = parent_indices + indices
-    else:
-        indices = parent_indices
+def init_trait_vtables_for_node(node, param_values):
     if node.traits:
-        index_str = ''.join('[%s]' % (i,) for i in indices)
         method_overrides = node.traits.method_overrides
         param_overrides = param_values[node]
         for trait in node.traits.referenced:
@@ -2117,9 +2101,9 @@ def init_trait_vtables_for_node(node, param_values, dims, parent_indices):
                         crep.cref_session(
                             session_node,
                             (mkIntegerConstant(node.site, 0, False),)
-                            * len(indices))))
+                            * node.dimensions)))
             # initialize vtable instance
-            vtable_arg = '&%s%s' % (node.traits.vtable_cname(trait), index_str)
+            vtable_arg = f'&{node.traits.vtable_cname(trait)}'
             init_call = ('_tinit_%s(%s);\n'
                  % (trait.name, ', '.join([vtable_arg] + args)))
 
@@ -2139,12 +2123,7 @@ def init_trait_vtables_for_node(node, param_values, dims, parent_indices):
             else:
                 assert not param_decl
                 code = [init_call]
-            init_calls.append((dims, ''.join(f'{line}\n' for line in code)))
-    for subnode in node.get_components():
-        if isinstance(subnode, objects.CompositeObject):
-            init_calls.extend(init_trait_vtables_for_node(
-                subnode, param_values, dims, indices))
-    return init_calls
+            yield ''.join(f'{line}\n' for line in code)
 
 def generate_trait_trampoline(method, vtable_trait):
     implicit_inargs = vtable_trait.implicit_args()
@@ -2198,9 +2177,8 @@ def generate_vtable_instances(devnode):
         if subnode.traits:
             for trait in subnode.traits.referenced:
                 add_variable_declaration(
-                    'struct _%s %s%s'
-                     % (cident(trait.name), subnode.traits.vtable_cname(trait),
-                       ''.join('[%d]' % i for i in subnode.dimsizes)))
+                    'struct _%s %s'
+                     % (cident(trait.name), subnode.traits.vtable_cname(trait)))
 
 def calculate_saved_userdata(node, dimsizes, attr_name, sym_spec = None):
     if node.objtype == 'method':
@@ -2445,53 +2423,24 @@ def generate_init_trait_vtables(node, param_values):
         generate_tinit(trait)
     for subnode in flatten_object_subtree(node):
         generate_trait_trampolines(subnode)
-    init_calls = init_trait_vtables_for_node(node, param_values, (), ())
-    by_dims = {}
-    for (dims, call) in init_calls:
-        by_dims.setdefault(dims, []).append(call)
-    all_dims = sorted(by_dims)
-    fun_count = 0
-    call_count = 0
-    def finish_current_function(last_dims):
-        for _ in last_dims:
-            out('}\n', preindent=-1)
-        out('}\n', preindent=-1)
+    init_blocks = [
+        block
+        for subnode in flatten_object_subtree(node)
+        for block in init_trait_vtables_for_node(subnode, param_values)]
 
-    prev_dims = ()
-    for dims in all_dims:
-        for call in by_dims[dims]:
-            # split into chunks of ~20 objects each.
-            # Tested in a device with ~1500 objects,
-            # where optimum chunk size seems to be between 10 and 100.
-            if call_count % 20 == 0:
-                if fun_count != 0:
-                    finish_current_function(prev_dims)
-                    prev_dims = ()
-                out('static void _initialize_traits%d(void) {\n'
-                    % (fun_count,), postindent=1)
-                fun_count += 1
-            common_dims = []
-            for (a, b) in zip(dims, prev_dims):
-                if a == b:
-                    common_dims.append(a)
-                else:
-                    break
-            for _ in range(len(common_dims), len(prev_dims)):
-                out('}\n', preindent=-1)
-            for i in range(len(common_dims), len(dims)):
-                idxvar = '_i%d' % (i,)
-                out('for (int %s = 0; %s < %d; %s++) {\n'
-                    % (idxvar, idxvar, dims[i], idxvar),
-                    postindent=1)
-            prev_dims = dims
-            out(call)
-            call_count += 1
-    if fun_count:
-        finish_current_function(prev_dims)
+    # split into chunks of ~20 objects each.
+    # Tested in a device with ~1500 objects,
+    # where optimum chunk size seems to be between 10 and 100.
+    chunks = [init_blocks[n:n+20] for n in range(0, len(init_blocks), 20)]
+    for (i, blocks) in enumerate(chunks):
+        out(f'static void _initialize_traits{i}(void) {{\n', postindent=1)
+        for block in blocks:
+            out(block)
+        out('}\n', preindent=-1)
     start_function_definition('void _initialize_traits(void)')
     out('{\n', postindent=1)
-    for i in range(fun_count):
-        out('_initialize_traits%d();\n' % (i,))
+    for i in range(len(chunks)):
+        out(f'_initialize_traits{i}();\n')
     out('}\n', preindent=-1)
     splitting_point()
 
