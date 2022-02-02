@@ -753,7 +753,7 @@ class Trait(SubTrait):
 
     def vtable(self):
         for (name, (_, ptype)) in list(self.vtable_params.items()):
-            yield (name, ptype)
+            yield (name, TPtr(ptype))
         for (name, (_, ptype)) in list(self.vtable_sessions.items()):
             yield (name, TInt(32, False))
         for (name, (_, inp, outp, throws, independent, startup, memoized)) \
