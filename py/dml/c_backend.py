@@ -1925,7 +1925,7 @@ fields.
             out(', %s' % (mtype.declaration(scrambled_name),))
         elif member_kind == 'parameter':
             (site, typ) = vtable_trait.vtable_params[name]
-            out(', %s' % (typ.declaration(scrambled_name)))
+            out(', %s' % (TPtr(typ).declaration(scrambled_name)))
         else:
             assert member_kind == 'session'
             out(', uint32 %s' % (scrambled_name))
@@ -1968,6 +1968,9 @@ def init_trait_vtables_for_node(node, param_values, dims, parent_indices):
         param_overrides = param_values[node]
         for trait in node.traits.referenced:
             args = []
+            param_decl = []
+            param_init = []
+            param_indices = ''.join(f'[_i{i}]' for i in range(node.dimensions))
             for name in tinit_args(trait):
                 member_kind = trait.member_kind(name)
                 if member_kind == 'method':
@@ -1977,7 +1980,17 @@ def init_trait_vtables_for_node(node, param_values, dims, parent_indices):
                         if name in method_overrides else "NULL")
                 elif member_kind == 'parameter':
                     # param_overrides contains C expression strings
-                    args.append(param_overrides[name])
+                    (value, t) = param_overrides[name]
+                    var = f'_param_{name}'
+                    args.append(f'{var}' + '[0]' * node.dimensions)
+                    array_type = t
+                    for d in reversed(node.dimsizes):
+                        array_type = TArray(array_type,
+                                            mkIntegerLiteral(node.site, d))
+                    param_decl.append(f'''\
+{TPtr(array_type).declaration(var)} = MM_MALLOC(1, typeof(*{var}));
+''')
+                    param_init.append(f'(*{var}){param_indices} = {value};')
                 else:
                     assert member_kind == 'session'
                     session_node = node.get_component(name)
@@ -1990,9 +2003,26 @@ def init_trait_vtables_for_node(node, param_values, dims, parent_indices):
                             * len(indices))))
             # initialize vtable instance
             vtable_arg = '&%s%s' % (node.traits.vtable_cname(trait), index_str)
-            init_calls.append(
-                (dims, '_tinit_%s(%s);\n'
-                 % (trait.name, ', '.join([vtable_arg] + args))))
+            init_call = ('_tinit_%s(%s);\n'
+                 % (trait.name, ', '.join([vtable_arg] + args)))
+
+            if param_init:
+                code = param_decl
+                close = []
+                for (i, d) in enumerate(node.dimsizes):
+                    indent = '    ' * i
+                    code.append(
+                        indent + f'for (unsigned _i{i} = 0; _i{i} < {d}; ++_i{i}) {{')
+                    close.append(indent + '}')
+                code.extend('    ' * node.dimensions + init
+                            for init in param_init)
+                code.extend(reversed(close))
+                code.append(init_call)
+                code = ['{'] + ['    ' + line for line in code] + ['}']
+            else:
+                assert not param_decl
+                code = [init_call]
+            init_calls.append((dims, ''.join(f'{line}\n' for line in code)))
     for subnode in node.get_components():
         if isinstance(subnode, objects.CompositeObject):
             init_calls.extend(init_trait_vtables_for_node(
@@ -2251,11 +2281,12 @@ def trait_param_value(node, param_type_site, param_type):
                   for dim in range(node.dimensions)))
         if isinstance(expr, NonValue):
             raise expr.exc()
-        return source_for_assignment(expr.site, param_type, expr).read()
+        return (source_for_assignment(expr.site, param_type, expr).read(),
+                param_type)
 
     except DMLError as e:
         report(e)
-        return "0"
+        return ("0", param_type)
 
 def resolve_trait_param_values(node):
     '''Generate code for parameter initialization of all traits

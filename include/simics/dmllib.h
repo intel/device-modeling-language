@@ -183,6 +183,10 @@ DML_eq(uint64 a, uint64 b)
         ({_traitref_t __tref = traitref;                                \
           ((struct _ ## type *) __tref.trait)->method(dev, __tref);})   \
 
+#define VTABLE_PARAM(traitref, vtable_type, member)                        \
+        ({_traitref_t __tref = traitref;                                   \
+         ((vtable_type *)__tref.trait)->member[__tref.id.encoded_index];})
+
 #define _raw_load_uint8_be_t   UNALIGNED_LOAD_BE8
 #define _raw_load_uint16_be_t  UNALIGNED_LOAD_BE16
 #define _raw_load_uint32_be_t  UNALIGNED_LOAD_BE32

@@ -3314,7 +3314,7 @@ def vtable_read(expr):
                                             expr.read())
 
 class TraitParameter(Expression):
-    priority = 160 # SubRef.priority
+    priority = dml.expr.Apply.priority
     @auto_init
     def __init__(self, site, traitref, name, type): pass
 
@@ -3322,8 +3322,11 @@ class TraitParameter(Expression):
         return "%s.%s" % (self.traitref, self.name)
 
     def read(self):
-        return ("%s->%s"
-                % (vtable_read(self.traitref), self.name))
+        t = realtype(self.traitref.ctype())
+        assert isinstance(t, TTrait)
+        vtable_type = f'struct _{cident(t.trait.name)}'
+        return (f'VTABLE_PARAM({self.traitref.read()}, {vtable_type}'
+                f', {self.name})')
 
 class TraitSessionRef(Expression):
     '''A reference to a trait session variable.
