@@ -2083,15 +2083,19 @@ def init_trait_vtables_for_node(node, param_values):
                     # param_overrides contains C expression strings
                     (value, t) = param_overrides[name]
                     var = f'_param_{name}'
-                    args.append(f'{var}' + '[0]' * node.dimensions)
-                    array_type = t
-                    for d in reversed(node.dimsizes):
-                        array_type = TArray(array_type,
-                                            mkIntegerLiteral(node.site, d))
-                    param_decl.append(f'''\
-{TPtr(array_type).declaration(var)} = MM_MALLOC(1, typeof(*{var}));
-''')
-                    param_init.append(f'(*{var}){param_indices} = {value};')
+                    if node.dimensions:
+                        args.append(f'(void *)((uintptr_t){var})')
+                        array_type = t
+                        for d in reversed(node.dimsizes):
+                            array_type = TArray(array_type,
+                                                mkIntegerLiteral(node.site, d))
+                        param_decl.append(f'''\
+    {TPtr(array_type).declaration(var)} = malloc(sizeof(*{var}));
+    ''')
+                        param_init.append(f'(*{var}){param_indices} = {value};')
+                    else:
+                        args.append('({static %s; %s = %s; &%s;})'
+                                    % (t.declaration(var), var, value, var))
                 else:
                     assert member_kind == 'session'
                     session_node = node.get_component(name)
