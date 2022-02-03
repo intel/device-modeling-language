@@ -5,6 +5,8 @@
 dml 1.2;
 device test;
 
+extern int nc;
+
 /// ERROR EDATAINIT
 data int a[3] = {1, 2};
 
@@ -12,11 +14,21 @@ data int a[3] = {1, 2};
 data struct {int i; int j;} s = {1,};
 
 /// ERROR EDATAINIT
+data struct {int i; int j;} s2 = {nc, nc};
+
+/// ERROR EDATAINIT
 data bitfields 32 {
     uint3 x @ [31:29];
     uint16 y @ [23:8];
     uint8 z @ [7:0];
 } bf = {0, 0};
+
+data bitfields 32 {
+    uint3 x @ [31:29];
+    uint16 y @ [23:8];
+    uint8 z @ [7:0];
+/// ERROR EDATAINIT
+} bf2 = {nc, nc, nc};
 
 // This works now /// ERROR EDATAINIT
 data layout "big-endian" {
@@ -43,8 +55,15 @@ method init {
 
     local struct {
         int i;
-    /// ERROR EDATAINIT
-    } simple_struct = {d,};
+        int j;
+    // no error
+    } simple_struct = {d,nc,};
+
+    local bitfields 32 {
+        uint3 x @ [31:29];
+        uint16 y @ [23:8];
+    // no error
+    } l_bf = {d,nc,};
 
     /// ERROR EDATAINIT
     static int y = $i;

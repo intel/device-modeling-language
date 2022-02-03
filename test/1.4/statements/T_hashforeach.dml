@@ -1,0 +1,45 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+import "testing.dml";
+
+in each group {
+    param target default false;
+}
+
+group g1;
+group g2;
+group g3[i < 3] {
+    param target = i == 1;
+}
+
+method test() throws {
+    local object o = cast(dev, object);
+    local int miss_count = 0;
+    #foreach g in ([g1, g2, g3[0], g3[1], g3[2]]) {
+        #if (g.target) {
+            o = cast(g, object);
+            break;
+        } #else {
+            ++miss_count;
+        }
+    }
+    assert o == cast(g3[1], object) && miss_count == 3;
+
+    o = cast(dev, object);
+    miss_count = 0;
+    #foreach g in ([g1, g2, g3[0], g3[1], g3[2]]) {
+        if (g.target) {
+            o = cast(g, object);
+            break;
+        } else {
+            ++miss_count;
+        }
+    }
+    assert o == cast(g3[1], object) && miss_count == 3;
+}

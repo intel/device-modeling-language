@@ -37,9 +37,11 @@ __all__ = (
     'mkCompound',
     'mkNull', 'Null',
     'mkLabel',
+    'mkUnrolledLoop',
     'mkGoto',
     'mkReturnFromInline',
     'mkThrow',
+    'mkUnrolledBreak',
     'mkTryCatch',
     'mkInline',
     'mkInlinedMethod',
@@ -106,7 +108,7 @@ __all__ = (
     #'Constant',
     'mkIntegerConstant', 'IntegerConstant',
     'mkIntegerLiteral',
-    'mkFloatConstant',
+    'mkFloatConstant', 'FloatConstant',
     'mkStringConstant', 'StringConstant',
     'AbstractList',
     'mkList', 'List',
@@ -356,6 +358,29 @@ class Label(Statement):
 
 mkLabel = Label
 
+class UnrolledLoop(Statement):
+    @auto_init
+    def __init__(self, site, substatements, break_label):
+        assert isinstance(substatements, list)
+
+    def toc(self):
+        out('{\n', postindent = 1)
+        self.toc_inline()
+        out('}\n', preindent = -1)
+
+    def toc_inline(self):
+        for substatement in self.substatements:
+            substatement.toc()
+        if self.break_label is not None:
+            out(f'{self.break_label}: UNUSED;\n')
+
+    def control_flow(self):
+        bodyflow = mkCompound(self.site, self.substatements).control_flow()
+        return bodyflow.replace(fallthrough=(bodyflow.fallthrough
+                                             or bodyflow.br), br=False)
+
+mkUnrolledLoop = UnrolledLoop
+
 class Goto(Statement):
     @auto_init
     def __init__(self, site, label): pass
@@ -378,6 +403,12 @@ class Throw(Goto):
         return ControlFlow(throw=True)
 
 mkThrow = Throw
+
+class UnrolledBreak(Goto):
+    def control_flow(self):
+        return ControlFlow(br=True)
+
+mkUnrolledBreak = UnrolledBreak
 
 class TryCatch(Statement):
     '''A DML try/catch statement. Catch block is represented as an if (false)
@@ -2540,7 +2571,7 @@ def mkInterfaceMethodRef(site, iface_node, indices, method_name):
     stype = safe_realtype(stype)
     if not isinstance(stype, StructType):
         raise ENOSTRUCT(site, mkNodeRef(site, iface_node, indices), stype)
-    ftype = stype.member_type(method_name)
+    ftype = stype.get_member_qualified(method_name)
     if not ftype:
         raise EMEMBER(site, struct_name, method_name)
     ftype = safe_realtype(ftype)
@@ -3164,7 +3195,8 @@ class ObjTraitRef(Expression):
             indices = tuple(mkLit(self.site, '__indices[%d]' % (i,),
                                   TInt(32, False))
                             for i in range(self.node.dimensions))
-        structref = (self.node.traits.vtable_cname(self.ancestry_path[0])
+        vtable_name = self.node.traits.vtable_cname(self.ancestry_path[0])
+        structref = (f'(*{vtable_name})'
                      + ''.join('[%s]' % (i.read(),) for i in indices))
         pointer = '(&%s)' % ('.'.join([structref] + [
             cident(t.name) for t in self.ancestry_path[1:]]))
@@ -3725,14 +3757,15 @@ def mkSubRef(site, expr, sub, op):
     basetype = basetype.resolve()
 
     if isinstance(basetype, StructType):
-        typ = basetype.member_type(sub)
+        typ = basetype.get_member_qualified(sub)
         if not typ:
             raise EMEMBER(site, baseexpr, sub)
         return StructMember(site, expr, sub, typ, op)
     elif basetype.is_int and basetype.is_bitfields:
-        t, msb, lsb = basetype.member_type_bits(sub)
-        if t == None:
+        member = basetype.members.get(sub)
+        if member is None:
             raise EMEMBER(site, expr, sub)
+        (_, msb, lsb) = member
         return mkBitSlice(site,
                           baseexpr,
                           mkIntegerLiteral(site, msb),
@@ -4166,7 +4199,7 @@ class DesignatedStructInitializer(Initializer):
     def assign_to(self, dest, typ):
         '''output C statements to assign an lvalue'''
         typ = safe_realtype(typ)
-        if isinstance(typ, TExternStruct):
+        if isinstance(typ, StructType):
             out('memcpy(&%s, (%s){%s}, sizeof %s);\n' % (
                 dest.read(),
                 TArray(typ, mkIntegerLiteral(self.site, 1)).declaration(''),

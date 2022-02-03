@@ -14,12 +14,19 @@ import difflib
 from pathlib import Path
 from os.path import join, isdir, isfile, exists
 import glob
+import json
 from fnmatch import fnmatch
 from simicsutils.host import host_type, is_windows, batch_suffix
 from simicsutils.internal import package_path
 import testparams
 from testparams import simics_root_path
 import traceback
+from depfile import parse_depfile
+
+class TestFail(Exception):
+    def __init__(self, reason):
+        Exception.__init__(self)
+        self.reason = reason
 
 sys.path.append(join(simics_root_path(), "scripts", "build"))
 import module_id
@@ -57,9 +64,15 @@ else:
 bat_sfx = batch_suffix()
 exe_sfx = '.exe' if is_windows() else ""
 
-dmlc = [join(simics_root_path(), host_type(), "bin", "py3",
-             "mini-python" + exe_sfx),
-        join(project_host_path(), "bin", "dml", "python")]
+# Python interpreter for DMLC including args, e.g. '["pypy3", "-X", "utf8"]'
+python = os.environ.get('DMLC_PYTHON')
+if python:
+    python = json.loads(python)
+else:
+    python = [join(simics_root_path(), host_type(), "bin", "py3",
+                   "mini-python" + exe_sfx)]
+
+dmlc = python + [join(project_host_path(), "bin", "dml", "python")]
 
 if not is_windows():
     dmlc_lib_path = ":".join(
@@ -77,23 +90,32 @@ def dmlc_reaper_args(exitcode_file, timeout_multiplier = 1):
 
 common_cflags = ["-O2", "-std=gnu99", '-Wall', '-Werror', '-Wpointer-arith',
                  '-Wwrite-strings', '-Wformat-nonliteral',]
+cc = os.environ.get('DMLC_CC')
 if is_windows():
-    cc = [testparams.mingw_cc()]
+    if not cc:
+        try:
+            cc = testparams.mingw_cc()
+            cc_found = os.path.exists(cc)
+        except Exception:
+            cc_found = False
+        if not cc_found:
+            raise TestFail('gcc not found(specify gcc by env var DMLC_CC)')
+        ldflags = [f"-L{testparams.mingw_root()}/lib/gcc/x86_64-w64-mingw32/lib"]
+    else:
+        ldflags = []
     cflags = common_cflags + [
         "-DUSE_MODULE_HOST_CONFIG", "-D__USE_MINGW_ANSI_STDIO=1"]
-    ldflags = [f"-L{testparams.mingw_root()}/lib/gcc/x86_64-w64-mingw32/lib"]
 else:
-    cc = [join(package_path(), "gcc_6.4.0", "bin", "gcc")]
+    if not cc:
+        cc = join(package_path(), "gcc_6.4.0", "bin", "gcc")
+        if not os.path.exists(cc):
+            raise TestFail('gcc not found(specify gcc by env var DMLC_CC)')
     cflags = ['-g', '-fPIC', '-Wundef'] + common_cflags
     ldflags = []
+cc = [cc]
 cflags_shared = ["-shared"]
 
 os.environ['DMLC_DEBUG'] = 't'
-
-class TestFail(Exception):
-    def __init__(self, reason):
-        Exception.__init__(self)
-        self.reason = reason
 
 latest_api_version = "6"
 
@@ -123,6 +145,16 @@ class BaseTestCase(object):
         self.output = None
     def pr(self, msg):
         self.output.call(testparams.pr, msg)
+
+    def expect_equal_sets(self, a, b):
+        assert isinstance(a, set) and isinstance(b, set)
+        if a != b:
+            import traceback
+            for line in traceback.format_stack():
+                self.pr(line.rstrip())
+            self.pr('missing elements: %r' % ((b - a),))
+            self.pr('unexpected elements: %r' % ((a - b),))
+            raise TestFail('difference found')
 
     def run_test(self, output_handler):
         self.output = output_handler
@@ -873,8 +905,8 @@ class DebuggableCheck(BaseTestCase):
 
 all_tests.append(DebuggableCheck('debuggable-check'))
 
-class DmlDep(CTestCase):
-    '''Stability test, '''
+class DmlDepBase(CTestCase):
+    '''Base class for DML dependency test cases.'''
     __slots__ = ()
     def run_cc(self, cc_extraargs):
         assert not cc_extraargs
@@ -897,49 +929,23 @@ class DmlDep(CTestCase):
         if result != 0:
             self.pr("CC: " + " ".join(args))
         return result
+
     def run_linker(self):
         # suppress link step
         return 0
-    def expect_equal_sets(self, a, b):
-        assert isinstance(a, set) and isinstance(b, set)
-        if a != b:
-            import traceback
-            for line in traceback.format_stack():
-                self.pr(line.rstrip())
-            self.pr('missing elements: %r' % ((b - a),))
-            self.pr('unexpected elements: %r' % ((a - b),))
-            raise TestFail('difference found')
 
-    def parse_depfile(self, f):
-        lines = []
-        for line in f:
-            line = line.rstrip()
-            if lines and lines[-1] and lines[-1][-1] == '\\':
-                lines[-1] = lines[-1][:-1] + ' ' + line
-            else:
-                lines.append(line)
-        target_prereqs = {}
-        for line in filter(None, lines):
-            # finding : is awkward because of Windows c:\
-            # MingW gcc 10.3 dep output path has inconsistent case
-            (targets, prereqs) = (line + ' ').replace('d:', 'D:').split(': ')
-            for target in targets.split():
-                target_prereqs.setdefault(target, set()).update(prereqs.split())
-        return target_prereqs
+    def load_dependencies(self, path):
+        with open(path) as f:
+            return parse_depfile(f)
 
+class DmlDep(DmlDepBase):
+    '''Stability test, '''
+    __slots__ = ()
     def test(self):
         super(DmlDep, self).test()
-        # unit test depfile parsing
-        assert self.parse_depfile([
-            s + '\n' for s in [
-                'a \\ ', ' b: c\\', 'd', ' ', 'a : e', 'f:']]) == {
-                    'a': {'c', 'd', 'e'},
-                    'b': {'c', 'd'},
-                    'f': set()}
 
         # test .dmldep
-        with open(self.cfilename + '.dmldep') as f:
-            target_prereqs = self.parse_depfile(f)
+        target_prereqs = self.load_dependencies(self.cfilename + '.dmldep')
         c_target = 'T_%s.c' % (self.shortname,)
         dmldep_target = 'T_%s.dmldep' % (self.shortname,)
         non_lib = {os.path.normpath(p) for p in target_prereqs[c_target]
@@ -969,8 +975,7 @@ class DmlDep(CTestCase):
         # Similar to .dmldep check. Covers that dependency generation
         # extracts #include directives from headers/footers, handling
         # DMLDIR_x_H correctly.
-        with open(self.cfilename + '.d') as f:
-            target_prereqs = self.parse_depfile(f)
+        target_prereqs = self.load_dependencies(self.cfilename + '.d')
         prereqs = target_prereqs[self.cfilename + '.c']
         expected_subset = [
             self.cfilename + '-cdep.c',
@@ -993,6 +998,23 @@ all_tests.append(DmlDep(['dmldep'],
                         join(testdir, '1.2', 'misc', 'T_import_rel_1.dml'),
                         dmlc_extraargs = ['--dep', 'T_dmldep.dmldep'],
                         api_version=latest_api_version))
+
+class DmlDepArgs(DmlDepBase):
+    '''Test optional arguments for dependency generation.'''
+    __slots__ = ()
+    def test(self):
+        super().test()
+        dependencies = self.load_dependencies(self.cfilename + '.dmldep')
+        assert list(dependencies.keys()) == ['x.dml', 'y.dml'], "Expected custom targets only"
+
+all_tests.append(
+    DmlDepArgs(['dmldepargs'],
+               join(testdir, '1.2', 'misc', 'T_import_rel_1.dml'),
+               dmlc_extraargs=[
+                   '--dep=T_dmldepargs.dmldep', '--no-dep-phony',
+                   '--dep-target=x.dml', '--dep-target=y.dml'
+               ],
+               api_version=latest_api_version))
 
 class PortingConvert(CTestCase):
     __slots__ = ('PORTING',)

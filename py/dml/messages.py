@@ -846,15 +846,6 @@ class EBREAK(DMLError):
     """
     fmt = "nothing to break from"
 
-class EBREAKU(DMLError):
-    """
-    A `break` statement cannot be used in a `foreach`
-    or `select` statement.
-    """
-    fmt = "break is not possible here"
-    def __init__(self, site):
-        DMLError.__init__(self, site)
-
 class ENMETH(DMLError):
     """
     A method name was expected. This might be caused by using
@@ -1686,6 +1677,14 @@ class WNEGCONSTCOMP(DMLWarning):
         DMLError.log(self)
         self.print_site_message(
             self.expr.site, "Consider 'cast(%s, %s)'" % (self.expr, self.ty))
+
+class WASTRUNC(DMLWarning):
+    """The source of an assignment is a constant value that can't fit in the
+    type of the target, and is thus truncated. This warning can be silenced by
+    explicitly casting the expression to the target type.
+    """
+    fmt = ("The assignment source is a constant value which does not fit "
+           + "the assign target of type '%s', and will thus be truncated")
 
 class WREDUNDANTLEVEL(DMLWarning):
     """`X then Y` log level syntax has no effect when the

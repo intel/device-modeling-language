@@ -52,20 +52,24 @@ copyright = '''<!--
 -->
 '''
 
+frontpage_links = []
+
 filename_map = {}
 bodies = []
 for (path, indices) in toc_md_files(toc, []):
     contents = path.read_text()
     title_match = title_re.match(contents)
-    title = title_match.group(1).replace(' ', '-')
-    title = f"{'.'.join(map(str, indices))}.-{title}"
-    assert validate_md_links.valid_chars.issuperset(title), path
+    title = f"{'.'.join(map(str, indices))}. {title_match.group(1)}"
+    basename = title.replace(' ', '-')
+    assert validate_md_links.valid_chars.issuperset(basename), path
     body = contents[title_match.end():].lstrip()
     if not indices:
         assert not body
         continue
-    filename = title + '.md'
-    filename_map[path.with_suffix('.html').name] = title
+    frontpage_links.append(
+        '#' * len(indices) + f'# [{title}]({basename})')
+    filename = basename + '.md'
+    filename_map[path.with_suffix('.html').name] = basename
     bodies.append((outdir / filename, body))
 
 for (path, body) in bodies:
@@ -75,3 +79,14 @@ for (path, body) in bodies:
         if end > start:
             body = body[:start] + filename_map[match[1]] + body[end:]
     path.write_text(copyright + body)
+
+# When built in a Simics tree, this will detect the current Simics version
+specs = outdir / '..' / '..' / '..' / '..' / 'package-specs.json'
+pkgs = json.loads(specs.read_bytes()) if specs.is_file() else {}
+version = pkgs.get('Simics-Base-linux64', {}).get('version', '6.0.xxx')
+
+head = [copyright,
+        f'This is the reference manual of DML 1.4, as of Simics {version}, '
+        'converted to GitHub markdown.']
+(outdir / 'DML-1.4-Reference-Manual.md').write_text(
+    '\n'.join(head + frontpage_links))

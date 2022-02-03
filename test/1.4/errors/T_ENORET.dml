@@ -87,6 +87,32 @@ template t {
     }
 }
 
+method m10() -> (int) {
+    try {
+        #foreach b in ([dev]) {
+            break;
+            // this statement is dead...
+            throw;
+        }
+        return 0;
+    } catch {
+        // .. so this block is also dead ..
+    }
+    // .. so finally, this point is unreachable and we should get no error
+}
+
+method m11() -> (int) {
+    try {
+        #foreach b in ([dev]) {
+            throw;
+        }
+        // this point is unreachable...
+    } catch {
+        return 0;
+    }
+    // ... as is this one, so we should get no error
+}
+
 method init() {
     local int i;
     try {
@@ -100,4 +126,6 @@ method init() {
     try i = m7(1); catch ;
     i = m8();
     i = m9(1);
+    i = m10();
+    i = m11();
 }

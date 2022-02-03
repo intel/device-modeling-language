@@ -16,13 +16,6 @@ trait tr {
 // unfortunately, error is only triggered upon trait instantiation
 port p is (tr);
 
-data bitfields 32 {
-        uint1 x @ [2:2];
-        uint1 z @ [1:1];
-        uint1 y @ [0:0];
-/// ERROR EASTYPE
-} f = { 3, 0, 0 };
-
 method foo(int x) { }
 
 extern z;

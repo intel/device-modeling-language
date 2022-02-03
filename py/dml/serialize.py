@@ -237,7 +237,7 @@ def map_dmltype_to_attrtype(site, dmltype):
         return 'f'
     if isinstance(real_type, TStruct):
         return '[%s]' % "".join([map_dmltype_to_attrtype(site, mt)
-                                 for (_, mt) in real_type.members])
+                                 for mt in real_type.members.values()])
     if isinstance(real_type, TArray):
         # Can only save constant-size arrays
         if not real_type.size.constant:
@@ -320,9 +320,8 @@ def generate_serialize(real_type):
             imm_attr_decl, imm_attr_ref = declare_variable(
                 site, "_imm_attr", attr_value_t)
             statements = []
-            for i in range(size):
+            for (i, (name, val_type)) in enumerate(real_type.members.items()):
                 index = ctree.mkIntegerConstant(site, i, False)
-                (name, val_type) = real_type.members[i]
                 val_ref = ctree.mkSubRef(site, in_arg, name, "->")
                 sub_serialize = serialize(safe_realtype(val_type),
                                           val_ref, imm_attr_ref)
@@ -369,13 +368,11 @@ def generate_deserialize(real_type):
         output.out(function_decl + " {\n", postindent = 1)
         out_arg_decl.toc()
         if isinstance(real_type, TStruct):
-            size = len(real_type.members)
             statements = []
             imm_attr_decl, imm_attr_ref = declare_variable(
                 site, "_imm_attr", attr_value_t)
-            for i in range(size):
+            for (i, (name, val_type)) in enumerate(real_type.members.items()):
                 index = ctree.mkIntegerConstant(site, i, False)
-                (name, val_type) = real_type.members[i]
                 val_ref = ctree.mkSubRef(site, out_arg, name, "->")
                 sim_attr_list_item = apply_c_fun(
                     site, "SIM_attr_list_item",

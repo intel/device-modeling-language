@@ -221,7 +221,7 @@ def check_named_types(t):
             raise ETYPE(t.declaration_site, t)
     elif isinstance(t, TStruct):
         t.resolve()
-        for mn, mt in t.member_types:
+        for (mn, mt) in t.members.items():
             check_named_types(mt)
     elif isinstance(t, (TPtr, TVector, TArray)):
         check_named_types(t.base)
@@ -277,7 +277,7 @@ def type_deps(t, include_structs, expanded_typedefs):
         deps = []
         if include_structs:
             deps.append(t.label)
-        for (mn, mt) in t.member_types:
+        for (mn, mt) in t.members.items():
             deps.extend(type_deps(mt, True, expanded_typedefs))
         return deps
     elif isinstance(t, TArray):
