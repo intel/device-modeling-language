@@ -1908,7 +1908,7 @@ fields.
         tinit_calls.append("_tinit_%s(%s);\n" % (
             parent.name, ", ".join(['&_ret->' + cident(parent.name)] + args)))
 
-    out('static void\n')
+    out('static void __attribute__((optimize("O0")))\n')
     out('_tinit_%s(struct _%s *_ret' % (trait.name,
                                         cident(trait.name)))
     inargs = tinit_args(trait)
@@ -2216,7 +2216,8 @@ def generate_init_trait_vtables(node, param_values):
     # where optimum chunk size seems to be between 10 and 100.
     chunks = [init_blocks[n:n+20] for n in range(0, len(init_blocks), 20)]
     for (i, blocks) in enumerate(chunks):
-        out(f'static void _initialize_traits{i}(void) {{\n', postindent=1)
+        out('static void __attribute__((optimize("O0")))'
+            f' _initialize_traits{i}(void) {{\n', postindent=1)
         for block in blocks:
             out(block)
         out('}\n', preindent=-1)
