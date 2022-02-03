@@ -1,5 +1,5 @@
 /*
-  © 2021 Intel Corporation
+  © 2021-2022 Intel Corporation
   SPDX-License-Identifier: MPL-2.0
 */
 dml 1.4;
@@ -52,27 +52,46 @@ port p[i < 2] {
     }
 }
 
+// The way param pointers are stored, param values must appear on addresses
+// aligned by two; without the alignment logic, references to one of the below
+// params will break.
+template byte_params {
+    param aa : uint8;
+    param ab : uint8;
+    param ac : uint8;
+}
+group bytes is byte_params {
+    param aa = 3;
+    param ab = 4;
+    param ac = 5;
+}
+
 method test() throws {
-    local child c = cast(p[0], child);
+    local child c = cast(p[1], child);
     local base pp;
     local base *ppp = &pp;
     *ppp = cast(cast(c, base), base);
     pp.m(0);
     c.m(0);
     c.o(0);
-    expect(ppp->o(3) == 12, "ppp->o(3) == 12");
-    expect(p[1].o(3) == 16, "p[1].o(3) == 16");;
+    expect(ppp->o(3) == 16, "ppp->o(3) == 16");
+    expect(p[0].o(3) == 12, "p[0].o(3) == 12");;
     // The parameters value is given as a float value 14.2; the parameter's type
     // causes this to be truncated to an integer when referenced
     // dynamically as a trait parameter.
     expect(cast(p[1], child).param == 14, "cast(p[1], child).param == 14");
     expect(p[1].param == 14.2, "p[1].param == 14.2");
-    p[0].d = 4;
-    p[0].e = 5;
+    p[1].d = 4;
+    p[1].e = 5;
+    p[0].d = 6;
     expect(ppp->d == 4, "ppp->d == 4");
     expect(ppp->e == 5, "ppp->e == 5");
-    expect(p[1].traitref_param.d == 4, "p[1].traitref_param.d == 4");
-    expect(p[1].traitref_param.e == 5, "p[1].traitref_param.e == 5");
+    expect(p[1].traitref_param.d == 6, "p[1].traitref_param.d == 6");
+    expect(p[0].traitref_param.e == 5, "p[0].traitref_param.e == 5");
     expect(p[1].param == 14.2, "p[1].param == 14.2");
     p[1].hello();
+
+    assert cast(bytes, byte_params).aa == 3;
+    assert cast(bytes, byte_params).ab == 4;
+    assert cast(bytes, byte_params).ac == 5;
 }

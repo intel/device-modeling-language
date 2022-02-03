@@ -1,4 +1,4 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 import sys
@@ -8,22 +8,17 @@ import json
 import functools
 import traceback
 
-(toc, *dirs) = sys.argv[1:]
-
-toc = json.loads(Path(toc).read_text())
-dirs = list(map(Path, dirs))
-
-def lookup(f):
+def lookup(f, dirs):
     for d in dirs:
         candidate = d / f
         if candidate.is_file():
             return candidate
     assert False, f
 
-def toc_md_files(toc):
-    yield lookup(toc['file'])
+def toc_md_files(toc, dirs):
+    yield lookup(toc['file'], dirs)
     for child in toc.get('children', []):
-        yield from toc_md_files(child)
+        yield from toc_md_files(child, dirs)
 
 anchor_re = re.compile(r'<a id="(.*?)"')
 
@@ -57,8 +52,6 @@ def anchors(text):
                 anchors.add(key)
     return anchors - ambiguous_anchors
 
-md_files = {f: f.read_text() for f in toc_md_files(toc)}
-
 link_re = re.compile(r'\[.*?\]\((.*?)\)', re.DOTALL)
 
 assert link_re.findall('[blah\nblah](foo.html#xyz) [glurp](#bar)') == [
@@ -68,27 +61,37 @@ def report(path, match, message):
     line = md_files[path][:match.start()].count('\n') + 1
     sys.stderr.write(f'{path}:{line}: error: {message}\n')
 
-ok = True
-for path in md_files:
-    for match in link_re.finditer(md_files[path]):
-        [link] = match.groups()
-        if link.count('#') == 0 and link.endswith('.html'):
-            (f, anchor) = (link, '')
-        elif link.count('#') == 1:
-            (f, anchor) = link.split('#')
-        else:
-            report(path, match, f"malformed link, expected '#': {link}")
-            ok = False
-            continue
-        if f:
-            assert f.endswith('.html')
-            f = f[:-5] + '.md'
-            f = lookup(Path(f))
-            assert f in md_files
-        else:
-            f = path
-        if anchor not in anchors(md_files[f]):
-            report(path, match, f"broken link: {link}")
-            ok = False
+def main():
+    (toc, *dirs) = sys.argv[1:]
+    toc = json.loads(Path(toc).read_text())
+    dirs = list(map(Path, dirs))
 
-sys.exit(0 if ok else 1)
+    md_files = {f: f.read_text() for f in toc_md_files(toc, dirs)}
+
+    ok = True
+    for path in md_files:
+        for match in link_re.finditer(md_files[path]):
+            [link] = match.groups()
+            if link.count('#') == 0 and link.endswith('.html'):
+                (f, anchor) = (link, '')
+            elif link.count('#') == 1:
+                (f, anchor) = link.split('#')
+            else:
+                report(path, match, f"malformed link, expected '#': {link}")
+                ok = False
+                continue
+            if f:
+                assert f.endswith('.html')
+                f = f[:-5] + '.md'
+                f = lookup(Path(f), dirs)
+                assert f in md_files
+            else:
+                f = path
+            if anchor not in anchors(md_files[f]):
+                report(path, match, f"broken link: {link}")
+                ok = False
+
+    sys.exit(0 if ok else 1)
+
+if __name__ == '__main__':
+    main()

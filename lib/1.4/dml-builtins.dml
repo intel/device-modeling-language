@@ -1,5 +1,5 @@
 /*
-  © 2013-2021 Intel Corporation
+  © 2013-2022 Intel Corporation
   SPDX-License-Identifier: 0BSD
 */
 
@@ -42,6 +42,7 @@ extern char *_DML_describe_uint64_event(const char *base, uint64 data);
 
 extern size_t strlen(const char *s);
 extern char *strcpy(char *s, const char *s);
+extern void *memcpy(void *dest, const void *src, size_t n);
 
 extern typedef struct {
 } _callback_entry_t;
@@ -463,6 +464,10 @@ The `device` template contains the following parameters:
   wider than a single byte; inherited by `bank` objects. Allowed values are
   `"little-endian"` and `"big-endian"`. The default value is `"little-endian"`.
 
+* `be_bitorder` *[bool]*: The default value of the `be_bitorder` in banks.  The
+  default value is `true` if the DML file containing the `device` statement
+  declares `bitorder be;`, and `false` otherwise.
+
 * `use_io_memory` *[bool]*: The default value of the `use_io_memory` parameter
   in banks. The current default value is `true`, but in future Simics versions
   it will be `false`.
@@ -493,7 +498,8 @@ template device {
     // register defaults
     param register_size             default undefined;
     param byte_order                default "little-endian";
-
+    param _be_bitorder            auto;
+    param be_bitorder             default _be_bitorder;
     param log_group                 = undefined;
 
     param use_io_memory             default simics_api_version == "6"
@@ -539,7 +545,8 @@ template _conf_attribute {
 
     param configuration             default "optional";
     param persistent                default false;
-    param internal                  default !defined documentation;
+    param internal                  default (!defined documentation
+                                             && !defined desc);
 
     param readable default this.configuration != "none";
     param writable default this.configuration != "none";
@@ -640,8 +647,8 @@ internal [bool]
 
 If this parameter is `true`, the attribute will be treated
 as internal, meaning that it will be excluded from documentation.
-The default value is `true` if the `documentation` parameter
-is defined, and `false` otherwise.
+The default value is `true` if the `documentation` and `desc` parameters
+are undefined, and `false` otherwise.
 </dd></dl>
  */
 template attribute is _conf_attribute {
@@ -1170,7 +1177,9 @@ bank. The `aux` parameter is NULL by default, and is passed on to bank methods.
 In order to pass additional information on the access down to register and
 field methods, one can override `transaction_access`, decode needed information
 from the incoming transaction, and call `default` with the extracted
-information in the `aux` argument.
+information in the `aux` argument. Accesses that bigger than 8 bytes are split
+into smaller sized chunks before being completed, the exact details of which
+are *undefined*.
 </dd><dt>
 
 <small>write(uint64 offset, uint64 value, uint64 enabled\_bytes,
@@ -1297,6 +1306,18 @@ This parameter must have the same value among all elements in a bank
 array object, i.e., it must not depend on the index of the bank.
 </dd><dt>
 
+be_bitorder [bool]
+</dt><dd>
+
+Controls the preferred bit ordering of registers within this bank.
+Whenever the register is presented to the user as a bitfield, bit 0 refers to
+the least significant bit if the parameter is `false` (the default), and
+to the most significant bit if the parameter is `true`. The parameter is
+only a presentation hint and does not affect the model's behaviour. The
+parameter is technically unrelated to the top-level `bitorder`
+declaration, though in most cases the two should match.
+</dd><dt>
+
 use_io_memory [bool]
 </dt><dd>
 
@@ -1346,6 +1367,8 @@ template bank is (object, shown_desc, _qname) {
     param mappable                  default true;
     param byte_order                default dev.byte_order;
     param _le_byte_order = byte_order == "little-endian";
+    param be_bitorder : bool;
+    param be_bitorder default dev.be_bitorder;
 
     // register defaults
     param register_size             default dev.register_size;
@@ -1359,28 +1382,39 @@ template bank is (object, shown_desc, _qname) {
     // this carried semantics in DML 1.2; deprecated in 1.4
     param _confidentiality          = undefined;
 
-    // would be great if we could index a sequence
-    shared method _get_register(uint32 reg) -> (register) throws default {
-        local uint32 num = 0;
-        foreach r in (this._each_register) {
-            if (r.offset != unmapped_offset) {
-                if (num == reg) {
-                    return r;
+    session register *_reginfo_cache;
+    session uint64 _reginfo_cache_size = 0;
+
+    shared method _build_register_cache() {
+        if (_reginfo_cache == NULL) {
+            foreach r in (this._each_register) {
+                if (r.offset != unmapped_offset) {
+                    _reginfo_cache_size++;
                 }
-                num++;
+            }
+            _reginfo_cache = new register[_reginfo_cache_size];
+            local uint64 num = 0;
+            foreach r in (this._each_register) {
+                if (r.offset != unmapped_offset) {
+                    _reginfo_cache[num] = r;
+                    num++;
+                }
             }
         }
-        throw;
+    }
+
+    // would be great if we could index a sequence
+    shared method _get_register(uint32 reg) -> (register) throws default {
+        _build_register_cache();
+        if (reg >= _reginfo_cache_size) {
+            throw;
+        }
+        return _reginfo_cache[reg];
     }
 
     shared method _num_registers() -> (uint32) {
-        local uint32 num = 0;
-        foreach r in (this._each_register) {
-            if (r.offset != unmapped_offset) {
-                num++;
-            }
-        }
-        return num;
+        _build_register_cache();
+        return _reginfo_cache_size;
     }
 
     // Given two address intervals, return the location of their intersection,
@@ -1727,17 +1761,27 @@ template bank is (object, shown_desc, _qname) {
         else
             return SIM_get_mem_op_value_be(memop);
     }
-    shared method _transaction_set_read_value(transaction_t *t, uint64 val) {
-        if (this._le_byte_order)
-            SIM_set_transaction_value_le(t, val);
-        else
-            SIM_set_transaction_value_be(t, val);
+    shared method _set_read_value(uint64 size, uint8 *buf, uint64 val) {
+        assert size <= 8;
+        if (this._le_byte_order) {
+            local uint64_le_t v = val;
+            memcpy(buf, &v, size);
+        } else {
+            local uint64_be_t v = val;
+            memcpy(buf, cast(&v, char *) + 8 - size, size);
+        }
     }
-    shared method _transaction_write_value(transaction_t *t) -> (uint64) {
-        if (this._le_byte_order)
-            return SIM_get_transaction_value_le(t);
-        else
-            return SIM_get_transaction_value_be(t);
+    shared method _write_value(uint64 size, const uint8 *buf) -> (uint64) {
+        assert size <= 8;
+        if (this._le_byte_order) {
+            local uint64_le_t v;
+            memcpy(&v, buf, size);
+            return v;
+        } else {
+            local uint64_be_t v;
+            memcpy(cast(&v, char *) + 8 - size, buf, size);
+            return v;
+        }
     }
 
     shared method _log_miss(bool is_read, int size, uint64 offset) {
@@ -1857,9 +1901,44 @@ template bank is (object, shown_desc, _qname) {
     shared method transaction_access(transaction_t *t, uint64 offset,
                                      void *aux) -> (exception_type_t) default {
         local uint64 size = SIM_transaction_size(t);
+        local uint8 buf[size];
+        if (SIM_transaction_is_write(t)) {
+            local buffer_t bytes;
+            bytes.data = buf;
+            bytes.len = size;
+            SIM_get_transaction_bytes(t, bytes);
+        }
         local bool inquiry = SIM_transaction_is_inquiry(t);
+        local bool is_read = SIM_transaction_is_read(t);
+        if (size <= 8) {
+            if (!_transaction_access(is_read, inquiry, offset, size, buf, aux))
+                return Sim_PE_IO_Not_Taken;
+        } else {
+            local int sz = 8 - (offset % 8);
+            local uint64 offs = 0;
+            while (offs < size) {
+                if (!_transaction_access(is_read, inquiry, offset + offs, sz,
+                                         buf + offs, aux))
+                    return Sim_PE_IO_Not_Taken;
+                offs += sz;
+                sz = 8 > (size - offs) ? (size - offs) : 8;
+            }
+        }
+        if (SIM_transaction_is_read(t)) {
+            local bytes_t bytes;
+            bytes.data = buf;
+            bytes.len = size;
+            SIM_set_transaction_bytes(t, bytes);
+        }
+
+        return Sim_PE_No_Exception;
+    }
+
+    shared method _transaction_access(
+        bool is_read, bool inquiry, uint64 offset, uint64 size, uint8 *buf,
+        void *aux) -> (bool) {
         local bool inquiry_override = false;
-        if (SIM_transaction_is_read(t) && !inquiry) {
+        if (is_read && !inquiry) {
             _callback_before_read(this._bank_obj(), &inquiry_override, &offset,
                                   size, &_connections, &_before_read_callbacks);
             if (inquiry_override) {
@@ -1869,7 +1948,7 @@ template bank is (object, shown_desc, _qname) {
 
         local bool success = true;
         if (inquiry) {
-            if (SIM_transaction_is_read(t)) {
+            if (is_read) {
                 local uint64 value;
                 try {
                     value = this.get(offset, size);
@@ -1884,14 +1963,14 @@ template bank is (object, shown_desc, _qname) {
                 }
 
                 if (success) {
-                    this._transaction_set_read_value(t, value);
+                    this._set_read_value(size, buf, value);
                 }
             } else {
-                local uint64 writevalue = this._transaction_write_value(t);
+                local uint64 writevalue = this._write_value(size, buf);
                 this.set(offset, size, writevalue);
             }
         } else {
-            if (SIM_transaction_is_read(t)) {
+            if (is_read) {
                 local uint64 value = 0;
                 try {
                     value = this.read(offset, _mask(size), aux);
@@ -1904,10 +1983,10 @@ template bank is (object, shown_desc, _qname) {
                                      &_after_read_callbacks);
 
                 if (success) {
-                    this._transaction_set_read_value(t, value);
+                    this._set_read_value(size, buf, value);
                 }
             } else {
-                local uint64 writevalue = this._transaction_write_value(t);
+                local uint64 writevalue = this._write_value(size, buf);
 
                 local bool suppress = false;
                 _callback_before_write(
@@ -1923,16 +2002,16 @@ template bank is (object, shown_desc, _qname) {
             }
         }
 
-        if (!SIM_transaction_is_read(t) && !inquiry) {
+        if (!is_read && !inquiry) {
             _callback_after_write(this._bank_obj(), &offset, size,
                                   &success, &_connections,
                                   &_after_write_callbacks);
         }
 
         if (!inquiry && !success) {
-            this._log_miss(SIM_transaction_is_read(t), size, offset);
+            this._log_miss(is_read, size, offset);
         }
-        return success ? Sim_PE_No_Exception : Sim_PE_IO_Not_Taken;
+        return success;
     }
 
     shared method _first_dot_idx(const char *s) -> (int) {
@@ -1972,24 +2051,8 @@ template bank is (object, shown_desc, _qname) {
             // allowed.
             return bank.shown_desc == NULL ? "" : bank.shown_desc;
         }
-        // as it stands, DML prevents us from deducing the
-        // bitorder directly so we rely on the XML 'guessing'
         method big_endian_bitorder() -> (bool) {
-            local attr_value_t args;
-            args = SIM_make_attr_list(
-                2,
-                SIM_make_attr_string(dev.classname),
-                SIM_make_attr_string(bank.name));
-
-            local attr_value_t ret;
-            ret = VT_call_python_module_function("register_view",
-                                                 "big_endian_bitorder",
-                                                 &args);
-            SIM_attr_free(&args);
-
-            local bool big_endian = SIM_attr_boolean(ret);
-            SIM_attr_free(&ret);
-            return big_endian;
+            return bank.be_bitorder;
         }
         method number_of_registers() -> (uint32) {
             return _num_registers();
@@ -2021,14 +2084,16 @@ template bank is (object, shown_desc, _qname) {
 
             local attr_value_t ret;
             ret = SIM_make_attr_list(
-                5,
+                6,
                 SIM_make_attr_string(_group_register_name(r._qname())),
                 // TODO: NULL should give a nil value
                 SIM_make_attr_string(r.shown_desc == NULL ? ""
                                      : r.shown_desc),
                 SIM_make_attr_uint64(r._size()),
                 SIM_make_attr_uint64(r.offset),
-                fields);
+                fields,
+                SIM_make_attr_boolean(
+                    byte_order == "big-endian" #? true #: false));
 
             return ret;
         }
@@ -2256,7 +2321,7 @@ internal [bool]
 </dt><dd>
 
 Specifies whether the register [attribute](#attribute-objects)
-should be internal.
+should be internal, default is `true`.
 </dd></dl>
 
 The `register` template provides the following
@@ -2305,6 +2370,7 @@ template register is (_conf_attribute, get, set, shown_desc,
     session uint64 val;
 
     param objtype = "register";
+    param internal default true;
     param bank = this._nongroup_parent;
     param bitsize                   = this.size * 8;
     param fields : sequence(field);
@@ -2571,16 +2637,18 @@ template register is (_conf_attribute, get, set, shown_desc,
         local int lsb = _enabled_bytes_to_offset(enabled_bits) * 8;
 
         // If any bits are written outside fields, then that's fine as long as
-        // they match the current storage. If not, signal a spec-viol.  TODO:
-        // only signal the spec-viol once (US1576)
+        // they match the current storage. If not, signal a spec-viol.
         local uint64 write_outside_fields
             = ((enabled_bits & value) ^
                (this.val & value)) << lsb;
 
         if (write_outside_fields != 0) {
             local int unmapped_msb = -1;
+            local strbuf_t ranges;
+            sb_init(&ranges);
+            // Collect the unmapped ranges that were written to, and format them
+            // into a log message
             for (local int i = this.bitsize; i >= -1; i--) {
-                // One message for each bitrange where any bit was changed.
                 if (i >= 0 && enabled_bits[i]) {
                     if (unmapped_msb < 0)
                         unmapped_msb = i;
@@ -2596,17 +2664,20 @@ template register is (_conf_attribute, get, set, shown_desc,
                             current[bit - i - 1]
                                 = this.val[bit] ? '1' : '0';
                         }
+                        sb_addfmt(&ranges, "\n\t%d:%d (value written = 0b%s,"
+                                  + " previous value = 0b%s)",
+                                  unmapped_msb, cast(i + 1, int),
+                                  written, current);
                         written[unmapped_msb - i] = 0;
                         current[unmapped_msb - i] = 0;
-                        log spec_viol:
-                            "Write outside fields in register %s,"
-                            + " bits %d:%d (value written = 0b%s,"
-                            + " previous value = 0b%s)",
-                            _qname(), unmapped_msb, i + 1, written, current;
                     }
                     unmapped_msb = -1;
                 }
             }
+            log spec_viol, 1 then 5:
+                "Write outside fields in register %s, bitranges;%s",
+                _qname(), sb_str(&ranges);
+            sb_free(&ranges);
         }
     }
 

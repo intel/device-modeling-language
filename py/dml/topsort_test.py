@@ -1,11 +1,11 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 import unittest
 
 import random
 import collections
-from dml.template import topsort, CycleFound
+from dml.topsort import topsort, CycleFound
 
 class Test_topsort(unittest.TestCase):
     def verify_graph(self, g):

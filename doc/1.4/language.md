@@ -1,5 +1,5 @@
 <!--
-  © 2021 Intel Corporation
+  © 2021-2022 Intel Corporation
   SPDX-License-Identifier: MPL-2.0
 -->
 
@@ -1642,8 +1642,16 @@ In the absence of explicit initializer expression, a default
 Note that the number of elements in the initializer must match with
 the number of elements or fields of the type of the *session*
 variable. This also implies that each sub-element, if itself being a
-compound data structure, must also be enclosed in braces. C99-style
-designated initializers are not supported.
+compound data structure, must also be enclosed in braces.
+
+C99-style designated initializers are supported for `struct`, `layout`, and
+`bitfields` types:
+```
+typedef struct { int x; struct { int i; int j; } y; } struct_t;
+session struct_t s = { .x = 1, .y = { .i = 2, .j = 3 } }
+```
+Unlike C, designator lists are not supported, and designated initializers for
+arrays are not supported.
 
 <div class="note">
 
@@ -1680,8 +1688,16 @@ In the absence of explicit initializer expression, a default
 Note that the number of elements in the initializer must match with
 the number of elements or fields of the type of the *saved*
 variable. This also implies that each sub-element, if itself being a
-compound data structure, must also be enclosed in braces. C99-style
-designated initializers are not supported.
+compound data structure, must also be enclosed in braces.
+
+C99-style designated initializers are supported for `struct`, `layout`, and
+`bitfields` types:
+```
+typedef struct { int x; struct { int i; int j; } y; } struct_t;
+saved struct_t s = { .x = 1, .y = { .i = 2, .j = 3 } }
+```
+Unlike C, designator lists are not supported, and designated initializers for
+arrays are not supported.
 
 In addition, the types of saved declaration variables are currently
 restricted to primitive data types, or structs or arrays containing
@@ -2171,7 +2187,9 @@ type, which has members of given types that can be accessed with
 the `.` operator. No assumptions are made on completeness or
 size; so the C struct may have additional fields, or it might be
 a `union` type. An empty member list is even allowed; this can
-make sense for opaque structs.
+make sense for opaque structs. DML variables of `extern` struct type are
+initialized such that any members of the C struct which are unknown to DML are
+initialized to 0.
 
 Nested struct definitions are permitted in an `extern typedef`
 declaration, but an inner struct type only supports member access; it
@@ -2975,6 +2993,8 @@ Only `#if` can be used to make such selections; `switch` or
 note the use of `error` above to catch any compile-time
 mistakes.)
 
+The `break` statement can be used within a `#foreach` loop to exit it.
+
 ### Select Statements
 
 <pre>
@@ -3163,6 +3183,11 @@ int size = sizeoftype io_memory_interface_t;
 
 Semantically, <code>sizeoftype <em>type</em></code> is equivalent to the C
 expression <code>sizeof (<em>type</em>)</code>.
+
+DML does not know the sizes of all types statically; DML usually regards a
+`sizeoftype` expression as non-constant and delegates size calculations
+to the C compiler. DML does evaluate the sizes of integer types, layout types,
+and constant-sized arrays thereof, as constants.
 
 ### Defined Expressions
 

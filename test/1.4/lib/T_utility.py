@@ -1,4 +1,4 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 import stest
@@ -228,36 +228,42 @@ stest.expect_equal(write_only.read(), 0) # log-level filters spec-viol filtered
 obj.log_level = 2
 with stest.expect_log_mgr(obj, 'spec-viol'):
     stest.expect_equal(write_only.read(), 0)
+
 obj.log_level = 1
 
 # Access outside fields
-fields3 = dev_util.Register_LE(
-    (obj, 'b', 3), size=1, bitfield=dev_util.Bitfield_LE({
+(fields3_0, fields3_2_0, fields3_2_1) = (dev_util.Register_LE(
+    (obj, 'b', offset), size=1, bitfield=dev_util.Bitfield_LE({
         'f76': (7, 6), 'y': 5, 'f43': (4, 3), 'x': 2, 'f10': (1, 0)}))
+                                     for offset in (3, 128, 129))
 with LogCapture() as capture, stest.allow_log_mgr(obj, 'spec-viol'):
-    fields3.write(0)
+    fields3_0.write(0)
     stest.expect_equal(capture.messages, [])
-    fields3.write(f76=3, f43=3, f10=3)
+
+    fields3_2_0.write(f76=3, f43=3, f10=3)
     # writes outside fields are masked out
-    stest.expect_equal(obj.b_fields3, 0)
-    # .. and one message is written for each bit range
+    stest.expect_equal(obj.b_fields3_2[0], 0)
+    # and one message is output
     stest.expect_equal(
         capture.messages,
-        ["Write outside fields in register b.fields3, bits %s" % (bits,)
-         + " (value written = 0b11, previous value = 0b00)"
-         for bits in ["7:6", "4:3", "1:0"]])
+        ["Write outside fields in register b.fields3_2[0], bitranges;%s" % "".join(
+            ["\n\t%s (value written = 0b11, previous value = 0b00)" % bits
+             for bits in ["7:6", "4:3", "1:0"]])])
     del capture.messages[:]
 
-    obj.b_fields3 = fields3.bitfield.value(f43=3)
+    obj.b_fields3_2[0] = fields3_2_0.bitfield.value(f43=3)
     # outside bits are not masked out by set (they were in DML 1.2)
-    stest.expect_equal(obj.b_fields3, fields3.bitfield.value(f43=3))
+    stest.expect_equal(obj.b_fields3_2[0], fields3_2_0.bitfield.value(f43=3))
+
+    obj.b_fields3_2[1] = fields3_2_1.bitfield.value(f43=3)
     # No message for bit 4:3 this time, because it didn't change
-    fields3.write(f76=1, f43=3, f10=2)
+    fields3_2_1.write(f76=1, f43=3, f10=2)
     stest.expect_equal(
         capture.messages,
-        ["Write outside fields in register b.fields3, bits %s" % (bits,)
-         + " (value written = 0b%s, previous value = 0b00)" % (val)
-         for (bits, val) in [("7:6", "10"), ("1:0", "01")]])
+        ["Write outside fields in register b.fields3_2[1], bitranges;%s" % "".join(
+            ["\n\t%s (value written = 0b%s, previous value = 0b00)" % (bits,
+                                                                       val)
+             for (bits, val) in [("7:6", "10"), ("1:0", "01")]])])
 
 [unimpl, read_unimpl, write_unimpl, silent_unimpl] = [
      dev_util.Register_LE((obj, 'b', offs), size=4)

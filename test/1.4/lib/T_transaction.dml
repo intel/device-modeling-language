@@ -1,5 +1,5 @@
 /*
-  © 2021 Intel Corporation
+  © 2021-2022 Intel Corporation
   SPDX-License-Identifier: MPL-2.0
 */
 
@@ -7,14 +7,18 @@ dml 1.4;
 
 device test;
 
-bank b {
+template tpl is bank {
     param use_io_memory = false;
+    session uint2 idx;
 
     method transaction_access(transaction_t *t, uint64 offset,
                               void *aux) -> (exception_type_t) {
+        idx = 0;
         return default(t, offset, cast(1234, void *));
     }
     method get(uint64 offset_, uint64 size_) -> (uint64) throws {
+        saved uint64 multi_offset[4];
+        multi_offset[idx++] = offset_;
         saved uint64 offset;
         offset = offset_;
         saved uint64 size;
@@ -24,6 +28,11 @@ bank b {
         return 4711;
     }
     method set(uint64 offset_, uint64 size_, uint64 value_) {
+        saved uint64 multi_offset[4];
+        saved uint64 multi_value[4];
+        multi_offset[idx] = offset_;
+        multi_value[idx] = value_;
+        idx += 1;
         saved uint64 offset;
         offset = offset_;
         saved uint64 size;
@@ -33,6 +42,8 @@ bank b {
     }
     method read(uint64 offset_, uint64 enabled_bytes, void *aux_)
         -> (uint64) throws {
+        saved uint64 multi_offset[4];
+        multi_offset[idx++] = offset_;
         saved uint64 offset;
         offset = offset_;
         saved uint64 mask;
@@ -45,6 +56,11 @@ bank b {
     }
     method write(uint64 offset_, uint64 value_, uint64 enabled_bytes,
                  void *aux_) throws {
+        saved uint64 multi_offset[4];
+        saved uint64 multi_value[4];
+        multi_offset[idx] = offset_;
+        multi_value[idx] = value_;
+        idx += 1;
         saved uint64 offset;
         offset = offset_;
         saved uint64 value;
@@ -56,4 +72,10 @@ bank b {
         if (offset == 13)
             throw;
     }
+}
+
+bank b is tpl;
+
+bank be is tpl {
+    param byte_order = "big-endian";
 }

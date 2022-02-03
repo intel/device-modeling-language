@@ -1,5 +1,5 @@
 /*
-  © 2021 Intel Corporation
+  © 2021-2022 Intel Corporation
   SPDX-License-Identifier: MPL-2.0
 */
 dml 1.4;
@@ -35,6 +35,27 @@ typedef struct {
 saved struct { i_ii_t v0; int i; } saved_struct;
 
 saved int saved_array[4];
+saved int saved_nested_array[4][3];
+
+// This declaration only exists to test that de/serialization functions for
+// large (nested) arrays are generated efficiently, and do not hang dmlc/gcc
+saved int64 saved_big_array[8][8192];
+
+// The final dimension of uint8 array types -- both implicit and explicit
+// endian -- is serialized as data, and can be deserialized either through data
+// or an integer list.
+saved uint8 saved_byte_array_via_data[4];
+saved uint8_be_t saved_nested_byte_array_via_data[4][3];
+saved uint8 saved_byte_array_via_list[4];
+saved uint8_be_t saved_nested_byte_array_via_list[4][3];
+
+// The final dimension of int8 array types -- both implicit and explicit
+// endian -- is serialized as an integer list, and can be deserialized either
+// through data or an integer list
+saved char saved_signed_byte_array_via_data[4];
+saved int8_be_t saved_nested_signed_byte_array_via_data[4][3];
+saved char saved_signed_byte_array_via_list[4];
+saved int8_be_t saved_nested_signed_byte_array_via_list[4][3];
 
 // The unused sessions in these objects will complicate the strides of the
 // struct arrays in the device
@@ -157,6 +178,11 @@ attribute test_later is write_only_attr {
 
         for (local int i = 0; i < 4; i++) {
             assert saved_array[i] == 3-i;
+            assert saved_byte_array_via_data[i] == 3-i;
+            assert saved_byte_array_via_list[i] == 3-i;
+
+            assert saved_signed_byte_array_via_data[i] == 1-i;
+            assert saved_signed_byte_array_via_list[i] == 1-i;
         }
 
         for (local int i = 0; i < 4; i++) {
@@ -173,6 +199,15 @@ attribute test_later is write_only_attr {
             for (local int j = 0; j < 3; j++) {
                 assert port_array[i].array_saved_int[j].v == matrix[i][j];
                 assert b[i].r.f[j].v == matrix[i][j];
+                assert saved_nested_array[i][j] == matrix[i][j];
+                assert saved_nested_byte_array_via_data[i][j]
+                    == cast(matrix[i][j], uint8);
+                assert saved_nested_byte_array_via_list[i][j]
+                    == cast(matrix[i][j], uint8);
+                assert saved_nested_signed_byte_array_via_data[i][j]
+                    == matrix[i][j];
+                assert saved_nested_signed_byte_array_via_list[i][j]
+                    == matrix[i][j];
             }
         }
 

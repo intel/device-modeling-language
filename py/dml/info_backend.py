@@ -1,4 +1,4 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 __all__ = ['generate']
@@ -145,9 +145,10 @@ def bank_info(fmt, node, name):
     if node.is_confidential():
         return
     attrs = common_attrs(node, name, ())
-    val = string_param(node, 'byte_order', ())
-    if isinstance(val, str):
-        attrs['byte_order'] = val
+    if dml.globals.dml_version == (1, 2):
+        val = string_param(node, 'byte_order', ())
+        if isinstance(val, str):
+            attrs['byte_order'] = val
 
     fparam = node.get_component('function')
     if fparam is not None:

@@ -1,0 +1,82 @@
+/*
+  © 2021-2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+import "utility.dml";
+import "simics/simulator-api.dml";
+
+import "testing.dml";
+
+template map_target_tester {
+    connect target is map_target;
+
+    saved uint64 address = 123;
+    saved uint64 size = 1;
+
+    attribute value is (pseudo_attr) {
+        param type = "i|n";
+
+        method set(attr_value_t value) throws {
+            target.write(address, size, SIM_attr_integer(value));
+        }
+
+        method get() -> (attr_value_t) {
+            local uint64 val;
+            try
+                val = target.read(address, size);
+            catch
+                return SIM_make_attr_nil();
+            return SIM_make_attr_uint64(val);
+        }
+    }
+
+    attribute data is pseudo_attr {
+        param type = "d|n";
+        method set(attr_value_t value) throws {
+            target.write_bytes(
+                address, SIM_attr_data_size(value), SIM_attr_data(value));
+        }
+
+        method get() -> (attr_value_t) {
+            local uint8 bytes[size];
+            try
+                target.read_bytes(address, size, bytes);
+            catch
+                return SIM_make_attr_nil();
+            return SIM_make_attr_data(size, bytes);
+        }
+    }
+}
+
+group x is map_target_tester;
+group y is map_target_tester {
+    connect target is init_as_subobj {
+        param classname = "set-memory";
+        method init() {
+            default();
+            SIM_set_attribute_default(this.obj, "value",
+                                      SIM_make_attr_uint64(42));
+        }
+    }
+}
+bank z {
+    register r size 8 @ 0x100;
+}
+
+method set_attr(conf_object_t *obj, const char *name,
+                conf_object_t *val) -> (set_error_t) {
+    local attr_value_t attr = SIM_make_attr_object(val);
+    return SIM_set_attribute(obj, name, &attr);
+}
+
+method test() throws {
+    set_attr(obj, x.target.name, y.target.obj);
+    expect(x.target.map_target != NULL, "map_target should not be NULL");
+
+    set_attr(obj, x.target.name, NULL);
+    expect(x.target.map_target == NULL, "map_target should be NULL");
+}

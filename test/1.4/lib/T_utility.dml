@@ -1,5 +1,5 @@
 /*
-  © 2021 Intel Corporation
+  © 2021-2022 Intel Corporation
   SPDX-License-Identifier: MPL-2.0
 */
 dml 1.4;
@@ -27,6 +27,11 @@ bank b {
         field read_unimpl    @ [1] is (read_unimpl, write);
         field write_unimpl   @ [2] is (write_unimpl, read);
         field silent_unimpl  @ [3] is (silent_unimpl);
+    }
+
+    register fields3_2[i < 2] size 1 @ 128 + i {
+        field x @ [2] is (read, write);
+        field y @ [5] is (read, write);
     }
 }
 

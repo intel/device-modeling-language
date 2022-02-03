@@ -1,4 +1,4 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 import sys, os
@@ -117,14 +117,14 @@ def print_device_substruct(node):
     if the node needs no storage.'''
 
     def arraywrap(node, typ):
-        for arraylen in reversed(node.arraylens()):
+        for arraylen in reversed(node.dimsizes):
             typ = TArray(typ, mkIntegerLiteral(node.site, arraylen))
         return typ
 
     def composite_ctype(node, unfiltered_members, label=None):
         '''Helper. Unfiltered_members is a list of (name, type) pairs, where
         type=None entries are ignored.'''
-        members = [(name, typ) for (name, typ) in unfiltered_members if typ]
+        members = {name: typ for (name, typ) in unfiltered_members if typ}
         if not members:
             return None
         if not label:
@@ -133,7 +133,7 @@ def print_device_substruct(node):
                                     for s in crep.ancestor_cnames(node))
         structtype = TStruct(members, label)
         structtype.print_struct_definition()
-        return arraywrap(node, structtype)
+        return structtype
 
     if node.objtype == 'device':
         members = [("obj", conf_object_t)]
@@ -149,7 +149,7 @@ def print_device_substruct(node):
     elif ((node.objtype == 'session' or node.objtype == 'saved')
           or (dml.globals.dml_version == (1, 2)
               and node.objtype == 'interface')):
-        return crep.node_storage_type(node, node.site)
+        return arraywrap(node, crep.node_storage_type(node, node.site))
 
     elif (node.objtype in ('register', 'field')
           and dml.globals.dml_version == (1, 2)):
@@ -162,7 +162,8 @@ def print_device_substruct(node):
             @apply
             def members():
                 if allocate:
-                    yield ('__DMLfield', crep.node_storage_type(node))
+                    yield ('__DMLfield',
+                           arraywrap(node, crep.node_storage_type(node)))
                 for sub in node.get_components():
                     if not sub.ident:
                         # implicit field: Don't add anything, storage
@@ -179,7 +180,7 @@ def print_device_substruct(node):
         else:
             # really a _port_object_t* rather than conf_object_t*, but
             # there is no DML type for the former
-            obj = [("_obj", TPtr(conf_object_t))]
+            obj = [("_obj", arraywrap(node, TPtr(conf_object_t)))]
         return composite_ctype(node,
                                obj + [(crep.cname(sub),
                                        print_device_substruct(sub))
@@ -259,7 +260,7 @@ def generate_hfile(device, headers, filename):
     reset_line_directive()
     out('\n')
 
-    out('#include "'+structfilename+'"\n\n')
+    out('#include "'+os.path.basename(structfilename)+'"\n\n')
 
     for name in dml.globals.traits:
         out(f'typedef _traitref_t {cident(name)};\n')
@@ -546,10 +547,10 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
         if port.dimensions == 0:
             register_attribute(node.site, None, "%s_%s" % (port.name, attrname))
             initcode.out(
-                '_register_port_attr(class, %s, offsetof(%s, %s._obj), %s,'
+                '_register_port_attr(class, %s, offsetof(%s, %s), %s,'
                 % (port_class_ident(port),
                    crep.structtype(dml.globals.device),
-                   crep.cref_node(port, ()),
+                   crep.cref_portobj(port, ()),
                    'true' if port.objtype == "bank" else 'false')
                 + ' "%s", "%s", %s, %s, %s, "%s", %s);\n'
                 % (port.name, attrname, getter, setter,
@@ -557,17 +558,16 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
         elif port.dimensions == 1:
             # Generate an accessor attribute for legacy reasons
             register_attribute(node.site, None, "%s_%s" % (port.name, attrname))
-            member = crep.cref_node(
+            member = crep.cref_portobj(
                 port, (mkLit(port.site, '0', TInt(32, False)),))
             (dimsize,) = port.dimsizes
             initcode.out(
-                '_register_port_array_attr(class, %s, offsetof(%s, %s._obj),'
+                '_register_port_array_attr(class, %s, offsetof(%s, %s),'
                 % (port_class_ident(port),
                    crep.structtype(dml.globals.device),
                    member)
-                + ' sizeof(((%s*)0)->%s), %d, %s, "%s", "%s", %s, %s, %s, "%s",'
-                % (crep.structtype(dml.globals.device), member, dimsize,
-                   'true' if port.objtype == "bank" else 'false',
+                + ' %d, %s, "%s", "%s", %s, %s, %s, "%s",'
+                % (dimsize, 'true' if port.objtype == "bank" else 'false',
                    port.name, attrname, getter, setter, attr_flag, attr_type)
                 + ' %s);\n' % (doc.read(),))
         else:
@@ -724,7 +724,7 @@ def generate_implement_method(device, ifacestruct, meth, indices):
         require_fully_typed(None, meth)
 
         # Calculate the expected method signature
-        ifacemethtype = ifacestruct.member_type(meth.name)
+        ifacemethtype = ifacestruct.get_member_qualified(meth.name)
         if not ifacemethtype:
             raise EMEMBER(meth.site, meth.parent.name, meth.name)
         ifacemethtype = safe_realtype(ifacemethtype)
@@ -759,9 +759,9 @@ def generate_implement_method(device, ifacestruct, meth, indices):
                             mt, '<return value>', ifacemethtype.output_type,
                             'method')
         if indices is PORTOBJ:
-            name = '_DML_PIFACE_' + crep.cref(meth)
+            name = '_DML_PIFACE_' + crep.cref_method(meth)
         else:
-            name = '_DML_IFACE_' + crep.cref(meth) + "".join([
+            name = '_DML_IFACE_' + crep.cref_method(meth) + "".join([
                 "__%d" % idx for idx in indices])
 
         wrap_method(meth, name, indices)
@@ -1049,7 +1049,7 @@ def event_callbacks(event, indices):
         if not method:
             raise ICE(event.site, 'cannot find method %s' % (method_name))
         result.append((method, '_DML_EV_%s%s' % (
-            crep.cref(method),
+            crep.cref_method(method),
             '_'.join(str(i) for i in indices))))
     return result
 
@@ -1133,15 +1133,15 @@ def generate_register_tables(device):
             dims = r.dimsizes or []
             getter = r.node.get_component('_get64')
             setter = r.node.get_component('_set64')
-            generate_reg_callback(getter, '_DML_MI_%s' % crep.cref(getter),
+            generate_reg_callback(getter, '_DML_MI_%s' % crep.cref_method(getter),
                                   )
-            generate_reg_callback(setter, '_DML_MI_%s' % crep.cref(setter))
+            generate_reg_callback(setter, '_DML_MI_%s' % crep.cref_method(setter))
             name = r.node.logname_anonymized(tuple("" for _ in dims),
                                              relative='bank')
             regs.append((name,
                          len(dims),
-                         '_DML_MI_%s' % crep.cref(getter),
-                         '_DML_MI_%s' % crep.cref(setter)))
+                         '_DML_MI_%s' % crep.cref_method(getter),
+                         '_DML_MI_%s' % crep.cref_method(setter)))
             mark_method_referenced(method_instance(getter))
             mark_method_referenced(method_instance(setter))
             regidxs[r] = i
@@ -1218,7 +1218,7 @@ def generate_state_existence_callback(device):
     out('}\n\n', preindent = -1)
 
 def generate_identity_data_decls():
-    items = ('(const _id_info_t) {"%s", %s, %d, %d}' %
+    items = ('{"%s", %s, %d, %d}' %
              (node.logname_anonymized(("%u",) * node.dimensions),
               ('(const uint32 []) {%s}' % (', '.join(map(str, node.dimsizes)),)
                if node.dimensions else 'NULL'),
@@ -1491,16 +1491,16 @@ def generate_init_port_objs(device):
             index_array = "%s%s" % (
                 index_enumeration.read(),
                 ''.join('[_i%d]' % (i,) for i in range(port.dimensions)))
-            out('_dev->%s._obj = _init_port_object(&_dev->obj'
-                % (crep.cref_node(port, loop_indices),)
+            out('_dev->%s = _init_port_object(&_dev->obj'
+                % (crep.cref_portobj(port, loop_indices),)
                 + ', sb_str(&portname), %d, %s);\n'
                 % (port.dimensions, index_array))
             out('sb_free(&portname);\n')
             for _ in range(port.dimensions):
                 out('\n}', preindent=-1)
         else:
-            out('_dev->%s._obj = _init_port_object('
-                % (crep.cref_node(port, ()),)
+            out('_dev->%s = _init_port_object('
+                % (crep.cref_portobj(port, ()),)
                 + '&_dev->obj, "%s%s", 0, NULL);\n'
                 % (port_prefix, port.logname_anonymized()))
     out('}\n', preindent=-1)
@@ -1698,16 +1698,13 @@ def generate_each_in_table(node, trait, subnodes):
         # vtables exist, because trait instances are marked referenced
         # when an 'each in' instance is referenced
         ancestry_path = sub.traits.ancestry_paths[trait][0]
-        base = '&%s%s%s' % (
+        base = '&%s%s' % (
             sub.traits.vtable_cname(ancestry_path[0]),
-            '[0]' * sub.dimensions,
             ''.join('.' + cident(t.name)
                     for t in ancestry_path[1:]))
         num = reduce(operator.mul, sub.dimsizes, 1)
         uniq = sub.uniq
-        offset = 'sizeof(struct _%s)' % (cident(ancestry_path[0].name),)
-        items.append("{(uintptr_t)%s, %d, %s, %d}\n"
-                     % (base, num, offset, uniq))
+        items.append("{%s, %d, %d}\n" % (base, num, uniq))
     init = '{\n%s}' % (',\n'.join('    %s' % (item,) for item in items),)
     add_variable_declaration(
         'const _vtable_list_t %s[%d]' % (ident, len(subnodes)), init)
@@ -1911,7 +1908,7 @@ fields.
         tinit_calls.append("_tinit_%s(%s);\n" % (
             parent.name, ", ".join(['&_ret->' + cident(parent.name)] + args)))
 
-    out('static void\n')
+    out('static void __attribute__((optimize("O0")))\n')
     out('_tinit_%s(struct _%s *_ret' % (trait.name,
                                         cident(trait.name)))
     inargs = tinit_args(trait)
@@ -1925,7 +1922,7 @@ fields.
             out(', %s' % (mtype.declaration(scrambled_name),))
         elif member_kind == 'parameter':
             (site, typ) = vtable_trait.vtable_params[name]
-            out(', %s' % (typ.declaration(scrambled_name)))
+            out(', %s' % (TPtr(typ).declaration(scrambled_name)))
         else:
             assert member_kind == 'session'
             out(', uint32 %s' % (scrambled_name))
@@ -1941,7 +1938,7 @@ fields.
 
 def trait_trampoline_name(method, vtable_trait):
     return "%s__trampoline_from_%s" % (
-        crep.cref(method), vtable_trait.name)
+        crep.cref_method(method), vtable_trait.name)
 
 def flatten_object_subtree(node):
     '''return a list of all composite subobjects inside node'''
@@ -1949,25 +1946,15 @@ def flatten_object_subtree(node):
         'event', 'port', 'implement', 'attribute', 'connect',
         'interface', 'bank', 'group', 'register', 'field')
 
-def init_trait_vtables_for_node(node, param_values, dims, parent_indices):
-    init_calls = []
-    if node.isindexed():
-        if all(not o.traits for o in flatten_object_subtree(node)):
-            return
-        indices = ()
-        for (arridx, arrlen) in enumerate(node.arraylens()):
-            idx = "_i%d" % (arridx + node.nonlocal_dimensions())
-            dims = dims + (arrlen,)
-            indices += (mkLit(node.site, idx, TInt(32, True)),)
-        indices = parent_indices + indices
-    else:
-        indices = parent_indices
+def init_trait_vtables_for_node(node, param_values):
     if node.traits:
-        index_str = ''.join('[%s]' % (i,) for i in indices)
         method_overrides = node.traits.method_overrides
         param_overrides = param_values[node]
         for trait in node.traits.referenced:
             args = []
+            param_decl = []
+            param_init = []
+            param_indices = ''.join(f'[_i{i}]' for i in range(node.dimensions))
             for name in tinit_args(trait):
                 member_kind = trait.member_kind(name)
                 if member_kind == 'method':
@@ -1977,24 +1964,53 @@ def init_trait_vtables_for_node(node, param_values, dims, parent_indices):
                         if name in method_overrides else "NULL")
                 elif member_kind == 'parameter':
                     # param_overrides contains C expression strings
-                    args.append(param_overrides[name])
+                    (value, t, indexed) = param_overrides[name]
+                    var = f'_param_{name}'
+                    if indexed:
+                        args.append(f'(void *)((uintptr_t){var} + 1)')
+                        array_type = t
+                        for d in reversed(node.dimsizes):
+                            array_type = TArray(array_type,
+                                                mkIntegerLiteral(node.site, d))
+                        param_decl.append(f'''\
+    {TPtr(array_type).declaration(var)} = malloc(sizeof(*{var}));
+    ''')
+                        param_init.append(f'(*{var}){param_indices} = {value};')
+                    else:
+                        args.append('({static %s __attribute__((aligned(2))); %s = %s; &%s;})'
+                                    % (t.declaration(var), var, value, var))
                 else:
                     assert member_kind == 'session'
                     session_node = node.get_component(name)
                     assert session_node.objtype in ('session', 'saved')
                     args.append('offsetof(%s, %s)' % (
                         crep.structtype(dml.globals.device),
-                        crep.cref_node(session_node, indices)))
+                        crep.cref_session(
+                            session_node,
+                            (mkIntegerConstant(node.site, 0, False),)
+                            * node.dimensions)))
             # initialize vtable instance
-            vtable_arg = '&%s%s' % (node.traits.vtable_cname(trait), index_str)
-            init_calls.append(
-                (dims, '_tinit_%s(%s);\n'
-                 % (trait.name, ', '.join([vtable_arg] + args))))
-    for subnode in node.get_components():
-        if isinstance(subnode, objects.CompositeObject):
-            init_calls.extend(init_trait_vtables_for_node(
-                subnode, param_values, dims, indices))
-    return init_calls
+            vtable_arg = f'&{node.traits.vtable_cname(trait)}'
+            init_call = ('_tinit_%s(%s);\n'
+                 % (trait.name, ', '.join([vtable_arg] + args)))
+
+            if param_init:
+                code = param_decl
+                close = []
+                for (i, d) in enumerate(node.dimsizes):
+                    indent = '    ' * i
+                    code.append(
+                        indent + f'for (unsigned _i{i} = 0; _i{i} < {d}; ++_i{i}) {{')
+                    close.append(indent + '}')
+                code.extend('    ' * node.dimensions + init
+                            for init in param_init)
+                code.extend(reversed(close))
+                code.append(init_call)
+                code = ['{'] + ['    ' + line for line in code] + ['}']
+            else:
+                assert not param_decl
+                code = [init_call]
+            yield ''.join(f'{line}\n' for line in code)
 
 def generate_trait_trampoline(method, vtable_trait):
     implicit_inargs = vtable_trait.implicit_args()
@@ -2013,17 +2029,8 @@ def generate_trait_trampoline(method, vtable_trait):
     [_, (tname, ttype)] = implicit_inargs
     site = method.site
     obj = method.parent
-    path = obj.traits.ancestry_paths[vtable_trait][0]
     if obj.dimensions:
-        if path[0] is vtable_trait:
-            downcast = tname
-        else:
-            downcast = 'DOWNCAST(%s, %s, %s)' % (
-                tname, cident(path[0].name),
-                '.'.join(cident(t.name) for t in path[1:]))
-        out('int _flat_index = ((struct _%s *)%s.trait) - &%s%s;\n' % (
-            cident(path[0].name), downcast, obj.traits.vtable_cname(path[0]),
-            '[0]' * obj.dimensions))
+        out(f'int _flat_index = {tname}.id.encoded_index;\n')
     indices = [
         mkLit(site, '((_flat_index / %d) %% %d)' % (
             reduce(operator.mul, obj.dimsizes[dim + 1:], 1),
@@ -2055,9 +2062,8 @@ def generate_vtable_instances(devnode):
         if subnode.traits:
             for trait in subnode.traits.referenced:
                 add_variable_declaration(
-                    'struct _%s %s%s'
-                     % (cident(trait.name), subnode.traits.vtable_cname(trait),
-                       ''.join('[%d]' % i for i in subnode.dimsizes)))
+                    'struct _%s %s'
+                     % (cident(trait.name), subnode.traits.vtable_cname(trait)))
 
 def calculate_saved_userdata(node, dimsizes, attr_name, sym_spec = None):
     if node.objtype == 'method':
@@ -2078,7 +2084,7 @@ def calculate_saved_userdata(node, dimsizes, attr_name, sym_spec = None):
         # saved variable
         loop_vars = (mkIntegerConstant(decl_site, 0, False),) * node.dimensions
         var_ref = mkNodeRef(node.site, node, loop_vars)
-        device_member = crep.cref_node(node, loop_vars)
+        device_member = crep.cref_session(node, loop_vars)
     else:
         assert False
 
@@ -2086,38 +2092,17 @@ def calculate_saved_userdata(node, dimsizes, attr_name, sym_spec = None):
         crep.structtype(dml.globals.device),
         device_member)
 
-    attr_type = serialize.map_dmltype_to_attrtype(decl_site, var_ref.ctype())
     c_type = var_ref.ctype()
+    attr_type = serialize.map_dmltype_to_attrtype(decl_site, c_type)
 
     for dimension in reversed(dimsizes):
         attr_type = "[%s{%d}]" % (attr_type, dimension)
-    # For variables that are spread out throughout the device struct, build
-    # up the correct strides through their dimensions
-    if node.objtype == 'saved':
-        curr_node = node.parent
-        dimension_strides = []
-        while curr_node.objtype != 'device':
-            # if the current node is not an array, we skip it
-            if curr_node.local_dimensions() == 0:
-                curr_node = curr_node.parent
-                continue
-            loopvars = ((mkIntegerConstant(decl_site, 0, False),) *
-                        curr_node.dimensions)
-            # If size is constant below this point, we stop
-            if not loopvars:
-                break
-            dimension_strides.append("sizeof(((%s*)0)->%s)" % (
-                crep.structtype(dml.globals.device),
-                crep.cref_node(curr_node, loopvars)))
-            curr_node = curr_node.parent
-        dimension_strides = tuple(reversed(dimension_strides))
-    else:
-        # Static variables are easier to access, with a predictable stride
-        dimension_strides = tuple(
-            "sizeof(((%s*)0)->%s%s)" % (
-                crep.structtype(dml.globals.device),
-                device_member, "[0]" * (depth + 1))
-            for depth in range(node.dimensions))
+    dimension_strides = []
+    stride = f'sizeof({c_type.declaration("")})'
+    for dimsize in reversed(node.dimsizes):
+        dimension_strides.append(stride)
+        stride += f' * {dimsize}'
+    dimension_strides = tuple(reversed(dimension_strides))
 
     serialize_name = serialize.lookup_serialize(c_type)
     deserialize_name = serialize.lookup_deserialize(c_type)
@@ -2221,68 +2206,49 @@ def generate_init_trait_vtables(node, param_values):
         generate_tinit(trait)
     for subnode in flatten_object_subtree(node):
         generate_trait_trampolines(subnode)
-    init_calls = init_trait_vtables_for_node(node, param_values, (), ())
-    by_dims = {}
-    for (dims, call) in init_calls:
-        by_dims.setdefault(dims, []).append(call)
-    all_dims = sorted(by_dims)
-    fun_count = 0
-    call_count = 0
-    def finish_current_function(last_dims):
-        for _ in last_dims:
-            out('}\n', preindent=-1)
-        out('}\n', preindent=-1)
+    init_blocks = [
+        block
+        for subnode in flatten_object_subtree(node)
+        for block in init_trait_vtables_for_node(subnode, param_values)]
 
-    prev_dims = ()
-    for dims in all_dims:
-        for call in by_dims[dims]:
-            # split into chunks of ~20 objects each.
-            # Tested in a device with ~1500 objects,
-            # where optimum chunk size seems to be between 10 and 100.
-            if call_count % 20 == 0:
-                if fun_count != 0:
-                    finish_current_function(prev_dims)
-                    prev_dims = ()
-                out('static void _initialize_traits%d(void) {\n'
-                    % (fun_count,), postindent=1)
-                fun_count += 1
-            common_dims = []
-            for (a, b) in zip(dims, prev_dims):
-                if a == b:
-                    common_dims.append(a)
-                else:
-                    break
-            for _ in range(len(common_dims), len(prev_dims)):
-                out('}\n', preindent=-1)
-            for i in range(len(common_dims), len(dims)):
-                idxvar = '_i%d' % (i,)
-                out('for (int %s = 0; %s < %d; %s++) {\n'
-                    % (idxvar, idxvar, dims[i], idxvar),
-                    postindent=1)
-            prev_dims = dims
-            out(call)
-            call_count += 1
-    if fun_count:
-        finish_current_function(prev_dims)
+    # split into chunks of ~20 objects each.
+    # Tested in a device with ~1500 objects,
+    # where optimum chunk size seems to be between 10 and 100.
+    chunks = [init_blocks[n:n+20] for n in range(0, len(init_blocks), 20)]
+    for (i, blocks) in enumerate(chunks):
+        out('static void __attribute__((optimize("O0")))'
+            f' _initialize_traits{i}(void) {{\n', postindent=1)
+        for block in blocks:
+            out(block)
+        out('}\n', preindent=-1)
     start_function_definition('void _initialize_traits(void)')
     out('{\n', postindent=1)
-    for i in range(fun_count):
-        out('_initialize_traits%d();\n' % (i,))
+    for i in range(len(chunks)):
+        out(f'_initialize_traits{i}();\n')
     out('}\n', preindent=-1)
     splitting_point()
 
 def trait_param_value(node, param_type_site, param_type):
     try:
-        expr = node.get_expr(
-            tuple(mkLit(node.site, '_i%d' % (dim,), TInt(32, False))
-                  for dim in range(node.dimensions)))
-        if isinstance(expr, NonValue):
-            raise expr.exc()
-        return source_for_assignment(expr.site, param_type, expr).read()
-
+        try:
+            expr = node.get_expr(static_indices(node))
+            if isinstance(expr, NonValue):
+                raise expr.exc()
+            expr = source_for_assignment(expr.site, param_type, expr)
+            indexed = False
+        except EIDXVAR:
+            indexed = True
+            expr = node.get_expr(
+                tuple(mkLit(node.site, '_i%d' % (dim,), TInt(32, False))
+                      for dim in range(node.dimensions)))
+            if isinstance(expr, NonValue):
+                raise expr.exc()
+            expr = source_for_assignment(expr.site, param_type, expr)
+        return (expr.read(),
+                param_type, indexed)
     except DMLError as e:
         report(e)
-        return "0"
+        return ("0", param_type, False)
 
 def resolve_trait_param_values(node):
     '''Generate code for parameter initialization of all traits
@@ -2359,8 +2325,8 @@ def generate_cfile(device, footers,
         ' */',
         '',
         api_define,
-        '#include "%s"' % (hfilename,),
-        '#include "%s"' % (protofilename,),
+        '#include "%s"' % (os.path.basename(hfilename),),
+        '#include "%s"' % (os.path.basename(protofilename),),
         ''])
 
     if c_split_threshold:

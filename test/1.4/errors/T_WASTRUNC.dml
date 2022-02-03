@@ -1,0 +1,71 @@
+/*
+  © 2021-2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// COMPILE-ONLY
+
+typedef bitfields 32 {
+    uint2 x @ [4:3];
+    int2  y @ [2:1];
+    int1  z @ [0:0];
+} bf_t;
+
+method init() {
+    local bf_t bf;
+    // no warning
+    bf = { 1, 1, 1 };
+    // no warning
+    bf = { 3, -2, -1 };
+    // no warning
+    bf = { ~0, ~0, ~0 };
+    bf = {
+        /// WARNING WASTRUNC
+        4,
+        /// WARNING WASTRUNC
+        2,
+        /// WARNING WASTRUNC
+        2 };
+    // no warning
+    bf = { cast(4, uint2), cast(2, int2), cast(2, int1) };
+    bf = {
+        // no warning
+        -3,
+        /// WARNING WASTRUNC
+        -3,
+        /// WARNING WASTRUNC
+        -2 };
+    // no warning
+    bf = { ~3, 0, 0 };
+    /// WARNING WASTRUNC
+    bf = { ~3 - 1, 0, 0 };
+    bf = {
+        /// WARNING WASTRUNC
+        0.5,
+        /// WARNING WASTRUNC
+        -0.5,
+        /// WARNING WASTRUNC
+        -0.5 };
+    // no warning
+    bf = { cast(0.5, uint2), cast(-0.5, int2), cast(-0.5, int1) };
+
+    // no warning
+    bf = { -0.0, -0.0, -0.0 };
+
+    // no warning
+    bf = { 3.0, 1.0, 1.0 };
+
+    bf = {
+        /// WARNING WASTRUNC
+        -1.0,
+        // no warning
+        -2.0, -1.0 };
+
+    local int i = 4;
+    local double d = 0.5;
+    // no warning
+    bf = { i, d, d };
+}

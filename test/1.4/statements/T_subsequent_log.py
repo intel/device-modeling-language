@@ -1,4 +1,4 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 import simics
@@ -53,6 +53,14 @@ obj.log_level = 1
 with LogCapture() as capture:
     obj.test_multi_inheritance = True
     messages = capture.messages
-    stest.expect_true(len(messages), 2)
+    stest.expect_true(len(messages), 1)
     stest.expect_true("multiply inherited" in messages[0])
-    stest.expect_true("multiply inherited" in messages[1])
+
+with LogCapture() as capture:
+    obj.test_arrays = True
+    messages = capture.messages
+    stest.expect_true(len(messages), 8)
+    for mess in messages[0:4]:
+        stest.expect_true("shared in array" in mess)
+    for mess in messages[4:]:
+        stest.expect_true("array method" in mess)

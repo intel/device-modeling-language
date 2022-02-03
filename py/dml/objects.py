@@ -1,4 +1,4 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 import itertools
@@ -241,8 +241,8 @@ class CompositeObject(DMLObject):
         if self.isindexed():
             suff = "".join('[%s]' % i for i in
                            indices[-self.local_dimensions():])
-            suff += "".join('[$%s]' % idxvar for idxvar in
-                            self._idxvars[len(indices):])
+            suff += "".join(f'[{dollar(self.site)}{idxvar}]'
+                            for idxvar in self._idxvars[len(indices):])
             indices = indices[:-self.local_dimensions()]
         else:
             suff = ''
@@ -268,7 +268,7 @@ class CompositeObject(DMLObject):
         if self.isindexed():
             suff = "".join('[%s]' % i for i in
                            indices[-self.local_dimensions():])
-            suff += "".join('[$%s < %d]' % (idxvar, arrlen)
+            suff += "".join(f'[{dollar(self.site)}{idxvar} < {arrlen}]'
                             for (idxvar, arrlen) in
                             itertools.islice(
                                 zip(self._idxvars, self._arraylens),

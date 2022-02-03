@@ -1,4 +1,4 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 import stest
@@ -17,6 +17,19 @@ obj.saved_float = -0.5
 stest.expect_equal(obj.saved_float, -0.5)
 obj.saved_array = [3, 2, 1, 0]
 stest.expect_equal(obj.saved_array, [3, 2, 1, 0])
+# uint8 arrays are serialized as data instead of list, and can be
+# deserialized through either
+obj.saved_byte_array_via_data = (3, 2, 1, 0)
+stest.expect_equal(obj.saved_byte_array_via_data, (3, 2, 1, 0))
+obj.saved_byte_array_via_list = [3, 2, 1, 0]
+stest.expect_equal(obj.saved_byte_array_via_list, (3, 2, 1, 0))
+# int8 arrays are serialized as list, but can be deserialized
+# either through data or list
+obj.saved_signed_byte_array_via_data = tuple(x & 0xff for x in [1, 0, -1, -2])
+stest.expect_equal(obj.saved_signed_byte_array_via_data, [1, 0, -1, -2])
+obj.saved_signed_byte_array_via_list = [1, 0, -1, -2]
+stest.expect_equal(obj.saved_signed_byte_array_via_list, [1, 0, -1, -2])
+
 obj.saved_struct = [[0, [-1, 2], [3], [-2]], 4]
 stest.expect_equal(obj.saved_struct, [[0, [-1, 2], [3], [-2]], 4])
 
@@ -34,6 +47,22 @@ stest.expect_equal([p.array_saved_int_v for p in obj.port.port_array], matrix)
 for (i, arr) in enumerate(matrix):
     obj.bank.b[i].r_f_v = arr
 stest.expect_equal([b.r_f_v for b in obj.bank.b], matrix)
+obj.saved_nested_array = matrix
+stest.expect_equal(obj.saved_nested_array, matrix)
+
+# Only the final dimension of a nested uint8 array is serialized as data,
+# and may be deserialized as data.
+byte_matrix = [tuple(byte & 0xff for byte in row) for row in matrix]
+obj.saved_nested_byte_array_via_data = byte_matrix
+stest.expect_equal(obj.saved_nested_byte_array_via_data, byte_matrix)
+obj.saved_nested_byte_array_via_list = matrix
+stest.expect_equal(obj.saved_nested_byte_array_via_list, byte_matrix)
+
+# Only the final dimension of a nested int8 array may be deserialized as data.
+obj.saved_nested_signed_byte_array_via_data = byte_matrix
+stest.expect_equal(obj.saved_nested_signed_byte_array_via_data, matrix)
+obj.saved_nested_signed_byte_array_via_list = matrix
+stest.expect_equal(obj.saved_nested_signed_byte_array_via_list, matrix)
 
 obj.saved_int24_le = 0xF00F00 #-1044736 in dml
 stest.expect_equal(obj.saved_int24_le, -1044736)

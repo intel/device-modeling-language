@@ -1,4 +1,4 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 # This module handles errors and warnings
@@ -13,6 +13,8 @@ __all__ = (
     'enable_warning',
     'set_include_tag',
     'ErrorContext',
+
+    'dollar',
 
     'FileInfo',
     'Site',
@@ -83,6 +85,9 @@ def report_error():
     failure += 1
     if failure == max_errors:
         exit(2)
+
+def dollar(site):
+    return '$' * (site.dml_version() == (1, 2))
 
 # Error messages
 #

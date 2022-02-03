@@ -1,5 +1,5 @@
 /*
-  © 2010-2021 Intel Corporation
+  © 2010-2022 Intel Corporation
   SPDX-License-Identifier: 0BSD
 */
 
@@ -182,6 +182,23 @@ DML_eq(uint64 a, uint64 b)
 #define CALL_TRAIT_METHOD0(type, method, dev, traitref)                 \
         ({_traitref_t __tref = traitref;                                \
           ((struct _ ## type *) __tref.trait)->method(dev, __tref);})   \
+
+// A parameter is represented in the vtable using a pointer that points to the
+// parameter value. A parameter whose value varies across indices is stored as
+// an array of all values, indexed by encoded_index. This is marked by setting
+// bit 0 of the vtable's pointer to 1. A parameter that stays constant across
+// indices is represented as a single value, this is marked by setting bit 0 of
+// the pointer to 0. Parameter values are always stored with an alignment of at
+// least 2.
+#define VTABLE_PARAM(traitref, vtable_type, member)                     \
+        ({_traitref_t __tref = traitref;                                     \
+          uintptr_t __member                                                 \
+              = (uintptr_t)((vtable_type *)__tref.trait)->member;            \
+          (__member & 1)                                                     \
+           ? ((typeof(((vtable_type*)NULL)->member))(__member - 1))[         \
+                   __tref.id.encoded_index]                                  \
+           : *(typeof(((vtable_type*)NULL)->member))__member; })
+
 
 #define _raw_load_uint8_be_t   UNALIGNED_LOAD_BE8
 #define _raw_load_uint16_be_t  UNALIGNED_LOAD_BE16
@@ -601,14 +618,10 @@ _identity_eq(const _identity_t a, const _identity_t b) {
 
 // List of vtables of a specific trait in one specific object
 typedef struct {
-        // first trait vtable instance. Instances are stored linearly in a
-        // possibly multi-dimensional array, with outer index corresponding to
-        // index of outer DML object.
-        uintptr_t base;
+        // trait vtable instance
+        void *vtable;
         // total number of elements (product of object's dimsizes)
         uint64 num;
-        // offset between two vtable instances; at least sizeof(<vtable type>)
-        uint32 offset;
         // The unique object id
         uint32 id;
 } _vtable_list_t;
@@ -807,7 +820,6 @@ typedef struct {
         get_attr_t get;
         set_attr_t set;
         uint32 array_size;
-        uint32 array_delta;
 } _port_array_attr_t;
 static attr_value_t
 _getattr_from_portobj_array(lang_void *ptr, conf_object_t *obj,
@@ -815,12 +827,11 @@ _getattr_from_portobj_array(lang_void *ptr, conf_object_t *obj,
 {
         ASSERT(SIM_attr_is_nil(*idx));
         _port_array_attr_t *port = (_port_array_attr_t *)ptr;
-        uintptr_t port_obj_ptr_base = (uintptr_t)obj
-                + port->port_obj_base_offset;
+        conf_object_t **port_obj_ptr_base = (conf_object_t **)(
+                (uintptr_t)obj + port->port_obj_base_offset);
         attr_value_t vals = SIM_alloc_attr_list(port->array_size);
         for (uint32 i = 0; i < port->array_size; i++) {
-                conf_object_t *port_obj = *(conf_object_t **)(
-                        port_obj_ptr_base + (uint64)i * port->array_delta);
+                conf_object_t *port_obj = port_obj_ptr_base[i];
                 attr_value_t val = port->get(NULL, port_obj, NULL);
                 if (SIM_attr_is_invalid(val)) {
                         SIM_attr_free(&vals);
@@ -836,11 +847,10 @@ _setattr_from_portobj_array(lang_void *ptr, conf_object_t *obj,
 {
         ASSERT(SIM_attr_is_nil(*idx));
         _port_array_attr_t *port = (_port_array_attr_t *)ptr;
-        uintptr_t port_obj_ptr_base = (uintptr_t)obj
-                + port->port_obj_base_offset;
+        conf_object_t **port_obj_ptr_base = (conf_object_t **)(
+                (uintptr_t)obj + port->port_obj_base_offset);
         for (uint32 i = 0; i < port->array_size; i++) {
-                conf_object_t *port_obj = *(conf_object_t **)(
-                        port_obj_ptr_base + (uint64)i * port->array_delta);
+                conf_object_t *port_obj = port_obj_ptr_base[i];
                 attr_value_t val = SIM_attr_list_item(*vals, i);
                 set_error_t err = port->set(NULL, port_obj, &val, NULL);
                 if (err != Sim_Set_Ok) {
@@ -850,11 +860,10 @@ _setattr_from_portobj_array(lang_void *ptr, conf_object_t *obj,
         return Sim_Set_Ok;
 }
 // port_obj_offset is the offset within the device struct of the first pointer
-// to a port object. Pointers to remaining port object in the array are located
-// array_delta bytes apart.
+// to a port object. Remaining port objects are stored consecutively in memory.
 UNUSED static void
 _register_port_array_attr(conf_class_t *devcls, conf_class_t *portcls,
-                          ptrdiff_t port_obj_offset, ptrdiff_t array_delta,
+                          ptrdiff_t port_obj_offset,
                           uint32 array_size, bool is_bank,
                           const char *portname, const char *attrname,
                           get_attr_t getter, set_attr_t setter,
@@ -867,9 +876,6 @@ _register_port_array_attr(conf_class_t *devcls, conf_class_t *portcls,
         data->get = getter;
         data->set = setter;
         data->array_size = array_size;
-        data->array_delta = array_delta;
-        // storing ptrdiff in uint32, overflow will not happen in practise
-        ASSERT(data->array_delta == array_delta);
         char name[strlen(portname) + strlen(attrname) + 2];
         sprintf(name, "%s_%s", portname, attrname);
         strbuf_t proxy_desc = sb_newf("Proxy attribute for %s.%s[].%s",
@@ -1660,13 +1666,16 @@ _callback_after_write(conf_object_t *bank,
                                   Callback_After_Write);
 }
 
+typedef set_error_t (*_deserializer_t)(attr_value_t *val, void *addr);
+typedef void (*_serializer_t)(const void *addr, attr_value_t *val);
+
 UNUSED static set_error_t
 _set_device_member(attr_value_t val,
                    char *ptr,
                    const uint32 *dimension_sizes,
                    const uint32 *dimension_strides,
                    unsigned int remaining_dimensions,
-                   set_error_t (*setter)(attr_value_t *val, void *addr)) {
+                   _deserializer_t setter) {
         if (remaining_dimensions == 0) {
                 return setter(&val, (void*)ptr);
         } else {
@@ -1690,10 +1699,10 @@ _get_device_member(char *ptr,
                    const uint32 *dimension_sizes,
                    const uint32 *dimension_strides,
                    unsigned int remaining_dimensions,
-                   void (*getter)(void *addr, attr_value_t *target)) {
+                   _serializer_t getter) {
         attr_value_t to_return;
         if (remaining_dimensions == 0) {
-                getter((void*)ptr, &to_return);
+                getter((const void *)ptr, &to_return);
         } else {
                 to_return = SIM_alloc_attr_list(dimension_sizes[0]);
                 attr_value_t im_attr;
@@ -1713,13 +1722,13 @@ _get_device_member(char *ptr,
 typedef struct {
         ptrdiff_t relative_base;
         // excluding port dimensions
-        unsigned int ndims;
+        unsigned int    ndims;
         // excluding port dimensions
-        const uint32 *dimension_sizes;
+        const uint32    *dimension_sizes;
         // including port dimensions
-        const uint32 *dimension_strides;
-        set_error_t (*setter)(attr_value_t *val, void *addr);
-        void (*getter)(void *addr, attr_value_t *val);
+        const uint32    *dimension_strides;
+        _deserializer_t setter;
+        _serializer_t   getter;
 } _saved_userdata_t;
 
 UNUSED static set_error_t
@@ -1779,6 +1788,129 @@ _get_port_saved_variable(lang_void *saved_access, conf_object_t *_portobj,
                                   acc->ndims,
                                   acc->getter);
 }
+
+
+UNUSED static uint64 _identity_to_key(_identity_t id) {
+        return (uint64)id.id << 32 | (uint64)id.encoded_index;
+}
+
+static attr_value_t
+_serialize_array_aux(const uint8 *data, size_t elem_size,
+                     const uint32 *dimsizes, uint32 dims,
+                     uint64 total_elem_count, _serializer_t serialize_elem) {
+    uint32 len = *dimsizes;
+
+    // Serialize the final dimension as bytes if serialize_elem is NULL
+    if (dims == 1 && !serialize_elem) {
+        return SIM_make_attr_data(len, data);
+    }
+
+    size_t children_elem_count = total_elem_count/len;
+
+    attr_value_t val = SIM_alloc_attr_list(len);
+    attr_value_t *items = SIM_attr_list(val);
+
+    for (uint32 i = 0; i < len; ++i) {
+        if (dims == 1) {
+            serialize_elem(&data[i*elem_size], &items[i]);
+        } else {
+            items[i] = _serialize_array_aux(
+                data + children_elem_count * elem_size * i, elem_size,
+                dimsizes + 1, dims - 1, children_elem_count, serialize_elem);
+        }
+    }
+    return val;
+}
+
+UNUSED static attr_value_t
+_serialize_array(const void *data, size_t elem_size,
+                 const uint32 *dimsizes, uint32 dims,
+                 _serializer_t serialize_elem) {
+    ASSERT(dims > 0);
+    size_t total_elem_count = 1;
+    for (uint32 i = 0; i < dims; ++i) {
+        total_elem_count *= dimsizes[i];
+    }
+    return _serialize_array_aux((const uint8 *)data, elem_size, dimsizes, dims,
+                                total_elem_count, serialize_elem);
+}
+
+
+static set_error_t
+_deserialize_array_aux(attr_value_t val, uint8 *data, size_t elem_size,
+                       const uint32 *dimsizes, uint32 dims,
+                       size_t total_elem_count,
+                       _deserializer_t deserialize_elem,
+                       bool elems_are_bytes) {
+    uint32 len = *dimsizes;
+
+    // Allow the final dimension to be represented as data if elems_are_bytes
+    bool data_allowed = elems_are_bytes && dims == 1;
+    if (data_allowed && SIM_attr_is_data(val)) {
+        if (unlikely(SIM_attr_data_size(val) != len)) {
+            SIM_c_attribute_error(
+                "Invalid serialized value of byte array: expected data of %u "
+                "bytes, got %u", len, SIM_attr_data_size(val));
+            return Sim_Set_Illegal_Value;
+        }
+        memcpy(data, SIM_attr_data(val), len);
+        return Sim_Set_Ok;
+    } else if (unlikely(!SIM_attr_is_list(val))) {
+        if (data_allowed) {
+            SIM_attribute_error("Invalid serialized representation of byte "
+                                "array: not a list or data");
+        } else {
+            SIM_attribute_error("Invalid serialized representation of array: "
+                                "not a list");
+        }
+        return Sim_Set_Illegal_Type;
+    } else if (unlikely(SIM_attr_list_size(val) != len)) {
+        SIM_c_attribute_error(
+            "Invalid serialized representation of %sarray: expected list of "
+            "%u elements, got %u", data_allowed ? "byte " : "", len,
+            SIM_attr_list_size(val));
+        return Sim_Set_Illegal_Type;
+    }
+    attr_value_t *items = SIM_attr_list(val);
+    size_t children_elem_count = total_elem_count/len;
+    for (uint32 i = 0; i < len; ++i) {
+        set_error_t error;
+        if (dims == 1) {
+            error = deserialize_elem(&items[i], &data[i*elem_size]);
+        } else {
+            error = _deserialize_array_aux(
+                items[i], &data[i*children_elem_count*elem_size], elem_size,
+                dimsizes + 1, dims - 1, children_elem_count, deserialize_elem,
+                elems_are_bytes);
+        }
+        if (error != Sim_Set_Ok) {
+            return error;
+        }
+    }
+    return Sim_Set_Ok;
+}
+
+UNUSED static set_error_t
+_deserialize_array(attr_value_t in_val, void *out_data, size_t elem_size,
+                   const uint32 *dimsizes, uint32 dims,
+                   _deserializer_t deserialize_elem, bool elems_are_bytes) {
+    ASSERT(dims > 0);
+    size_t total_elem_count = 1;
+    for (uint32 i = 0; i < dims; ++i) {
+        total_elem_count *= dimsizes[i];
+    }
+
+    uint8 *temp_out = MM_MALLOC(total_elem_count * elem_size, uint8);
+    set_error_t error = _deserialize_array_aux(
+        in_val, temp_out, elem_size, dimsizes, dims, total_elem_count,
+        deserialize_elem, elems_are_bytes);
+    if (error == Sim_Set_Ok) {
+        memcpy(out_data, temp_out, total_elem_count*elem_size);
+    }
+    MM_FREE(temp_out);
+    return error;
+}
+
 
 // The internal format for ht is:
 // dict(trait_identifier -> dict(statement_idx -> bool))

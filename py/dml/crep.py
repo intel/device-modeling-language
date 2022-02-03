@@ -1,4 +1,4 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 # This module tries to contain all the code that describes the
@@ -13,8 +13,9 @@ from .messages import *
 
 __all__ = (
     'cname',
-    'cref',
-    'cref_node',
+    'cref_method',
+    'cref_portobj',
+    'cref_session',
     'ctype',
     'conf_obj',
     'cloggroup',
@@ -55,36 +56,43 @@ def ancestor_cnames(node):
         node = node.parent
     return list(reversed(names))
 
-def cref(method_node):
+def cref_method(method_node):
     assert method_node.objtype == 'method'
     # This might actually conflict, but the chances are small.
     return '__'.join(ancestor_cnames(method_node)[1:])
 
-def cref_node(node, indices):
+def cref_portobj(node, indices):
+    assert node.objtype in {'port', 'bank'}
+    components = ['_obj']
+    parent = node
+    while parent.parent:
+        components.append(cname(parent))
+        parent = parent.parent
+    return ('.'.join(reversed(components))
+            + ''.join(f'[{i.read()}]' for i in indices))
+
+def cref_session(node, indices):
+    assert (node.objtype in {'session', 'saved'}
+            or (dml.globals.dml_version == (1, 2)
+                and node.objtype in {'field', 'register', 'interface',
+                                     'attribute', 'device'})), (
+                    node.objtype)
     assert isinstance(indices, tuple)
     if node.name is None and node.objtype == 'field':
         assert dml.globals.dml_version == (1, 2)
         # implicit field, inherits everything from parent register
-        return cref_node(node.parent, indices)
-    if node.objtype == 'device':
-        return ''
-    if node.objtype == 'method':
-        return cref(node)
+        return cref_session(node.parent, indices)
 
     components = []
-    if (dml.globals.dml_version == (1, 2)
-        and node.objtype in ('register', 'field') and not node.simple_storage):
+    if node.objtype in ('register', 'field') and not node.simple_storage:
+        assert dml.globals.dml_version == (1, 2)
         components.append('__DMLfield')
     parent = node
     while parent.parent:
-        remaining_dimensions = len(indices) - parent.local_dimensions()
-        used_indices = indices[remaining_dimensions:]
-        indices = indices[:remaining_dimensions]
-        index = "".join(['[%s]' % i.read() for i in used_indices])
-        components.append(cname(parent) + index)
+        components.append(cname(parent))
         parent = parent.parent
-    assert not indices
-    return '.'.join(reversed(components))
+    return ('.'.join(reversed(components))
+            + ''.join(f'[{i.read()}]' for i in indices))
 
 def node_storage_type(node, site = None):
     "Return the storage type for a node, or None"
@@ -157,7 +165,7 @@ def conf_object(node, indices):
                                     and node.name is None):
         return '&_dev->obj'
     else:
-        return '_dev->%s._obj' % cref_node(node, indices[:node.dimensions])
+        return '_dev->%s' % cref_portobj(node, indices[:node.dimensions])
 
 def cloggroup(name):
     if dml.globals.compat_dml12:

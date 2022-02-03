@@ -1,5 +1,5 @@
 <!--
-  © 2021 Intel Corporation
+  © 2021-2022 Intel Corporation
   SPDX-License-Identifier: MPL-2.0
 -->
 
@@ -1681,4 +1681,23 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
   <build-id value="6132"><add-note> Unicode BiDi control characters
       are no longer permitted in DML source files, for security
       reasons. </add-note></build-id>
+  <build-id value="6135"><add-note> Addressed code generation efficiency issues
+      when using array types in <tt>saved</tt> variables or parameters to
+      methods called with <tt>after</tt> <bug number="SIMICS-18440"/>.
+
+      Serialized representation of <tt>uint8[(be|le)_t]</tt> array types has
+      been changed. The old serialized representation is still accepted for
+      deserialization in order to preserve checkpoint compatibility.
+  </add-note></build-id>
+  <build-id value="6139"><add-note> Added support for non-constant
+      compound initializers inside methods. For example, the following
+      is now supported:
+      <pre>
+      local size_t size = get_size();
+      local buffer_t buf = {size, new uint8[size]};
+      </pre></add-note></build-id>
+  <build-id value="next"><add-note> <tt>break</tt> may now be used within
+      <tt>foreach</tt> statements in DML 1.2 and <tt>#foreach</tt> statements in
+      DML 1.4 <bug number="1309451301"/>.
+  </add-note></build-id>
 </rn>

@@ -1,0 +1,19 @@
+/*
+  © 2021-2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+bitorder be;
+
+bank b {
+    param be_bitorder = false;
+}
+
+// auto from bitorder declaration
+#if (!be_bitorder) { error; }
+
+bank b2 {
+    // inherited from toplevel
+    #if (!this.be_bitorder) { error; }
+}

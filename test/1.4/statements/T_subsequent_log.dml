@@ -1,5 +1,5 @@
 /*
-  © 2021 Intel Corporation
+  © 2021-2022 Intel Corporation
   SPDX-License-Identifier: MPL-2.0
 */
 dml 1.4;
@@ -36,6 +36,17 @@ template y is x {}
 template z is x {}
 group g is (y,z);
 
+template at {
+    shared method m() {
+        log info, 1 then 5: "shared in array";
+    }
+}
+group a[i < 2][j < 2] is at {
+    method m2() {
+        log info, 1 then 5: "array method";
+    }
+}
+
 attribute test is bool_attr {
     method set(attr_value_t val) throws {
         once();
@@ -51,15 +62,28 @@ attribute test is bool_attr {
     }
 }
 
-// Known issue: statements that in traits that are multiply inherited can log
-// with the same log level twice depending on how the trait is accessed
-// This will be fixed when we update the tracking to use trait identity
-// see: SIMICS-6998
 attribute test_multi_inheritance is bool_attr {
     method set(attr_value_t val) throws {
         cast(g, y).m();
         cast(g, y).m();
         cast(g, z).m();
         cast(g, z).m();
+    }
+}
+
+attribute test_arrays is bool_attr {
+    method set(attr_value_t val) throws {
+        for (local int i = 0; i < 2; i++) {
+            for (local int j = 0; j < 2; j++) {
+                cast(a[i][j], at).m();
+                cast(a[i][j], at).m();
+            }
+        }
+        for (local int i = 0; i < 2; i++) {
+            for (local int j = 0; j < 2; j++) {
+                a[i][j].m2();
+                a[i][j].m2();
+            }
+        }
     }
 }

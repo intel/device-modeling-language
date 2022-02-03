@@ -1,4 +1,4 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 from .expr import *
@@ -30,7 +30,7 @@ find_regname = mkLit(None, '_DML_find_regname',
 def return_success(site):
     return mkReturn(site, mkBoolConstant(site, False))
 
-dml_reg_t = TExternStruct([], '_dml_reg_t', const=True)
+dml_reg_t = TExternStruct({}, '_dml_reg_t', const=True)
 
 def codegen_get_name(impl, indices, inargs, outargs, site):
     bank = impl.parent

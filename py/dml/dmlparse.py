@@ -1,4 +1,4 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 # Parser for DML 1.2
@@ -12,6 +12,8 @@ from . import ast, logging
 import dml.globals
 from . import dmllex12
 from . import dmllex14
+
+assert lex.__version__ == yacc.__version__ == "3.4"
 
 class UnexpectedEOF(Exception): pass
 
@@ -119,6 +121,15 @@ def end_site(site):
         site = site.site
     assert lexspan_map
     if site not in lexspan_map:
+        # lexspan_map is uninitialized when an AST is loaded from
+        # .dmlast. Luckily, this is not a problem in practice, since
+        # lexspan_map is only used for porting messages, and .dmlast
+        # is only created for files that nobody wants to auto-port.
+        # We still produce a well-formed site, to avoid confusing
+        # port-dml's tag parser
+        if os.path.isfile(site.filename() + 'ast'):
+            return SimpleSite(site.filename() + ':1:1')
+        # unknown...
         return None
     (_, end) = lexspan_map[site]
     return DumpableSite(site.file_info, end)
@@ -1768,13 +1779,14 @@ def bracketed_string_bracketed(t):
 @prod
 def initializer_scalar(t):
     'initializer : expression'
-    t[0] = t[1]
+    t[0] = ast.initializer_scalar(site(t), t[1])
 
 @prod
 def initializer_compound(t):
     '''initializer : LBRACE initializer_list RBRACE
                    | LBRACE initializer_list COMMA RBRACE'''
-    t[0] = t[2]
+    t[0] = ast.initializer_compound(site(t), t[2])
+
 
 @prod
 def initializer_list_one(t):
@@ -1785,6 +1797,28 @@ def initializer_list_one(t):
 def initializer_list_many(t):
     'initializer_list : initializer_list COMMA initializer'
     t[0] = t[1] + [t[3]]
+
+@prod_dml14
+def initializer_designated_struct(t):
+    '''initializer : LBRACE designated_struct_initializer_list RBRACE
+                   | LBRACE designated_struct_initializer_list COMMA RBRACE'''
+    t[0] = ast.initializer_designated_struct(site(t), t[2])
+
+@prod_dml14
+def designated_struct_initializer(t):
+    '''designated_struct_initializer : PERIOD ident EQUALS initializer'''
+    t[0] = (t[2], t[4])
+
+@prod_dml14
+def designated_struct_initializer_list_one(t):
+    '''designated_struct_initializer_list : designated_struct_initializer'''
+    t[0] = [t[1]]
+
+@prod_dml14
+def designated_struct_initializer_list_many(t):
+    '''designated_struct_initializer_list : designated_struct_initializer_list COMMA designated_struct_initializer'''
+    t[0] = t[1] + [t[3]]
+
 
 # statement
 

@@ -1,4 +1,4 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 import abc
@@ -278,6 +278,6 @@ class StaticIndex(NonValue):
     def __init__(self, site, var):
         pass
     def str(self):
-        return '$' + self.var
+        return dollar(self.site) + self.var
     def exc(self):
-        return EIDXVAR(self.site, '$' + self.var)
+        return EIDXVAR(self.site, dollar(self.site) + self.var)

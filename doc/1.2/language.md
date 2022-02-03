@@ -1,5 +1,5 @@
 <!--
-  © 2021 Intel Corporation
+  © 2021-2022 Intel Corporation
   SPDX-License-Identifier: MPL-2.0
 -->
 
@@ -1711,6 +1711,8 @@ Only `if` can be used to make such selections; `switch`
 statements are *not* evaluated at compile time. (Also
 note the use of `error` above to catch any compile-time
 mistakes.)
+
+The `break` statement can be used within a `foreach` loop to exit it.
 
 ### Select Statements
 

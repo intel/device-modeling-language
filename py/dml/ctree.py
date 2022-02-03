@@ -1,4 +1,4 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 # Intermediate representation of the device model
@@ -37,9 +37,11 @@ __all__ = (
     'mkCompound',
     'mkNull', 'Null',
     'mkLabel',
+    'mkUnrolledLoop',
     'mkGoto',
     'mkReturnFromInline',
     'mkThrow',
+    'mkUnrolledBreak',
     'mkTryCatch',
     'mkInline',
     'mkInlinedMethod',
@@ -106,7 +108,7 @@ __all__ = (
     #'Constant',
     'mkIntegerConstant', 'IntegerConstant',
     'mkIntegerLiteral',
-    'mkFloatConstant',
+    'mkFloatConstant', 'FloatConstant',
     'mkStringConstant', 'StringConstant',
     'AbstractList',
     'mkList', 'List',
@@ -356,6 +358,29 @@ class Label(Statement):
 
 mkLabel = Label
 
+class UnrolledLoop(Statement):
+    @auto_init
+    def __init__(self, site, substatements, break_label):
+        assert isinstance(substatements, list)
+
+    def toc(self):
+        out('{\n', postindent = 1)
+        self.toc_inline()
+        out('}\n', preindent = -1)
+
+    def toc_inline(self):
+        for substatement in self.substatements:
+            substatement.toc()
+        if self.break_label is not None:
+            out(f'{self.break_label}: UNUSED;\n')
+
+    def control_flow(self):
+        bodyflow = mkCompound(self.site, self.substatements).control_flow()
+        return bodyflow.replace(fallthrough=(bodyflow.fallthrough
+                                             or bodyflow.br), br=False)
+
+mkUnrolledLoop = UnrolledLoop
+
 class Goto(Statement):
     @auto_init
     def __init__(self, site, label): pass
@@ -378,6 +403,12 @@ class Throw(Goto):
         return ControlFlow(throw=True)
 
 mkThrow = Throw
+
+class UnrolledBreak(Goto):
+    def control_flow(self):
+        return ControlFlow(br=True)
+
+mkUnrolledBreak = UnrolledBreak
 
 class TryCatch(Statement):
     '''A DML try/catch statement. Catch block is represented as an if (false)
@@ -2207,7 +2238,7 @@ class AddressOf(UnaryOp):
                and node.name == 'callback' \
                and node.parent.objtype == 'event':
                 return AddressOf(site, mkLit(
-                    site, '_DML_EV_'+crep.cref(node),
+                    site, '_DML_EV_'+crep.cref_method(node),
                     TFunction([TPtr(TNamed('conf_object_t')),
                                TPtr(TVoid())],
                               TVoid())))
@@ -2462,8 +2493,8 @@ def read_iface_struct(iface_noderef):
     interface struct.'''
     if dml.globals.dml_version == (1, 2):
         assert isinstance(iface_noderef, NodeRefWithStorage)
-        return '_dev->' + crep.cref_node(iface_noderef.node,
-                                         iface_noderef.indices)
+        return '_dev->' + crep.cref_session(iface_noderef.node,
+                                            iface_noderef.indices)
     else:
         assert isinstance(iface_noderef, PlainNodeRef)
         struct_name = param_str(iface_noderef.node, '_c_type')
@@ -2540,7 +2571,7 @@ def mkInterfaceMethodRef(site, iface_node, indices, method_name):
     stype = safe_realtype(stype)
     if not isinstance(stype, StructType):
         raise ENOSTRUCT(site, mkNodeRef(site, iface_node, indices), stype)
-    ftype = stype.member_type(method_name)
+    ftype = stype.get_member_qualified(method_name)
     if not ftype:
         raise EMEMBER(site, struct_name, method_name)
     ftype = safe_realtype(ftype)
@@ -2826,6 +2857,9 @@ class EachIn(Expression):
         self.trait = trait
         self.node = node
         assert isinstance(indices, tuple)
+        for index in indices:
+            if isinstance(index, NonValue):
+                raise index.exc()
         self.indices = indices
 
     def __str__(self):
@@ -3134,6 +3168,9 @@ class ObjTraitRef(Expression):
         if not isinstance(indices, tuple):
             raise ICE(site, 'bad indices: %r' % (indices,))
         assert len(indices) == node.dimensions
+        for index in indices:
+            if isinstance(index, NonValue):
+                raise index.exc()
         self.node = node
         self.trait = trait
         self.indices = indices
@@ -3164,8 +3201,7 @@ class ObjTraitRef(Expression):
             indices = tuple(mkLit(self.site, '__indices[%d]' % (i,),
                                   TInt(32, False))
                             for i in range(self.node.dimensions))
-        structref = (self.node.traits.vtable_cname(self.ancestry_path[0])
-                     + ''.join('[%s]' % (i.read(),) for i in indices))
+        structref = self.node.traits.vtable_cname(self.ancestry_path[0])
         pointer = '(&%s)' % ('.'.join([structref] + [
             cident(t.name) for t in self.ancestry_path[1:]]))
         id = ObjIdentity(self.site, self.node, indices).read()
@@ -3283,7 +3319,7 @@ def vtable_read(expr):
                                             expr.read())
 
 class TraitParameter(Expression):
-    priority = 160 # SubRef.priority
+    priority = dml.expr.Apply.priority
     @auto_init
     def __init__(self, site, traitref, name, type): pass
 
@@ -3291,8 +3327,11 @@ class TraitParameter(Expression):
         return "%s.%s" % (self.traitref, self.name)
 
     def read(self):
-        return ("%s->%s"
-                % (vtable_read(self.traitref), self.name))
+        t = realtype(self.traitref.ctype())
+        assert isinstance(t, TTrait)
+        vtable_type = f'struct _{cident(t.trait.name)}'
+        return (f'VTABLE_PARAM({self.traitref.read()}, {vtable_type}'
+                f', {self.name})')
 
 class TraitSessionRef(Expression):
     '''A reference to a trait session variable.
@@ -3311,9 +3350,9 @@ class TraitSessionRef(Expression):
         return TPtr(self.type_)
 
     def read(self):
-        return '(%s)((uintptr_t)_dev + %s->%s)' % (
+        return '((%s)((uintptr_t)_dev + %s->%s) + (%s).id.encoded_index)' % (
             TPtr(self.type_).declaration(''), vtable_read(self.traitref),
-            self.name)
+            self.name, self.traitref.read())
 
 class TraitMethodRef(NonValue):
     '''A reference to a bound method in a trait. The expression
@@ -3459,7 +3498,7 @@ class NodeRef(Expression):
     def __str__(self):
         name = self.node.logname(self.indices)
         if name:
-            return '$'+name
+            return dollar(self.site)+name
         else:
             assert dml.globals.dml_version == (1, 2)
             return '$<anonymous %s>' % self.node.objtype
@@ -3496,18 +3535,18 @@ class NodeRefWithStorage(NodeRef, LValue):
             report(PVAL(dmlparse.end_site(self.site)))
         node = self.node
 
-        expr = crep.cref_node(node, self.indices)
         if node.objtype == 'method':
             # enforced by crep.node_storage_type
             assert dml.globals.dml_version == (1, 2)
             from . import codegen
             method = codegen.method_instance(node)
             codegen.mark_method_referenced(method)
-            expr = '_DML_M_' + expr
-        elif expr:
-            expr = '_dev->' + expr
+            expr = '_DML_M_' + crep.cref_method(node)
+        elif node.objtype == 'device':
+            assert dml.globals.dml_version == (1, 2)
+            return '_dev'
         else:
-            expr = '_dev'
+            expr = '_dev->' + crep.cref_session(node, self.indices)
         return expr
 
     def apply(self, args):
@@ -3533,7 +3572,7 @@ class SessionVariableRef(LValue):
         assert name
         return name
     def read(self):
-        return '_dev->' + crep.cref_node(self.node, self.indices)
+        return '_dev->' + crep.cref_session(self.node, self.indices)
 
 class PlainNodeRef(NodeRef, NonValue):
     pass
@@ -3624,7 +3663,7 @@ class NodeArrayRef(NonValue):
                       % (node,))
     def __str__(self):
         name = self.node.logname(self.indices)
-        return '$' + name
+        return dollar(self.site) + name
     def exc(self):
         return EARRAY(self.site, self.node)
 
@@ -3725,14 +3764,15 @@ def mkSubRef(site, expr, sub, op):
     basetype = basetype.resolve()
 
     if isinstance(basetype, StructType):
-        typ = basetype.member_type(sub)
+        typ = basetype.get_member_qualified(sub)
         if not typ:
             raise EMEMBER(site, baseexpr, sub)
         return StructMember(site, expr, sub, typ, op)
     elif basetype.is_int and basetype.is_bitfields:
-        t, msb, lsb = basetype.member_type_bits(sub)
-        if t == None:
+        member = basetype.members.get(sub)
+        if member is None:
             raise EMEMBER(site, expr, sub)
+        (_, msb, lsb) = member
         return mkBitSlice(site,
                           baseexpr,
                           mkIntegerLiteral(site, msb),
@@ -3983,7 +4023,7 @@ class QName(Expression):
     @auto_init
     def __init__(self, site, node, relative, indices): pass
     def __str__(self):
-        return '$%s.qname' % (self.node)
+        return dollar(self.site) + '%s.qname' % (self.node)
     def read(self):
         if (dml.globals.dml_version == (1, 2)
             and self.node.logname() != self.node.logname_anonymized()):
@@ -4036,7 +4076,7 @@ class HiddenName(StringConstant):
     def __init__(self, site, value, node):
         assert(node.objtype in ('register', 'field'))
     def __str__(self):
-        return '$%s.name' % (self.node,)
+        return dollar(self.site) + '%s.name' % (self.node,)
     def read(self):
         report(WCONFIDENTIAL(self.site))
         return self.quoted
@@ -4052,7 +4092,7 @@ class HiddenQName(Expression):
     def __init__(self, site, node, indices):
         assert(node.objtype in ('register', 'field'))
     def __str__(self):
-        return '$%s.qname' % (self.node)
+        return dollar(self.site) + '%s.qname' % (self.node)
     def read(self):
         return QName(self.site, self.node, 'device', self.indices).read()
     def fmt(self):
@@ -4166,7 +4206,7 @@ class DesignatedStructInitializer(Initializer):
     def assign_to(self, dest, typ):
         '''output C statements to assign an lvalue'''
         typ = safe_realtype(typ)
-        if isinstance(typ, TExternStruct):
+        if isinstance(typ, StructType):
             out('memcpy(&%s, (%s){%s}, sizeof %s);\n' % (
                 dest.read(),
                 TArray(typ, mkIntegerLiteral(self.site, 1)).declaration(''),

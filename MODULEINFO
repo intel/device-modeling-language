@@ -5,14 +5,6 @@
 # docs: None
 # comment:
 
-Group: dml-api-header(name)
-  $(HOST)/bin/dml/api/4.8/1.2/simics/{name}
-  $(HOST)/bin/dml/api/4.8/1.4/simics/{name}
-  $(HOST)/bin/dml/api/5/1.2/simics/{name}
-  $(HOST)/bin/dml/api/5/1.4/simics/{name}
-  $(HOST)/bin/dml/api/6/1.2/simics/{name}
-  $(HOST)/bin/dml/api/6/1.4/simics/{name}
-
 Group: dmllib(name)
   $(HOST)/bin/dml/{name}.dml
   $(HOST)/bin/dml/{name}.dmlast
@@ -55,6 +47,7 @@ Make: dmlc
     $(HOST)/bin/dml/python/dml/expr.pyc
     $(HOST)/bin/dml/python/dml/expr_util.pyc
     $(HOST)/bin/dml/python/dml/globals.pyc
+    $(HOST)/bin/dml/python/dml/env.pyc
     $(HOST)/bin/dml/python/dml/info_backend.pyc
     $(HOST)/bin/dml/python/dml/int_register.pyc
     $(HOST)/bin/dml/python/dml/io_memory.pyc
@@ -69,6 +62,7 @@ Make: dmlc
     $(HOST)/bin/dml/python/dml/symtab.pyc
     $(HOST)/bin/dml/python/dml/template.pyc
     $(HOST)/bin/dml/python/dml/toplevel.pyc
+    $(HOST)/bin/dml/python/dml/topsort.pyc
     $(HOST)/bin/dml/python/dml/traits.pyc
     $(HOST)/bin/dml/python/dml/types.pyc
     $(HOST)/bin/dml/python/dml/dml12_parsetab.pyc

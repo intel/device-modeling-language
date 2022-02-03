@@ -1,4 +1,4 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 import dml.types as dt
@@ -15,15 +15,15 @@ class TestClone(unittest.TestCase):
         for typ in (dt.TVoid(),
                     dt.TNamed("int"),
                     dt.TBool(),
-                    dt.TInt(8, False, []),
-                    dt.TEndianInt(8, False, 'big-endian', []),
+                    dt.TInt(8, False, {}),
+                    dt.TEndianInt(8, False, 'big-endian', {}),
                     dt.TFloat("a"),
                     dt.TArray(typ0, ctree.mkIntegerLiteral(0, 2)),
                     dt.TPtr(typ0),
                     dt.TVector(typ0),
                     dt.TTrait(object()),
-                    dt.TStruct([("name", types.TInt(32, False))]),
-                    dt.TLayout("big-endian", []),
+                    dt.TStruct({"name": types.TInt(32, False)}),
+                    dt.TLayout("big-endian", {}),
                     dt.TFunction([], dt.TVoid())):
             typ_clone = typ.clone()
             self.assertEqual(

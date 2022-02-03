@@ -1,4 +1,4 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 import unittest
@@ -8,10 +8,10 @@ import sys
 import subprocess
 import math
 from pathlib import Path
-from simicsutils.host import is_windows
 
 from dml import ctree, types, logging, messages, output, symtab
 from dml.ctree import string_escape, mkCompound, dmldir_macro
+from dml.env import is_windows
 
 def apply(f):
     return f()
@@ -449,8 +449,8 @@ class ExprTests(GccTests):
               for targettype in (
                       types.TInt(8, False),
                       types.TInt(8, False,
-                                 [("a", types.TInt(4, False), 5, 2)],
-                                 [("b", types.TInt(2, False), 7, 5)]),
+                                 {"a": (types.TInt(4, False), 5, 2)},
+                                 {"b": (types.TInt(2, False), 7, 5)}),
                       types.TPtr(types.TVoid()),
               )
               for endiantype in (

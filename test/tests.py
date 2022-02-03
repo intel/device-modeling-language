@@ -1,4 +1,4 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 import sys, time
@@ -14,15 +14,26 @@ import difflib
 from pathlib import Path
 from os.path import join, isdir, isfile, exists
 import glob
+import json
 from fnmatch import fnmatch
 from simicsutils.host import host_type, is_windows, batch_suffix
 from simicsutils.internal import package_path
 import testparams
 from testparams import simics_root_path
 import traceback
+from depfile import parse_depfile
+
+class TestFail(Exception):
+    def __init__(self, reason):
+        Exception.__init__(self)
+        self.reason = reason
 
 sys.path.append(join(simics_root_path(), "scripts", "build"))
 import module_id
+
+# Set to true to update the copyright year in source files (manually validate
+# that only correct files where updated)
+update_copyright = False
 
 def host_path():
     return join(testparams.simics_root_path(),
@@ -53,9 +64,15 @@ else:
 bat_sfx = batch_suffix()
 exe_sfx = '.exe' if is_windows() else ""
 
-dmlc = [join(simics_root_path(), host_type(), "bin", "py3",
-             "mini-python" + exe_sfx),
-        join(project_host_path(), "bin", "dml", "python")]
+# Python interpreter for DMLC including args, e.g. '["pypy3", "-X", "utf8"]'
+python = os.environ.get('DMLC_PYTHON')
+if python:
+    python = json.loads(python)
+else:
+    python = [join(simics_root_path(), host_type(), "bin", "py3",
+                   "mini-python" + exe_sfx)]
+
+dmlc = python + [join(project_host_path(), "bin", "dml", "python")]
 
 if not is_windows():
     dmlc_lib_path = ":".join(
@@ -73,23 +90,32 @@ def dmlc_reaper_args(exitcode_file, timeout_multiplier = 1):
 
 common_cflags = ["-O2", "-std=gnu99", '-Wall', '-Werror', '-Wpointer-arith',
                  '-Wwrite-strings', '-Wformat-nonliteral',]
+cc = os.environ.get('DMLC_CC')
 if is_windows():
-    cc = [testparams.mingw_cc()]
+    if not cc:
+        try:
+            cc = testparams.mingw_cc()
+            cc_found = os.path.exists(cc)
+        except Exception:
+            cc_found = False
+        if not cc_found:
+            raise TestFail('gcc not found(specify gcc by env var DMLC_CC)')
+        ldflags = [f"-L{testparams.mingw_root()}/lib/gcc/x86_64-w64-mingw32/lib"]
+    else:
+        ldflags = []
     cflags = common_cflags + [
         "-DUSE_MODULE_HOST_CONFIG", "-D__USE_MINGW_ANSI_STDIO=1"]
-    ldflags = [f"-L{testparams.mingw_root()}/lib/gcc/x86_64-w64-mingw32/lib"]
 else:
-    cc = [join(package_path(), "gcc_6.4.0", "bin", "gcc")]
+    if not cc:
+        cc = join(package_path(), "gcc_6.4.0", "bin", "gcc")
+        if not os.path.exists(cc):
+            raise TestFail('gcc not found(specify gcc by env var DMLC_CC)')
     cflags = ['-g', '-fPIC', '-Wundef'] + common_cflags
     ldflags = []
+cc = [cc]
 cflags_shared = ["-shared"]
 
 os.environ['DMLC_DEBUG'] = 't'
-
-class TestFail(Exception):
-    def __init__(self, reason):
-        Exception.__init__(self)
-        self.reason = reason
 
 latest_api_version = "6"
 
@@ -119,6 +145,16 @@ class BaseTestCase(object):
         self.output = None
     def pr(self, msg):
         self.output.call(testparams.pr, msg)
+
+    def expect_equal_sets(self, a, b):
+        assert isinstance(a, set) and isinstance(b, set)
+        if a != b:
+            import traceback
+            for line in traceback.format_stack():
+                self.pr(line.rstrip())
+            self.pr('missing elements: %r' % ((b - a),))
+            self.pr('unexpected elements: %r' % ((a - b),))
+            raise TestFail('difference found')
 
     def run_test(self, output_handler):
         self.output = output_handler
@@ -869,8 +905,8 @@ class DebuggableCheck(BaseTestCase):
 
 all_tests.append(DebuggableCheck('debuggable-check'))
 
-class DmlDep(CTestCase):
-    '''Stability test, '''
+class DmlDepBase(CTestCase):
+    '''Base class for DML dependency test cases.'''
     __slots__ = ()
     def run_cc(self, cc_extraargs):
         assert not cc_extraargs
@@ -893,49 +929,23 @@ class DmlDep(CTestCase):
         if result != 0:
             self.pr("CC: " + " ".join(args))
         return result
+
     def run_linker(self):
         # suppress link step
         return 0
-    def expect_equal_sets(self, a, b):
-        assert isinstance(a, set) and isinstance(b, set)
-        if a != b:
-            import traceback
-            for line in traceback.format_stack():
-                self.pr(line.rstrip())
-            self.pr('missing elements: %r' % ((b - a),))
-            self.pr('unexpected elements: %r' % ((a - b),))
-            raise TestFail('difference found')
 
-    def parse_depfile(self, f):
-        lines = []
-        for line in f:
-            line = line.rstrip()
-            if lines and lines[-1] and lines[-1][-1] == '\\':
-                lines[-1] = lines[-1][:-1] + ' ' + line
-            else:
-                lines.append(line)
-        target_prereqs = {}
-        for line in filter(None, lines):
-            # finding : is awkward because of Windows c:\
-            # MingW gcc 10.3 dep output path has inconsistent case
-            (targets, prereqs) = (line + ' ').replace('d:', 'D:').split(': ')
-            for target in targets.split():
-                target_prereqs.setdefault(target, set()).update(prereqs.split())
-        return target_prereqs
+    def load_dependencies(self, path):
+        with open(path) as f:
+            return parse_depfile(f)
 
+class DmlDep(DmlDepBase):
+    '''Stability test, '''
+    __slots__ = ()
     def test(self):
         super(DmlDep, self).test()
-        # unit test depfile parsing
-        assert self.parse_depfile([
-            s + '\n' for s in [
-                'a \\ ', ' b: c\\', 'd', ' ', 'a : e', 'f:']]) == {
-                    'a': {'c', 'd', 'e'},
-                    'b': {'c', 'd'},
-                    'f': set()}
 
         # test .dmldep
-        with open(self.cfilename + '.dmldep') as f:
-            target_prereqs = self.parse_depfile(f)
+        target_prereqs = self.load_dependencies(self.cfilename + '.dmldep')
         c_target = 'T_%s.c' % (self.shortname,)
         dmldep_target = 'T_%s.dmldep' % (self.shortname,)
         non_lib = {os.path.normpath(p) for p in target_prereqs[c_target]
@@ -965,8 +975,7 @@ class DmlDep(CTestCase):
         # Similar to .dmldep check. Covers that dependency generation
         # extracts #include directives from headers/footers, handling
         # DMLDIR_x_H correctly.
-        with open(self.cfilename + '.d') as f:
-            target_prereqs = self.parse_depfile(f)
+        target_prereqs = self.load_dependencies(self.cfilename + '.d')
         prereqs = target_prereqs[self.cfilename + '.c']
         expected_subset = [
             self.cfilename + '-cdep.c',
@@ -989,6 +998,23 @@ all_tests.append(DmlDep(['dmldep'],
                         join(testdir, '1.2', 'misc', 'T_import_rel_1.dml'),
                         dmlc_extraargs = ['--dep', 'T_dmldep.dmldep'],
                         api_version=latest_api_version))
+
+class DmlDepArgs(DmlDepBase):
+    '''Test optional arguments for dependency generation.'''
+    __slots__ = ()
+    def test(self):
+        super().test()
+        dependencies = self.load_dependencies(self.cfilename + '.dmldep')
+        assert list(dependencies.keys()) == ['x.dml', 'y.dml'], "Expected custom targets only"
+
+all_tests.append(
+    DmlDepArgs(['dmldepargs'],
+               join(testdir, '1.2', 'misc', 'T_import_rel_1.dml'),
+               dmlc_extraargs=[
+                   '--dep=T_dmldepargs.dmldep', '--no-dep-phony',
+                   '--dep-target=x.dml', '--dep-target=y.dml'
+               ],
+               api_version=latest_api_version))
 
 class PortingConvert(CTestCase):
     __slots__ = ('PORTING',)
@@ -1097,6 +1123,21 @@ class PortingConvert(CTestCase):
                            join(testdir, '1.2', 'misc', 'porting.dml'),
                            destfile, expfile, stdout, stderr, [])
 
+    def run_dmlc(self, filename, dmlc_extraargs):
+        # A reasonable setting of DMLC_PATHSUBST would disrupt this
+        # test by adjusting porting tag generation on utility.dml.
+        # We work around this by temporarily unsetting the variable.
+        var = 'DMLC_PATHSUBST'
+        prev = os.environ.get(var)
+        if prev:
+            os.environ[var] = ''
+        try:
+            return super(PortingConvert, self).run_dmlc(
+                filename, dmlc_extraargs)
+        finally:
+            if prev:
+                os.environ[var] = prev
+
 class PortingConvertFail(PortingConvert):
     __slots__ = ()
     port_dml_status = 1
@@ -1181,6 +1222,7 @@ all_tests.append(PortingConvert(
        ('dml-builtins.dml', None, 'PWUNUSED'),
        ('dml-builtins.dml', None, 'PNO_WUNUSED'),
        ('utility.dml', None, 'PWUNUSED'),
+       ('utility.dml', None, 'PVAL'),
        ('utility.dml', None, 'PNO_WUNUSED'),
        ('utility.dml', None, 'POVERRIDE'),
        ('utility.dml', None, 'PRENAME_TEMPLATE'),
@@ -1274,7 +1316,7 @@ class DevInfoCompare(BaseTestCase):
             self.expected = '''\
 <?xml version="1.0" encoding="UTF-8"?>
 <device name="test" bitorder="le">
-  <bank name="b" vsize="4 2" byte_order="little-endian" function="3 4 5 6 7 8 9 10">
+  <bank name="b" vsize="4 2" function="3 4 5 6 7 8 9 10">
   </bank>
 </device>
 '''
@@ -1308,6 +1350,28 @@ class CopyrightTestCase(BaseTestCase):
         start = int(match.group(1))
         end = start if match.group(2) is None else int(match.group(2))
         if end != this_year:
+            if update_copyright:
+                last_year = str(int(this_year) - 1)
+                updated = False
+                def replace_cr_text(m):
+                    return m.group(1) + str(this_year).encode('utf-8') + m.group(3)
+                with open(path, 'rb') as f:
+                    result = []
+                    for (_, org_line) in enumerate(f):
+                        line = re.sub(
+                            f'© {last_year} '.encode('utf-8'),
+                            f'© {last_year}-{this_year} '.encode('utf-8'),
+                            org_line)
+                        line = re.sub(
+                            r'(.*© \d\d\d\d-)(\d\d\d\d)(.*)$'.encode('utf-8'),
+                            replace_cr_text, line)
+                        result.append(line)
+                        if line != org_line:
+                            updated = True
+                if updated:
+                    with open(path, 'wb') as f:
+                        for line in result:
+                            f.write(line)
             return 'copyright year too old'
         if not 2000 < start <= end:
             return f'strange copyright year: {start}'
@@ -1359,7 +1423,12 @@ SPDX-License-Identifier: MPL-2.0
             'test/SUITEINFO',
             # data file
             'test/XFAIL',
+            # config files
+            '.github/workflows/dependent-issues.yml',
+            '.gitignore',
         }
+        for f in ignorelist:
+            assert (root / f).is_file(), f
         nonexisting = ignorelist.difference(files)
         assert not nonexisting, nonexisting
         for f in files:
@@ -1404,43 +1473,42 @@ for version in ['1.2', '1.4']:
         '%s-devinfo-compare' % (version,),
         testname, generate.cfilename + '.xml', version))
 
-for version in ['1.2', '1.4']:
-    all_tests.append(
-        XmlTestCase(
-            ['%s-register-view' % (version,)],
-            join(testdir, version, 'misc', 'register_view.dml'),
-            api_version=latest_api_version,
-            dmlc_extraargs=['--info']))
-    all_tests.append(
-        XmlTestCase(
-            ['%s-register-view-descriptions' % (version,)],
-            join(testdir, version, 'misc', 'register_view_descriptions.dml'),
-            api_version=latest_api_version,
-            dmlc_extraargs=['--info']))
-    all_tests.append(
-        XmlTestCase(
-            ['%s-register-view-bitorder-le' % (version,)],
-            join(testdir, version, 'misc', 'register_view_bitorder_le.dml'),
-            api_version=latest_api_version,
-            dmlc_extraargs=['--info']))
-    all_tests.append(
-        XmlTestCase(
-            ['%s-register-view-bitorder-be' % (version,)],
-            join(testdir, version, 'misc', 'register_view_bitorder_be.dml'),
-            api_version=latest_api_version,
-            dmlc_extraargs=['--info']))
-    all_tests.append(
-        XmlTestCase(
-            ['%s-register-view-inquiry' % (version,)],
-            join(testdir, version, 'misc', 'register_view_inquiry.dml'),
-            api_version=latest_api_version,
-            dmlc_extraargs=['--info']))
-    all_tests.append(
-        XmlTestCase(
-            ['%s-register-view-fields' % (version,)],
-            join(testdir, version, 'misc', 'register_view_fields.dml'),
-            api_version=latest_api_version,
-            dmlc_extraargs=['--info']))
+all_tests.append(
+    XmlTestCase(
+        ['1.2-register-view'],
+        join(testdir, '1.2', 'misc', 'register_view.dml'),
+        api_version=latest_api_version,
+        dmlc_extraargs=['--info']))
+all_tests.append(
+    XmlTestCase(
+        ['1.2-register-view-descriptions'],
+        join(testdir, '1.2', 'misc', 'register_view_descriptions.dml'),
+        api_version=latest_api_version,
+        dmlc_extraargs=['--info']))
+all_tests.append(
+    XmlTestCase(
+        ['1.2-register-view-bitorder-le'],
+        join(testdir, '1.2', 'misc', 'register_view_bitorder_le.dml'),
+        api_version=latest_api_version,
+        dmlc_extraargs=['--info']))
+all_tests.append(
+    XmlTestCase(
+        ['1.2-register-view-bitorder-be'],
+        join(testdir, '1.2', 'misc', 'register_view_bitorder_be.dml'),
+        api_version=latest_api_version,
+        dmlc_extraargs=['--info']))
+all_tests.append(
+    XmlTestCase(
+        ['1.2-register-view-inquiry'],
+        join(testdir, '1.2', 'misc', 'register_view_inquiry.dml'),
+        api_version=latest_api_version,
+        dmlc_extraargs=['--info']))
+all_tests.append(
+    XmlTestCase(
+        ['1.2-register-view-fields'],
+        join(testdir, '1.2', 'misc', 'register_view_fields.dml'),
+        api_version=latest_api_version,
+        dmlc_extraargs=['--info']))
 
 def walk(rootdir):
     # This is similar to os.walk()

@@ -1,4 +1,4 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 import sys, os, traceback, re
@@ -6,7 +6,6 @@ import optparse
 import tempfile
 import shutil
 import time
-from simicsutils.internal import api_versions, default_api_version
 from pathlib import Path
 
 from . import structure, logging, messages, ctree, ast, expr_util, toplevel
@@ -20,6 +19,7 @@ import dml.globals
 import dml.dmlparse
 from .logging import *
 from .messages import *
+from .env import api_versions, default_api_version
 
 def prerr(msg):
     sys.stderr.write(msg + "\n")
@@ -194,6 +194,9 @@ def flush_porting_log(tmpfile, porting_filename):
         os.rmdir(lockfile)
 
 def main(argv):
+    # DML files must be utf8, but are generally opened without specifying
+    # the 'encoding' arg. This works only if utf8_mode is enabled.
+    assert sys.flags.utf8_mode
     optpar = optparse.OptionParser(
         """
   dmlc [flags] <file> [output-base]""")
@@ -232,6 +235,25 @@ def main(argv):
     optpar.add_option(
         '--dep', dest = "makedep", action = 'store',
         help = 'generate makefile dependencies')
+
+    # <dt>--no-dep-phony</dt>
+    # <dd>With --dep, avoid addition of a phony target for each dependency
+    # other than the main file.</dd>
+    optpar.add_option(
+        '--no-dep-phony', dest = "no_dep_phony", action = 'store_true',
+        help = 'With --dep, avoid addition of a phony target for each'
+        + ' dependency other than the main file.')
+
+    # <dt>--dep-target</dt>
+    # <dd>With --dep, change the target of the rule emitted by dependency
+    # generation. Specify multiple times to have multiple targets.</dd>
+    optpar.add_option(
+        '--dep-target', dest = "dep_target", action = 'append',
+        metavar = 'TARGET',
+        default = [],
+        help = 'With --dep, change the target of the rule emitted by'
+        + ' dependency generation. Specify multiple times to have multiple'
+        + ' targets.')
 
     # <dt>-T</dt>
     # <dd>Show tags on warning messages. The tags can be used with
@@ -497,16 +519,22 @@ def main(argv):
                 # dependencies
                 deplist = set(deplist) - set(future_timestamps)
             deps = ' '.join(path.replace(" ", "\\ ") for path in deplist)
+            if options.dep_target:
+                targetlist = options.dep_target
+            else:
+                targetlist = [options.makedep, f"{outputbase}.c"]
+            targets = ' '.join(path.replace(" ", "\\ ") for path in targetlist)
             if options.makedep_old:
                 f = sys.stdout
             else:
                 f = open(options.makedep, 'w')
             with f:
-                # rebuild from DML if imported file has changed
-                f.write('%s %s.c : %s\n' % (
-                    options.makedep, outputbase, deps))
-                # if imported file vanished, survive and rebuild
-                f.write('%s :\n' % (deps,))
+                f.write('%s : %s\n' % (targets, deps))
+                # By default generate phony targets similar to -MP GCC
+                # argument. Phony targets provide better experience with GNU
+                # Make when dependencies get removed.
+                if not options.no_dep_phony:
+                    f.write('%s :\n' % (deps,))
             sys.exit(0)
 
         dev = process(devname, global_defs, top_tpl, defs)

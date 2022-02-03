@@ -1,7 +1,8 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
-from .logging import DMLError, DMLWarning, SimpleSite, PortingMessage, ICE
+from .logging import (DMLError, DMLWarning, SimpleSite, PortingMessage, ICE,
+                      dollar)
 
 def truncate(s, maxlen):
     "Make sure that s is not longer than maxlen"
@@ -845,15 +846,6 @@ class EBREAK(DMLError):
     """
     fmt = "nothing to break from"
 
-class EBREAKU(DMLError):
-    """
-    A `break` statement cannot be used in a `foreach`
-    or `select` statement.
-    """
-    fmt = "break is not possible here"
-    def __init__(self, site):
-        DMLError.__init__(self, site)
-
 class ENMETH(DMLError):
     """
     A method name was expected. This might be caused by using
@@ -1549,7 +1541,7 @@ class WDUPEVENT(DMLWarning):
     fmt = "duplicate event checkpoint names: %s"
     def __init__(self, site, objlist):
         DMLWarning.__init__(self, site,
-                            ", ".join("$" + o.logname()
+                            ", ".join(dollar(self.site) + o.logname()
                                       for o in objlist))
 
 class WSIZEOFTYPE(DMLWarning):
@@ -1679,12 +1671,20 @@ class WNEGCONSTCOMP(DMLWarning):
         DMLWarning.__init__(self, site)
         self.expr = expr
         self.ty = ty
-    fmt = ("Comparing negative constant to signed integer has a constant "
+    fmt = ("Comparing negative constant to unsigned integer has a constant "
            + "result")
     def log(self):
         DMLError.log(self)
         self.print_site_message(
             self.expr.site, "Consider 'cast(%s, %s)'" % (self.expr, self.ty))
+
+class WASTRUNC(DMLWarning):
+    """The source of an assignment is a constant value that can't fit in the
+    type of the target, and is thus truncated. This warning can be silenced by
+    explicitly casting the expression to the target type.
+    """
+    fmt = ("The assignment source is a constant value which does not fit "
+           + "the assign target of type '%s', and will thus be truncated")
 
 class WREDUNDANTLEVEL(DMLWarning):
     """`X then Y` log level syntax has no effect when the

@@ -1,0 +1,49 @@
+/*
+  © 2021-2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+import "simics/simulator-api.dml";
+import "testing.dml";
+
+bank b {
+    param register_size = 1;
+    register r0 @ 0;
+    register r1 @ 1 "short desc";
+    register r2 @ 2 {
+        param documentation = "long desc";
+    }
+    register r3 @ 3 {
+        param internal = false;
+    }
+}
+
+attribute a0 is bool_attr;
+attribute a1 is bool_attr "short desc";
+attribute a2 is bool_attr {
+    param documentation = "long desc";
+}
+attribute a3 is bool_attr {
+    param internal = false;
+}
+
+method get_internal(conf_object_t *cobj, const char *attr) -> (bool) {
+    return (SIM_get_attribute_attributes(SIM_object_class(cobj), attr)
+            & Sim_Attr_Internal) == Sim_Attr_Internal;
+}
+
+method test() throws {
+    expect(get_internal(dev.obj, a0.name), "a0 should be internal");
+    expect(!get_internal(dev.obj, a1.name), "a1 should not be internal");
+    expect(!get_internal(dev.obj, a2.name), "a2 should not be internal");
+    expect(!get_internal(dev.obj, a3.name), "a3 should not be internal");
+
+    expect(get_internal(b.obj, b.r0.name), "r0 should be internal");
+    expect(get_internal(b.obj, b.r1.name), "r1 should be internal");
+    expect(get_internal(b.obj, b.r2.name), "r2 should be internal");
+    expect(!get_internal(b.obj, b.r3.name), "r3 should not be internal");
+
+}

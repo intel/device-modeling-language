@@ -1,4 +1,4 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 # Types in DML
@@ -45,8 +45,7 @@ import sys
 import re
 from itertools import *
 
-from simicsutils.host import is_windows
-
+from .env import is_windows
 from .output import out
 from .messages import *
 from .logging import *
@@ -133,6 +132,12 @@ def safe_realtype_shallow(t):
         return realtype_shallow(t)
     except DMLUnknownType as e:
         raise ETYPE(e.type.declaration_site or None, e.type)
+
+def conv_const(const, t):
+    if const and not t.const:
+        t = t.clone()
+        t.const = True
+    return t
 
 class DMLType(metaclass=abc.ABCMeta):
     '''The type of a value (expression or declaration) in DML. One DML
@@ -368,7 +373,7 @@ class IntegerType(DMLType):
         self.bits = bits
         assert isinstance(signed, bool)
         if members is not None:
-            assert all(isinstance(m, TInt) for (_, m, _, _) in members)
+            assert all(isinstance(m, TInt) for (m, _, _) in members.values())
             assert not signed
         self.signed = signed
         self.members = members
@@ -386,16 +391,17 @@ class IntegerType(DMLType):
     def sizeof(self):
         return self.bytes
 
-    def member_type_bits(self, member):
-        "Return the type, msb, and lsb for a member"
+    @property
+    def members_qualified(self):
         assert(self.is_bitfields)
-        for (name, typ, msb, lsb) in self.members:
-            if name == member:
-                if self.const and not typ.const:
-                    typ = typ.clone()
-                    typ.const = True
-                return typ, msb, lsb
-        return None, None, None
+        return ((name, conv_const(self.const, typ), msb, lsb)
+                for (name, (typ, msb, lsb)) in self.members.items())
+
+    def get_member_qualified(self, member):
+        t = self.members.get(member)
+        if t is not None:
+            t = (conv_const(self.const, t[0]),) + t[1:]
+        return t
 
     def cmp(self, other):
         if not other.is_int:
@@ -831,18 +837,14 @@ class StructType(DMLType):
         super(StructType, self).__init__(const)
         self.members = members
 
-    def member_type(self, member):
-        for name, typ in self.members:
-            if name == member:
-                if self.const and not typ.const:
-                    typ = typ.clone()
-                    typ.const = True
-                return typ
-        return None
-
     @property
-    def member_types(self):
-        return iter(self.members)
+    def members_qualified(self):
+        return ((name, conv_const(self.const, typ))
+                for (name, typ) in self.members.items())
+
+    def get_member_qualified(self, member):
+        t = self.members.get(member)
+        return t if t is None else conv_const(self.const, t)
 
 class TExternStruct(StructType):
     '''A struct-like type defined by code outside DMLC's control.
@@ -900,8 +902,7 @@ class TStruct(StructType):
         super(TStruct, self).__init__(members, const)
 
     def __repr__(self):
-        return 'TStruct(%s,%r,%r)' % (",".join([repr(x) for x in self.members]),
-                                      self.label, self.const)
+        return 'TStruct(%r,%r,%r)' % (self.members, self.label, self.const)
 
     def describe(self):
         return 'struct %s' % (self.label,)
@@ -914,7 +915,7 @@ class TStruct(StructType):
 
     def print_struct_definition(self):
         out("struct %s {\n" % (cident(self.label),), postindent = 1)
-        for (n, t) in self.members:
+        for (n, t) in self.members.items():
             t.print_declaration(n)
         out("};\n", preindent = -1)
 
@@ -985,12 +986,12 @@ class TLayout(TStruct):
             raise ELAYOUT(site, "illegal layout member type: %s" % t)
 
         self.size = 0
-        self.members = []
-        for i, (site, m, t) in enumerate(self.member_decls):
+        self.members = {}
+        for (m, (site, t)) in self.member_decls.items():
             try:
                 # t = the member type, rt = real, resolved, underlying type
                 t, rt = check_layout_member_type(site, t, m)
-                self.members.append((m, t))
+                self.members[m] = t
 
                 size = rt.sizeof()
                 if size is None:

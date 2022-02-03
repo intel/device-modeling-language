@@ -1,4 +1,4 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 import builtins
@@ -71,6 +71,9 @@ astkinds = {
     'header',
     'if',
     'import',
+    'initializer_compound',
+    'initializer_designated_struct',
+    'initializer_scalar',
     'index',
     'inline',
     'int',

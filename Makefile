@@ -1,4 +1,4 @@
-# © 2021 Intel Corporation
+# © 2021-2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 #
@@ -17,6 +17,7 @@ PYFILES := dml/__init__.py			\
           dml/ctree.py				\
           dml/template.py			\
           dml/toplevel.py			\
+          dml/topsort.py			\
           dml/traits.py				\
           dml/types.py				\
           dml/dmllex.py				\
@@ -45,7 +46,8 @@ PYUNIT_FILES := $(wildcard $(DMLC_DIR)/py/dml/*_test.py)
 PYUNIT_TESTED := $(foreach x,$(PYUNIT_FILES),$(basename $(notdir $x))-pyunit-tested)
 
 GEN_PYFILES :=	dml12_parsetab.py \
-		dml14_parsetab.py
+		dml14_parsetab.py \
+		env.py
 
 .SECONDARY: $(GEN_PYFILES)
 
@@ -123,6 +125,9 @@ dml%_parsetab.py $(PYTHONPATH)/dml%_parser.out: \
 	$(info Generating $(@F))
 	$(PYTHON) $< $(PYTHONPATH) $* dml$*_parsetab $(PYTHONPATH)/dml$*_parser.out
 
+env.py: $(SRC_BASE)/$(TARGET)/generate_env.py
+	$(PYTHON) $< $@
+
 # needed by ctree_test.py
 export CC
 export SIMICS_BASE
@@ -191,7 +196,7 @@ all: $(PREPARSE_MARKERS)
 
 DODOC := $(SIMICS_BASE)/$(HOST_TYPE)/bin/dodoc$(EXE_SUFFIX)
 
-generated-md-1.2 generated-md-1.4:
+generated-md-1.2 generated-md-1.4 github-wiki:
 	$(MKDIRS) $@
 generated-md-1.2/grammar.md generated-md-1.4/grammar.md: generated-md-1.%/grammar.md: $(PYTHONPATH)/dml1%_parser.out $(SRC_BASE)/$(TARGET)/grammar_to_md.py
 	$(PYTHON) $(SRC_BASE)/$(TARGET)/grammar_to_md.py $(PYTHONPATH) $< $@
@@ -211,8 +216,9 @@ generated-md-1.4/dml-builtins.md generated-md-1.4/utility.md: generated-md-1.4/%
 	$(PYTHON) $(DMLC_DIR)/dmlcomments_to_md.py $< $@
 DOC_FILES_14 += $(GENERATED_MD_FILES_14)
 $(GENERATED_MD_FILES_14): | generated-md-1.4
-$(DOC_MARKER_14): $(DOC_FILES_14)
+$(DOC_MARKER_14): $(DOC_FILES_14) | github-wiki
 	$(PYTHON) $(DMLC_DIR)/validate_md_links.py $(DOC_SRC_DIR_14)/toc.json $(DOC_SRC_DIR_14) generated-md-1.4
+	$(PYTHON) $(DMLC_DIR)/md_to_github.py $(DOC_SRC_DIR_14)/toc.json github-wiki $(DOC_SRC_DIR_14) generated-md-1.4
 	$(DODOC) --css simics.css $(SIMICS_BASE)/src/docs/dodoc -o $(DOC_DEST_14) $(DOC_SRC_DIR_14) generated-md-1.4
 
 all: $(DOC_MARKER_14)
