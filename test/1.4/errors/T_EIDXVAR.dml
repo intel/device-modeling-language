@@ -1,0 +1,13 @@
+/*
+  © 2021-2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+group g[i < 2] {
+    // this is EIDXVAR rather than ENCONST, because the 'each in' expression
+    // implicitly references an index which is static in this context.
+    /// ERROR EIDXVAR
+    #if ((each group in (this)).len == 13) {}
+}

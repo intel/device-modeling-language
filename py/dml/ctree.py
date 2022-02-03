@@ -2857,6 +2857,9 @@ class EachIn(Expression):
         self.trait = trait
         self.node = node
         assert isinstance(indices, tuple)
+        for index in indices:
+            if isinstance(index, NonValue):
+                raise index.exc()
         self.indices = indices
 
     def __str__(self):
