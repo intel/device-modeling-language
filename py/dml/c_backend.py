@@ -2081,10 +2081,10 @@ def init_trait_vtables_for_node(node, param_values):
                         if name in method_overrides else "NULL")
                 elif member_kind == 'parameter':
                     # param_overrides contains C expression strings
-                    (value, t) = param_overrides[name]
+                    (value, t, indexed) = param_overrides[name]
                     var = f'_param_{name}'
-                    if node.dimensions:
-                        args.append(f'(void *)((uintptr_t){var})')
+                    if indexed:
+                        args.append(f'(void *)((uintptr_t){var} + 1)')
                         array_type = t
                         for d in reversed(node.dimsizes):
                             array_type = TArray(array_type,
@@ -2094,7 +2094,7 @@ def init_trait_vtables_for_node(node, param_values):
     ''')
                         param_init.append(f'(*{var}){param_indices} = {value};')
                     else:
-                        args.append('({static %s; %s = %s; &%s;})'
+                        args.append('({static %s __attribute__((aligned(2))); %s = %s; &%s;})'
                                     % (t.declaration(var), var, value, var))
                 else:
                     assert member_kind == 'session'
@@ -2451,17 +2451,25 @@ def generate_init_trait_vtables(node, param_values):
 
 def trait_param_value(node, param_type_site, param_type):
     try:
-        expr = node.get_expr(
-            tuple(mkLit(node.site, '_i%d' % (dim,), TInt(32, False))
-                  for dim in range(node.dimensions)))
-        if isinstance(expr, NonValue):
-            raise expr.exc()
-        return (source_for_assignment(expr.site, param_type, expr).read(),
-                param_type)
-
+        try:
+            expr = node.get_expr(static_indices(node))
+            if isinstance(expr, NonValue):
+                raise expr.exc()
+            expr = source_for_assignment(expr.site, param_type, expr)
+            indexed = False
+        except EIDXVAR:
+            indexed = True
+            expr = node.get_expr(
+                tuple(mkLit(node.site, '_i%d' % (dim,), TInt(32, False))
+                      for dim in range(node.dimensions)))
+            if isinstance(expr, NonValue):
+                raise expr.exc()
+            expr = source_for_assignment(expr.site, param_type, expr)
+        return (expr.read(),
+                param_type, indexed)
     except DMLError as e:
         report(e)
-        return ("0", param_type)
+        return ("0", param_type, False)
 
 def resolve_trait_param_values(node):
     '''Generate code for parameter initialization of all traits

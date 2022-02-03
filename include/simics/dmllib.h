@@ -189,9 +189,22 @@ DML_eq(uint64 a, uint64 b)
     ({_traitref_t __tref = traitref;                                    \
       ((struct _ ## type *) __tref.trait)->method(__tref);})
 
-#define VTABLE_PARAM(traitref, vtable_type, member)                        \
-        ({_traitref_t __tref = traitref;                                   \
-         ((vtable_type *)__tref.trait)->member[__tref.id.encoded_index];})
+// A parameter is represented in the vtable using a pointer that points to the
+// parameter value. A parameter whose value varies across indices is stored as
+// an array of all values, indexed by encoded_index. This is marked by setting
+// bit 0 of the vtable's pointer to 1. A parameter that stays constant across
+// indices is represented as a single value, this is marked by setting bit 0 of
+// the pointer to 0. Parameter values are always stored with an alignment of at
+// least 2.
+#define VTABLE_PARAM(traitref, vtable_type, member)                     \
+        ({_traitref_t __tref = traitref;                                     \
+          uintptr_t __member                                                 \
+              = (uintptr_t)((vtable_type *)__tref.trait)->member;            \
+          (__member & 1)                                                     \
+           ? ((typeof(((vtable_type*)NULL)->member))(__member - 1))[         \
+                   __tref.id.encoded_index]                                  \
+           : *(typeof(((vtable_type*)NULL)->member))__member; })
+
 
 #define _raw_load_uint8_be_t   UNALIGNED_LOAD_BE8
 #define _raw_load_uint16_be_t  UNALIGNED_LOAD_BE16
