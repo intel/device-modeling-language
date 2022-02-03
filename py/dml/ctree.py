@@ -3168,6 +3168,9 @@ class ObjTraitRef(Expression):
         if not isinstance(indices, tuple):
             raise ICE(site, 'bad indices: %r' % (indices,))
         assert len(indices) == node.dimensions
+        for index in indices:
+            if isinstance(index, NonValue):
+                raise index.exc()
         self.node = node
         self.trait = trait
         self.indices = indices
