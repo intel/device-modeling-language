@@ -1,0 +1,71 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+bank b1 {
+    /// ERROR EREGOL
+    register a size 4 @ 8;
+    /// ERROR EREGOL
+    register b size 4 @ 11;
+    // no error
+    register c size 4 @ 18;
+    register d size 4 @ 22;
+}
+
+bank b2 {
+    /// ERROR EREGOL
+    register a[i < 4] size 4 @ 8 + 8 * i;
+    register b[i < 2] size 4 @ 12 + 4 * i;
+}
+
+// bug 7858
+bank b3 {
+    group channel [i < 5] {
+        /// ERROR EREGOL
+        register r0 size 4 @ 0x00;
+    }
+}
+
+bank b4 {
+    // integer overflow doesn't hide overlaps
+    /// ERROR EREGOL
+    register r[i < 3] size 4 @ i * 0x8000_0000_0000_0000;
+}
+
+bank b5 {
+    // Collision detection falls back to evaluating the expression at every
+    // index, triggered by the cast to a small integer type.
+    /// ERROR EREGOL
+    register r[i < 3] size 4 @ 4 + cast(i * 0x8000_0000, uint32);
+}
+
+bank b6 {
+   register A size 4 @ 0x148;
+   register B size 4 @ 0x14c;
+   register C size 4 @ 0x150;
+   register D size 4 @ 0x160;
+
+   /// ERROR EREGOL
+   register CONFLICT0 size 2 @ 0x0;
+   // Ideally, this line should also get an error. It doesn't, because the
+   // addition of G is entirely inhibited by the first error.
+   register CONFLICT200 size 4 @ 0x200;
+
+   /// ERROR EREGOL
+   group G[i < 2] { register X size 4 @ i*0x200; }
+}
+
+bank b7 {
+    // partial overlap between [0][1] and [1][0]
+    /// ERROR EREGOL
+    register r[i < 2][j < 2] size 4 @ i * 7 + j * 10;
+}
+
+bank b8[i < 2] {
+    /// ERROR EIDXVAR
+    register r size 4 @ i;
+}

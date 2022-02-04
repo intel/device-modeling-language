@@ -280,4 +280,7 @@
       local size_t size = get_size();
       local buffer_t buf = {.len = size, .data = new uint8[size]};
       </pre></add-note></build-id>
+  <build-id value="next"><add-note>Added an optimization that
+      reduces the compile time for devices with huge register arrays
+      <bug number="SIMICS-7038"/> </add-note></build-id>
 </rn>

@@ -11,6 +11,8 @@ from . import objects, logging, crep, ast
 from . import traits
 from . import toplevel
 from . import topsort
+from . import slotsmeta
+from . import ctree
 from .logging import *
 from .codegen import *
 from .symtab import *
@@ -1987,15 +1989,72 @@ def get_group_registers(group, indexvars):
 
     return regs
 
+def param_linear_int(param):
+    '''If possible, return tuple of coefficients (i0, i1, .., iN, k) such
+    that param's value can be equivalently expressed as
+    (i0*v0 + i1*v1 + ... + iN*vN + k), in DML's 64-bit arithmetic,
+    where vN are index variables. Return None if no such
+    representation can be found.
+
+    If a tuple is returned, then the parameter value either has type
+    uint64 or int64.
+    '''
+    class IndexVar(Expression):
+        type = TInt(64, True)
+        @slotsmeta.auto_init
+        def __init__(self, site, variables): pass
+
+    indices = tuple(IndexVar(param.site,
+                             tuple(1 if x == i else 0
+                                   for x in range(param.dimensions + 1)))
+                    for i in range(param.dimensions))
+    class NotLinear(Exception): pass
+    def expr_linear_int(expr):
+        if isinstance(expr, ctree.Add):
+            return tuple(l + r
+                         for (l, r) in zip(expr_linear_int(expr.lh),
+                                           expr_linear_int(expr.rh)))
+        elif isinstance(expr, ctree.Mult):
+            l = expr_linear_int(expr.lh)
+            r = expr_linear_int(expr.rh)
+            if any(r[:-1]):
+                if any(l[:-1]):
+                    # bilinear
+                    raise NotLinear()
+                # normalize: all variables in 'l'
+                (l, r) = (r, l)
+            return tuple(x * r[-1] for x in l)
+        elif isinstance(expr, ctree.Subtract):
+            return tuple(l - r
+                         for (l, r) in zip(expr_linear_int(expr.lh),
+                                           expr_linear_int(expr.rh)))
+        elif isinstance(expr, ctree.IntegerConstant):
+            return (0,) * param.dimensions + (expr.value,)
+        elif isinstance(expr, IndexVar):
+            return expr.variables
+        elif (isinstance(expr, ctree.Cast) and expr.type.is_int
+              and expr.type.bits == 64):
+            return expr_linear_int(expr.expr)
+        raise NotLinear()
+
+    try:
+        expr = param.get_expr(indices)
+    except DMLError:
+        return None
+    try:
+        return tuple(c & ((1 << 64) - 1) for c in expr_linear_int(expr))
+    except NotLinear:
+        return None
+
 def sort_registers(bank):
     # TODO: partition_registers is expensive, and all it gives in 1.4
     # is to check for errors such as EREGOL. It would be better with a
     # function that only checks for those problems, but which yields a
     # warning instead. That way, we can naturally allow the
     # (expensive) check to be skipped by disabling the warning. See US1610.
-    (bank.mapped_registers, bank.unmapped_registers,
-     bank.numbered_registers) = explode_registers(bank)
     if dml.globals.dml_version == (1, 2):
+        (bank.mapped_registers, bank.unmapped_registers,
+         bank.numbered_registers) = explode_registers(bank)
         setparam(bank, 'mapped_registers', ObjectListParamExpr(
             bank.site,
             [instance
@@ -2013,6 +2072,53 @@ def sort_registers(bank):
             [instance
              for reg in bank.numbered_registers
              for instance in reg.node_instances()]))
+    else:
+        def reg_coords(reg):
+            return itertools.product(
+                *(range(i) for i in reg.dimsizes[bank.dimensions:]))
+        def explode_offsets(reg):
+            param = reg.get_component('offset')
+            assert param.objtype == 'parameter'
+            coeffs = param_linear_int(param)
+            if coeffs and any(coeffs[:bank.dimensions]):
+                # offset depends linearly on bank index. Delegate to
+                # the code for the non-linear case to report this as an error.
+                coeffs = None
+            if coeffs is None:
+                bank_indices = tuple(StaticIndex(reg.site, var)
+                                     for var in bank.idxvars())
+                return [(param_int(reg, 'offset',
+                                   indices = bank_indices + reg_indices), coord)
+                        for (reg_indices, coord) in zip(
+                                itertools.product(
+                                    *([mkIntegerLiteral(reg.site, i)
+                                       for i in range(dimsize)]
+                                      for dimsize in reg.dimsizes[
+                                              bank.dimensions:])),
+                                reg_coords(reg))]
+            else:
+                return [
+                    (coeffs[-1] + sum(a * b for (a, b)
+                                      in zip(coeffs[bank.dimensions:], coord)),
+                     coord)
+                    for coord in reg_coords(reg)]
+
+        # list of quadruples (start, end, DMLObject, coord)
+        # where coord is a tuple integer indices of this instance,
+        # and [start, end] is a half-open offset interval.
+        all_offsets = []
+        mask = (1 << 64) - 1
+        for reg in bank.get_recursive_components('register'):
+            size = param_int(reg, 'size')
+            all_offsets.extend((offset & mask, (offset + size) & mask,
+                                reg, coord)
+                               for (offset, coord) in explode_offsets(reg))
+        all_offsets.sort(key=lambda t: t[0])
+        while all_offsets and all_offsets[-1][0] == mask:
+            del all_offsets[-1]
+        for (a, b) in zip(all_offsets, all_offsets[1:]):
+            if a[1] > b[0]:
+                report(EREGOL(a[2], b[2], a[3], b[3]))
 
 class ParentParamExpr(objects.ParamExpr):
     def __init__(self, obj):
