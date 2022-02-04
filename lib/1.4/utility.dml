@@ -1222,11 +1222,13 @@ template bank_obj is (bank, name) {
    ### map\_target
 
    A `connect` object can instantiate the template `map_target`. The template
-   defines a default implementation of `validate` which verifies that the
-   object can be used to create a map target, i.e. the Simics API
-   `SIM_new_map_target` returns a valid pointer. The template provides a
-   session variable `map_target` of the type `map_target_t *` which can be used
-   to issue transactions to the connected object.
+   provides an easy way to send memory transactions to objects that can be
+   mapped into Simics memory maps. It defines a default implementation of
+   `validate` which verifies that the object can be used to create a map
+   target, i.e. the Simics API `SIM_new_map_target` returns a valid
+   pointer. The template provides a session variable `map_target` of the type
+   `map_target_t *` which can be used to issue transactions to the connected
+   object.
 
    The template defines the following methods:
 */
@@ -1268,7 +1270,8 @@ template map_target is (connect, _qname) {
        * `read(uint64 addr, uint64 size) -> (uint64) throws`
 
          Reads `size` bytes starting at `addr` in the connected object. Size
-         must be 8 or less. Throws an exception if the read fails.
+         must be 8 or less. Byte order is little-endian. Throws an exception if
+         the read fails.
      */
     shared method read(uint64 addr, uint64 size) -> (uint64) throws {
         if (size > 8) {
@@ -1313,7 +1316,8 @@ template map_target is (connect, _qname) {
        * `write(uint64 addr, uint64 size, uint64 value) throws`
 
          Writes `value` of `size` bytes, starting at `addr` in the connected
-         object. Size must be 8 or less. Throws an exception if the write fails.
+         object. Size must be 8 or less. Byte order is little-endian. Throws an
+         exception if the write fails.
     */
     shared method write(uint64 addr, uint64 size, uint64 value) throws {
         if (size > 8) {
