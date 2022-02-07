@@ -2089,12 +2089,16 @@ def init_trait_vtables_for_node(node, param_values):
                         for d in reversed(node.dimsizes):
                             array_type = TArray(array_type,
                                                 mkIntegerLiteral(node.site, d))
-                        param_decl.append(f'''\
-    {TPtr(array_type).declaration(var)} = malloc(sizeof(*{var}));
-    ''')
-                        param_init.append(f'(*{var}){param_indices} = {value};')
+                        param_decl.append(
+                            f'{TPtr(array_type).declaration(var)} = malloc('
+                            f'sizeof(*{var}));\n')
+                        param_init.append(
+                            f'(*{var}){param_indices} = {value};\n')
                     else:
-                        args.append('({static %s __attribute__((aligned(2))); %s = %s; &%s;})'
+                        # Reasons for alignment explained along with test
+                        # in 1.4/structure/T_trait.dml
+                        args.append('({static %s __attribute__((aligned(2)));'
+                                    ' %s = %s; &%s;})'
                                     % (t.declaration(var), var, value, var))
                 else:
                     assert member_kind == 'session'
@@ -2112,22 +2116,21 @@ def init_trait_vtables_for_node(node, param_values):
                  % (trait.name, ', '.join([vtable_arg] + args)))
 
             if param_init:
-                code = param_decl
-                close = []
+                out('{\n', postindent=1)
+                for decl in param_decl:
+                    out(decl)
                 for (i, d) in enumerate(node.dimsizes):
-                    indent = '    ' * i
-                    code.append(
-                        indent + f'for (unsigned _i{i} = 0; _i{i} < {d}; ++_i{i}) {{')
-                    close.append(indent + '}')
-                code.extend('    ' * node.dimensions + init
-                            for init in param_init)
-                code.extend(reversed(close))
-                code.append(init_call)
-                code = ['{'] + ['    ' + line for line in code] + ['}']
+                    out(f'for (unsigned _i{i} = 0; _i{i} < {d}; ++_i{i}) {{',
+                        postindent=1)
+                for init in param_init:
+                    out(init)
+                for _ in range(node.dimensions):
+                    out('}\n', preindent=-1)
+                out(init_call)
+                out('}\n', preindent=-1)
             else:
                 assert not param_decl
-                code = [init_call]
-            yield ''.join(f'{line}\n' for line in code)
+                out(init_call)
 
 def generate_trait_trampoline(method, vtable_trait):
     implicit_inargs = vtable_trait.implicit_args()
@@ -2427,25 +2430,11 @@ def generate_init_trait_vtables(node, param_values):
         generate_tinit(trait)
     for subnode in flatten_object_subtree(node):
         generate_trait_trampolines(subnode)
-    init_blocks = [
-        block
-        for subnode in flatten_object_subtree(node)
-        for block in init_trait_vtables_for_node(subnode, param_values)]
-
-    # split into chunks of ~20 objects each.
-    # Tested in a device with ~1500 objects,
-    # where optimum chunk size seems to be between 10 and 100.
-    chunks = [init_blocks[n:n+20] for n in range(0, len(init_blocks), 20)]
-    for (i, blocks) in enumerate(chunks):
-        out('static void __attribute__((optimize("O0")))'
-            f' _initialize_traits{i}(void) {{\n', postindent=1)
-        for block in blocks:
-            out(block)
-        out('}\n', preindent=-1)
-    start_function_definition('void _initialize_traits(void)')
+    start_function_definition('void __attribute__((optimize("O0")))'
+                              ' _initialize_traits(void)')
     out('{\n', postindent=1)
-    for i in range(len(chunks)):
-        out(f'_initialize_traits{i}();\n')
+    for subnode in flatten_object_subtree(node):
+        init_trait_vtables_for_node(subnode, param_values)
     out('}\n', preindent=-1)
     splitting_point()
 
