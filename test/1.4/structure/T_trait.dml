@@ -66,6 +66,12 @@ group bytes is byte_params {
     param ac = 5;
 }
 
+session int count = 0;
+method side() -> (int) {
+    ++count;
+    return 0;
+}
+
 method test() throws {
     local child c = cast(p[1], child);
     local base pp;
@@ -84,9 +90,12 @@ method test() throws {
     p[1].d = 4;
     p[1].e = 5;
     p[0].d = 6;
-    expect(ppp->d == 4, "ppp->d == 4");
+    count = 0;
+    expect((ppp + side())->d == 4, "ppp->d == 4");
+    assert count == 1;
     expect(ppp->e == 5, "ppp->e == 5");
-    expect(p[1].traitref_param.d == 6, "p[1].traitref_param.d == 6");
+    expect(p[1 + side()].traitref_param.d == 6, "p[1].traitref_param.d == 6");
+    assert count == 2;
     expect(p[0].traitref_param.e == 5, "p[0].traitref_param.e == 5");
     expect(p[1].param == 14.2, "p[1].param == 14.2");
     p[1].hello();

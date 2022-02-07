@@ -3370,9 +3370,11 @@ class TraitSessionRef(Expression):
         return TPtr(self.type_)
 
     def read(self):
-        return '((%s)((uintptr_t)_dev + %s->%s) + (%s).id.encoded_index)' % (
-            TPtr(self.type_).declaration(''), vtable_read(self.traitref),
-            self.name, self.traitref.read())
+        t = realtype(self.traitref.ctype())
+        assert isinstance(t, TTrait)
+        vtable_type = f'struct _{cident(t.trait.name)}'
+        return (f'VTABLE_SESSION(_dev, {self.traitref.read()}, {vtable_type}'
+                f', {self.name}, {self.ctype().declaration("")})')
 
 class TraitMethodRef(NonValue):
     '''A reference to a bound method in a trait. The expression

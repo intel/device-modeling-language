@@ -205,6 +205,10 @@ DML_eq(uint64 a, uint64 b)
                    __tref.id.encoded_index]                                  \
            : *(typeof(((vtable_type*)NULL)->member))__member; })
 
+#define VTABLE_SESSION(dev, traitref, vtable_type, member, var_type)    \
+      ({_traitref_t __tref = traitref;                                  \
+        (var_type)((uintptr_t)dev + ((vtable_type *)__tref.trait)->member) \
+           + __tref.id.encoded_index; })
 
 #define _raw_load_uint8_be_t   UNALIGNED_LOAD_BE8
 #define _raw_load_uint16_be_t  UNALIGNED_LOAD_BE16
