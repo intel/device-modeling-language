@@ -198,7 +198,8 @@ set_error_t stub_deserializer(attr_value_t *val, void *dest) {
           && SIM_attr_is_string(SIM_attr_list_item(*val, 0)))) {
         return Sim_Set_Illegal_Type;
     }
-    strncpy(dest, SIM_attr_string(SIM_attr_list_item(*val, 0)), 512);
+    strncpy(dest, SIM_attr_string(SIM_attr_list_item(*val, 0)), 511);
+    ((char *)dest)[511] = '\0';
     return Sim_Set_Ok;
 }
 
@@ -299,8 +300,8 @@ void stub_serializer(const void *src, attr_value_t *dst) {
     if (!src) {
         *dst = SIM_make_attr_nil();
     } else {
-        char buf[512];
-        strncpy(buf, src, 512);
+        char buf[512] = {0};
+        strncpy(buf, src, 511);
         *dst = SIM_make_attr_list(1, SIM_make_attr_string(buf));
     }
 }
