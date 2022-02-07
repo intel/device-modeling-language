@@ -1717,7 +1717,6 @@ def generate_init(device, initcode, outprefix):
             ');\n')
         out('}\n', preindent = -1)
 
-    out('_allocate_traits();\n')
     out('_initialize_traits();\n')
     out('_initialize_identity_ht();\n')
     out('_register_events(class);\n')
@@ -1806,16 +1805,16 @@ def generate_each_in_table(node, trait, subnodes):
         # vtables exist, because trait instances are marked referenced
         # when an 'each in' instance is referenced
         ancestry_path = sub.traits.ancestry_paths[trait][0]
-        base = '&%s' % (sub.traits.vtable_cname(ancestry_path[0]),)
-        base_offset = ('offsetof(struct _%s, %s)'
-                       % (cident(ancestry_path[0].name),
-                          '.'.join(cident(t.name) for t in ancestry_path[1:]))
-                       if len(ancestry_path) > 1 else '0')
+        base = '&%s%s%s' % (
+            sub.traits.vtable_cname(ancestry_path[0]),
+            '[0]' * sub.dimensions,
+            ''.join('.' + cident(t.name)
+                    for t in ancestry_path[1:]))
         num = reduce(operator.mul, sub.dimsizes, 1)
         uniq = sub.uniq
         offset = 'sizeof(struct _%s)' % (cident(ancestry_path[0].name),)
-        items.append("{(uintptr_t *)%s, %s, %d, %s, %d}\n"
-                     % (base, base_offset, num, offset, uniq))
+        items.append("{(uintptr_t)%s, %d, %s, %d}\n"
+                     % (base, num, offset, uniq))
     init = '{\n%s}' % (',\n'.join('    %s' % (item,) for item in items),)
     add_variable_declaration(
         'const _vtable_list_t %s[%d]' % (ident, len(subnodes)), init)
@@ -2104,9 +2103,7 @@ def init_trait_vtables_for_node(node, param_values, dims, parent_indices):
                         crep.structtype(dml.globals.device),
                         crep.cref_session(session_node, indices)))
             # initialize vtable instance
-            vtable_name = node.traits.vtable_cname(trait)
-            vtable_arg = (f'&(*{vtable_name}){index_str}'
-                          if index_str else vtable_name)
+            vtable_arg = '&%s%s' % (node.traits.vtable_cname(trait), index_str)
             init_calls.append(
                 (dims, '_tinit_%s(%s);\n'
                  % (trait.name, ', '.join([vtable_arg] + args))))
@@ -2144,10 +2141,9 @@ def generate_trait_trampoline(method, vtable_trait):
                 downcast = 'DOWNCAST(%s, %s, %s)' % (
                     tname, cident(path[0].name),
                     '.'.join(cident(t.name) for t in path[1:]))
-            name = cident(path[0].name)
-            out(('int _flat_index = ((struct _%s *)%s.trait) '
-                 + '- (struct _%s *)%s;\n')
-                % (name, downcast, name, obj.traits.vtable_cname(path[0])))
+            out('int _flat_index = ((struct _%s *)%s.trait) - &%s%s;\n' % (
+                cident(path[0].name), downcast, obj.traits.vtable_cname(path[0]),
+                '[0]' * obj.dimensions))
         indices = [
             mkLit(site, '((_flat_index / %d) %% %d)' % (
                 reduce(operator.mul, obj.dimsizes[dim + 1:], 1),
@@ -2178,8 +2174,8 @@ def generate_vtable_instances(devnode):
         if subnode.traits:
             for trait in subnode.traits.referenced:
                 add_variable_declaration(
-                    'struct _%s (*%s)%s'
-                    % (cident(trait.name), subnode.traits.vtable_cname(trait),
+                    'struct _%s %s%s'
+                     % (cident(trait.name), subnode.traits.vtable_cname(trait),
                        ''.join('[%d]' % i for i in subnode.dimsizes)))
 
 def calculate_saved_userdata(node, dimsizes, attr_name, sym_spec = None):
@@ -2313,17 +2309,6 @@ def register_saved_attributes(initcode, node):
                  postindent = -1)
     initcode.out('}\n', preindent=-1)
     initcode.out('}\n', preindent=-1)
-
-def generate_alloc_trait_vtables(node):
-    start_function_definition('void _allocate_traits(void)')
-    out('{\n', postindent=1)
-    for subnode in flatten_object_subtree(node):
-        if subnode.traits:
-            for trait in subnode.traits.referenced:
-                name = subnode.traits.vtable_cname(trait)
-                out(f'{name} = MM_ZALLOC(1, typeof(*{name}));\n')
-    out('}\n', preindent=-1)
-    splitting_point()
 
 def generate_startup_call_loops(startup_methods):
     by_dims = {}
@@ -2677,7 +2662,6 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
         register_saved_attributes(init_code, device)
         generate_init(device, init_code, filename_prefix)
 
-    generate_alloc_trait_vtables(device)
     generate_init_trait_vtables(device, trait_param_values)
     for ((node, trait), subobjs) in list(EachIn.instances.items()):
         generate_each_in_table(node, trait, subobjs)
