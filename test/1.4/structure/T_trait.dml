@@ -66,6 +66,44 @@ group bytes is byte_params {
     param ac = 5;
 }
 
+// Test that sequence params work. They are represented differently from
+// params of other types; three cases:
+// a: "each T in this" represented as one each_in_t, with a certain marker
+// b: each T in <object expr that doesn't depend on index params>: represented
+//    as a single each_in_t
+// c: each T in <object expr that depends on index params>: represented
+//    as an array of each_in_t:s
+template marker { param val : int; }
+method marker_sum(sequence(marker) markers) -> (int) {
+    local int sum = 0;
+    foreach marker in (markers) {
+        sum += marker.val;
+    }
+    return sum;
+}
+template seqs {
+    param a : sequence(marker);
+    param b : sequence(marker);
+    param c : sequence(marker);
+    shared method expect_sums(int a, int b, int c) {
+        assert marker_sum(this.a) == a;
+        assert marker_sum(this.b) == b;
+        assert marker_sum(this.c) == c;
+    }
+}
+group seqs[i<2][j<3] is seqs {
+    param a = each marker in (this);
+    param b = each marker in (seqs[i][1-j]);
+    param c = each marker in (dev);
+    group x is marker { param val = i*100 + j*10; }
+    group y[k < 4] is marker { param val = i * 100 + j * 10 + k; }
+    method test() {
+        this.expect_sums(5 * (i * 100 + j * 10) + 6,
+                         5 * (i * 100 + (1 - j) * 10) + 6,
+                         100 * 3 * 5 + 10 * 2 * (1+2) * 5 + 6 * 2 * 3);
+    }
+}
+
 session int count = 0;
 method side() -> (int) {
     ++count;
@@ -126,6 +164,12 @@ method test() throws {
     assert cast(bytes, byte_params).aa == 3;
     assert cast(bytes, byte_params).ab == 4;
     assert cast(bytes, byte_params).ac == 5;
+
+    for (local int i = 0; i < 2; i++) {
+        for (local int j = 0; j < 2; j++) {
+            seqs[i][j].test();
+        }
+    }
 
     dc[0].test(0);
     dc[1].test(1);

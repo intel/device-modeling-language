@@ -1856,7 +1856,7 @@ def generate_adjustor_thunk(traitname, name, inp, outp, throws, independent,
 
 def tinit_args(trait):
     '''Return the arguments of a trait's tinit method, excluding the first
-    '_indices' argument. Represented as a list of vtable method names,
+    '_indices' argument. Represented as a list of vtable member names,
     also used as argument names.'''
     return sorted(itertools.chain(
         trait.vtable_methods,
@@ -2038,7 +2038,9 @@ fields.
             out(', %s' % (mtype.declaration(scrambled_name),))
         elif member_kind == 'parameter':
             (site, typ) = vtable_trait.vtable_params[name]
-            out(', %s' % (TPtr(typ).declaration(scrambled_name)))
+            if not isinstance(realtype(typ), TTraitList):
+                typ = TPtr(typ)
+            out(', %s' % (typ.declaration(scrambled_name)))
         else:
             assert member_kind == 'session'
             out(', uint32 %s' % (scrambled_name))
@@ -2081,10 +2083,15 @@ def init_trait_vtables_for_node(node, param_values):
                         if name in method_overrides else "NULL")
                 elif member_kind == 'parameter':
                     # param_overrides contains C expression strings
-                    (value, t, indexed) = param_overrides[name]
+                    (value, t, indexed, is_sequence) = param_overrides[name]
                     var = f'_param_{name}'
                     if indexed:
-                        args.append(f'(void *)((uintptr_t){var} + 1)')
+                        if is_sequence:
+                            args.append(
+                                '(_each_in_t){(_vtable_list_t *)%s,' % (var,)
+                                + ' 1, 0, 0, 0}')
+                        else:
+                            args.append(f'(void *)((uintptr_t){var} + 1)')
                         array_type = t
                         for d in reversed(node.dimsizes):
                             array_type = TArray(array_type,
@@ -2101,11 +2108,15 @@ def init_trait_vtables_for_node(node, param_values):
                             param_init.append(
                                 f'(*{var}){param_indices} = {value};\n')
                     else:
-                        # Reasons for alignment explained along with test
-                        # in 1.4/structure/T_trait.dml
-                        args.append('({static %s __attribute__((aligned(2)));'
-                                    ' %s = %s; &%s;})'
-                                    % (t.declaration(var), var, value, var))
+                        if is_sequence:
+                            args.append(value)
+                        else:
+                            # Reasons for alignment explained along with test
+                            # in 1.4/structure/T_trait.dml
+                            args.append(
+                                '({static %s __attribute__((aligned(2)));'
+                                ' %s = %s; &%s;})'
+                                % (t.declaration(var), var, value, var))
                 else:
                     assert member_kind == 'session'
                     session_node = node.get_component(name)
@@ -2445,6 +2456,7 @@ def generate_init_trait_vtables(node, param_values):
     splitting_point()
 
 def trait_param_value(node, param_type_site, param_type):
+    is_sequence = isinstance(realtype(param_type), TTraitList)
     try:
         try:
             expr = node.get_expr(static_indices(node))
@@ -2454,17 +2466,21 @@ def trait_param_value(node, param_type_site, param_type):
             indexed = False
         except EIDXVAR:
             indexed = True
-            expr = node.get_expr(
-                tuple(mkLit(node.site, '_i%d' % (dim,), TInt(32, False))
-                      for dim in range(node.dimensions)))
+            indices = tuple(mkLit(node.site, '_i%d' % (dim,), TInt(32, False))
+                            for dim in range(node.dimensions))
+            expr = node.get_expr(indices)
+            if (is_sequence and isinstance(expr, EachIn)
+                and expr.node is node.parent
+                and expr.indices == indices[:node.dimensions]):
+                return (expr.read(each_in_this=True),
+                        param_type, False, True)
             if isinstance(expr, NonValue):
                 raise expr.exc()
             expr = source_for_assignment(expr.site, param_type, expr)
-        return (expr.read(),
-                param_type, indexed)
+        return (expr.read(), param_type, indexed, is_sequence)
     except DMLError as e:
         report(e)
-        return ("0", param_type, False)
+        return ("0", param_type, False, is_sequence)
 
 def resolve_trait_param_values(node):
     '''Generate code for parameter initialization of all traits

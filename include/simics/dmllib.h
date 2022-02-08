@@ -151,6 +151,58 @@ DML_eq(uint64 a, uint64 b)
         return ((a ^ b) | ((b | a) >> 63)) == 0;
 }
 
+
+typedef struct {
+    uint32 id;
+    uint32 encoded_index;
+} _identity_t;
+
+typedef struct {
+    const char *logname;
+    const uint32 *dimsizes;
+    uint32 dimensions;
+    uint32 id;
+} _id_info_t;
+
+typedef struct {
+    void *trait;
+    _identity_t id;
+} _traitref_t;
+
+// List of vtables of a specific trait in one specific object
+typedef struct {
+        // trait vtable instance
+        void *vtable;
+        // total number of elements (product of object's dimsizes)
+        uint32 num;
+        // The unique object id
+        uint32 id;
+} _vtable_list_t;
+
+typedef struct {
+        const _vtable_list_t *base;
+        // iteration interval in list of vtable_list_t. Interval includes start
+        // point but not endpoint. starti is currently always 0.
+        uint32 starti;
+        uint32 endi;
+        // When iterating inside an array, the vtable_list_t instances show
+        // number of elements globally. If one or more outer object array index
+        // is fixed in the 'in each' expression, then these members show which
+        // subset to iterate through from each vtable_list_t: Iteration in a
+        // vtable_list_t starts at array_idx * num/array_size, and we iterate
+        // through num/array_size elements.
+        uint32 array_idx;
+        uint32 array_size;
+} _each_in_t;
+
+UNUSED static uint64 _count_eachin(_each_in_t each_in) {
+        uint64 count = 0;
+        for (int i = each_in.starti; i < each_in.endi; ++i) {
+                count += each_in.base[i].num / each_in.array_size;
+        }
+        return count;
+}
+
 // Upcast a trait reference expression expr of type 'from' to a corresponding
 // trait reference of an ancestor trait, given that the vtable of the new trait
 // is found as from.ancestry. E.g.: If a trait y extends z, and x extends y,
@@ -200,10 +252,37 @@ DML_eq(uint64 a, uint64 b)
         ({_traitref_t __tref = traitref;                                     \
           uintptr_t __member                                                 \
               = (uintptr_t)((vtable_type *)__tref.trait)->member;            \
-          (__member & 1)                                                     \
-           ? ((typeof(((vtable_type*)NULL)->member))(__member - 1))[         \
-                   __tref.id.encoded_index]                                  \
-           : *(typeof(((vtable_type*)NULL)->member))__member; })
+          ((typeof(((vtable_type*)NULL)->member))(__member & ~1))[           \
+             (__member & 1) ? __tref.id.encoded_index : 0]; })
+
+// Similar to VTABLE_PARAM: a very common parameter is a sequence(T) with the
+// value (each T in this). This is by far the most common param whose value
+// depends on index, and therefore warrants a special case.
+// Unlike ordinary params, which are represented as pointers to values,
+// sequence params are represented directly as _each_in_t values.
+// Three cases:
+// * The general case: `j < 3 ? each T in foo[5-i] : each T in bar[17+i]`
+//   here the _each_in_t value is interpreted as a tagged union, indicated by
+//   an out-of-band `starti` value that causes `base` to be re-interpreted as
+//   an array of each_in_t, similar to odd-addressed pointers in VTABLE_PARAM.
+// * The most common case: `each T in this`, where the value depends on the
+//   indices of `this`, in that .array_idx is set to encoded_index. This
+//   is represented by an out-of-band value in `array_idx` in the vtable.
+// * Other values of `array_idx` represent a literal sequence that doesn't
+//   depend on encoded_index
+static UNUSED _each_in_t
+_vtable_sequence_param(_traitref_t traitref, size_t vtable_member_offset)
+{
+        _each_in_t seq = *(_each_in_t *)((char *)traitref.trait
+                                         + vtable_member_offset);
+        if (unlikely(seq.starti == 1)) {
+                return ((_each_in_t *)seq.base)[traitref.id.encoded_index];
+        } else {
+                if (seq.array_idx == 0xffffffffu)
+                        seq.array_idx = traitref.id.encoded_index;
+                return seq;
+        }
+}
 
 #define VTABLE_SESSION(dev, traitref, vtable_type, member, var_type)    \
       ({_traitref_t __tref = traitref;                                  \
@@ -531,23 +610,6 @@ FOR_ENDIAN_VARIANTS(DEFINE_PRECHANGE);
 
 #undef FOR_ALL_BITSIZES
 #undef FOR_ENDIAN_VARIANTS
-
-typedef struct {
-    uint32 id;
-    uint32 encoded_index;
-} _identity_t;
-
-typedef struct {
-    const char *logname;
-    const uint32 *dimsizes;
-    uint32 dimensions;
-    uint32 id;
-} _id_info_t;
-
-typedef struct {
-    void *trait;
-    _identity_t id;
-} _traitref_t;
 
 UNUSED static attr_value_t
 _serialize_identity(const _id_info_t *id_info_array, const _identity_t id) {
@@ -1064,40 +1126,6 @@ _deserialize_simple_event_data(
   error:
     _free_simple_event_data(temp_out);
     return error;
-}
-
-// List of vtables of a specific trait in one specific object
-typedef struct {
-        // trait vtable instance
-        void *vtable;
-        // total number of elements (product of object's dimsizes)
-        uint32 num;
-        // The unique object id
-        uint32 id;
-} _vtable_list_t;
-
-typedef struct {
-        const _vtable_list_t *base;
-        // iteration interval in list of vtable_list_t. Interval includes start
-        // point but not endpoint. starti is currently always 0.
-        uint32 starti;
-        uint32 endi;
-        // When iterating inside an array, the vtable_list_t instances show
-        // number of elements globally. If one or more outer object array index
-        // is fixed in the 'in each' expression, then these members show which
-        // subset to iterate through from each vtable_list_t: Iteration in a
-        // vtable_array_t starts at array_idx * num/array_size, and we iterate
-        // through num/array_size elements.
-        uint32 array_idx;
-        uint32 array_size;
-} _each_in_t;
-
-UNUSED static uint64 _count_eachin(_each_in_t each_in) {
-        uint64 count = 0;
-        for (int i = each_in.starti; i < each_in.endi; ++i) {
-                count += each_in.base[i].num / each_in.array_size;
-        }
-        return count;
 }
 
 UNUSED static void
