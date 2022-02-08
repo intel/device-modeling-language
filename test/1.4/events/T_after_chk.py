@@ -7,7 +7,7 @@ import subprocess
 
 cpu = SIM_create_object("clock", "clock", [["freq_mhz", 1]])
 obj.queue = cpu
-obj.alttest = 1
+obj.exec_afters = None
 
 SIM_write_configuration_to_file("after_chk.chkp", Sim_Save_Nobundle)
 

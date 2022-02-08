@@ -957,26 +957,29 @@ def eval_method_outp(outp_asts, location, scope):
     return outp
 
 class SimpleEvents(object):
-    # Basically a dictionary, but items sorts on the value
-    # (function name) to make it predictable
     def __init__(self):
         self.__dict = {}
     def items(self):
-        return sorted(iter(list(self.__dict.items())), key = operator.itemgetter(1))
+        return self.__dict.items()
     def add(self, method):
         "Create an event object that calls a method"
-        fun = self.__dict.get(method, None)
-        if not fun:
-            if method.dimensions > 0 or len(method.inp) > 0:
-                fun = tuple('_simple_event%s_%d' % (i, len(self.__dict))
-                            for i in ('', '_destroy', '_get_value',
-                                      '_set_value'))
-            else:
-                fun = ('_simple_event_%d' % len(self.__dict),
-                       'NULL', 'NULL', 'NULL')
-            self.__dict[method] = fun
+        info = self.__dict.get(method, None)
+        if not info:
+            id = str(len(self.__dict))
+            info = {'callback': f'_simple_event_{id}',
+                    'destroy': '_destroy_simple_event_data'}
+            for fun in ('get_value', 'set_value'):
+                info[fun] = ('_simple_event_%s_%s'
+                             % ((id if method.dimensions or method.inp
+                                 else 'only_domains'), fun))
+            info['args_type'] = (TStruct({name: typ
+                                          for (name, typ) in method.inp},
+                                         label=f'_simple_event_{id}_args')
+                                 if method.inp else None)
 
-        return fun
+            self.__dict[method] = info
+
+        return info
 
 simple_events = SimpleEvents()
 
@@ -1817,6 +1820,13 @@ def stmt_after(stmt, location, scope):
     if unit == 'cycles' and not safe_realtype(old_delay_type).is_int:
         report(WTTYPEC(site, old_delay_type, unit_type, unit))
 
+    # TODO after statement should be extended to allow the user to explicitly
+    # give the domains
+    if location.method():
+        domains = [ObjIdentity(site, location.node.parent, location.indices)]
+    else:
+        domains = [TraitObjIdentity(site, lookup_var(site, scope, "this"))]
+
     method = codegen_expression_maybe_nonvalue(method, location, scope)
 
     if not isinstance(method, NodeRef):
@@ -1850,9 +1860,10 @@ def stmt_after(stmt, location, scope):
         raise EAFTER(site, method, unserializable)
 
     mark_method_referenced(func)
-    eventfun = simple_events.add(method)
+    eventinfo = simple_events.add(method)
 
-    return [mkAfter(site, api_unit, delay, method, eventfun, indices, inargs)]
+    return [mkAfter(site, api_unit, delay, domains, method, eventinfo, indices,
+                    inargs)]
 
 @statement_dispatcher
 def stmt_select(stmt, location, scope):
@@ -1910,7 +1921,8 @@ def foreach_each_in(site, itername, trait, each_in,
     inner_scope = Symtab(scope)
     trait_type = TTrait(trait)
     trait_ptr = (f'(struct _{cident(trait.name)} *) '
-                 + '(_list.base + _inner_idx * _list.offset)')
+                 + '(*_list.base + _list.base_offset + _inner_idx '
+                 + '* _list.offset)')
     obj_ref = '(_identity_t) { .id = _list.id, .encoded_index = _inner_idx}'
     inner_scope.add_variable(
         itername, type=trait_type,

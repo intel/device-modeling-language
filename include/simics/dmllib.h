@@ -599,12 +599,454 @@ _identity_eq(const _identity_t a, const _identity_t b) {
     return a.id == b.id && a.encoded_index == b.encoded_index;
 }
 
+
+typedef set_error_t (*_deserializer_t)(attr_value_t *val, void *addr);
+typedef void (*_serializer_t)(const void *addr, attr_value_t *val);
+
+typedef struct {
+    uint32      *indices;
+    void        *args;
+    _identity_t *domains;
+    uint64      no_domains;
+} _simple_event_data_t;
+
+UNUSED static int
+_simple_event_predicate(lang_void *_data, lang_void *match_data) {
+    ASSERT(match_data);
+
+    if (!_data) {
+        return 0;
+    }
+
+    _simple_event_data_t *data = (_simple_event_data_t *)_data;
+    _identity_t *domains = data->domains;
+    uint64 no_domains = data->no_domains;
+
+    _identity_t match_id = *(_identity_t *)match_data;
+    for (uint64 i = 0; i < no_domains; ++i) {
+        if (_identity_eq(match_id, domains[i])) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/*
+ * The modern serialized representation of after event data is a
+ * pseudo-dictionary, containing entries for method indices, arguments, and
+ * domains (associated objects for cancellation):
+ * [["indices", [index0, index1, ...]],
+ *  ["arguments", [arg0, arg1, ...]],
+ *  ["domains", [domain0, domain1, ...]]
+ * ]
+ * The entries may appear in any order, and any entry may be omitted if not
+ * applicable, (for example, a method call has no indices/arguments or
+ * associated objects). If all entries may be omitted, then nil may be used as
+ * the serialized representation.
+ *
+ * Before the introduction of domains (early 2022), after event data was
+ * represented as follows:
+ * [[index0, index1, ...], [arg0, arg1, ...]]
+ * and when either list is empty, the other is represented directly; if both
+ * are empty, nil is used.
+ * This is called the legacy representation of after event data, and is
+ * supported for backwards checkpoint compatibility.
+ */
+typedef enum {
+    _Simple_Event_Data_Format_Invalid,
+    _Simple_Event_Data_Format_Pseudodict,
+    _Simple_Event_Data_Format_Legacy
+} _simple_event_data_format_t;
+
+UNUSED static _simple_event_data_format_t
+_simple_event_data_representation(
+    attr_value_t val, bool has_indices, bool has_params) {
+    ASSERT(SIM_attr_is_list(val) && SIM_attr_list_size(val) > 0);
+    if (SIM_attr_list_size(val) == 2 && has_indices && has_params) {
+        // Either the pseudodict format, or the [indices, params] format
+        // Determine by inspecting the first element:
+        // [integer, ...] -> Legacy representation
+        // [string, _] -> Pseudodict representation
+        attr_value_t item = SIM_attr_list_item(val, 0);
+        if (unlikely(!SIM_attr_is_list(item)
+                     || SIM_attr_list_size(item) == 0)) {
+            return _Simple_Event_Data_Format_Invalid;
+        }
+        attr_value_t inner_item = SIM_attr_list_item(item, 0);
+        if (SIM_attr_is_integer(inner_item)) {
+            return _Simple_Event_Data_Format_Legacy;
+        } else if (SIM_attr_list_size(item) == 2
+                   && SIM_attr_is_string(inner_item)) {
+            return _Simple_Event_Data_Format_Pseudodict;
+        }
+    } else {
+        // Either the pseudodict format, or [index0, ...] or [param0, ...]
+        // Determine by inspecting the first element:
+        // [string, _] -> Pseudodict representation
+        // integer and has_indices and !has_params -> Legacy representation
+        // anything and has_params and !has_indices -> Legacy representation
+        // Otherwise invalid
+        attr_value_t item = SIM_attr_list_item(val, 0);
+        if (SIM_attr_is_list(item) && SIM_attr_list_size(item) == 2
+            && SIM_attr_is_string(SIM_attr_list_item(item, 0))) {
+            return _Simple_Event_Data_Format_Pseudodict;
+        }  else if ((has_indices && !has_params && SIM_attr_is_integer(item))
+                    || (has_params && !has_indices)) {
+            return _Simple_Event_Data_Format_Legacy;
+        }
+    }
+    return _Simple_Event_Data_Format_Invalid;
+}
+
+UNUSED static void
+_free_simple_event_data(_simple_event_data_t data) {
+    MM_FREE(data.indices);
+    MM_FREE(data.args);
+    MM_FREE(data.domains);
+}
+
+UNUSED static void
+_destroy_simple_event_data(conf_object_t *_obj, lang_void *data) {
+    if (data) {
+        _free_simple_event_data(*(_simple_event_data_t *)data);
+        MM_FREE(data);
+    }
+}
+
+UNUSED static attr_value_t
+_serialize_simple_event_data(
+    uint32 dimensions, _serializer_t args_serializer,
+    const _id_info_t *id_info_array, _simple_event_data_t *data) {
+
+    if (!data) {
+        return SIM_make_attr_nil();
+    }
+
+    uint32 entry_index = 0;
+    attr_value_t entries_buf[3];
+
+    if (dimensions) {
+        attr_value_t indices_attr = SIM_alloc_attr_list(dimensions);
+        attr_value_t *index_list = SIM_attr_list(indices_attr);
+        for (uint32 i = 0; i < dimensions; ++i) {
+            index_list[i] = SIM_make_attr_uint64(data->indices[i]);
+        }
+        entries_buf[entry_index++] = SIM_make_attr_list(
+            2, SIM_make_attr_string("indices"), indices_attr);
+    }
+
+    if (args_serializer) {
+        attr_value_t args_attr;
+        args_serializer(data->args, &args_attr);
+        entries_buf[entry_index++] = SIM_make_attr_list(
+            2, SIM_make_attr_string("arguments"), args_attr);
+
+    }
+
+    if (data->no_domains) {
+        attr_value_t domains_attr = SIM_alloc_attr_list(data->no_domains);
+        attr_value_t *domain_list = SIM_attr_list(domains_attr);
+        for (uint32 i = 0; i < data->no_domains; ++i) {
+            domain_list[i] = _serialize_identity(id_info_array,
+                                                 data->domains[i]);
+        }
+        entries_buf[entry_index++] = SIM_make_attr_list(
+            2, SIM_make_attr_string("domains"), domains_attr);
+    }
+
+    attr_value_t pseudodict = SIM_alloc_attr_list(entry_index);
+    attr_value_t *entry_list = SIM_attr_list(pseudodict);
+    for (uint32 i = 0; i < entry_index; ++i) {
+        entry_list[i] = entries_buf[i];
+    }
+    return pseudodict;
+}
+
+UNUSED static set_error_t
+_simple_event_data_deconstruct_pseudodict(
+    attr_value_t pseudodict, attr_value_t **indices_attr,
+    attr_value_t **arguments_attr, attr_value_t **domains_attr) {
+
+    attr_value_t *entries = SIM_attr_list(pseudodict);
+    uint32 no_entries = SIM_attr_list_size(pseudodict);
+    for (uint32 i = 0; i < no_entries; ++i) {
+        if (!SIM_attr_is_list(entries[i])
+            || SIM_attr_list_size(entries[i]) != 2
+            || !SIM_attr_is_string(SIM_attr_list_item(entries[i], 0))) {
+            SIM_attribute_error(
+                "Invalid serialized representation of after event data: "
+                "expected list of [key, val] entries, where 'key's are "
+                "strings");
+            return Sim_Set_Illegal_Type;
+        }
+        const char *key = SIM_attr_string(SIM_attr_list_item(entries[i], 0));
+        bool duplicate = false;
+        if (strcmp(key, "indices") == 0) {
+            duplicate = *indices_attr != NULL;
+            if (!duplicate) {
+                *indices_attr = &SIM_attr_list(entries[i])[1];
+            }
+        } else if (strcmp(key, "arguments") == 0) {
+            duplicate = *arguments_attr != NULL;
+            if (!duplicate) {
+                *arguments_attr = &SIM_attr_list(entries[i])[1];
+            }
+        } else if (strcmp(key, "domains") == 0) {
+            duplicate = *domains_attr != NULL;
+            if (!duplicate) {
+                *domains_attr = &SIM_attr_list(entries[i])[1];
+            }
+        } else {
+            SIM_c_attribute_error(
+                "Invalid serialized value of after event data: list has entry "
+                "with unknown key '%s'", key);
+            return Sim_Set_Illegal_Value;
+        }
+        if (duplicate) {
+            SIM_c_attribute_error(
+                "Invalid serialized value of after event data: list has "
+                "duplicate entry for key '%s'", key);
+            return Sim_Set_Illegal_Value;
+        }
+    }
+    return Sim_Set_Ok;
+}
+
+
+UNUSED static set_error_t
+_deserialize_simple_event_indices(
+    const uint32 *dimsizes, uint32 dimensions, attr_value_t *indices_attr,
+    uint32 **out_indices) {
+
+    if (indices_attr) {
+        if (!SIM_attr_is_list(*indices_attr)) {
+            SIM_attribute_error(
+                "Invalid serialized value of after event data: provided "
+                "indices is not a list");
+            return Sim_Set_Illegal_Value;
+        }
+        if (dimensions != SIM_attr_list_size(*indices_attr)) {
+            SIM_c_attribute_error(
+                "Invalid serialized value of after event data: expected %u "
+                "indices, got %u", dimensions,
+                SIM_attr_list_size(*indices_attr));
+            return Sim_Set_Illegal_Value;
+        }
+        if (dimensions == 0) {
+            *out_indices = NULL;
+            return Sim_Set_Ok;
+        }
+
+        set_error_t error = Sim_Set_Ok;
+        uint32 *temp_out_indices = MM_MALLOC(dimensions, uint32);
+        attr_value_t *index_list = SIM_attr_list(*indices_attr);
+        for (uint32 i = 0; i < dimensions; ++i) {
+            if (!SIM_attr_is_integer(index_list[i])) {
+                SIM_attribute_error(
+                    "Invalid serialized representation of after event data: "
+                    "received indices with non-integer element");
+                error = Sim_Set_Illegal_Type;
+                goto error;
+            }
+            uint32 index = SIM_attr_integer(index_list[i]);
+            if (index >= dimsizes[i]) {
+                SIM_c_attribute_error(
+                    "Invalid serialized value of after event data: "
+                    "encountered invalid index. The size of dimension %u is "
+                    "%u, but deserialized index for that dimension is %u.",
+                    i, dimsizes[i], index);
+                error = Sim_Set_Illegal_Value;
+                goto error;
+            }
+            temp_out_indices[i] = index;
+        }
+        *out_indices = temp_out_indices;
+        return Sim_Set_Ok;
+
+      error:
+        MM_FREE(temp_out_indices);
+        return error;
+    } else if (dimensions) {
+        SIM_attribute_error(
+            "Invalid serialized value of after event data: missing entry "
+            "for key 'indices'");
+        return Sim_Set_Illegal_Value;
+    } else {
+        *out_indices = NULL;
+        return Sim_Set_Ok;
+    }
+}
+
+UNUSED static set_error_t
+_deserialize_simple_event_arguments(
+    size_t args_size, _deserializer_t args_deserializer,
+    attr_value_t *arguments_attr, void **out_args) {
+
+    if (arguments_attr) {
+        if (!args_deserializer) {
+            if (!SIM_attr_is_list(*arguments_attr)
+                || SIM_attr_list_size(*arguments_attr) != 0) {
+                SIM_attribute_error(
+                    "Invalid serialized value of after event data: expected "
+                    "empty list as serialized value for arguments");
+                return Sim_Set_Illegal_Value;
+            }
+            *out_args = NULL;
+            return Sim_Set_Ok;
+        } else {
+            void *temp_out_args = MM_MALLOC(args_size, uint8);
+            set_error_t error = args_deserializer(arguments_attr,
+                                                  temp_out_args);
+            if (error != Sim_Set_Ok) {
+                MM_FREE(temp_out_args);
+                return error;
+            }
+            *out_args = temp_out_args;
+            return Sim_Set_Ok;
+        }
+    } else if (args_deserializer) {
+        SIM_attribute_error(
+            "Invalid serialized value of after event data: missing entry "
+            "for key 'arguments'");
+        return Sim_Set_Illegal_Value;
+    } else {
+        *out_args = NULL;
+        return Sim_Set_Ok;
+    }
+}
+
+UNUSED static set_error_t
+_deserialize_simple_event_domains(
+    ht_str_table_t *id_info_ht, attr_value_t *domains_attr,
+    _identity_t **out_domains, uint64 *out_no_domains) {
+
+    if (domains_attr) {
+        if (!SIM_attr_is_list(*domains_attr)) {
+            SIM_attribute_error(
+                "Invalid serialized representation of after event data: "
+                "specified domains is not a list.");
+            return Sim_Set_Illegal_Type;
+        }
+        uint32 temp_out_no_domains = SIM_attr_list_size(*domains_attr);
+        if (temp_out_no_domains == 0) {
+            *out_no_domains = 0;
+            *out_domains = NULL;
+            return Sim_Set_Ok;
+        }
+        _identity_t *temp_out_domains = MM_MALLOC(temp_out_no_domains,
+                                                  _identity_t);
+
+        attr_value_t *ids = SIM_attr_list(*domains_attr);
+        for (uint64 i = 0; i < temp_out_no_domains; ++i) {
+            set_error_t error = _deserialize_identity(id_info_ht, ids[i],
+                                                      &temp_out_domains[i]);
+            if (error != Sim_Set_Ok) {
+                MM_FREE(temp_out_domains);
+                return error;
+            }
+        }
+        *out_no_domains = temp_out_no_domains;
+        *out_domains = temp_out_domains;
+    } else {
+        *out_no_domains = 0;
+        *out_domains = NULL;
+    }
+    return Sim_Set_Ok;
+}
+
+UNUSED static set_error_t
+_deserialize_simple_event_data(
+    const uint32 *dimsizes, uint32 dimensions, size_t args_size,
+    _deserializer_t args_deserializer, ht_str_table_t *id_info_ht,
+    attr_value_t val, _simple_event_data_t **out) {
+
+    *out = NULL;
+    set_error_t error = Sim_Set_Ok;
+    if (SIM_attr_is_nil(val)) {
+        if (likely(dimensions == 0 && !args_deserializer)) {
+            return Sim_Set_Ok;
+        } else {
+            SIM_attribute_error(
+                "Invalid serialized representation of after event data: "
+                "expected arguments and/or indices, instead got nil");
+            return Sim_Set_Illegal_Type;
+        }
+    } else if (unlikely(!SIM_attr_is_list(val))) {
+        SIM_attribute_error("Invalid serialized representation of after "
+                            "event data: expected list");
+        return Sim_Set_Illegal_Type;
+    } else if (SIM_attr_list_size(val) == 0) {
+        if (likely(dimensions == 0 && !args_deserializer)) {
+            return Sim_Set_Ok;
+        } else {
+            SIM_attribute_error(
+                "Invalid serialized representation of after event data: "
+                "expected arguments and/or indices, instead got empty list");
+            return Sim_Set_Illegal_Type;
+        }
+    }
+
+    attr_value_t *indices_attr = NULL;
+    attr_value_t *arguments_attr = NULL;
+    attr_value_t *domains_attr = NULL;
+
+    switch (_simple_event_data_representation(val, dimensions,
+                                              args_deserializer)) {
+    case _Simple_Event_Data_Format_Invalid:
+        SIM_attribute_error(
+            "Invalid serialized representation of after event data: "
+            "can't recognize format");
+        return Sim_Set_Illegal_Type;
+    case _Simple_Event_Data_Format_Legacy:
+        if (dimensions && args_deserializer) {
+            attr_value_t *vals = SIM_attr_list(val);
+            indices_attr = &vals[0];
+            arguments_attr = &vals[1];
+        } else if (dimensions) {
+            indices_attr = &val;
+        } else if (args_deserializer) {
+            arguments_attr = &val;
+        }
+        break;
+    case _Simple_Event_Data_Format_Pseudodict:
+        error = _simple_event_data_deconstruct_pseudodict(
+            val, &indices_attr, &arguments_attr, &domains_attr);
+        if (error != Sim_Set_Ok) return error;
+        break;
+    }
+
+    _simple_event_data_t temp_out = { NULL, NULL, NULL, 0 };
+
+    error = _deserialize_simple_event_indices(
+        dimsizes, dimensions, indices_attr, &temp_out.indices);
+    if (error != Sim_Set_Ok) goto error;
+
+    error = _deserialize_simple_event_arguments(
+        args_size, args_deserializer, arguments_attr, &temp_out.args);
+    if (error != Sim_Set_Ok) goto error;
+
+    error = _deserialize_simple_event_domains(
+        id_info_ht, domains_attr, &temp_out.domains, &temp_out.no_domains);
+    if (error != Sim_Set_Ok) goto error;
+
+    _simple_event_data_t *out_ptr = MM_MALLOC(1, _simple_event_data_t);
+    *out_ptr = temp_out;
+    *out = out_ptr;
+    return Sim_Set_Ok;
+
+  error:
+    _free_simple_event_data(temp_out);
+    return error;
+}
+
 // List of vtables of a specific trait in one specific object
 typedef struct {
-        // first trait vtable instance. Instances are stored linearly in a
-        // possibly multi-dimensional array, with outer index corresponding to
-        // index of outer DML object.
-        uintptr_t base;
+        // *base + base_offset is the pointer to the first trait vtable
+        // instance. Instances are stored linearly in a possibly
+        // multi-dimensional array, with outer index corresponding to index of
+        // outer DML object.
+        uintptr_t *base;
+        uint64 base_offset;
         // total number of elements (product of object's dimsizes)
         uint64 num;
         // offset between two vtable instances; at least sizeof(<vtable type>)
@@ -807,7 +1249,6 @@ typedef struct {
         get_attr_t get;
         set_attr_t set;
         uint32 array_size;
-        uint32 array_delta;
 } _port_array_attr_t;
 static attr_value_t
 _getattr_from_portobj_array(lang_void *ptr, conf_object_t *obj,
@@ -815,12 +1256,11 @@ _getattr_from_portobj_array(lang_void *ptr, conf_object_t *obj,
 {
         ASSERT(SIM_attr_is_nil(*idx));
         _port_array_attr_t *port = (_port_array_attr_t *)ptr;
-        uintptr_t port_obj_ptr_base = (uintptr_t)obj
-                + port->port_obj_base_offset;
+        conf_object_t **port_obj_ptr_base = (conf_object_t **)(
+                (uintptr_t)obj + port->port_obj_base_offset);
         attr_value_t vals = SIM_alloc_attr_list(port->array_size);
         for (uint32 i = 0; i < port->array_size; i++) {
-                conf_object_t *port_obj = *(conf_object_t **)(
-                        port_obj_ptr_base + (uint64)i * port->array_delta);
+                conf_object_t *port_obj = port_obj_ptr_base[i];
                 attr_value_t val = port->get(NULL, port_obj, NULL);
                 if (SIM_attr_is_invalid(val)) {
                         SIM_attr_free(&vals);
@@ -836,11 +1276,10 @@ _setattr_from_portobj_array(lang_void *ptr, conf_object_t *obj,
 {
         ASSERT(SIM_attr_is_nil(*idx));
         _port_array_attr_t *port = (_port_array_attr_t *)ptr;
-        uintptr_t port_obj_ptr_base = (uintptr_t)obj
-                + port->port_obj_base_offset;
+        conf_object_t **port_obj_ptr_base = (conf_object_t **)(
+                (uintptr_t)obj + port->port_obj_base_offset);
         for (uint32 i = 0; i < port->array_size; i++) {
-                conf_object_t *port_obj = *(conf_object_t **)(
-                        port_obj_ptr_base + (uint64)i * port->array_delta);
+                conf_object_t *port_obj = port_obj_ptr_base[i];
                 attr_value_t val = SIM_attr_list_item(*vals, i);
                 set_error_t err = port->set(NULL, port_obj, &val, NULL);
                 if (err != Sim_Set_Ok) {
@@ -850,11 +1289,10 @@ _setattr_from_portobj_array(lang_void *ptr, conf_object_t *obj,
         return Sim_Set_Ok;
 }
 // port_obj_offset is the offset within the device struct of the first pointer
-// to a port object. Pointers to remaining port object in the array are located
-// array_delta bytes apart.
+// to a port object. Remaining port objects are stored consecutively in memory.
 UNUSED static void
 _register_port_array_attr(conf_class_t *devcls, conf_class_t *portcls,
-                          ptrdiff_t port_obj_offset, ptrdiff_t array_delta,
+                          ptrdiff_t port_obj_offset,
                           uint32 array_size, bool is_bank,
                           const char *portname, const char *attrname,
                           get_attr_t getter, set_attr_t setter,
@@ -867,9 +1305,6 @@ _register_port_array_attr(conf_class_t *devcls, conf_class_t *portcls,
         data->get = getter;
         data->set = setter;
         data->array_size = array_size;
-        data->array_delta = array_delta;
-        // storing ptrdiff in uint32, overflow will not happen in practise
-        ASSERT(data->array_delta == array_delta);
         char name[strlen(portname) + strlen(attrname) + 2];
         sprintf(name, "%s_%s", portname, attrname);
         strbuf_t proxy_desc = sb_newf("Proxy attribute for %s.%s[].%s",
@@ -1659,9 +2094,6 @@ _callback_after_write(conf_object_t *bank,
                                   &access,
                                   Callback_After_Write);
 }
-
-typedef set_error_t (*_deserializer_t)(attr_value_t *val, void *addr);
-typedef void (*_serializer_t)(const void *addr, attr_value_t *val);
 
 UNUSED static set_error_t
 _set_device_member(attr_value_t val,

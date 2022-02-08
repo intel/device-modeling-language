@@ -117,7 +117,7 @@ def print_device_substruct(node):
     if the node needs no storage.'''
 
     def arraywrap(node, typ):
-        for arraylen in reversed(node.arraylens()):
+        for arraylen in reversed(node.dimsizes):
             typ = TArray(typ, mkIntegerLiteral(node.site, arraylen))
         return typ
 
@@ -133,7 +133,7 @@ def print_device_substruct(node):
                                     for s in crep.ancestor_cnames(node))
         structtype = TStruct(members, label)
         structtype.print_struct_definition()
-        return arraywrap(node, structtype)
+        return structtype
 
     if node.objtype == 'device':
         members = [("obj", conf_object_t)]
@@ -149,7 +149,7 @@ def print_device_substruct(node):
     elif ((node.objtype == 'session' or node.objtype == 'saved')
           or (dml.globals.dml_version == (1, 2)
               and node.objtype == 'interface')):
-        return crep.node_storage_type(node, node.site)
+        return arraywrap(node, crep.node_storage_type(node, node.site))
 
     elif (node.objtype in ('register', 'field')
           and dml.globals.dml_version == (1, 2)):
@@ -162,7 +162,8 @@ def print_device_substruct(node):
             @apply
             def members():
                 if allocate:
-                    yield ('__DMLfield', crep.node_storage_type(node))
+                    yield ('__DMLfield',
+                           arraywrap(node, crep.node_storage_type(node)))
                 for sub in node.get_components():
                     if not sub.ident:
                         # implicit field: Don't add anything, storage
@@ -179,7 +180,7 @@ def print_device_substruct(node):
         else:
             # really a _port_object_t* rather than conf_object_t*, but
             # there is no DML type for the former
-            obj = [("_obj", TPtr(conf_object_t))]
+            obj = [("_obj", arraywrap(node, TPtr(conf_object_t)))]
         return composite_ctype(node,
                                obj + [(crep.cname(sub),
                                        print_device_substruct(sub))
@@ -319,6 +320,14 @@ def generate_hfile(device, headers, filename):
 
     for (name, t) in list(dml.globals.traits.items()):
         t.type().print_vtable_struct_declaration()
+    out('\n')
+
+    for args_type in (eventinfo['args_type']
+                      for (method, eventinfo) in simple_events.items()
+                      if method.inp):
+        args_type.print_struct_definition()
+        out(f'typedef struct {args_type.label} {args_type.label}_t;\n')
+    out('\n')
 
 
     print_device_substruct(device)
@@ -546,10 +555,10 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
         if port.dimensions == 0:
             register_attribute(node.site, None, "%s_%s" % (port.name, attrname))
             initcode.out(
-                '_register_port_attr(class, %s, offsetof(%s, %s._obj), %s,'
+                '_register_port_attr(class, %s, offsetof(%s, %s), %s,'
                 % (port_class_ident(port),
                    crep.structtype(dml.globals.device),
-                   crep.cref_node(port, ()),
+                   crep.cref_portobj(port, ()),
                    'true' if port.objtype == "bank" else 'false')
                 + ' "%s", "%s", %s, %s, %s, "%s", %s);\n'
                 % (port.name, attrname, getter, setter,
@@ -557,17 +566,16 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
         elif port.dimensions == 1:
             # Generate an accessor attribute for legacy reasons
             register_attribute(node.site, None, "%s_%s" % (port.name, attrname))
-            member = crep.cref_node(
+            member = crep.cref_portobj(
                 port, (mkLit(port.site, '0', TInt(32, False)),))
             (dimsize,) = port.dimsizes
             initcode.out(
-                '_register_port_array_attr(class, %s, offsetof(%s, %s._obj),'
+                '_register_port_array_attr(class, %s, offsetof(%s, %s),'
                 % (port_class_ident(port),
                    crep.structtype(dml.globals.device),
                    member)
-                + ' sizeof(((%s*)0)->%s), %d, %s, "%s", "%s", %s, %s, %s, "%s",'
-                % (crep.structtype(dml.globals.device), member, dimsize,
-                   'true' if port.objtype == "bank" else 'false',
+                + ' %d, %s, "%s", "%s", %s, %s, %s, "%s",'
+                % (dimsize, 'true' if port.objtype == "bank" else 'false',
                    port.name, attrname, getter, setter, attr_flag, attr_type)
                 + ' %s);\n' % (doc.read(),))
         else:
@@ -917,119 +925,124 @@ def generate_implements(code, device):
         except DMLError as e:
             report(e)
 
-def simple_event_fun_deconstruct_data(method, data):
-    if method.dimensions > 0 and len(method.inp) > 0:
-        out(f'ASSERT(SIM_attr_list_size({data}) == 2);\n')
-        out(f'attr_value_t indices = SIM_attr_list_item({data}, 0);\n')
-        out(f'attr_value_t params = SIM_attr_list_item({data}, 1);\n')
-    elif method.dimensions > 0 or len(method.inp) > 0:
-        varname = 'indices' if method.dimensions > 0 else 'params'
-        out(f'attr_value_t {varname} = {data};\n')
+def generate_simple_event_only_domains_funs():
+    start_function_definition(
+        'attr_value_t _simple_event_only_domains_get_value('
+        + 'conf_object_t *_obj, lang_void *data)')
+    out('{\n', postindent=1)
+    out('return _serialize_simple_event_data(0, NULL, _id_infos, '
+        + '(_simple_event_data_t *)data);\n')
+    out('}\n\n', preindent=-1)
 
-    if method.dimensions > 0:
-        out(f'ASSERT(SIM_attr_list_size(indices) == {method.dimensions});\n')
-
-    if len(method.inp) > 0:
-        out(f'ASSERT(SIM_attr_list_size(params) == {len(method.inp)});\n')
+    start_function_definition(
+        'lang_void *_simple_event_only_domains_set_value('
+        + 'conf_object_t *_obj, attr_value_t val)')
+    out('{\n', postindent=1)
+    out('_simple_event_data_t *out;\n')
+    out('set_error_t error = _deserialize_simple_event_data(NULL, 0, 0, NULL, '
+        + '&_id_info_ht, val, &out);\n')
+    out('if (error != Sim_Set_Ok) {\n', postindent=1)
+    out('out = NULL;\n')
+    out('}\n', preindent=-1)
+    out('return out;\n')
+    out('}\n\n', preindent=-1)
 
 def generate_simple_events(device):
-    handled = set()
-    done = False
+    for (method, info) in simple_events.items():
+        site = method.site
 
-    while not done:
-        done = True
-        items = list(simple_events.items())
-        for method, fun in items:
-            if method in handled:
-                continue
-            site = method.site
-            done = False
-            handled.add(method)
+        start_function_definition(
+            f'void {info["callback"]}(conf_object_t *_obj, '
+            + 'lang_void *_data)')
+        out('{\n', postindent = 1)
+        out(crep.structtype(device) + ' *_dev UNUSED = ('
+            + crep.structtype(device) + '*)_obj;\n')
 
-            (callback_fun, destroy_fun, get_value_fun, set_value_fun) = fun
+        out('_simple_event_data_t *data = '
+            + '(_simple_event_data_t *)_data;\n')
+
+        # If data is NULL, report it and use emergency indices/args
+        if method.dimensions > 0 or len(method.inp) > 0:
+            out('if (!data) {', postindent=1)
+            out('const char *msg = "Failed deserialization of after event '
+                + 'data. Using emergency indices/arguments.";\n')
+            out('VT_critical_error(msg, msg);\n')
+            out('}', preindent=-1)
+
+        if method.dimensions > 0:
+            out('const uint32 *_indices = data ? data->indices '
+                + (': (const uint32 [%s]) { 0 };\n'
+                   % (method.dimensions,)))
+
+        if len(method.inp) > 0:
+            args_struct_t = info['args_type'].label + '_t'
+            out('const %s *_args = data ? data->args : &(%s) { 0 };\n'
+                % (args_struct_t, args_struct_t))
+
+        indices = tuple(mkLit(site, f'_indices[{i}]', TInt(32, False))
+                        for i in range(method.dimensions))
+        params = tuple(mkLit(site, f'_args->{pname}', ptype)
+                       for (pname, ptype) in method.inp)
+        with LogFailure(site, method, indices):
+            code = codegen_call(site, method, indices, params, ())
+        code = mkCompound(site, [code])
+        code.toc()
+        out('if (data) {\n', postindent=1)
+        out('_free_simple_event_data(*data);\n')
+        out('MM_FREE(data);\n')
+        out('}\n', preindent=-1)
+        output_dml_state_change("_dev")
+        out('}\n\n', preindent = -1)
+        splitting_point()
+
+        if method.dimensions > 0 or len(method.inp) > 0:
             start_function_definition(
-                f'void {callback_fun}(conf_object_t *_obj, void *_data)')
+                f'attr_value_t {info["get_value"]}'
+                + '(conf_object_t *_obj, lang_void *data)')
             out('{\n', postindent = 1)
-            out(crep.structtype(device) + ' *_dev UNUSED = ('
-                + crep.structtype(device) + '*)_obj;\n')
-            scope = Symtab(global_scope)
-
-            if method.dimensions > 0 or len(method.inp) > 0:
-                out('ASSERT(_data);\n')
-                simple_event_fun_deconstruct_data(method,
-                                                  '*(attr_value_t*)_data');
-
-                if len(method.inp) > 0:
-                    # _p_attrs deliberately named to avoid possible name
-                    # conflicts with _param_*
-                    out(f'attr_value_t _p_attrs[{len(method.inp)}];\n')
-                    for i in range(len(method.inp)):
-                        out(f'_p_attrs[{i}] = '
-                            + f'SIM_attr_list_item(params, {i});\n')
-
-                    for (i, (pname, ptype)) in enumerate(method.inp):
-                        ptype = safe_realtype(ptype)
-                        out(f'{ptype} _param_{pname};\n')
-                        out(f'{serialize.lookup_deserialize(ptype)}'
-                            + f'(&_p_attrs[{i}], &_param_{pname});\n')
-
-                indices = tuple(mkLit(site,
-                                    'SIM_attr_integer(SIM_attr_list_item('
-                                    + f'indices, {i}))',
-                                    TInt(32, False))
-                              for i in range(method.dimensions))
-                params = tuple(mkLit(site, f'_param_{pname}', ptype)
-                               for pname, ptype in method.inp)
-                with LogFailure(site, method, indices):
-                    code = codegen_call(site, method, indices, params, ())
-                code = mkCompound(site, declarations(scope) + [code])
-                code.toc()
-                out('SIM_attr_free((attr_value_t*)_data);\n');
-                out('MM_FREE(_data);\n');
-            else:
-                with LogFailure(site, method, ()):
-                    code = codegen_inline(site, method, (), [], [])
-                code = mkCompound(site, declarations(scope) + [code])
-                code.toc()
-                output_dml_state_change("_dev")
+            out(('return _serialize_simple_event_data(%d, %s, _id_infos, '
+                 + '(_simple_event_data_t *)data);\n')
+                % (method.dimensions,
+                   (serialize.lookup_serialize(info['args_type'])
+                    if method.inp else 'NULL')))
             out('}\n\n', preindent = -1)
             splitting_point()
 
-            if method.dimensions > 0 or len(method.inp) > 0:
-                start_function_definition(
-                    f'void {destroy_fun}(conf_object_t *_obj, void *data)')
-                out('{\n', postindent = 1)
-                out('ASSERT(data);\n')
-                simple_event_fun_deconstruct_data(method,
-                                                  '*(attr_value_t*)data');
-                out('SIM_attr_free((attr_value_t*)data);\n');
-                out('MM_FREE(data);\n');
-                out('}\n\n', preindent = -1)
-                splitting_point()
-
-                start_function_definition(
-                    f'attr_value_t {get_value_fun}'
-                    + '(conf_object_t *_obj, void *data)')
-                out('{\n', postindent = 1)
-                out('ASSERT(data);\n')
-                simple_event_fun_deconstruct_data(method,
-                                                  '*(attr_value_t*)data');
-                out('return SIM_attr_copy(*(attr_value_t*)data);\n');
-                out('}\n\n', preindent = -1)
-                splitting_point()
-
-                start_function_definition(
-                    f'void *{set_value_fun}'
-                    + '(conf_object_t *_obj, attr_value_t val)')
-                out('{\n', postindent = 1)
-                simple_event_fun_deconstruct_data(method, 'val');
-                out('attr_value_t *data = MM_MALLOC(1, attr_value_t);\n');
-                out('*data = SIM_attr_copy(val);\n');
-                out('return data;\n');
-                out('}\n\n', preindent = -1)
-                splitting_point()
+            start_function_definition(
+                f'lang_void *{info["set_value"]}'
+                + '(conf_object_t *_obj, attr_value_t val)')
+            out('{\n', postindent = 1)
+            out('_simple_event_data_t *out;\n')
+            out(('set_error_t error = _deserialize_simple_event_data(%s, '
+                 + '%d, %s, %s, &_id_info_ht, val, &out);\n')
+                % ((('(const uint32 []) {%s}'
+                     % (', '.join(map(str, method.dimsizes)),))
+                    if method.dimensions > 0 else 'NULL'),
+                   method.dimensions,
+                   (f'sizeof({info["args_type"].label}_t)'
+                    if method.inp else 0),
+                   (serialize.lookup_deserialize(info['args_type'])
+                    if method.inp else 'NULL'),
+                   ))
+            out('if (error != Sim_Set_Ok) {\n', postindent=1)
+            out('out = NULL;\n')
+            out('}\n', preindent=-1)
+            out('return (lang_void *) out;\n')
+            out('}\n\n', preindent = -1)
+            splitting_point()
 
     reset_line_directive()
+
+def generate_simple_events_control_methods():
+    start_function_definition(
+        'void _cancel_simple_events(conf_object_t *_obj, _identity_t domain)')
+    out('{\n', postindent = 1)
+    for (method, _) in list(simple_events.items()):
+        out('SIM_event_cancel_time('
+            + f'SIM_object_clock(_obj), {crep.get_evclass(method)}, _obj, '
+            + '_simple_event_predicate, (lang_void *) &domain);\n')
+    out('}\n\n', preindent = -1)
+    splitting_point()
 
 def event_callbacks(event, indices):
     method_names = (
@@ -1076,10 +1089,13 @@ def generate_register_events(device):
                        ', '.join(
                            cname
                            for (_, cname) in event_callbacks(event, indices))))
-        for (method, fun) in list(simple_events.items()):
-            out('%s = SIM_register_event("%s", class, 0, %s, %s, %s, %s, NULL);\n'
+        for (method, info) in list(simple_events.items()):
+            out(('%s = SIM_register_event("%s", class, 0, %s, %s, %s, %s, '
+                 + 'NULL);\n')
                 % ((crep.get_evclass(method),
-                    method.logname_anonymized()) + fun))
+                    method.logname_anonymized())
+                   + tuple(info[fun] for fun in ('callback', 'destroy',
+                                                 'get_value', 'set_value'))))
 
     out('}\n\n', preindent = -1)
     splitting_point()
@@ -1491,16 +1507,16 @@ def generate_init_port_objs(device):
             index_array = "%s%s" % (
                 index_enumeration.read(),
                 ''.join('[_i%d]' % (i,) for i in range(port.dimensions)))
-            out('_dev->%s._obj = _init_port_object(&_dev->obj'
-                % (crep.cref_node(port, loop_indices),)
+            out('_dev->%s = _init_port_object(&_dev->obj'
+                % (crep.cref_portobj(port, loop_indices),)
                 + ', sb_str(&portname), %d, %s);\n'
                 % (port.dimensions, index_array))
             out('sb_free(&portname);\n')
             for _ in range(port.dimensions):
                 out('\n}', preindent=-1)
         else:
-            out('_dev->%s._obj = _init_port_object('
-                % (crep.cref_node(port, ()),)
+            out('_dev->%s = _init_port_object('
+                % (crep.cref_portobj(port, ()),)
                 + '&_dev->obj, "%s%s", 0, NULL);\n'
                 % (port_prefix, port.logname_anonymized()))
     out('}\n', preindent=-1)
@@ -1629,6 +1645,7 @@ def generate_init(device, initcode, outprefix):
             ');\n')
         out('}\n', preindent = -1)
 
+    out('_allocate_traits();\n')
     out('_initialize_traits();\n')
     out('_initialize_identity_ht();\n')
     out('_register_events(class);\n')
@@ -1698,16 +1715,16 @@ def generate_each_in_table(node, trait, subnodes):
         # vtables exist, because trait instances are marked referenced
         # when an 'each in' instance is referenced
         ancestry_path = sub.traits.ancestry_paths[trait][0]
-        base = '&%s%s%s' % (
-            sub.traits.vtable_cname(ancestry_path[0]),
-            '[0]' * sub.dimensions,
-            ''.join('.' + cident(t.name)
-                    for t in ancestry_path[1:]))
+        base = '&%s' % (sub.traits.vtable_cname(ancestry_path[0]),)
+        base_offset = ('offsetof(struct _%s, %s)'
+                       % (cident(ancestry_path[0].name),
+                          '.'.join(cident(t.name) for t in ancestry_path[1:]))
+                       if len(ancestry_path) > 1 else '0')
         num = reduce(operator.mul, sub.dimsizes, 1)
         uniq = sub.uniq
         offset = 'sizeof(struct _%s)' % (cident(ancestry_path[0].name),)
-        items.append("{(uintptr_t)%s, %d, %s, %d}\n"
-                     % (base, num, offset, uniq))
+        items.append("{(uintptr_t *)%s, %s, %d, %s, %d}\n"
+                     % (base, base_offset, num, offset, uniq))
     init = '{\n%s}' % (',\n'.join('    %s' % (item,) for item in items),)
     add_variable_declaration(
         'const _vtable_list_t %s[%d]' % (ident, len(subnodes)), init)
@@ -1984,9 +2001,11 @@ def init_trait_vtables_for_node(node, param_values, dims, parent_indices):
                     assert session_node.objtype in ('session', 'saved')
                     args.append('offsetof(%s, %s)' % (
                         crep.structtype(dml.globals.device),
-                        crep.cref_node(session_node, indices)))
+                        crep.cref_session(session_node, indices)))
             # initialize vtable instance
-            vtable_arg = '&%s%s' % (node.traits.vtable_cname(trait), index_str)
+            vtable_name = node.traits.vtable_cname(trait)
+            vtable_arg = (f'&(*{vtable_name}){index_str}'
+                          if index_str else vtable_name)
             init_calls.append(
                 (dims, '_tinit_%s(%s);\n'
                  % (trait.name, ', '.join([vtable_arg] + args))))
@@ -2021,9 +2040,9 @@ def generate_trait_trampoline(method, vtable_trait):
             downcast = 'DOWNCAST(%s, %s, %s)' % (
                 tname, cident(path[0].name),
                 '.'.join(cident(t.name) for t in path[1:]))
-        out('int _flat_index = ((struct _%s *)%s.trait) - &%s%s;\n' % (
-            cident(path[0].name), downcast, obj.traits.vtable_cname(path[0]),
-            '[0]' * obj.dimensions))
+        name = cident(path[0].name)
+        out('int _flat_index = ((struct _%s *)%s.trait) - (struct _%s *)%s;\n'
+            % (name, downcast, name, obj.traits.vtable_cname(path[0])))
     indices = [
         mkLit(site, '((_flat_index / %d) %% %d)' % (
             reduce(operator.mul, obj.dimsizes[dim + 1:], 1),
@@ -2055,8 +2074,8 @@ def generate_vtable_instances(devnode):
         if subnode.traits:
             for trait in subnode.traits.referenced:
                 add_variable_declaration(
-                    'struct _%s %s%s'
-                     % (cident(trait.name), subnode.traits.vtable_cname(trait),
+                    'struct _%s (*%s)%s'
+                    % (cident(trait.name), subnode.traits.vtable_cname(trait),
                        ''.join('[%d]' % i for i in subnode.dimsizes)))
 
 def calculate_saved_userdata(node, dimsizes, attr_name, sym_spec = None):
@@ -2078,7 +2097,7 @@ def calculate_saved_userdata(node, dimsizes, attr_name, sym_spec = None):
         # saved variable
         loop_vars = (mkIntegerConstant(decl_site, 0, False),) * node.dimensions
         var_ref = mkNodeRef(node.site, node, loop_vars)
-        device_member = crep.cref_node(node, loop_vars)
+        device_member = crep.cref_session(node, loop_vars)
     else:
         assert False
 
@@ -2086,38 +2105,17 @@ def calculate_saved_userdata(node, dimsizes, attr_name, sym_spec = None):
         crep.structtype(dml.globals.device),
         device_member)
 
-    attr_type = serialize.map_dmltype_to_attrtype(decl_site, var_ref.ctype())
     c_type = var_ref.ctype()
+    attr_type = serialize.map_dmltype_to_attrtype(decl_site, c_type)
 
     for dimension in reversed(dimsizes):
         attr_type = "[%s{%d}]" % (attr_type, dimension)
-    # For variables that are spread out throughout the device struct, build
-    # up the correct strides through their dimensions
-    if node.objtype == 'saved':
-        curr_node = node.parent
-        dimension_strides = []
-        while curr_node.objtype != 'device':
-            # if the current node is not an array, we skip it
-            if curr_node.local_dimensions() == 0:
-                curr_node = curr_node.parent
-                continue
-            loopvars = ((mkIntegerConstant(decl_site, 0, False),) *
-                        curr_node.dimensions)
-            # If size is constant below this point, we stop
-            if not loopvars:
-                break
-            dimension_strides.append("sizeof(((%s*)0)->%s)" % (
-                crep.structtype(dml.globals.device),
-                crep.cref_node(curr_node, loopvars)))
-            curr_node = curr_node.parent
-        dimension_strides = tuple(reversed(dimension_strides))
-    else:
-        # Static variables are easier to access, with a predictable stride
-        dimension_strides = tuple(
-            "sizeof(((%s*)0)->%s%s)" % (
-                crep.structtype(dml.globals.device),
-                device_member, "[0]" * (depth + 1))
-            for depth in range(node.dimensions))
+    dimension_strides = []
+    stride = f'sizeof({c_type.declaration("")})'
+    for dimsize in reversed(node.dimsizes):
+        dimension_strides.append(stride)
+        stride += f' * {dimsize}'
+    dimension_strides = tuple(reversed(dimension_strides))
 
     serialize_name = serialize.lookup_serialize(c_type)
     deserialize_name = serialize.lookup_deserialize(c_type)
@@ -2211,6 +2209,17 @@ def register_saved_attributes(initcode, node):
                  postindent = -1)
     initcode.out('}\n', preindent=-1)
     initcode.out('}\n', preindent=-1)
+
+def generate_alloc_trait_vtables(node):
+    start_function_definition('void _allocate_traits(void)')
+    out('{\n', postindent=1)
+    for subnode in flatten_object_subtree(node):
+        if subnode.traits:
+            for trait in subnode.traits.referenced:
+                name = subnode.traits.vtable_cname(trait)
+                out(f'{name} = MM_MALLOC(1, typeof(*{name}));\n')
+    out('}\n', preindent=-1)
+    splitting_point()
 
 def generate_init_trait_vtables(node, param_values):
     '''Return a list of pairs (dimsizes, 'call();\n')
@@ -2451,10 +2460,13 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     register_saved_attributes(init_code, device)
     generate_init(device, init_code, filename_prefix)
 
+    generate_alloc_trait_vtables(device)
     generate_init_trait_vtables(device, trait_param_values)
     for ((node, trait), subobjs) in list(EachIn.instances.items()):
         generate_each_in_table(node, trait, subobjs)
     generate_simple_events(device)
+    generate_simple_event_only_domains_funs()
+    generate_simple_events_control_methods()
     generate_init_identity_hashtable()
     generate_register_events(device)
     generate_init_port_objs(device)

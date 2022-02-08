@@ -12,14 +12,18 @@ bank b {
     register a[i < 10000] @ 50000 + (4 * i) is read_only;
     register b[i < 10000] @ 90000 + (4 * i) is read_only;
 
-    register c[i < 10000] @ 150000 + (8 * i) is read_only;
-    register d[i < 10000] @ 150004 + (8 * i) is read_only;
+    // The time consumption of large register arrays is still linear. Here the
+    // array sizes are tuned to consume ~50% of the DMLC compile time.
+    register c[i < 100000] @ 1500000 + (8 * i) is read_only;
+    register d[i < 100000] @ 1500004 + (8 * i) is read_only;
 
     // Trigger many reads from within DML, to avoid spending time in Python
     // wrappers. Access with different offsets, to mess up branch prediction.
     method read(uint64 offset, uint64 be, void *aux) -> (uint64) throws {
         local uint64 val;
-        for (local uint64 i=0; i < 1000000; i++) {
+        // the number 500000 is tuned to make register accesses account for
+        // ~50% of the Simics running time
+        for (local uint64 i=0; i < 500000; i++) {
             val = default(offset + (i * 2876) % 40000, be, aux);
         }
         return val;

@@ -3,9 +3,9 @@
 
 import dev_util
 
-a = dev_util.Register_LE((obj, 'b', 50000))
-b = dev_util.Register_LE((obj, 'b', 90000))
-c = dev_util.Register_LE((obj, 'b', 150000))
+a = dev_util.Register_LE(obj.bank.b, 50000)
+b = dev_util.Register_LE(obj.bank.b, 90000)
+c = dev_util.Register_LE(obj.bank.b, 1500000)
 
 a.read()
 b.read()

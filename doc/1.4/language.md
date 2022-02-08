@@ -2841,6 +2841,18 @@ where each input parameter is of [*serializable type*](#saved-variables).
 This means that `after` statements cannot be used with methods
 that e.g. have pointer parameters.
 
+Any events posted via an `after` statement are *associated* with the object that
+contain the method containing the statement. It is possible to cancel all
+`after` events associated with an object through that object's `cancel_after()`
+method, as provided by the [`object` template](dml-builtins.html#object).
+
+<div class="note">
+
+**Note:** We plan to extend the `after` statement to allow for users to
+explicitly state what objects the posted events are to be associated with.
+
+</div>
+
 ### Log Statements
 
 <pre>
