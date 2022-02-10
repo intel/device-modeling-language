@@ -22,6 +22,7 @@ import testparams
 from testparams import simics_root_path
 import traceback
 from depfile import parse_depfile
+import pstats
 
 class TestFail(Exception):
     def __init__(self, reason):
@@ -190,7 +191,7 @@ class DMLFileTestCase(BaseTestCase):
         'ld_stderr',
         'simics_stdout',                # Output from simics
         'simics_stderr',
-        'extraenv',                     # Extra envrionment variables
+        'extraenv',                     # Extra environment variables
 
         'status'                        # Expected status
         )
@@ -794,6 +795,27 @@ class XmlTestCase(CTestCase):
         os.rename('%s.xml' % self.cfilename, join(self.scratchdir, 'test.xml'))
         return CTestCase.run_simics(self, pyfile, auto_instantiate)
 
+class DMLCProfileTestCase(CTestCase):
+    __slots__ = ()
+    def __init__(self, path, filename, **info):
+        extraenv_arg = 'extraenv'
+        if extraenv_arg not in info:
+            info[extraenv_arg] = dict()
+        info[extraenv_arg].update({'DMLC_PROFILE': '1'})
+        super().__init__(path, filename, **info)
+
+    def test(self):
+        super().test()
+        # Check the existence of profiling data
+        stats_file_name = os.path.splitext(self.cfilename)[0] + ".prof"
+        if exists(stats_file_name):
+            try:
+                # Check the validity of profiling data
+                pstats.Stats(stats_file_name)
+            except:
+                raise TestFail(f'cannot load profile data')
+        else:
+            raise TestFail(f'stats file not generated')
 
 def _unittest_parse_messages():
     stderr = '''
@@ -837,9 +859,9 @@ all_tests.append(ErrorTest(["noinclude"], join(testdir, "minimal.dml"),
                            dmlc_extraargs=['--max-errors=1']))
 
 # Test DMLC_PROFILE
-all_tests.append(CTestCase(["dmlc_profile"], join(testdir, "minimal.dml"),
-                           api_version=latest_api_version,
-                           extraenv={'DMLC_PROFILE': '1'}))
+all_tests.append(DMLCProfileTestCase(["dmlc_profile"],
+                                     join(testdir, "minimal.dml"),
+                                     api_version=latest_api_version))
 
 # Test that it fails with a good error message if it can't create the
 # output files.

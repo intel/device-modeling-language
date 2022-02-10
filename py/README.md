@@ -29,8 +29,7 @@ setting time_dmlc to True, which will print a little information about
 how much time the compiler stages take, although this isn't all that useful.
 
 You can also set the DMLC_PROFILE environment variable to create a
-hotshot profile (which probably requires you to install the hotshot
-Python module in your simics tree.
+cProfile profile.
 
 There is a similar environment variable DMLC_HEAPY to do some
 profiling with heapy/guppy, but that's a bit more complicated.

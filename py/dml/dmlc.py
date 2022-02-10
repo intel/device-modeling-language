@@ -479,9 +479,9 @@ def main(argv):
 
     # Profiling setup
     if os.getenv('DMLC_PROFILE') and not options.makedep:
-        import hotshot, hotshot.stats
-        dmlc_profiler = hotshot.Profile('%s.prof' % outputbase)
-        dmlc_profiler.start()
+        import cProfile, pstats
+        dmlc_profiler = cProfile.Profile()
+        dmlc_profiler.enable()
     else:
         dmlc_profiler = False
 
@@ -596,11 +596,12 @@ def main(argv):
 
     finally:
         if dmlc_profiler:
-            dmlc_profiler.close()
-            stats = hotshot.stats.load("%s.prof" % outputbase)
+            dmlc_profiler.disable()
+            stats = pstats.Stats(dmlc_profiler)
             stats.strip_dirs()
             stats.sort_stats('time', 'calls')
             stats.print_stats(20)
+            stats.dump_stats(f'{outputbase}.prof')
         if options.porting_filename:
             flush_porting_log(logging.PortingMessage.outfile,
                               options.porting_filename)
