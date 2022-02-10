@@ -72,6 +72,29 @@ method side() -> (int) {
     return 0;
 }
 
+header %{
+    typedef struct {
+        int x;
+        const int y;
+    } deep_const_t;
+    static deep_const_t dc_val[2] = {{00,01},{10,11}};
+%}
+extern typedef struct {
+    int x;
+    const int y;
+} deep_const_t;
+extern deep_const_t dc_val[2];
+template deep_const {
+    param val : deep_const_t;
+    shared method test(int i) {
+        assert val.x == i * 10;
+        assert val.y == i * 10 + 1;
+    }
+}
+group  dc[i<2] is deep_const {
+    param val = dc_val[i];
+}
+
 method test() throws {
     local child c = cast(p[1], child);
     local base pp;
@@ -103,4 +126,7 @@ method test() throws {
     assert cast(bytes, byte_params).aa == 3;
     assert cast(bytes, byte_params).ab == 4;
     assert cast(bytes, byte_params).ac == 5;
+
+    dc[0].test(0);
+    dc[1].test(1);
 }
