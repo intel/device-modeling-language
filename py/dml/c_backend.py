@@ -2092,8 +2092,14 @@ def init_trait_vtables_for_node(node, param_values):
                         param_decl.append(
                             f'{TPtr(array_type).declaration(var)} = malloc('
                             f'sizeof(*{var}));\n')
-                        param_init.append(
-                            f'(*{var}){param_indices} = {value};\n')
+                        if deep_const(t):
+                            k = TArray(t, mkIntegerLiteral(node.site, 1)).declaration("")
+                            param_init.append(
+                                f' memcpy(&(*{var}){param_indices},'
+                                f' ({k}){{{value}}}, sizeof({t.declaration("")}));\n')
+                        else:
+                            param_init.append(
+                                f'(*{var}){param_indices} = {value};\n')
                     else:
                         # Reasons for alignment explained along with test
                         # in 1.4/structure/T_trait.dml
