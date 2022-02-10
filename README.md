@@ -46,3 +46,6 @@ stderr. The default is to hide tracebacks in a file `dmlc-error.log`.
 
 ### DMLC_CC
 Override the default compiler in unit tests.
+
+### DMLC_PROFILE
+When set, DMLC does self-profiling and writes the profile to a .prof file.
