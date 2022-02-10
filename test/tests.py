@@ -190,6 +190,7 @@ class DMLFileTestCase(BaseTestCase):
         'ld_stderr',
         'simics_stdout',                # Output from simics
         'simics_stderr',
+        'extraenv',                     # Extra envrionment variables
 
         'status'                        # Expected status
         )
@@ -202,6 +203,7 @@ class DMLFileTestCase(BaseTestCase):
         self.dmlc_extraargs = []
         self.cc_extraargs = []
         self.status = 0
+        self.extraenv = dict()
         # Override defaults
         for k,v in info.items():
             setattr(self, k, v)
@@ -268,10 +270,12 @@ class DMLFileTestCase(BaseTestCase):
 
         self.pr(" ".join(args))
 
+        env = os.environ.copy()
+        env.update(self.extraenv)
         status = subprocess.call(args,
                                  stdout = open(self.dmlc_stdout, "w"),
                                  stderr = open(self.dmlc_stderr, "w"),
-                                 cwd=self.scratchdir)
+                                 cwd=self.scratchdir, env = env)
         if status == 0:
             return 0
         elif status == 1:
@@ -560,9 +564,12 @@ class CTestCase(DMLFileTestCase):
             + list(self.cc_extraargs) + cc_extraargs + [
                 "-o", self.cfilename + ".o", self.cfilename + ".c"])
 
+        env = os.environ.copy()
+        env.update(self.extraenv)
         result = subprocess.call(args,
                                  stdout = open(self.cc_stdout, "w"),
-                                 stderr = open(self.cc_stderr, "w"))
+                                 stderr = open(self.cc_stderr, "w"),
+                                 env = env)
         if result != 0:
             self.pr("CC: " + " ".join(args))
         return result
@@ -601,6 +608,9 @@ class CTestCase(DMLFileTestCase):
         self.ld_stdout = join(self.scratchdir, name+'.ld_stdout')
         self.ld_stderr = join(self.scratchdir, name+'.ld_stderr')
 
+        env = os.environ.copy()
+        env.update(self.extraenv)
+
         self.pr("Compiling module_id.c")
         args = cc + cflags + \
                ["-c",
@@ -611,7 +621,8 @@ class CTestCase(DMLFileTestCase):
 
         status = subprocess.call(args,
                                  stdout = open(self.ld_stdout, "w"),
-                                 stderr = open(self.ld_stderr, "w"))
+                                 stderr = open(self.ld_stderr, "w"),
+                                 env = env)
         if status:
             self.pr("CC: %r" % args)
             return status
@@ -629,7 +640,8 @@ class CTestCase(DMLFileTestCase):
 
         status = subprocess.call(args,
                                  stdout = open(self.ld_stdout, "a"),
-                                 stderr = open(self.ld_stderr, "a"))
+                                 stderr = open(self.ld_stderr, "a"),
+                                 env = env)
         if status != 0:
             self.pr("LD: %r" % args)
             return status
@@ -639,7 +651,8 @@ class CTestCase(DMLFileTestCase):
                 "-sign-module", os.path.abspath(modfile)]
         return subprocess.call(args, 
                                stdout = open(self.ld_stdout, "a"),
-                               stderr = open(self.ld_stderr, "a"))
+                               stderr = open(self.ld_stderr, "a"),
+                               env = env)
 
     def run_simics(self, pyfile=None, auto_instantiate=True):
         name = self.shortname
@@ -686,6 +699,7 @@ class CTestCase(DMLFileTestCase):
                 "-project", testparams.project_path(),
                 "-p", self.scriptname]
         env = os.environ.copy()
+        env.update(self.extraenv)
         env['SIMICS_HOST'] = os.path.basename(host_path())
         env['SIMICS_ROOT'] = simics_root_path()
         # self.pr("ARGS: %r" % args)
@@ -822,6 +836,11 @@ all_tests.append(ErrorTest(["noinclude"], join(testdir, "minimal.dml"),
                            includepath=(), api_version=latest_api_version,
                            dmlc_extraargs=['--max-errors=1']))
 
+# Test DMLC_PROFILE
+all_tests.append(CTestCase(["dmlc_profile"], join(testdir, "minimal.dml"),
+                           api_version=latest_api_version,
+                           extraenv={'DMLC_PROFILE': '1'}))
+
 # Test that it fails with a good error message if it can't create the
 # output files.
 #run_test(join(testdir, "minimal.dml"), name = "not-writable",
@@ -846,6 +865,8 @@ class SplitTestCase(CTestCase):
         assert not cc_extraargs
         files = glob.glob(self.cfilename + "-[0-9]*.c")
         assert len(files) > 10, files
+        env = os.environ.copy()
+        env.update(self.extraenv)
         for fn in files:
             self.cc_stdout = join(self.scratchdir, fn + '.cc_stdout')
             self.cc_stderr = join(self.scratchdir, fn + '.cc_stderr')
@@ -857,7 +878,8 @@ class SplitTestCase(CTestCase):
 
             result = subprocess.call(args,
                                      stdout = open(self.cc_stdout, "w"),
-                                     stderr = open(self.cc_stderr, "w"))
+                                     stderr = open(self.cc_stderr, "w"),
+                                     env = env)
             if result != 0:
                 self.pr("CC: " + " ".join(args))
                 return result
@@ -868,7 +890,8 @@ class SplitTestCase(CTestCase):
 
         result = subprocess.call(ld,
                                  stdout = open(self.cc_stdout, "w"),
-                                 stderr = open(self.cc_stderr, "w"))
+                                 stderr = open(self.cc_stderr, "w"),
+                                 env = env)
         if result != 0:
             self.pr("CCLD: " + " ".join(ld))
         return result
@@ -923,9 +946,12 @@ class DmlDepBase(CTestCase):
                 '-M', '-MP', '-MF', self.cfilename + '.d',
                 '-MT', self.cfilename + '.c'])
 
+        env = os.environ.copy()
+        env.update(self.extraenv)
         result = subprocess.call(args,
                                  stdout = open(self.cc_stdout, "w"),
-                                 stderr = open(self.cc_stderr, "w"))
+                                 stderr = open(self.cc_stderr, "w"),
+                                 env = env)
         if result != 0:
             self.pr("CC: " + " ".join(args))
         return result
@@ -1026,6 +1052,7 @@ class PortingConvert(CTestCase):
 
     def run_port_script(self, args, stdout, stderr):
         env = os.environ.copy()
+        env.update(self.extraenv)
         env['DMLC_DIR'] = join(project_host_path(), 'bin')
         script = join(testparams.project_path(), 'bin',
                       'port-dml' + batch_suffix())
