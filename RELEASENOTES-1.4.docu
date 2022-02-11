@@ -280,10 +280,10 @@
       local size_t size = get_size();
       local buffer_t buf = {.len = size, .data = new uint8[size]};
       </pre></add-note></build-id>
-  <build-id value="next"><add-note>Added an optimization that
+  <build-id value="6143"><add-note>Added an optimization that
       reduces the compile time for devices with huge register arrays
       <bug number="SIMICS-7038"/> </add-note></build-id>
-  <build-id value="next"><add-note> Added support for cancelling events posted
+  <build-id value="6143"><add-note> Added support for cancelling events posted
       via <tt>after</tt> statement through the use of the
       <tt>cancel_after()</tt> method, provided as part of the <tt>object</tt>
       template <bug number="SIMICS-17930"/>.
