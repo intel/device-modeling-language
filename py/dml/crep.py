@@ -19,7 +19,52 @@ __all__ = (
     'ctype',
     'conf_obj',
     'cloggroup',
+    'dev',
+    'require_dev',
+    'maybe_dev_arg',
+    'DeviceInstanceContext',
+    'TypedParamContext',
     )
+
+
+class DeviceInstanceContext:
+    '''Signifies that the device instance is accessible for any
+    generated statements, and is retrievable through the '_dev' identifier.
+    '''
+    active = False
+
+    def __enter__(self):
+        self.prev_context = DeviceInstanceContext.active
+        DeviceInstanceContext.active = True
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        DeviceInstanceContext.active = self.prev_context
+
+class TypedParamContext:
+    '''Signifies that expressions are being generated as part of the
+    definition of a typed parameter, and are thus subject to the restrictions
+    placed upon typed parameter definitions.
+    '''
+    active = False
+
+    def __enter__(self):
+        self.prev_typed_context = TypedParamContext.active
+        TypedParamContext.active = True
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        TypedParamContext.active = self.prev_typed_context
+
+def dev(site):
+    require_dev(site)
+    return '_dev'
+
+def require_dev(site):
+    if not DeviceInstanceContext.active:
+        raise EINDEPENDENTVIOL(site)
+
+def maybe_dev_arg(independent):
+    return ([] if independent
+            else [('_dev', TDevice(structtype(dml.globals.device)))])
+
+
 
 def cname(node):
     if dml.globals.dml_version != (1, 2):
@@ -158,15 +203,16 @@ def node_storage_type_dml12(node, site):
     else:
         raise ICE(site or node, "No storage type for a "+node.objtype)
 
-def conf_object(node, indices):
+def conf_object(site, node, indices):
     '''return a C expression for the conf_object_t* the given node belongs to'''
     while node.objtype not in ['bank', 'port', 'device', 'subdevice']:
         node = node.parent
     if node.objtype == 'device' or (dml.globals.dml_version == (1, 2)
                                     and node.name is None):
-        return '&_dev->obj'
+        return f'&{dev(site)}->obj'
     else:
-        return '_dev->%s' % cref_portobj(node, indices[:node.dimensions])
+        return '%s->%s' % (dev(site),
+                           cref_portobj(node, indices[:node.dimensions]))
 
 def cloggroup(name):
     if dml.globals.compat_dml12:

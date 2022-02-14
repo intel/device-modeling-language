@@ -1,0 +1,61 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+// no error
+independent startup method m0() {}
+/// ERROR ESYNTAX
+independent startup method m1(int i) {}
+/// ERROR ESYNTAX
+independent startup method m2() throws {}
+/// ERROR ESYNTAX
+independent startup method m3() -> (int) { }
+/// ERROR ESYNTAX
+independent startup method m4() default {}
+
+// no error
+independent startup memoized method m5() -> (int) { return 1; }
+independent startup memoized method m6() throws {}
+/// ERROR ESYNTAX
+independent startup memoized method m7() {}
+/// ERROR ESYNTAX
+independent startup memoized method m8(int i) -> (int) { return 1; }
+/// ERROR ESYNTAX
+independent startup memoized method m9() -> (int) default { return 1; }
+
+
+template t {
+    // no error
+    shared independent startup method tm0() {}
+    /// ERROR ESYNTAX
+    shared independent startup method tm1(int i) {}
+    /// ERROR ESYNTAX
+    shared independent startup method tm2() throws {}
+    /// ERROR ESYNTAX
+    shared independent startup method tm3() -> (int) {}
+    /// ERROR ESYNTAX
+    shared independent startup method tm4() default {}
+
+    // no error
+    shared independent startup memoized method tm5() -> (int) {
+        return 1;
+    }
+    shared independent startup memoized method tm6() throws {}
+    /// ERROR ESYNTAX
+    shared independent startup memoized method tm7() {}
+    /// ERROR ESYNTAX
+    shared independent startup memoized method tm8(int i) -> (int) {
+        return 1;
+    }
+    /// ERROR ESYNTAX
+    shared independent startup memoized method tm9() -> (int) default {
+        return 1;
+    }
+
+    // no error
+    shared independent startup method tm10();
+    shared independent startup memoized method tm11() -> (int);
+}

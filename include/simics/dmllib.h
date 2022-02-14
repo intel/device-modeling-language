@@ -181,7 +181,13 @@ DML_eq(uint64 a, uint64 b)
                                                       __VA_ARGS__);})
 #define CALL_TRAIT_METHOD0(type, method, dev, traitref)                 \
         ({_traitref_t __tref = traitref;                                \
-          ((struct _ ## type *) __tref.trait)->method(dev, __tref);})   \
+          ((struct _ ## type *) __tref.trait)->method(dev, __tref);})
+#define CALL_INDEPENDENT_TRAIT_METHOD(type, method, traitref, ...)       \
+        ({_traitref_t __tref = traitref;                                      \
+          ((struct _ ## type *) __tref.trait)->method(__tref, __VA_ARGS__);})
+#define CALL_INDEPENDENT_TRAIT_METHOD0(type, method, traitref)     \
+    ({_traitref_t __tref = traitref;                                    \
+      ((struct _ ## type *) __tref.trait)->method(__tref);})
 
 #define _raw_load_uint8_be_t   UNALIGNED_LOAD_BE8
 #define _raw_load_uint16_be_t  UNALIGNED_LOAD_BE16
@@ -2411,6 +2417,14 @@ UNUSED static int _free_sub_table(ht_int_table_t *table,
 UNUSED static void _free_table(ht_int_table_t *table) {
         ht_for_each_entry_int(table, _free_sub_table, NULL);
         ht_clear_int_table(table, true);
+}
+
+UNUSED static void _memoized_recursion(const char *name) {
+    char msg[512];
+    snprintf(msg, 512,
+             "Recursive call to memoized method %s. "
+             "This is considered undefined behavior.", name);
+    VT_critical_error(msg, msg);
 }
 
 #endif

@@ -1,0 +1,39 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// COMPILE-ONLY
+
+template t {
+    shared independent method s1() -> (int) {
+        return 0;
+    }
+
+    shared independent method s2() -> (int) default {
+        return 0;
+    }
+}
+
+independent method m() -> (int) {
+    return 0;
+}
+
+template u {
+    param p1 : int;
+    param p2 : int;
+    param p3 : int;
+}
+
+is t;
+is u;
+
+/// ERROR ETYPEDPARAMVIOL
+param p1 = cast(dev, t).s1();
+/// ERROR ETYPEDPARAMVIOL
+param p2 = cast(dev, t).s2();
+/// ERROR ETYPEDPARAMVIOL
+param p3 = m();

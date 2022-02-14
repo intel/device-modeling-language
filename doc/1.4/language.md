@@ -1140,11 +1140,7 @@ named parameter:
   declaration](#parameter-declarations)). This can be done either within the
   template itself, within sub-templates, or within individual objects
   instantiating the template.
-
-  This requirement is enforced by the compiler.
 * The parameter definition must be a valid expression of the specified type.
-
-  This requirement is enforced by the compiler.
 * The parameter definition must be free of side-effects, and must not rely on
   the specific device instance of the DML model &mdash; in particular, the
   definition must be independent of device state.
@@ -1158,9 +1154,8 @@ named parameter:
 
   Examples of expressions that may *not* be used include method calls and
   references to `session`/`saved` variables.
-
-  This requirement is *not* enforced by the compiler &mdash; DML models
-  violating this requirement have undefined behavior.
+* The parameter definition must not contain calls to
+  [independent methods](#independent-methods).
 
 Typed parameters are most often used to allow a shared method defined within
 the template to access parameters of the template. For example:
@@ -1643,6 +1638,63 @@ and inline methods remain mainly for compatibility reasons.
 
 In DML 1.4, methods can be `exported` using the
 [`export` declaration](#export-declarations).
+
+### Independent Methods
+
+Methods that do not rely on the particular instance of the device model may
+be declared `independent`:
+```
+independent method m(...) -> (...) {...}
+```
+[Exported](#export-declarations) independent methods do not have the input
+parameter corresponding to the device instance, allowing them to be called
+in greater number of contexts. The body of independent methods may not contain
+statements or expressions that rely on the device instance in any way; for
+example, `session` or `saved` variables may not be referenced, `after` and `log`
+statements may not be used, and non-`independent` may not be called.
+
+Within a template, `shared` independent methods may be declared.
+
+#### Independent Startup Methods
+
+Independent methods may also be declared `startup`, which causes them to be
+called when the model is loaded into the simulation, *before* any device is
+created. In order for this to be possible, `independent startup methods` may not
+have any return values nor be declared `throw`s. In addition, independent
+startup methods may not be declared with an overridable definition due to
+technical limitations &mdash; this restriction can be worked around by having an
+independent startup method call an overridable independent method. Note that
+abstract `shared` independent startup methods are allowed.
+
+The order in which independent startup methods are implicitly called at model
+load is not defined, with the exception that independent startup methods not
+declared memoized are called before any independent startup methods that are.
+
+#### Independent Startup Memoized Methods
+Independent startup methods may also be declared `memoized`. Unlike regular
+`independent startup` methods, `independent startup memoized` methods may
+&mdash; indeed, are required to &mdash; have return values and/or be
+declared `throws`.
+
+After the first call of a memoized method, all subsequent calls for the
+simulation session return the results of the first call without executing the
+body of the method. If a memoized method call throws, then subsequent calls will
+throw without executing the body.
+
+The first call to an independent startup memoized method will typically be the
+one implicitly performed at model load, but it is may also occur beforehand
+(for example, if the method is called as part of another independent startup
+method).
+
+Result caching is shared across all instances of the device model. This
+mechanism can be used to compute device-independent data which is then shared
+across all instances of the device model.
+
+The results of `shared` memoized methods are cached per template instance, and
+are not shared across all objects instantiating the template.
+
+(Indirectly) recursive memoized method calls are not allowed; the result of
+such a call will result in a run-time critical error.
 
 ## Session variables
 
@@ -2360,6 +2412,9 @@ using the following signature:
 ```
 void my_c_function(conf_object_t *obj, int x);
 ```
+
+The `conf_object_t *obj` parameter corresponds to the device instance, and is
+omitted when the referenced method is [independent](#independent-methods).
 
 ## Resolution of overrides
 

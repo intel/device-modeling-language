@@ -9,6 +9,7 @@ from dml.traits import (
 import dml.objects
 import dml.ast
 import dml.ctree
+from dml import crep
 from dml import types
 from dml import traits
 
@@ -39,7 +40,8 @@ class Test_traits(unittest.TestCase):
     def test_one_default_method(self):
         body = dml.ast.compound(self.site, [])
         t = Trait(self.site, 't', set(),
-                  {'m': (self.site, [], [], False, True, body, None)},
+                  {'m': (self.site, [], [], False, False, False, False, True,
+                         body, None)},
                   {}, {}, {}, {}, {})
         ot = ObjTraits(self.dev, {t}, {'m': t}, {}, {})
         self.dev.set_traits(ot)
@@ -49,4 +51,5 @@ class Test_traits(unittest.TestCase):
         ref = ot.lookup_shared_method_impl(self.site, 'm', ())
         self.assertTrue(ref)
         # does not crash
-        ref.call_expr([], types.TVoid()).read()
+        with crep.DeviceInstanceContext():
+            ref.call_expr([], types.TVoid()).read()

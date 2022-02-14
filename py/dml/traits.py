@@ -5,6 +5,7 @@
 
 import itertools
 import collections
+import contextlib
 import abc
 import os
 from . import objects, logging, crep, codegen, toplevel, topsort
@@ -37,7 +38,7 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
     sessions = {}
     def check_namecoll(name, site):
         if name in methods:
-            (othersite, _, _, _, _, _, _) = methods[name]
+            (othersite, _, _, _, _, _, _, _, _, _) = methods[name]
             raise ENAMECOLL(site, othersite, name)
         if name in params:
             (othersite, _) = params[name]
@@ -49,15 +50,25 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
     for ast in subasts:
         try:
             if ast.kind == 'sharedmethod':
-                (mname, inp_asts, outp_asts, throws, overridable, body,
-                 rbrace_site) = ast.args
+                (mname, inp_asts, outp_asts, throws, qualifiers,
+                 overridable, body, rbrace_site) = ast.args
+                independent = 'independent' in qualifiers
+                startup = 'startup' in qualifiers
+                memoized = 'memoized' in qualifiers
+                if (startup and not independent) or (memoized and not startup):
+                    raise ICE(impl.method_ast.site,
+                              'Invalid qualifier combination: '
+                              + ' '.join(['independent']*independent
+                                         + ['startup']*startup
+                                         + ['memoized']*memoized))
                 # TODO: a trait method cannot use a subtrait in the
                 # argument list
                 inp = eval_method_inp(inp_asts, None, global_scope)
                 outp = eval_method_outp(outp_asts, None, global_scope)
                 check_namecoll(mname, ast.site)
-                methods[mname] = (ast.site, inp, outp, throws, overridable,
-                                  body, rbrace_site)
+                methods[mname] = (ast.site, inp, outp, throws, independent,
+                                  startup, memoized, overridable, body,
+                                  rbrace_site)
             elif ast.kind in ('session', 'saved'):
                 (decls, _) = ast.args
                 for decl_ast in decls:
@@ -113,15 +124,20 @@ class TraitVTableItem(metaclass=abc.ABCMeta):
     def name(self): '''Field name in vtable struct'''
 
 class TraitMethod(TraitVTableItem):
-    __slots__ = ('site', 'inp', 'outp', 'throws', 'astbody', 'name', 'trait',
-                 'default_trait', 'overridable', 'rbrace_site')
+    __slots__ = ('site', 'inp', 'outp', 'throws', 'independent', 'startup',
+                 'memoized', 'astbody', 'name', 'trait', 'default_trait',
+                 'overridable', 'rbrace_site', '_memo_outs_struct', 'id')
 
-    def __init__(self, site, inp, outp, throws, overridable,
-                 astbody, trait, name, default_trait, rbrace_site):
+    def __init__(self, site, inp, outp, throws, independent, startup, memoized,
+                 overridable, astbody, trait, name, default_trait,
+                 rbrace_site):
         self.site = site
         self.inp = inp
         self.outp = outp
         self.throws = throws
+        self.independent = independent
+        self.startup = startup
+        self.memoized = memoized
         self.overridable = overridable
         self.astbody = astbody
         self.trait = trait
@@ -129,6 +145,7 @@ class TraitMethod(TraitVTableItem):
         # the trait whose implementation we override, or None
         self.default_trait = default_trait
         self.rbrace_site = rbrace_site
+        self._memo_outs_struct = None
 
     def __str__(self):
         return '%s.%s' % (self.trait.name, self.name)
@@ -136,6 +153,18 @@ class TraitMethod(TraitVTableItem):
     def cname(self):
         '''Name of the C identifier for this method'''
         return '_DML_TM_%s__%s' % (self.trait.name, self.name)
+
+    @property
+    def memo_outs_struct(self):
+        assert self.memoized
+        if self._memo_outs_struct is None:
+            memo_dict = {'p_' + name: typ for (name, typ) in self.outp}
+            memo_dict['ran'] = TInt(8, True)
+            if self.throws:
+                memo_dict['threw'] = TBool()
+            self._memo_outs_struct = TStruct(
+                memo_dict, label=f'_memo_{self.trait.name}__{self.name}')
+        return self._memo_outs_struct
 
     @property
     def vtable_trait(self):
@@ -159,55 +188,62 @@ class TraitMethod(TraitVTableItem):
             return self.trait.ancestry_paths[vtable_trait][0]
 
     def declaration(self):
-        implicit_args = self.vtable_trait.implicit_args()
+        implicit_inargs = self.vtable_trait.implicit_args()
         args = ", ".join(t.declaration(n)
                          for (n, t) in c_inargs(
-                                 implicit_args + list(self.inp),
+                                 crep.maybe_dev_arg(self.independent)
+                                 + implicit_inargs + list(self.inp),
                                  self.outp, self.throws))
         return c_rettype(self.outp, self.throws).declaration(
             '%s(%s)' % (self.cname(), args))
 
     def codegen_body(self):
-        scope = MethodParamScope(self.trait.scope(global_scope))
-        implicit_args = self.vtable_trait.implicit_args()
-        site = self.site
-        if self.default_trait:
-            default_method = self.default_trait.method_impls[self.name]
-            [_, (name, typ)] = implicit_args
-            default = ExpressionSymbol(
-                'default',
-                TraitMethodDirect(
-                    default_method.site,
-                    mkLit(self.site, cident(name), typ),
-                    default_method),
-                site)
-        else:
-            default = NoDefaultSymbol()
-            # TODO: we should also have a clause for AmbiguousDefault here
+        with (crep.DeviceInstanceContext()
+              if not self.independent else contextlib.nullcontext()):
+            scope = MethodParamScope(self.trait.scope(global_scope))
+            implicit_inargs = self.vtable_trait.implicit_args()
+            site = self.site
+            if self.default_trait:
+                default_method = self.default_trait.method_impls[self.name]
+                [(name, typ)] = implicit_inargs
+                default = ExpressionSymbol(
+                    'default',
+                    TraitMethodDirect(
+                        default_method.site,
+                        mkLit(self.site, cident(name), typ),
+                        default_method),
+                    site)
+            else:
+                default = NoDefaultSymbol()
+                # TODO: we should also have a clause for AmbiguousDefault here
 
-        for (n, t) in self.outp:
-            # See SIMICS-19028
-            if deep_const(t):
-                raise ICE(site,
-                          'Methods with (partially) const output/return '
-                          + 'values are not yet supported.')
+            for (n, t) in self.outp:
+                # See SIMICS-19028
+                if deep_const(t):
+                    raise ICE(site,
+                              'Methods with (partially) const output/return '
+                              + 'values are not yet supported.')
 
-        body = codegen_method(
-            self.site, self.inp, self.outp, self.throws, self.astbody,
-            default, Location(dml.globals.device, ()), scope,
-            self.rbrace_site)
+            if self.memoized:
+                assert self.independent and self.startup
+                memoization = codegen.SharedIndependentMemoized(self)
+            else:
+                memoization = None
+            body = codegen_method(
+                self.site, self.inp, self.outp, self.throws, self.independent,
+                memoization, self.astbody, default,
+                Location(dml.globals.device, ()), scope, self.rbrace_site)
 
-        downcast_path = self.downcast_path()
-        if downcast_path:
-            trait_decl = mkInline(
-                site,
-                '%s UNUSED = DOWNCAST(%s, %s, %s);' % (
-                    self.trait.type().declaration('_' + cident(self.trait.name)),
-                    '_' + cident(self.vtable_trait.name),
-                    cident(self.trait.name),
-                    '.'.join(cident(t.name) for t in downcast_path)))
-            return mkCompound(site, [trait_decl, body])
-        else:
+            downcast_path = self.downcast_path()
+            if downcast_path:
+                trait_decl = mkInline(
+                    site,
+                    '%s UNUSED = DOWNCAST(%s, %s, %s);' % (
+                        self.trait.type().declaration('_' + cident(self.trait.name)),
+                        '_' + cident(self.vtable_trait.name),
+                        cident(self.trait.name),
+                        '.'.join(cident(t.name) for t in downcast_path)))
+                body = mkCompound(site, [trait_decl, body])
             return body
 
 def merge_ancestor_vtables(ancestors, site):
@@ -260,8 +296,8 @@ def mktrait(site, tname, ancestors, methods, params, sessions,
         del sessions[name]
 
     bad_methods = set()
-    for (name, (msite, inp, outp, throws, overridable, body, rbrace_site)) \
-        in list(methods.items()):
+    for (name, (msite, inp, outp, throws, independent, startup, memoized, overridable,
+                body, rbrace_site)) in list(methods.items()):
         for ancestor in direct_parents:
             coll = ancestor.member_declaration(name)
             if coll:
@@ -291,7 +327,8 @@ def mktrait(site, tname, ancestors, methods, params, sessions,
                                   'ancestor is overridable but not in vtable')
                     try:
                         typecheck_method_override(
-                            (msite, inp, outp, throws),
+                            (msite, inp, outp, throws, independent, startup,
+                             memoized),
                             ancestor_vtables[name].vtable_methods[name])
                     except DMLError as e:
                         report(e)
@@ -314,8 +351,8 @@ def mktrait(site, tname, ancestors, methods, params, sessions,
                  ancestor_vtables, ancestor_method_impls, reserved_symbols)
 
 def typecheck_method_override(left, right):
-    (site0, inp0, outp0, throws0) = left
-    (site1, inp1, outp1, throws1) = right
+    (site0, inp0, outp0, throws0, independent0, startup0, memoized0) = left
+    (site1, inp1, outp1, throws1, independent1, startup1, memoized1) = right
     if len(inp0) != len(inp1):
         raise EMETH(site0, site1, "different number of input arguments")
     if len(outp0) != len(outp1):
@@ -330,6 +367,20 @@ def typecheck_method_override(left, right):
         if realtype(t0).cmp(realtype(t1)) != 0:
             raise EMETH(site0, site1,
                         "mismatching types in output argument %d" % (i + 1,))
+
+    def qualifier_check(qualifier_name, qualifier0, qualifier1):
+        if qualifier0 > qualifier1:
+            raise EMETH(site0, site1,
+                        (f"overriding method is declared {qualifier_name}, "
+                         + "but the overridden method is not"))
+        elif qualifier0 < qualifier1:
+            raise EMETH(site0, site1,
+                        (f"overridden method is declared {qualifier_name}, "
+                         + "but the overriding method is not"))
+
+    qualifier_check('independent', independent0, independent1)
+    qualifier_check('startup', startup0, startup1)
+    qualifier_check('memoized', memoized0, memoized1)
 
 def merge_method_impl_maps(site, parents):
     '''Return a dictionary mapping method name to the most specific trait
@@ -553,10 +604,11 @@ class Trait(SubTrait):
                  ancestor_vtables, ancestor_method_impls, reserved_symbols):
         method_impls = {
             name: TraitMethod(
-                msite, inp, outp, throws, overridable, body, self, name,
-                ancestor_method_impls.get(name), rbrace_site)
-            for (name, (msite, inp, outp, throws, overridable, body,
-                        rbrace_site))
+                msite, inp, outp, throws, independent, startup, memoized,
+                overridable, body, self, name, ancestor_method_impls.get(name),
+                rbrace_site)
+            for (name, (msite, inp, outp, throws, independent, startup,
+                        memoized, overridable, body, rbrace_site))
             in list(methods.items())
             if body is not None}
 
@@ -577,8 +629,9 @@ class Trait(SubTrait):
 
         # methods and parameters that are direct members of this trait's vtable
         self.vtable_methods = {
-            name: (msite, inp, outp, throws)
-            for (name, (msite, inp, outp, throws, overridable, _, _))
+            name: (msite, inp, outp, throws, independent, startup, memoized)
+            for (name, (msite, inp, outp, throws, independent, startup, memoized,
+                        overridable, _, _))
             in list(methods.items())
             if overridable and name not in ancestor_vtables}
         self.vtable_params = params
@@ -600,8 +653,12 @@ class Trait(SubTrait):
         s = Symtab(global_scope)
         selfref = mkLit(self.site, '_' + cident(self.name), self.type())
         for name in self.members():
-            s.add(ExpressionSymbol(
-                name, mkSubRef(self.site, selfref, name, '.'), self.site))
+            # This is very hacky, but works well
+            try:
+                expr = mkSubRef(self.site, selfref, name, '.')
+            except EINDEPENDENTVIOL:
+                expr = InvalidSymbol(self.site, name, EINDEPENDENTVIOL)
+            s.add(ExpressionSymbol(name, expr, self.site))
         # grammar prohibits name collision on 'this'
         s.add(ExpressionSymbol('this', selfref, self.site))
         return s
@@ -635,7 +692,7 @@ class Trait(SubTrait):
         if name in self.method_impl_traits:
             return (self.method_impl_traits[name].method_impls[name].site, self)
         elif name in self.vtable_methods:
-            (site, _, _, _) = self.vtable_methods[name]
+            (site, _, _, _, _, _, _) = self.vtable_methods[name]
             return (site, self)
         elif name in self.vtable_params:
             (site, _) = self.vtable_params[name]
@@ -665,8 +722,10 @@ class Trait(SubTrait):
                     expr = TraitUpcast(site, expr, impl.vtable_trait)
                 return TraitMethodDirect(site, expr, impl)
         if name in self.vtable_methods:
-            (_, inp, outp, throws) = self.vtable_methods[name]
-            return TraitMethodIndirect(site, expr, name, inp, outp, throws)
+            (_, inp, outp, throws, independent, _, _) = \
+                self.vtable_methods[name]
+            return TraitMethodIndirect(site, expr, name, inp, outp, throws,
+                                       independent)
         if name in self.vtable_params:
             (_, ptype) = self.vtable_params[name]
             return TraitParameter(site, expr, name, ptype)
@@ -683,14 +742,13 @@ class Trait(SubTrait):
         return None
 
     def implicit_args(self):
-        structtype = TDevice(crep.structtype(dml.globals.device))
-        return [("_dev", structtype),
-                ("_" + cident(self.name), self.type())]
+        return [("_" + cident(self.name), self.type())]
 
-    def vtable_method_type(self, inp, outp, throws):
+    def vtable_method_type(self, inp, outp, throws, independent):
         return TPtr(TFunction(
             [t for (n, t) in c_inargs(
-                self.implicit_args() + inp, outp, throws)],
+                crep.maybe_dev_arg(independent) + self.implicit_args() + inp,
+                outp, throws)],
             c_rettype(outp, throws)))
 
     def vtable(self):
@@ -698,8 +756,13 @@ class Trait(SubTrait):
             yield (name, ptype)
         for (name, (_, ptype)) in list(self.vtable_sessions.items()):
             yield (name, TInt(32, False))
-        for (name, (_, inp, outp, throws)) in list(self.vtable_methods.items()):
-            yield (name, self.vtable_method_type(inp, outp, throws))
+        for (name, (_, inp, outp, throws, independent, startup, memoized)) \
+            in list(self.vtable_methods.items()):
+            yield (name, self.vtable_method_type(inp, outp, throws,
+                                                 independent))
+        for method in self.method_impls.values():
+            if method.independent and method.memoized:
+                yield (f'_{method.name}_outs', method.memo_outs_struct)
 
     def mark_referenced(self):
         if not self in Trait.referenced:
