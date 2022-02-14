@@ -1,0 +1,137 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+import "testing.dml";
+
+/// INSTANTIATE-MANUALLY
+
+independent method call_on_startup(const char *node, const char *meth) {
+    local attr_value_t args = SIM_make_attr_list(
+        2, SIM_make_attr_string(node), SIM_make_attr_string(meth));
+    local attr_value_t val = VT_call_python_module_function(
+        "__main__", "on_startup", &args);
+    SIM_attr_free(&val);
+    SIM_attr_free(&args);
+}
+
+template t is name {
+    independent startup memoized method memo_0_t() throws {
+        call_on_startup(name, "memo_0_t");
+        throw;
+    }
+    independent startup memoized method memo_0_nt() throws {
+        call_on_startup(name, "memo_0_nt");
+    }
+    independent startup memoized method memo_1() -> (int) {
+        call_on_startup(name, "memo_1");
+        return 3;
+    }
+    independent startup memoized method memo_2() -> (int, double) {
+        call_on_startup(name, "memo_2");
+        return (3, 7.2);
+    }
+    independent startup memoized method memo_2_t() -> (int, double) throws {
+        call_on_startup(name, "memo_2_t");
+        throw;
+    }
+    independent startup memoized method memo_2_nt() -> (int, double) throws {
+        call_on_startup(name, "memo_2_nt");
+        return (3, 7.2);
+    }
+    shared independent startup memoized method s_memo_0_t() throws {
+        call_on_startup(name, "s_memo_0_t");
+        throw;
+    }
+    shared independent startup memoized method s_memo_0_nt() throws {
+        call_on_startup(name, "s_memo_0_nt");
+    }
+    shared independent startup memoized method s_memo_1() -> (int) {
+        call_on_startup(name, "s_memo_1");
+        return 3;
+    }
+    shared independent startup memoized method s_memo_2() -> (int, double) {
+        call_on_startup(name, "s_memo_2");
+        return (3, 7.2);
+    }
+    shared independent startup memoized method s_memo_2_t() -> (int, double)
+        throws {
+        call_on_startup(name, "s_memo_2_t");
+        throw;
+    }
+    shared independent startup memoized method s_memo_2_nt() -> (int, double)
+        throws {
+        call_on_startup(name, "s_memo_2_nt");
+        return (3, 7.2);
+    }
+}
+
+is t;
+
+group g[i < 2][j < 3] {
+    group c[k < 5] is t;
+}
+
+method test() throws {
+    #foreach obj in ([dev, g[1][2].c[3]]) {
+        local int i;
+        local double j;
+        i = j = 1;
+        try {
+            obj.memo_0_t();
+            assert false;
+        } catch;
+        try {
+            obj.memo_0_nt();
+        } catch {
+            assert false;
+        }
+        i = obj.memo_1();
+        assert i == 3;
+        i = 1;
+        (i, j) = obj.memo_2();
+        assert i == 3 && j == 7.2;
+        i = j = 1;
+        try {
+            (i, j) = obj.memo_2_t();
+            assert false;
+        } catch;
+        assert i == 1 && j == 1;
+        try {
+            (i, j) = obj.memo_2_nt();
+        } catch {
+            assert false;
+        }
+        assert i == 3 && j == 7.2;
+        i = j = 1;
+        try {
+            obj.s_memo_0_t();
+            assert false;
+        } catch;
+        try {
+            obj.s_memo_0_nt();
+        } catch {
+            assert false;
+        }
+        i = obj.s_memo_1();
+        assert i == 3;
+        i = 1;
+        (i, j) = obj.s_memo_2();
+        assert i == 3 && j == 7.2;
+        i = j = 1;
+        try {
+            (i, j) = obj.s_memo_2_t();
+            assert false;
+        } catch;
+        assert i == 1 && j == 1;
+        try {
+            (i, j) = obj.s_memo_2_nt();
+        } catch {
+            assert false;
+        }
+        assert i == 3 && j == 7.2;
+        i = j = 1;
+    }
+}

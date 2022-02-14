@@ -662,7 +662,7 @@ class CTestCase(DMLFileTestCase):
         self.pr("Signing module")
         args = [join(host_path(), "bin", "py3", "simics-common"), "-core",
                 "-sign-module", os.path.abspath(modfile)]
-        return subprocess.call(args, 
+        return subprocess.call(args,
                                stdout = open(self.ld_stdout, "a"),
                                stderr = open(self.ld_stderr, "a"),
                                env = env)
