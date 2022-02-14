@@ -1,0 +1,157 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+import "testing.dml";
+
+header %{
+    static bool fired = false;
+%}
+extern bool fired;
+
+// TODO also test throws
+idempotent method idemp_0() {
+    fired = true;
+}
+
+idempotent method idemp_1() -> (int) {
+    fired = true;
+    return 4;
+}
+
+idempotent method idemp_2() -> (int, double) {
+    fired = true;
+    return (4, 7.2);
+}
+
+independent idempotent method indep_idemp_0() {
+    fired = true;
+}
+
+independent idempotent method indep_idemp_1() -> (int) {
+    fired = true;
+    return 4;
+}
+
+independent idempotent method indep_idemp_2() -> (int, double) {
+    fired = true;
+    return (4, 7.2);
+}
+
+template t {
+    shared idempotent method s_idemp_0() {
+        fired = true;
+    }
+
+    shared idempotent method s_idemp_1() -> (int) {
+        fired = true;
+        return 4;
+    }
+
+    shared idempotent method s_idemp_2() -> (int, double) {
+        fired = true;
+        return (4, 7.2);
+    }
+
+    shared independent idempotent method s_indep_idemp_0() {
+        fired = true;
+    }
+
+    shared independent idempotent method s_indep_idemp_1() -> (int) {
+        fired = true;
+        return 4;
+    }
+
+    shared independent idempotent method s_indep_idemp_2() -> (int, double) {
+        fired = true;
+        return (4, 7.2);
+    }
+}
+
+is t;
+
+method test() throws {
+    local int i = 0;
+    local double j = 0;
+    idemp_0();
+    assert fired;
+    fired = false;
+    idemp_0();
+    assert !fired;
+    i = idemp_1();
+    assert fired && i == 4;
+    fired = false;
+    i = 0;
+    i = idemp_1();
+    assert !fired && i == 4;
+    i = 0;
+    (i, j) = idemp_2();
+    assert fired && i == 4 && j == 7.2;
+    i = j = 0;
+    fired = false;
+    (i, j) = idemp_2();
+    assert !fired && i == 4 && j == 7.2;
+    i = j = 0;
+
+    indep_idemp_0();
+    assert fired;
+    fired = false;
+    indep_idemp_0();
+    assert !fired;
+    i = indep_idemp_1();
+    assert fired && i == 4;
+    fired = false;
+    i = 0;
+    i = indep_idemp_1();
+    assert !fired && i == 4;
+    i = 0;
+    (i, j) = indep_idemp_2();
+    assert fired && i == 4 && j == 7.2;
+    i = j = 0;
+    fired = false;
+    (i, j) = indep_idemp_2();
+    assert !fired && i == 4 && j == 7.2;
+    i = j = 0;
+
+    s_idemp_0();
+    assert fired;
+    fired = false;
+    s_idemp_0();
+    assert !fired;
+    i = s_idemp_1();
+    assert fired && i == 4;
+    fired = false;
+    i = 0;
+    i = s_idemp_1();
+    assert !fired && i == 4;
+    i = 0;
+    (i, j) = s_idemp_2();
+    assert fired && i == 4 && j == 7.2;
+    i = j = 0;
+    fired = false;
+    (i, j) = s_idemp_2();
+    assert !fired && i == 4 && j == 7.2;
+    i = j = 0;
+
+    s_indep_idemp_0();
+    assert fired;
+    fired = false;
+    s_indep_idemp_0();
+    assert !fired;
+    i = s_indep_idemp_1();
+    assert fired && i == 4;
+    fired = false;
+    i = 0;
+    i = s_indep_idemp_1();
+    assert !fired && i == 4;
+    i = 0;
+    (i, j) = s_indep_idemp_2();
+    assert fired && i == 4 && j == 7.2;
+    i = j = 0;
+    fired = false;
+    (i, j) = s_indep_idemp_2();
+    assert !fired && i == 4 && j == 7.2;
+    i = j = 0;
+}

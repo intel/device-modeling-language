@@ -1,0 +1,113 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+import "testing.dml";
+
+extern int sprintf(char *str, const char *format, ...);
+
+template mopq {
+    independent method M(char *buf) default {
+        sprintf(buf, "default M");
+    }
+
+    independent method O(char *buf, int x) default {
+        sprintf(buf, "default O %d", x);
+    }
+
+    independent method P() -> (int, int) default {
+        return (1, 2);
+    }
+}
+
+is mopq;
+
+export M as "ext_M";
+
+independent method M(char *buf) {
+    local int n = sprintf(buf, "overridden M;");
+    default(buf + n);
+}
+
+independent method O(char *buf, int y) {
+    local int n = sprintf(buf, "overridden O %d;", y);
+    default(buf + n, y+1);
+}
+
+independent method P() -> (int, int) {
+    local int i;
+    local int j;
+    (i, j) = default();
+    return (j, i);
+}
+
+template t is (device, model_init) {
+    param m_companion : int;
+    param m_companion = 4;
+
+    shared independent idempotent method th_companion() -> (int) throws {
+        throw;
+    }
+
+    shared independent method m() -> (int) default {
+        return this.n() + m_companion;
+    }
+    shared independent method n() -> (int) default {
+        return 1;
+    }
+    shared independent method th() -> (int) throws default {
+    //     return this.n() + *th_companion;
+    // }
+
+    // independent method model_init() {
+        local int c;
+        try {
+            c = th_companion();
+        } catch {
+            c = 4;
+        }
+        return this.n() + c;
+    }
+}
+
+template u is t {
+    shared independent method m() -> (int) default {
+        return default() + 8;
+    }
+    shared independent method n() -> (int) default {
+        return default() + 2;
+    }
+    shared independent method th() -> (int) throws default {
+        local int n;
+        n = default();
+        return n + 8;
+    }
+}
+
+is u;
+
+
+method test() throws {
+    local char buf[50];
+    M(buf);
+    /// GREP \[obj info\] overridden M;default M
+    log info: "%s", buf;
+    O(buf, 2);
+    /// GREP \[obj info\] overridden O 2;default O 3
+    log info: "%s", buf;
+    local int i;
+    local int j;
+    (i, j) = P();
+    expect(i == 2 && j == 1, "P");
+    expect(cast(dev, t).n() == 3, "n");
+    expect(cast(dev, t).m() == 15, "m");
+    local int k;
+    try {
+        k = cast(dev, t).th();
+    } catch {
+        fail("unexpected throw");
+    }
+    expect(k == 15, "k");
+}

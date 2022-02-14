@@ -243,7 +243,8 @@ def generate_structfile(device, filename, outprefix):
             out("extern %s;\n"
                 % func.rettype.declaration(
                     "%s(%s)" % (name,
-                                ", ".join(["conf_object_t *_obj"]
+                                ", ".join((["conf_object_t *_obj"]
+                                           * (not func.independent))
                                           + [t.declaration(n)
                                              for (n, t) in func.cparams[1:]]))))
     emit_guard_end(filename)
@@ -319,6 +320,9 @@ def generate_hfile(device, headers, filename):
     out('\n')
 
     for (name, t) in list(dml.globals.traits.items()):
+        for method in t.method_impls.values():
+            if method.idempotent:
+                method.idemp_outs_struct.print_struct_definition()
         t.type().print_vtable_struct_declaration()
     out('\n')
 
@@ -1114,6 +1118,9 @@ def generate_register_events(device):
     for (method, _) in list(simple_events.items()):
         add_variable_declaration(
             'event_class_t *%s' % (crep.get_evclass(method),))
+    # Body of function is in class-context, so ensure generated code
+    # does not use _dev
+    crep.in_static_context = True
     start_function_definition('void _register_events(conf_class_t *class)')
     out('{\n', postindent = 1)
     if not events and not simple_events:
@@ -1142,6 +1149,7 @@ def generate_register_events(device):
 
     out('}\n\n', preindent = -1)
     splitting_point()
+    crep.in_static_context = False
 
 def generate_events(device):
     events = device.get_recursive_components('event')
@@ -1353,8 +1361,17 @@ def generate_initialize(device):
 
     # Initialize table for tracking log-once feature
     out('ht_init_int_table(&(_dev->_subsequent_log_ht));\n')
+    out('ht_init_int_table(&(_dev->_shared_idemp_ht));\n')
 
     out('return _obj;\n')
+    out('}\n\n', preindent = -1)
+
+def generate_model_initialize(device):
+    start_function_definition('void _model_init()')
+    out('{\n', postindent = 1)
+    codegen_inline_byname(device, (), '_model_init', [], [],
+                          device.site).toc()
+    reset_line_directive()
     out('}\n\n', preindent = -1)
 
 def generate_dealloc(device):
@@ -1423,14 +1440,18 @@ def generate_deinit(device):
                                           device.site))
     # Free the tables used for log_once after all calls into device code
     # are done
-    table_ptr = TPtr(TNamed("ht_int_table_t"))
-    code.append(mkExpressionStatement(
-        device.site,
-        mkApply(device.site,
-                mkLit(device.site, "_free_table",
-                      TFunction([table_ptr], TVoid())),
-                [mkLit(device.site, '&(_dev->_subsequent_log_ht)', table_ptr)]
-                )))
+    def mkFreeTable(target, free_vals):
+        table_ptr = TPtr(TNamed("ht_int_table_t"))
+        return mkExpressionStatement(
+            device.site,
+            mkApply(device.site,
+                    mkLit(device.site, "_free_table",
+                          TFunction([table_ptr, TBool()], TVoid())),
+                    [mkLit(device.site, f'&(_dev->{target})', table_ptr),
+                     mkBoolConstant(device.site, free_vals)]
+                    ))
+    code.append(mkFreeTable('_subsequent_log_ht', False))
+    code.append(mkFreeTable('_shared_idemp_ht', True))
     code = mkCompound(device.site, declarations(scope) + code)
     code.toc()
     out('}\n\n', preindent = -1)
@@ -1689,6 +1710,8 @@ def generate_init(device, initcode, outprefix):
     out('_initialize_traits();\n')
     out('_initialize_identity_ht();\n')
     out('_register_events(class);\n')
+    if dml.globals.dml_version != (1, 2):
+        out('_model_init();\n')
 
     # initcode is independently indented
     out(initcode.buf, preindent = -1, postindent = 1)
@@ -1713,21 +1736,24 @@ def generate_init(device, initcode, outprefix):
     splitting_point()
 
 def generate_extern_trampoline(exported_name, func):
-    params = [("_obj", TPtr(TNamed("conf_object_t")))] + func.cparams[1:]
+    params = (func.cparams if func.independent else
+              [("_obj", TPtr(TNamed("conf_object_t")))] + func.cparams[1:])
     out("extern %s\n" % (func.rettype.declaration(
                          "%s(%s)" % (exported_name,
                                      ", ".join(t.declaration(n)
                                                for (n, t) in params)))))
     out("{\n", postindent=1)
-    (name, typ) = func.cparams[0]
-    out("%s = (%s)_obj;\n" % (typ.declaration(name), typ.declaration("")))
+    if not func.independent:
+        (name, typ) = func.cparams[0]
+        out("%s = (%s)_obj;\n" % (typ.declaration(name), typ.declaration("")))
     out("%s%s(%s);\n" % ("" if func.rettype.void
                          else func.rettype.declaration("result") + " = ",
                          func.get_cname(),
                          ", ".join(n for (n, t) in func.cparams)))
-    output_dml_state_change(name)
+    if not func.independent:
+        output_dml_state_change(name)
     if not func.rettype.void:
-        out("return result;")
+        out("return result;\n")
     out("}\n", preindent=-1)
 
 def generate_extern_trampoline_dml12(exported_name, func):
@@ -1778,7 +1804,7 @@ def generate_trait_method(m):
     code.toc_inline()
     out('}\n', preindent=-1)
 
-def generate_adjustor_thunk(traitname, name, inp, outp, throws,
+def generate_adjustor_thunk(traitname, name, inp, outp, throws, independent,
                             vtable_path, def_path, hardcoded_impl=None):
     generated_name = "__adj_%s__%s__%s" % (
         traitname, '__'.join(t.name for t in vtable_path), name)
@@ -1786,10 +1812,14 @@ def generate_adjustor_thunk(traitname, name, inp, outp, throws,
     out('static ' + rettype.declaration('\n%s' % (generated_name,)))
     vtable_trait = vtable_path[-1]
     assert vtable_trait is def_path[-1]
-    inargs = c_inargs(vtable_trait.implicit_args() + inp, outp, throws)
-    out('(%s)\n{\n' % (", ".join(t.declaration(n) for (n, t) in inargs)),
+    implicit_inargs = vtable_trait.implicit_args()
+    preargs = crep.maybe_dev_arg(independent) + implicit_inargs
+    inargs = c_inargs(inp, outp, throws)
+    out('(%s)\n{\n' % (", ".join(t.declaration(n) for (n, t) in (preargs
+                                                                 + inargs))),
         postindent=1)
-    (vt_name, vtable_trait_type) = inargs[1]
+    # TODO should ideally be agnostic of what implicit_inargs is
+    [(vt_name, vtable_trait_type)] = implicit_inargs
     assert vtable_trait_type.trait is vtable_trait
     out('%s.trait = &((struct _%s *) DOWNCAST(%s, %s, %s).trait)->%s;\n' % (
         vt_name, cident(traitname), vt_name, cident(traitname),
@@ -1799,8 +1829,8 @@ def generate_adjustor_thunk(traitname, name, inp, outp, throws,
         out('return ')
     fun = hardcoded_impl or ('((struct _%s *) %s.trait)->%s'
                              % (cident(vtable_trait.name), vt_name, name))
-    out('%s(_dev, %s);\n' % (fun, ", ".join([vt_name] + [
-        name for (name, _) in inargs[2:]])))
+    out('%s(%s);\n' % (fun, ", ".join(crep.maybe_dev(independent) + [vt_name]
+                                      + [name for (name, _) in inargs])))
     out('}\n', preindent=-1)
     return generated_name
 
@@ -1879,11 +1909,12 @@ def method_tinit_arg(trait, parent, name, scrambled_name):
             # impl_path[0] is a direct parent which provides
             # the correct default implementation
             assert impl_path[0] != parent
-            (_, inp, outp, throws) = vtable_trait.vtable_methods[name]
+            (_, inp, outp, throws,
+             independent, _) = vtable_trait.vtable_methods[name]
             method_impl = impl_trait.method_impls[name]
             thunk = generate_adjustor_thunk(
-                trait.name, name, inp, outp, throws, canonical_path,
-                impl_path,
+                trait.name, name, inp, outp, throws, independent,
+                canonical_path, impl_path,
                 method_impl.cname())
             if not method_impl.overridable:
                 # in this case, 'name' is not a parameter of this
@@ -1896,7 +1927,8 @@ def method_tinit_arg(trait, parent, name, scrambled_name):
         # not on canonical path; need to create an adjustor thunk
         # that trampolines to the implementation on the canonical path
         vtable_path = (parent,) + parent.ancestry_paths[vtable_trait][0]
-        (_, inp, outp, throws) = vtable_trait.vtable_methods[name]
+        (_, inp, outp, throws, independent, _) \
+            = vtable_trait.vtable_methods[name]
         # Avoid an indirect call in the adjustor thunk, for
         # methods that are not overridable
         if impl_trait and not impl_trait.method_impls[name].overridable:
@@ -1910,7 +1942,8 @@ def method_tinit_arg(trait, parent, name, scrambled_name):
             hardcoded_fun = None
             def_path = canonical_path
         thunk = generate_adjustor_thunk(
-            trait.name, name, inp, outp, throws, vtable_path, def_path,
+            trait.name, name, inp, outp, throws, independent,
+            vtable_path, def_path,
             hardcoded_fun)
         if parent.implements(impl_trait):
             assert name in tinit_args(trait)
@@ -1934,7 +1967,9 @@ occurrence of the method in the vtable. The _tinit_* function is
 responsible for filling in adjustor thunks in the remaining vtable
 fields.
     '''
-
+    # Body of the function is in static context, ensure generated code
+    # does not use _dev
+    crep.in_static_context = True
     # prevent argument names from shadowing trait types
     def scramble_argname(name):
         return "_%s_%s" % (trait.name, name)
@@ -1978,8 +2013,10 @@ fields.
         vtable_trait = trait.ancestor_vtables.get(name, trait)
         member_kind = trait.member_kind(name)
         if member_kind == 'method':
-            (_, inp, outp, throws) = vtable_trait.vtable_methods[name]
-            mtype = vtable_trait.vtable_method_type(inp, outp, throws)
+            (_, inp, outp, throws, independent, _) \
+                = vtable_trait.vtable_methods[name]
+            mtype = vtable_trait.vtable_method_type(inp, outp, throws,
+                                                    independent)
             out(', %s' % (mtype.declaration(scrambled_name),))
         elif member_kind == 'parameter':
             (site, typ) = vtable_trait.vtable_params[name]
@@ -1996,6 +2033,7 @@ fields.
     for tinit_call in tinit_calls:
         out(tinit_call)
     out("}\n", preindent=-1)
+    crep.in_static_context = False
 
 def trait_trampoline_name(method, vtable_trait):
     return "%s__trampoline_from_%s" % (
@@ -2061,7 +2099,8 @@ def generate_trait_trampoline(method, vtable_trait):
     explicit_inargs = c_inargs(list(method.inp), method.outp, method.throws)
     inparams = ", ".join(
         t.declaration(n)
-        for (n, t) in implicit_inargs + explicit_inargs)
+        for (n, t) in (crep.maybe_dev_arg(method.independent) + implicit_inargs
+                       + explicit_inargs))
     rettype = c_rettype(method.outp, method.throws)
 
     # guaranteed to exist; created by ObjTraits.mark_referenced
@@ -2070,7 +2109,7 @@ def generate_trait_trampoline(method, vtable_trait):
         rettype.declaration('%s(%s)' % (
             trait_trampoline_name(method, vtable_trait), inparams))),
         postindent=1)
-    [_, (tname, ttype)] = implicit_inargs
+    [(tname, ttype)] = implicit_inargs
     site = method.site
     obj = method.parent
     path = obj.traits.ancestry_paths[vtable_trait][0]
@@ -2090,8 +2129,7 @@ def generate_trait_trampoline(method, vtable_trait):
             obj.dimsizes[dim]), TInt(32, True))
         for dim in range(obj.dimensions)]
     args = [mkLit(site, n, t) for (n, t) in explicit_inargs]
-    call_expr = mkcall_method(
-        site, func.cfunc_expr(site), indices)(args)
+    call_expr = mkcall_method(site, func, indices)(args)
     if not rettype.void:
         out('return ')
     out('%s;\n' % call_expr.read())
@@ -2258,7 +2296,7 @@ def generate_alloc_trait_vtables(node):
         if subnode.traits:
             for trait in subnode.traits.referenced:
                 name = subnode.traits.vtable_cname(trait)
-                out(f'{name} = MM_MALLOC(1, typeof(*{name}));\n')
+                out(f'{name} = MM_ZALLOC(1, typeof(*{name}));\n')
     out('}\n', preindent=-1)
     splitting_point()
 
@@ -2271,7 +2309,11 @@ def generate_init_trait_vtables(node, param_values):
         generate_tinit(trait)
     for subnode in flatten_object_subtree(node):
         generate_trait_trampolines(subnode)
+    # These initialization calls are output into static context,
+    # so make sure they do not generate code that uses _dev
+    crep.in_static_context = True
     init_calls = init_trait_vtables_for_node(node, param_values, (), ())
+    crep.in_static_context = False
     by_dims = {}
     for (dims, call) in init_calls:
         by_dims.setdefault(dims, []).append(call)
@@ -2440,6 +2482,8 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     if dml.globals.dml_version != (1, 2) or dml.globals.state_change_dml12:
         generate_state_notify(device)
         generate_state_existence_callback(device)
+    if dml.globals.dml_version != (1, 2):
+        generate_model_initialize(device)
     generate_alloc(device)
     generate_initialize(device)
     generate_finalize(device)
@@ -2450,10 +2494,14 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
         generate_reset(device, 'hard')
         generate_reset(device, 'soft')
 
+    # These parameter values are output into static context, so make sure
+    # the expressions do not use _dev
+    crep.in_static_context = True
     trait_param_values = {
         node: resolve_trait_param_values(node)
         for node in flatten_object_subtree(device)
         if node.traits}
+    crep.in_static_context = False
 
     for t in list(dml.globals.traits.values()):
         for m in list(t.method_impls.values()):

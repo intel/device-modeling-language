@@ -238,6 +238,187 @@ class ReturnExit(ExitHandler):
         assert retvals is not None, 'dml 1.2/1.4 mixup'
         return codegen_return(site, self.outp, self.throws, retvals)
 
+class IdempotentReturnFailure(Failure):
+    '''Generate boolean return statements to signal success. False
+    means success.'''
+
+    def __init__(self, site, mkRef, hasRan=True):
+        self.site = site
+        self.mkRef = mkRef
+
+    def fail(self, site):
+        ran = self.mkRef('ran', TInt(8, True))
+        threw = self.mkRef('threw', TBool())
+        stmts = [mkCopyData(site, mkIntegerLiteral(site, 1), ran),
+                 mkCopyData(site, mkBoolConstant(site, True), threw),
+                 mkReturn(site, mkBoolConstant(site, True))]
+        return mkCompound(site, stmts)
+    def nofail(self):
+        '''Return code that is used to leave the method successfully'''
+        ran = self.mkRef('ran', TInt(8, True))
+        threw = self.mkRef('threw', TBool())
+        stmts = [mkCopyData(site, mkIntegerLiteral(site, 1), ran),
+                 mkCopyData(site, mkBoolConstant(site, False), threw),
+                 mkReturn(site, mkBoolConstant(site, False))]
+        return mkCompound(site, stmts)
+
+class IdempotentReturnExit(ExitHandler):
+    def __init__(self, site, outp, throws, mkRef):
+        self.site = site
+        self.outp = outp
+        self.throws = throws
+        self.mkRef = mkRef
+
+    def codegen_exit(self, site, retvals):
+        ran = self.mkRef('ran', TInt(8, True))
+        stmts = [mkCopyData(site, mkIntegerLiteral(site, 1), ran)]
+        if self.throws:
+            threw = self.mkRef('threw', TBool())
+            stmts.append(mkCopyData(site, mkBoolConstant(site, False), threw))
+        targets = []
+        for ((name, typ), val) in zip(self.outp, retvals):
+            target = self.mkRef(f'p_{name}', typ)
+            stmts.append(mkCopyData(site, val, target))
+            targets.append(target)
+        stmts.append(codegen_return(site, self.outp, self.throws, targets))
+        return mkCompound(site, stmts)
+
+class Idempotency():
+    def prelude(self):
+        pass
+    def exit_handler(self):
+        pass
+    def fail_handler(self):
+        pass
+
+class Idempotent(Idempotency):
+    def __init__(self, func, location):
+        self.func = func
+        self.method = func.method
+        self.static_dict = {}
+        for (name, typ) in ([(f'p_{name}', typ) for (name, typ) in func.outp]
+                            + [('ran', TInt(8, True))]
+                            + ([('threw', TBool())] if func.throws else [])):
+            self.static_dict[name] = make_static_var(
+                self.method.site, location, typ,
+                f'_{self.method.name}__{name}')
+    def mkRef(self, ref, typ):
+        expr = self.static_dict[ref]
+        assert safe_realtype(expr.ctype()).cmp(safe_realtype(typ)) == 0
+        return expr
+    def prelude(self):
+        return idempotency_common_prelude(
+            self.method.logname_anonymized(), self.method.site, self.func.outp,
+            self.func.throws, self.mkRef)
+    def exit_handler(self):
+        return IdempotentReturnExit(self.method.site, self.func.outp,
+                                    self.func.throws, self.mkRef)
+    def fail_handler(self):
+        return (IdempotentReturnFailure(self.method.rbrace_site, self.mkRef)
+                if self.func.throws else NoFailure(self.method.site))
+
+class IndependentIdempotent(Idempotency):
+    def __init__(self, func):
+        self.func = func
+        self.method = func.method
+
+    def mkRef(self, ref, typ):
+        return mkLit(self.method.site, f'_idemp__{ref}', typ)
+
+    def prelude(self):
+        stmts = [
+            mkInline(
+                self.method.site,
+                f'static {typ.declaration(f"_idemp__{name}")};')
+            for (name, typ) in (
+                [('ran', TInt(8, True))]
+                + ([('threw', TBool())] if self.func.throws else [])
+                + [(f'p_{name}', typ)
+                   for (name, typ) in self.func.outp])]
+        return stmts + idempotency_common_prelude(
+            self.method.logname_anonymized(), self.method.site, self.func.outp,
+            self.func.throws, self.mkRef)
+    def exit_handler(self):
+        return IdempotentReturnExit(self.method.site, self.func.outp,
+                                    self.func.throws, self.mkRef)
+    def fail_handler(self):
+        return (IdempotentReturnFailure(self.method.rbrace_site, self.mkRef)
+                if self.func.throws else NoFailure(self.method.site))
+
+class SharedIdempotent(Idempotency):
+    count = 0
+    def __init__(self, method):
+        self.method = method
+        self.id = SharedIdempotent.count
+        SharedIdempotent.count += 1
+
+    def mkRef(self, ref, typ):
+        return mkLit(self.method.site, f'_idemp_outs->{ref}', typ)
+    def prelude(self):
+        idemp_outs_ptr = TPtr(self.method.idemp_outs_struct)
+        site = self.method.site
+        fetch_outs_call = mkLit(
+            site,
+            '_get_shared_idempotent_outs(&_dev->_shared_idemp_ht,'
+            + f' _identity_to_key(_{cident(self.method.trait.name)}.id), '
+            + f'{self.id}, sizeof(*_idemp_outs))',
+            idemp_outs_ptr)
+        outs_decl = mkDeclaration(
+            site, '_idemp_outs',
+            TPtr(self.method.idemp_outs_struct),
+            init=ExpressionInitializer(fetch_outs_call), unused=True)
+
+        return [outs_decl] + idempotency_common_prelude(
+            self.method.name, site, self.method.outp, self.method.throws,
+            self.mkRef)
+    def exit_handler(self):
+        return IdempotentReturnExit(self.method.site, self.method.outp,
+                                    self.method.throws, self.mkRef)
+    def fail_handler(self):
+        return (IdempotentReturnFailure(self.method.rbrace_site, self.mkRef)
+                if self.method.throws else NoFailure(self.method.site))
+
+class SharedIndependentIdempotent(Idempotency):
+    def __init__(self, method):
+        self.method = method
+    def mkRef(self, ref, typ):
+        traitname = cident(self.method.trait.name)
+        return mkLit(self.method.site,
+                     f'((struct _{traitname} *) _{traitname}.trait)'
+                     + f'->_{self.method.name}_outs.{ref}', typ)
+    def prelude(self):
+        return idempotency_common_prelude(
+            self.method.name, self.method.site, self.method.outp,
+            self.method.throws, self.mkRef)
+    def exit_handler(self):
+        return IdempotentReturnExit(self.method.site, self.method.outp,
+                                    self.method.throws, self.mkRef)
+    def fail_handler(self):
+        return (IdempotentReturnFailure(self.method.rbrace_site, self.mkRef)
+                if self.method.throws else NoFailure(self.method.site))
+
+def idempotency_common_prelude(name, site, outp, throws, mkRef):
+    stmts = []
+    if throws:
+        stmts.append(
+            mkIf(site, mkRef('threw', TBool()),
+                 mkReturn(site, mkBoolConstant(site, True))))
+    stmts.append(
+        codegen_return(site, outp, throws,
+                       [mkRef(f'p_{pname}', ptype)
+                        for (pname, ptype) in outp]))
+    ran = mkRef('ran', TInt(8, True))
+    unrun   = [mkCase(site, mkIntegerLiteral(site, 0)),
+               mkCopyData(site, mkIntegerConstant(site, -1, True), ran),
+               mkBreak(site)]
+    has_run = [mkCase(site, mkIntegerLiteral(site, 1))] + stmts
+    running = [mkDefault(site),
+               mkInline(site, f'_idempotent_recursion("{name}");')]
+    return [mkSwitch(site,
+                 mkRef('ran', TInt(8, True)),
+                 mkCompound(site, unrun + has_run + running))]
+
+
 def declarations(scope):
     "Get all local declarations in a scope as a list of Declaration objects"
     decls = []
@@ -1365,32 +1546,40 @@ def stmt_session(stmt, location, scope):
                 init = None
         check_shadowing(scope, name, stmt.site)
 
-        # generate a nested array of variables, indexed into by
-        # the dimensions of the method dimensions
-        static_sym_type = etype
-        for dimsize in reversed(location.method().dimsizes):
-            static_sym_type = TArray(static_sym_type,
-                                     mkIntegerConstant(stmt.site, dimsize,
-                                                       False))
-            # initializer in methods cannot currently depend on indices
-            # so we can replicate the same initializer for all
-            # slots in the array.
-            # TODO: it should be possible to support
-            # index-dependent initialization now, though
-            if init is not None:
-                init = CompoundInitializer(stmt.site, [init] * dimsize)
-        static_sym_name = dml.globals.device.get_unique_static_name(name)
-        static_sym = StaticSymbol(static_sym_name, static_sym_name,
-                              static_sym_type, stmt.site, init, stmt)
-        static_var_expr = mkStaticVariable(stmt.site, static_sym)
-        for idx in location.indices:
-            static_var_expr = mkIndex(stmt.site, static_var_expr, idx)
+        static_var_expr = make_static_var(stmt.site, location, etype, name,
+                                          init, stmt)
         local_sym = ExpressionSymbol(name, static_var_expr, stmt.site)
 
         scope.add(local_sym)
-        dml.globals.device.add_static_var(static_sym)
 
     return []
+
+def make_static_var(site, location, static_sym_type, name, init = None,
+                    stmt = False, saved = False):
+    # generate a nested array of variables, indexed into by
+    # the dimensions of the method dimensions
+    for dimsize in reversed(location.method().dimsizes):
+        static_sym_type = TArray(static_sym_type,
+                                 mkIntegerConstant(site, dimsize, False))
+        # initializer in methods cannot currently depend on indices
+        # so we can replicate the same initializer for all
+        # slots in the array.
+        # TODO: it should be possible to support
+        # index-dependent initialization now, though
+        if init is not None:
+            init = CompoundInitializer(site, [init] * dimsize)
+    static_sym_name = dml.globals.device.get_unique_static_name(name)
+    static_sym = StaticSymbol(static_sym_name, static_sym_name,
+                              static_sym_type, site, init, stmt)
+    static_var_expr = mkStaticVariable(site, static_sym)
+    for idx in location.indices:
+        static_var_expr = mkIndex(site, static_var_expr, idx)
+
+    dml.globals.device.add_static_var(static_sym)
+    if saved:
+        saved_method_variables.setdefault(location.method(), []).append(
+            (static_sym, name))
+    return static_var_expr
 
 @statement_dispatcher
 def stmt_saved(stmt, location, scope):
@@ -1439,32 +1628,11 @@ def stmt_saved(stmt, location, scope):
             cname = node.name + "_" + cname
             node = node.parent
 
-        # generate a nested array of variables, indexed into by
-        # the dimensions of the method dimensions
-        static_sym_type = etype
-        for dimsize in reversed(location.method().dimsizes):
-            static_sym_type = TArray(static_sym_type,
-                                     mkIntegerConstant(stmt.site, dimsize,
-                                                       False))
-            # initializer in methods cannot currently depend on indices
-            # so we can replicate the same initializer for all
-            # slots in the array.
-            # TODO: it should be possible to support
-            # index-dependent initialization now, though
-            if init is not None:
-                init = CompoundInitializer(stmt.site, [init] * dimsize)
-        static_sym_name = dml.globals.device.get_unique_static_name(name)
-        static_sym = StaticSymbol(static_sym_name, static_sym_name,
-                                  static_sym_type, stmt.site, init, stmt)
-        static_var_expr = mkStaticVariable(stmt.site, static_sym)
-        for idx in location.indices:
-            static_var_expr = mkIndex(stmt.site, static_var_expr, idx)
+        static_var_expr = make_static_var(stmt.site, location, etype, name,
+                                          init, stmt, True)
         local_sym = ExpressionSymbol(name, static_var_expr, stmt.site)
-        scope.add(local_sym)
 
-        dml.globals.device.add_static_var(static_sym)
-        saved_method_variables.setdefault(location.method(), []).append(
-            (static_sym, name))
+        scope.add(local_sym)
     return []
 
 @statement_dispatcher
@@ -1770,7 +1938,7 @@ def stmt_return(stmt, location, scope):
     [inits] = stmt.args
     if isinstance(ExitHandler.current, GotoExit_dml14):
         outp_typs = [var.ctype() for var in ExitHandler.current.outvars]
-    elif isinstance(ExitHandler.current, ReturnExit):
+    elif isinstance(ExitHandler.current, (ReturnExit, IdempotentReturnExit)):
         outp_typs = [typ for (_, typ) in ExitHandler.current.outp]
     else:
         raise ICE(stmt.site, ("Unexpected ExitHandler "
@@ -2315,14 +2483,16 @@ def verify_args(site, inp, outp, inargs, outargs):
             return False
     return True
 
-def mkcall_method(site, fun, indices):
+def mkcall_method(site, func, indices):
     for i in indices:
         if isinstance(i, NonValue):
             raise i.exc()
+    from .crep import dev
+    devarg = ([] if func.independent
+              else [mkLit(site, dev(site),
+                          TDevice(crep.structtype(dml.globals.device)))])
     return lambda args: mkApply(
-        site, fun,
-        [mkLit(site, '_dev', TDevice(crep.structtype(dml.globals.device)))]
-        + list(indices) + args)
+        site, func.cfunc_expr(site), devarg + list(indices) + args)
 
 def common_inline(site, method, indices, inargs, outargs):
     if not verify_args(site, method.inp, method.outp, inargs, outargs):
@@ -2353,10 +2523,11 @@ def common_inline(site, method, indices, inargs, outargs):
         inp = [func.inp[i] for i in used_args]
 
         return codegen_call_stmt(site, func.method.name,
-                                 mkcall_method(site,
-                                               func.cfunc_expr(site),
-                                               indices),
+                                 mkcall_method(site, func, indices),
                                  inp, func.outp, func.throws, inargs, outargs)
+
+    if not method.independent:
+        crep.require_dev(site)
 
     with NoLoopContext():
         res = codegen_inline(site, method, indices, inargs, outargs)
@@ -2650,10 +2821,11 @@ class MethodFunc(object):
     will result in a separate MethodFunc instance with the constant
     parameter removed from the signature, and the constant propagated
     into the method body.'''
-    __slots__ = ('method', 'inp', 'outp', 'throws',
-                 'cparams', 'rettype', 'suffix')
+    __slots__ = ('method', 'inp', 'outp', 'throws', 'independent',
+                 'idempotent', 'cparams', 'rettype', 'suffix')
 
-    def __init__(self, method, inp, outp, throws, cparams, suffix):
+    def __init__(self, method, inp, outp, throws, independent, idempotent,
+                 cparams, suffix):
         '''(inp, outp, throws) describe the method's signature; cparams
         describe the generated C function parameters corresponding to
         inp. If some method parameters are constant propagated, then
@@ -2666,6 +2838,8 @@ class MethodFunc(object):
         self.inp = tuple(inp)
         self.outp = tuple(outp)
         self.throws = throws
+        self.independent = independent
+        self.idempotent = idempotent
         self.suffix = suffix
 
         # rettype is the return type of the C function
@@ -2709,9 +2883,9 @@ def canonicalize_signature(signature):
             tuple(str(t) for t in outtypes))
 
 def implicit_params(method):
-    structtype = TDevice(crep.structtype(dml.globals.device))
-    return [("_dev", structtype)] + [('_idx%d' % i, TInt(32, False))
-                                     for i in range(method.dimensions)]
+    return (crep.maybe_dev_arg(method.independent)
+            + [('_idx%d' % i, TInt(32, False))
+               for i in range(method.dimensions)])
 
 def untyped_method_instance(method, signature):
     """Return the MethodFunc instance for a given signature"""
@@ -2729,8 +2903,8 @@ def untyped_method_instance(method, signature):
 
     cparams = [(n, t) for (n, t) in inp if isinstance(t, DMLType)]
 
-    func = MethodFunc(method, inp, outp, method.throws, cparams,
-                      "__"+str(len(method.funcs)))
+    func = MethodFunc(method, inp, outp, method.throws, method.independent,
+                      method.idempotent, cparams, "__"+str(len(method.funcs)))
 
     method.funcs[canon_signature] = func
     return func
@@ -2742,7 +2916,7 @@ def method_instance(method):
         return method.funcs[None]
 
     func = MethodFunc(method, method.inp, method.outp, method.throws,
-                      method.inp, "")
+                      method.independent, method.idempotent, method.inp, "")
 
     method.funcs[None] = func
     return func
@@ -2775,10 +2949,17 @@ def codegen_method_func(func):
     inp = [(n, t) for (n, t) in func.inp if isinstance(t, DMLType)]
 
     with ErrorContext(method):
+        location = Location(method, indices)
+        if func.idempotent:
+            idempotency = (IndependentIdempotent(func) if func.independent
+                           else Idempotent(func, location))
+        else:
+            idempotency = None
         code = codegen_method(
-            method.site, inp, func.outp, func.throws,
-            method.astcode, method.default_method.default_sym(indices),
-            Location(method, indices), inline_scope, method.rbrace_site)
+            method.site, inp, func.outp, func.throws, func.independent,
+            idempotency, method.astcode,
+            method.default_method.default_sym(indices),
+            location, inline_scope, method.rbrace_site)
     return code
 
 def codegen_return(site, outp, throws, retvals):
@@ -2810,8 +2991,10 @@ def codegen_return(site, outp, throws, retvals):
     stmts.append(ret)
     return mkCompound(site, stmts)
 
-def codegen_method(site, inp, outp, throws, ast, default,
-                   location, fnscope, rbrace_site):
+def codegen_method(site, inp, outp, throws, independent, idempotency, ast,
+                   default, location, fnscope, rbrace_site):
+    static_context_before = crep.in_static_context
+    crep.in_static_context = static_context_before or independent
     for (arg, etype) in inp:
         fnscope.add_variable(arg, type=etype, site=site, make_unique=False)
     initializers = [get_initializer(site, parmtype, None, None, None)
@@ -2819,7 +3002,17 @@ def codegen_method(site, inp, outp, throws, ast, default,
 
     fnscope.add(default)
 
-    fail_handler = ReturnFailure(rbrace_site) if throws else NoFailure(site)
+    if idempotency:
+        prelude = idempotency.prelude
+        fail_handler = idempotency.fail_handler()
+        exit_handler = idempotency.exit_handler()
+    else:
+        def prelude():
+            return []
+        fail_handler = (ReturnFailure(rbrace_site) if throws
+                        else NoFailure(site))
+        exit_handler = (GotoExit_dml12() if ast.site.dml_version() == (1, 2)
+                        else ReturnExit(outp, throws))
 
     if ast.site.dml_version() == (1, 2):
         if throws:
@@ -2850,30 +3043,32 @@ def codegen_method(site, inp, outp, throws, ast, default,
             else:
                 code = []
 
-        exit_handler = GotoExit_dml12()
         with fail_handler, exit_handler:
             code.append(codegen_statement(ast, location, fnscope))
         if exit_handler.used:
             code.append(mkLabel(site, exit_handler.label))
         code.append(codegen_return(site, outp, throws, [
             lookup_var(site, fnscope, varname) for (varname, _) in outp]))
-        return mkCompound(site, code)
+        to_return = mkCompound(site, code)
     else:
-        exit_handler = ReturnExit(outp, throws)
         # manually deconstruct compound AST node, to make sure
         # top-level locals share scope with parameters
         assert ast.kind == 'compound'
         [subs] = ast.args
+        # TODO(lwaern) insert idempotency logic HERE for regular (independent)
+        # methods
         with fail_handler, exit_handler:
-            body = codegen_statements(subs, location, fnscope)
-        code = mkCompound(site, body)
-        if code.control_flow().fallthrough:
-            if outp:
-                report(ENORET(site))
-            elif throws:
-                return mkCompound(site, body + [mkReturn(
-                    site, mkBoolConstant(site, False))])
-        return code
+            body = prelude()
+            body.extend(codegen_statements(subs, location, fnscope))
+            code = mkCompound(site, body)
+            if code.control_flow().fallthrough:
+                if outp:
+                    report(ENORET(site))
+                else:
+                    code = mkCompound(site, body + [codegen_exit(site, [])])
+        to_return = code
+    crep.in_static_context = static_context_before
+    return to_return
 
 # Keep track of methods that we need to generate code for
 def mark_method_referenced(func):
@@ -2919,7 +3114,7 @@ def codegen_call_expr(site, meth_node, indices, args):
     func = method_instance(meth_node)
     mark_method_referenced(func)
     typecheck_inargs(site, args, func.inp, 'method')
-    return mkcall_method(site, func.cfunc_expr(site), indices)(args)
+    return mkcall_method(site, func, indices)(args)
 
 def codegen_call_traitmethod(site, expr, inargs, outargs):
     if not isinstance(expr, TraitMethodRef):
@@ -2949,9 +3144,7 @@ def codegen_call(site, meth_node, indices, inargs, outargs):
 
     mark_method_referenced(func)
     return codegen_call_stmt(site, func.method.name,
-                             mkcall_method(site,
-                                           func.cfunc_expr(site),
-                                           indices),
+                             mkcall_method(site, func, indices),
                              func.inp, func.outp, func.throws, inargs, outargs)
 
 def codegen_call_byname(site, node, indices, meth_name, inargs, outargs):

@@ -19,7 +19,30 @@ __all__ = (
     'ctype',
     'conf_obj',
     'cloggroup',
+    'dev',
+    'require_dev',
+    'in_static_context',
+    'maybe_dev',
+    'maybe_dev_arg',
     )
+
+in_static_context = False
+def dev(site):
+    require_dev(site)
+    return "_dev"
+
+def require_dev(site):
+    if in_static_context:
+        raise ESTATICVIOL(site)
+
+def maybe_dev(independent):
+    return [] if independent else ['_dev']
+
+def maybe_dev_arg(independent):
+    return ([] if independent
+            else [('_dev', TDevice(structtype(dml.globals.device)))])
+
+
 
 def cname(node):
     if dml.globals.dml_version != (1, 2):
@@ -158,15 +181,16 @@ def node_storage_type_dml12(node, site):
     else:
         raise ICE(site or node, "No storage type for a "+node.objtype)
 
-def conf_object(node, indices):
+def conf_object(site, node, indices):
     '''return a C expression for the conf_object_t* the given node belongs to'''
     while node.objtype not in ['bank', 'port', 'device', 'subdevice']:
         node = node.parent
     if node.objtype == 'device' or (dml.globals.dml_version == (1, 2)
                                     and node.name is None):
-        return '&_dev->obj'
+        return f'&{dev(site)}->obj'
     else:
-        return '_dev->%s' % cref_portobj(node, indices[:node.dimensions])
+        return '%s->%s' % (dev(site),
+                           cref_portobj(node, indices[:node.dimensions]))
 
 def cloggroup(name):
     if dml.globals.compat_dml12:

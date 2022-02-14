@@ -181,7 +181,13 @@ DML_eq(uint64 a, uint64 b)
                                                       __VA_ARGS__);})
 #define CALL_TRAIT_METHOD0(type, method, dev, traitref)                 \
         ({_traitref_t __tref = traitref;                                \
-          ((struct _ ## type *) __tref.trait)->method(dev, __tref);})   \
+          ((struct _ ## type *) __tref.trait)->method(dev, __tref);})
+#define CALL_INDEPENDENT_TRAIT_METHOD(type, method, traitref, ...)       \
+        ({_traitref_t __tref = traitref;                                      \
+          ((struct _ ## type *) __tref.trait)->method(__tref, __VA_ARGS__);})
+#define CALL_INDEPENDENT_TRAIT_METHOD0(type, method, traitref)     \
+    ({_traitref_t __tref = traitref;                                    \
+      ((struct _ ## type *) __tref.trait)->method(__tref);})
 
 #define _raw_load_uint8_be_t   UNALIGNED_LOAD_BE8
 #define _raw_load_uint16_be_t  UNALIGNED_LOAD_BE16
@@ -2402,14 +2408,42 @@ UNUSED static uint64 _select_log_level(ht_int_table_t *ht,
         return subsequent;
 }
 
+// The internal format for ht is:
+// dict(trait_identifier -> dict(method_idx -> outs_struct))
+UNUSED static void *_get_shared_idempotent_outs(
+    ht_int_table_t *ht, uint64 first_key, uint64 second_key, size_t size) {
+    ht_int_table_t *sub_table = ht_lookup_int(ht, first_key);
+    void *entry = sub_table ? ht_lookup_int(sub_table, second_key) : NULL;
+    if (!sub_table) {
+        sub_table = MM_MALLOC(1, ht_int_table_t);
+        ht_init_int_table(sub_table);
+        ht_insert_int(ht, first_key, sub_table);
+    }
+    if (!entry) {
+        entry = MM_ZALLOC(size, uint8);
+        ht_insert_int(sub_table, second_key, entry);
+    }
+    return entry;
+}
+
+
+UNUSED static void _idempotent_recursion(const char *name) {
+    char msg[512];
+    snprintf(msg, 512,
+             "Recursive call to idempotent method %s. "
+             "This is considered undefined behavior.", name);
+    VT_critical_error(msg, msg);
+}
+
 UNUSED static int _free_sub_table(ht_int_table_t *table,
-                                  uint64 key, void *val, void *_) {
-        ht_clear_int_table(table, false);
+                                  uint64 key, void *val, void *free_vals) {
+        ht_clear_int_table(table, free_vals != NULL);
         return 0;
 }
 
-UNUSED static void _free_table(ht_int_table_t *table) {
-        ht_for_each_entry_int(table, _free_sub_table, NULL);
+UNUSED static void _free_table(ht_int_table_t *table, bool free_vals) {
+        ht_for_each_entry_int(table, _free_sub_table,
+                              free_vals ? (void *)(uintptr_t)1 : NULL);
         ht_clear_int_table(table, true);
 }
 

@@ -32,6 +32,7 @@ __all__ = (
     'Location',
 
     'ExpressionSymbol',
+    'InvalidExpressionSymbol',
     'LiteralSymbol',
 
     'mkCompound',
@@ -194,6 +195,15 @@ class ExpressionSymbol(symtab.Symbol):
         expr = self.value.copy(site)
         expr.incref()
         return expr
+
+# HACK should not exist
+class InvalidExpressionSymbol(symtab.Symbol):
+    """A symbol that corresponds to an invalid expression"""
+    def __init__(self, name, mkError, site):
+        super(InvalidExpressionSymbol, self).__init__(name, value = mkError,
+                                                      site = site)
+    def expr(self, site):
+        raise self.value(site)
 
 class LiteralSymbol(symtab.Symbol):
     "A symbol with corresponds directly to an opaque C identifier"
@@ -530,7 +540,8 @@ def mkExpressionStatement(site, expr):
 class After(Statement):
     @auto_init
     def __init__(self, site, unit, delay, domains, method, eventinfo, indices,
-                 inargs): pass
+                 inargs):
+        crep.require_dev(site)
     def toc(self):
         self.linemark()
         objarg = '&_dev->obj'
@@ -2692,23 +2703,22 @@ def mkBitSlice(site, expr, msb, lsb, bitorder):
 class TraitMethodApplyIndirect(Expression):
     '''The C expression of a trait method call'''
     @auto_init
-    def __init__(self, site, traitref, methname, inargs, type): pass
+    def __init__(self, site, traitref, methname, independent, inargs, type):
+        if not independent:
+            crep.require_dev(site)
 
     def __str__(self):
         return '%s.%s(%s)' % (self.traitref, self.methname,
                               ', '.join(map(str, self.inargs)))
 
     def read(self):
-        if self.inargs:
-            return "CALL_TRAIT_METHOD(%s, %s, _dev, %s)" % (
-                cident(realtype(self.traitref.ctype()).trait.name),
-                self.methname,
-                ', '.join([arg.read()
-                           for arg in [self.traitref] + self.inargs]))
-        else:
-            return "CALL_TRAIT_METHOD0(%s, %s, _dev, %s)" % (
-                cident(realtype(self.traitref.ctype()).trait.name),
-                self.methname, self.traitref.read())
+        infix_independent = 'INDEPENDENT_' if self.independent else ''
+        suffix_noarg = '' if self.inargs else '0'
+        macro = f'CALL_{infix_independent}TRAIT_METHOD{suffix_noarg}'
+        args = (crep.maybe_dev(self.independent)
+                + [arg.read() for arg in [self.traitref] + self.inargs])
+        trait_name = cident(realtype(self.traitref.ctype()).trait.name)
+        return f"{macro}({trait_name}, {self.methname}, {', '.join(args)})"
 
 class TraitMethodApplyDirect(Expression):
     '''The C expression of a trait method call'''
@@ -2717,15 +2727,17 @@ class TraitMethodApplyDirect(Expression):
         # traitref is a reference to method's vtable trait
         assert realtype(traitref.ctype()).trait == methodref.vtable_trait
         assert methodref.__class__.__name__ == 'TraitMethod'
+        if not methodref.independent:
+            crep.require_dev(site)
 
     def __str__(self):
         return '%s(%s)' % (self.methodref, ', '.join(map(str, self.inargs)))
 
     def read(self):
-        return "%s(_dev, %s)" % (
+        return "%s(%s)" % (
             self.methodref.cname(),
-            ', '.join([arg.read()
-                       for arg in [self.traitref] + self.inargs]))
+            ', '.join(crep.maybe_dev(self.methodref.independent)
+                      + [arg.read() for arg in [self.traitref] + self.inargs]))
 
 class New(Expression):
     priority = 160 # f()
@@ -3331,7 +3343,8 @@ class TraitSessionRef(Expression):
     indirection is there as an easy way to make session references lvalues.'''
     priority = 140 # Cast.priority
     @auto_init
-    def __init__(self, site, traitref, name, type_): pass
+    def __init__(self, site, traitref, name, type_):
+        crep.require_dev(self.site)
 
     def __str__(self):
         return "&%s.%s" % (self.traitref, self.name)
@@ -3402,6 +3415,10 @@ class TraitMethodDirect(TraitMethodRef):
     def throws(self):
         return self.methodref.throws
 
+    @property
+    def independent(self):
+        return self.methodref.independent
+
     def call_expr(self, inargs, rettype):
         return TraitMethodApplyDirect(self.site, self.traitref,
                                       self.methodref, inargs, rettype)
@@ -3412,14 +3429,16 @@ class TraitMethodIndirect(TraitMethodRef):
     vtable. The expression cannot currently be referenced standalone;
     it needs to be called.'''
     @auto_init
-    def __init__(self, site, traitref, methname, inp, outp, throws): pass
+    def __init__(self, site, traitref, methname, inp, outp, throws,
+                 independent): pass
 
     def __str__(self):
         return "%s.%s" % (str(self.traitref), self.methname)
 
     def call_expr(self, inargs, rettype):
         return TraitMethodApplyIndirect(self.site, self.traitref,
-                                        self.methname, inargs, rettype)
+                                        self.methname, self.independent,
+                                        inargs, rettype)
 
 def lookup_component(site, base, indices, name, only_local):
     '''Lookup a name in object scope 'base' and return an
@@ -3558,6 +3577,7 @@ class SessionVariableRef(LValue):
         assert isinstance(indices, tuple)
         assert node.objtype in ('session', 'saved')
         self.type = node._type
+        crep.require_dev(site)
     def __str__(self):
         name = self.node.logname(self.indices)
         assert name
@@ -3690,8 +3710,9 @@ class StaticVariable(Variable):
     @auto_init
     def __init__(self, site, sym):
         assert_type(site, sym, symtab.StaticSymbol)
+        crep.require_dev(site)
     def read(self):
-        return '_dev->'+self.sym.value
+        return '_dev->%s' % (self.sym.value,)
 
 mkStaticVariable = StaticVariable
 
@@ -4012,7 +4033,9 @@ def mkInlinedParam(site, expr, name, type):
 class QName(Expression):
     type = TPtr(TNamed('char', const = True))
     @auto_init
-    def __init__(self, site, node, relative, indices): pass
+    def __init__(self, site, node, relative, indices):
+        if self.indices and not all(x.constant for x in self.indices):
+            crep.require_dev(site)
     def __str__(self):
         return dollar(self.site) + '%s.qname' % (self.node)
     def read(self):
@@ -4098,6 +4121,10 @@ mkHiddenQName = HiddenQName
 
 class DeviceObject(Expression):
     type = TPtr(TNamed('conf_object_t'))
+    @auto_init
+    def __init__(self, site):
+        crep.require_dev(site)
+
     def read(self):
         return "&_dev->obj"
 
@@ -4416,7 +4443,7 @@ def log_statement(site, node, indices, logtype, level, groups, fmt, *args):
                      TPtr(TInt(8, True, const=True))])
     fun = mkLit(site, logfunc, TFunction(inargtypes, TVoid(), varargs=True))
 
-    logobj = mkLit(site, crep.conf_object(node, indices),
+    logobj = mkLit(site, crep.conf_object(site, node, indices),
                    TPtr(TNamed("conf_object_t")))
     x = Apply(site, fun,
               lvl +

@@ -1,0 +1,91 @@
+/*
+  © 2021-2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+import "testing.dml";
+
+import "simics/devs/i2c.dml";
+
+connect ifaces {
+    interface i2c_bus { param required = true; }
+}
+
+attribute a is (int64_attr);
+
+template param_typed {
+    param p1 : int64;
+    param p2 : int64;
+}
+
+session int64 s;
+template param_val {
+    /// ERROR ESTATICVIOL
+    param p1 = a.val;
+    /// ERROR ESTATICVIOL
+    param p2 = s;
+
+    session int ts;
+
+    shared independent method sm() -> (int) {
+        /// ERROR ESTATICVIOL
+        log info: "r";
+        /// ERROR ESTATICVIOL
+        dependent();
+
+        local int i;
+        local int j;
+        local int k;
+        /// ERROR ESTATICVIOL
+        i = s;
+        /// ERROR ESTATICVIOL
+        j = ts;
+        /// ERROR ESTATICVIOL
+        j = this.ts;
+        return i + j + k;
+    }
+}
+
+port p is (param_typed, param_val);
+
+independent method q() -> (int) {
+    /// ERROR ESTATICVIOL
+    log info: "q";
+    /// ERROR ESTATICVIOL
+    dependent();
+    /// ERROR ESTATICVIOL
+    local int to_ret = s;
+    /// ERROR ESTATICVIOL
+    session int ses;
+    /// ERROR ESTATICVIOL
+    saved int sav;
+
+    /// ERROR ESTATICVIOL
+    local bool not_present = !ifaces.i2c_bus.start;
+
+    if (!not_present) {
+        /// ERROR ESTATICVIOL
+        to_ret += ifaces.i2c_bus.start(0);
+    }
+
+    /// ERROR ESTATICVIOL
+    increment(&to_ret);
+
+    return to_ret;
+}
+
+method dependent() {
+    return;
+}
+
+inline method increment(inline x) {
+    ++*x;
+}
+
+method test() throws {
+    local param_typed _p = cast(p, param_typed);
+    local int a = q() + p.sm();
+}

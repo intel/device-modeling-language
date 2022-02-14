@@ -1074,6 +1074,12 @@ class EIDXVAR(DMLError):
     def __init__(self, site, var):
         DMLError.__init__(self, site, var)
 
+class ESTATICVIOL(DMLError):
+    """Expressions that depend on values stored in a device instance cannot be
+    evaluated in a static context. For example; when initializing typed
+    template parameters."""
+    fmt = "cannot access device instance in static context"
+
 class EFARRSZ(DMLError):
     """
     The bit width must be identical across the elements of a field array.

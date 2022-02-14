@@ -484,6 +484,8 @@ def object_method_noinparams(t):
     '''method : METHOD maybe_extern objident method_outparams maybe_default compound_statement'''
     name = t[3]
     (inp, outp, throws) = ([], t[4], True)
+    independent = False
+    idempotent = False
     if logging.show_porting:
         i = min([4, 5, 6], key=lambda i: t.lexpos(i))
         report(PINPARAMLIST(site(t, i)))
@@ -500,30 +502,42 @@ def object_method_noinparams(t):
             ends_with_return))
 
     body = t[6]
-    t[0] = ast.method(site(t), name, (inp, outp, throws, body),
+    t[0] = ast.method(site(t), name,
+                      (inp, outp, throws, independent, idempotent, body),
                       t[5], t[2], lex_end_site(t, -1))
 
 @prod_dml14
 def object_method(t):
-    '''method : METHOD objident method_params_typed maybe_default compound_statement'''
-    name = t[2]
-    (inp, outp, throws) = t[3]
-    body = t[5]
-    t[0] = ast.method(site(t), name, (inp, outp, throws, body),
-                      t[4], False, lex_end_site(t, -1))
+    '''method : maybe_independent maybe_idempotent METHOD objident method_params_typed maybe_default compound_statement'''
+    name = t[4]
+    (inp, outp, throws) = t[5]
+    independent = t[1]
+    idempotent = t[2]
+    body = t[7]
+    if idempotent and inp:
+        report(ESYNTAX(site(t), None,
+                       'idempotent methods may not have input parameters'))
+        inp = []
+
+    t[0] = ast.method(site(t), name,
+                      (inp, outp, throws, independent, idempotent, body),
+                      t[6], False, lex_end_site(t, -1))
 
 @prod_dml14
 def object_inline_method(t):
     '''method : INLINE METHOD objident method_params_maybe_untyped maybe_default compound_statement'''
     name = t[3]
     (inp, outp, throws) = t[4]
+    independent = False
+    idempotent = False
     if all(typ for (_, asite, name, typ) in inp):
         # inline annotation would have no effect for fully typed methods.
         # We forbid it as a way to strongly discourage unneeded use of inline.
         report(ESYNTAX(site(t, 2), 'inline',
                        'only use inline if there are untyped arguments'))
     body = t[6]
-    t[0] = ast.method(site(t), name, (inp, outp, throws, body),
+    t[0] = ast.method(site(t), name,
+                      (inp, outp, throws, independent, idempotent, body),
                       t[5], False, lex_end_site(t, -1))
 
 @prod_dml12
@@ -533,6 +547,8 @@ def object_method(t):
     inp = t[5]
     outp = t[7]
     throws = t[8]
+    independent = False
+    idempotent = False
     if logging.show_porting and any(not typ for (_, _, name, typ) in inp):
         # some standard methods are assigned a type later on
         if name not in ['set', 'write']:
@@ -553,7 +569,8 @@ def object_method(t):
             ends_with_return))
 
     body = t[10]
-    t[0] = ast.method(site(t), name, (inp, outp, throws, body),
+    t[0] = ast.method(site(t), name,
+                      (inp, outp, throws, independent, idempotent, body),
                       t[9], t[2], lex_end_site(t, -1))
 
 @prod_dml12
@@ -652,8 +669,16 @@ def template_statement_obj(t):
 
 @prod_dml14
 def template_statement_shared_method(t):
-    '''template_stmt : SHARED METHOD shared_method'''
-    t[0] = [t[3]]
+    '''template_stmt : SHARED maybe_independent maybe_idempotent METHOD shared_method'''
+    (name, (inp, outp, throws), overridable, body, rbrace_site) = t[5]
+    independent = t[2]
+    idempotent = t[3]
+    if idempotent and inp:
+        report(ESYNTAX(site(t), None,
+                       'idempotent methods may not have input parameters'))
+        inp = []
+    t[0] = [ast.sharedmethod(site(t), name, inp, outp, throws, independent,
+                             idempotent, overridable, body, rbrace_site)]
 
 @prod_dml12
 def trait_template(t):
@@ -666,31 +691,48 @@ def trait_template(t):
             report(EISINTPL(stmt.site))
     t[0] = t[3]
 
+@prod_dml14
+def maybe_independent_no(t):
+    '''maybe_independent : '''
+    t[0] = False
+
+@prod_dml14
+def maybe_independent_yes(t):
+    '''maybe_independent : INDEPENDENT'''
+    t[0] = True
+
+@prod_dml14
+def maybe_idempotent_no(t):
+    '''maybe_idempotent : '''
+    t[0] = False
+
+@prod_dml14
+def maybe_idempotent_yes(t):
+    '''maybe_idempotent : IDEMPOTENT'''
+    t[0] = True
+
 @prod_dml12
 def trait_method(t):
     '''trait_method : METHOD shared_method'''
-    t[0] = t[2]
+    (name, (inp, outp, throws), overridable, body, rbrace_site) = t[2]
+    independent = False
+    idempotent = False
+    t[0] = ast.sharedmethod(site(t), name, inp, outp, throws, independent,
+                            idempotent, overridable, body, rbrace_site)
 
 @prod
 def shared_method_abstract(t):
     '''shared_method : ident method_params_typed SEMI'''
-    (inp, outp, throws) = t[2]
-    t[0] = ast.sharedmethod(site(t), t[1], inp, outp, throws, True, None,
-                            site(t, 3))
-
+    t[0] = (t[1], t[2], True, None, site(t, 3))
 @prod
 def shared_method_default(t):
     '''shared_method : ident method_params_typed DEFAULT compound_statement'''
-    (inp, outp, throws) = t[2]
-    t[0] = ast.sharedmethod(site(t), t[1], inp, outp, throws, True, t[4],
-                            lex_end_site(t, -1))
+    t[0] = (t[1], t[2], True, t[4], lex_end_site(t, -1))
 
 @prod
 def shared_method_final(t):
     '''shared_method : ident method_params_typed compound_statement'''
-    (inp, outp, throws) = t[2]
-    t[0] = ast.sharedmethod(site(t), t[1], inp, outp, throws, False, t[3],
-                            lex_end_site(t, -1))
+    t[0] = (t[1], t[2], False, t[3], lex_end_site(t, -1))
 
 @prod_dml12
 def param_(t):
@@ -844,7 +886,7 @@ def object_statement_bad_shared_method(t):
 
 @prod_dml14
 def bad_shared_method(t):
-    '''bad_shared_method : SHARED METHOD shared_method'''
+    '''bad_shared_method : SHARED maybe_independent maybe_idempotent METHOD shared_method'''
     report(ESYNTAX(site(t), 'shared',
                    'shared method declaration only permitted'
                    + ' in top level template block'))
