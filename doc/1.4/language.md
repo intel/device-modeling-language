@@ -1982,14 +1982,12 @@ The *conditional* is an expression with a constant boolean value.  It
 may reference parameters declared at the same level in the object
 hierarchy, or in parent levels.
 
-The *object declarations* are any number of declarations of
-objects, session variables, saved variables, methods,
-`in each` statements or other `#if` statements, but not
-parameters or `is` statements.  When the conditional is `true`
-(or if it's the else branch of a false conditional), the object
-declarations are treated as if they had appeared without any
-surrounding *#if*.  So the two following declarations are
-equivalent:
+The *object declarations* are any number of declarations of objects, session
+variables, saved variables, methods, or other `#if` statements, but not
+parameters, `is` statements, or `in each` statements . When the conditional is
+`true` (or if it's the else branch of a false conditional), the object
+declarations are treated as if they had appeared without any surrounding *#if*.
+So the two following declarations are equivalent:
 
 ```
 #if (true) {
