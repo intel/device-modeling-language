@@ -1644,6 +1644,49 @@ and inline methods remain mainly for compatibility reasons.
 In DML 1.4, methods can be `exported` using the
 [`export` declaration](#export-declarations).
 
+### Independent Methods
+
+Methods that do not rely on the particular instance of the device model may
+be declared `independent`:
+```
+independent method m(...) -> (...) [throws] {...}
+```
+[Exported](#export-declarations) independent methods do not have the input
+parameter corresponding to the device instance, allowing them to be called
+in greater number of contexts. The body of independent methods may not contain
+statements or expressions that rely on the device instance in any way; for
+example, `session` or `saved` variables may not be referenced, `after` and `log`
+statements may not be used, and non-`independent` may not be called.
+
+Within a template, `shared independent method`s may be declared. An example of
+this is the `model_init()` method of the
+[`model_init`](dml-builtins.html#model_init) template.
+
+### Idempotent Methods
+
+Methods can be declared `idempotent` as a means of memoization: after the
+first call of an idempotent method, all subsequent calls for the simulation
+session return the results of the first call without executing the body of the
+method. Idempotent methods are declared as follows:
+```
+[independent] idempotent method m() -> (...) [throws] {...}
+```
+Note that idempotent methods may not have any input parameters. If an idempotent
+method call throws, then subsequent calls will throw without executing the body.
+
+Results are cached per device instance, except for `independent idempotent`
+methods, where result caching is shared across all device instances. This
+mechanism can be used to compute device-independent data which is then shared
+across all instances of the device model.
+
+Within a template, both `shared idempotent method`s and
+`shared independent idempotent method`s may be declared. Result caching
+is done per-instance, and is not shared across template instances.
+
+(Indirectly) recursive idempotent method calls are not allowed; the result of
+such a call is undefined. Performing such a method call will result in a
+run-time critical error.
+
 ## Session variables
 
 A *session* declaration creates a number of named storage locations for
