@@ -288,4 +288,7 @@
       <tt>cancel_after()</tt> method, provided as part of the <tt>object</tt>
       template <bug number="SIMICS-17930"/>.
   </add-note></build-id>
+  <build-id value="next"><add-note> <tt>break</tt> may now be used within
+      <tt>foreach</tt> statements <bug number="SIMICS-18719"/>.
+  </add-note></build-id>
 </rn>

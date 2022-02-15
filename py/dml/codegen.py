@@ -109,19 +109,19 @@ class NoLoopContext(LoopContext):
     def break_(self, site):
         raise EBREAK(site)
 
-class UnrolledLoopContext(LoopContext):
-    '''DML loop context corresponding to an unrolled loop.
-    Uses of `break` is codegen:d as a goto past the unrolled loop.'''
+class GotoLoopContext(LoopContext):
+    '''DML loop context not directly corresponding to a single C loop
+    statement. Uses of `break` is codegen:d as a goto past the loop.'''
     count = 0
     def __init__(self):
         self.used = False
-        self.id = UnrolledLoopContext.count
-        self.label = f'_unrolledbreak{self.id}'
-        UnrolledLoopContext.count += 1
+        self.id = GotoLoopContext.count
+        self.label = f'_abstractloopbreak{self.id}'
+        GotoLoopContext.count += 1
 
     def break_(self, site):
         self.used = True
-        return [mkUnrolledBreak(site, self.label)]
+        return [mkGotoBreak(site, self.label)]
 
 class Failure(metaclass=ABCMeta):
     '''Handle exceptions failure handling is supposed to handle the various kind of
@@ -1935,8 +1935,10 @@ def foreach_each_in(site, itername, trait, each_in,
                                         trait_ptr, obj_ref)),
                   trait_type
                   )))
-    inner_body = mkCompound(site, declarations(inner_scope)
-        + codegen_statements([body_ast], location, inner_scope))
+    context = GotoLoopContext()
+    with context:
+        inner_body = mkCompound(site, declarations(inner_scope)
+            + codegen_statements([body_ast], location, inner_scope))
     loop = mkFor(
         site,
         [mkLit(site, 'int _outer_idx = %s.starti' % (ident,), TVoid())],
@@ -1956,7 +1958,8 @@ def foreach_each_in(site, itername, trait, each_in,
                        site, mkLit(site, '++_inner_idx', TVoid()))],
                    inner_body)]))
 
-    return [mkCompound(site, [sym_declaration(each_in_sym), loop])]
+    label = [mkLabel(site, context.label, True)] if context.used else []
+    return [mkCompound(site, [sym_declaration(each_in_sym), loop] + label)]
 
 @expression_dispatcher
 def expr_each_in(ast, location, scope):
@@ -2023,10 +2026,10 @@ def stmt_hashforeach(stmt, location, scope):
 def foreach_constant_list(site, itername, lst, statement, location, scope):
     assert isinstance(lst, AbstractList)
     spec = []
-    unroll = UnrolledLoopContext()
-    with unroll:
+    context = GotoLoopContext()
+    with context:
         for items in lst.iter():
-            loopvars = tuple(mkLit(site, '_ai%d_%d' % (unroll.id, dim),
+            loopvars = tuple(mkLit(site, '_ai%d_%d' % (context.id, dim),
                                    TInt(32, True))
                              for dim in range(len(items.dimsizes)))
             loopscope = Symtab(scope)
@@ -2054,7 +2057,7 @@ def foreach_constant_list(site, itername, lst, statement, location, scope):
             spec.append(mkCompound(site, decls + [stmt]))
 
         return [mkUnrolledLoop(site, spec,
-                               unroll.label if unroll.used else None)]
+                               context.label if context.used else None)]
 
 @statement_dispatcher
 def stmt_while(stmt, location, scope):

@@ -62,4 +62,10 @@ method test() throws {
         found = true;
     }
     expect(found, "indirectly instantiated template");
+    local int i = 0;
+    foreach obj in (each t in (a.b[0])) {
+        ++i;
+        if (i == 2) break;
+    }
+    expect(i == 2, "break");
 }

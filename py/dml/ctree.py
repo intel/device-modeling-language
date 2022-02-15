@@ -41,7 +41,7 @@ __all__ = (
     'mkGoto',
     'mkReturnFromInline',
     'mkThrow',
-    'mkUnrolledBreak',
+    'mkGotoBreak',
     'mkTryCatch',
     'mkInline',
     'mkInlinedMethod',
@@ -350,11 +350,13 @@ class Null(Statement):
 mkNull = Null
 
 class Label(Statement):
-    def __init__(self, site, label):
+    def __init__(self, site, label, unused=False):
         Statement.__init__(self, site)
         self.label = label
+        self.unused = unused
     def toc(self):
-        out('%s: ;\n' % self.label, preindent = -1, postindent = 1)
+        out('%s: %s;\n' % (self.label, 'UNUSED'*self.unused), preindent = -1,
+            postindent = 1)
 
 mkLabel = Label
 
@@ -404,11 +406,11 @@ class Throw(Goto):
 
 mkThrow = Throw
 
-class UnrolledBreak(Goto):
+class GotoBreak(Goto):
     def control_flow(self):
         return ControlFlow(br=True)
 
-mkUnrolledBreak = UnrolledBreak
+mkGotoBreak = GotoBreak
 
 class TryCatch(Statement):
     '''A DML try/catch statement. Catch block is represented as an if (false)
