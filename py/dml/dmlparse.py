@@ -249,7 +249,8 @@ def toplevel_if(t):
     if all(stmt.kind in allowed_in_hashif for stmt in t[6] + t[8]):
         t[0] = ast.hashif(site(t), t[3], t[6], t[8])
     else:
-        report(WEXPERIMENTAL(site(t), "'if' body with top-level statements"))
+        report(WEXPERIMENTAL(site(t), ("top-level 'if' body with unsupported "
+                                       + "statements")))
         t[0] = ast.toplevel_if(site(t), t[3], t[6], t[8])
 
 @prod_dml14

@@ -21,3 +21,10 @@ port p {
         in each x {}
     }
 }
+
+/// WARNING WEXPERIMENTAL
+#if (false && true && dml_1_4) {
+    // Experimental support for complex top-level conditionals allows in-each
+    // to be used
+    in each x {}
+}
