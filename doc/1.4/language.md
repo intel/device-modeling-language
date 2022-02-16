@@ -1841,6 +1841,15 @@ defines an array named `regs` of 16 registers (numbered from 0 to
 See Section [Universal Templates](dml-builtins.html#universal-templates)
 for details about arrays and index parameters.
 
+The size specification of an array dimension may be replaced with `...` if the
+size has already been defined by a different declaration of the same object
+array. For example, the following is valid:
+
+```
+register regs[i < 16][j < ...] size 2 @ 0x0100 + 16 * i + 2 * j;
+register regs[i < ...][j < 8] is (read_only);
+```
+
 Note that in Simics 5, `port` arrays and `bank` arrays
 cannot be multi-dimensional.
 
