@@ -828,16 +828,15 @@ class TTrait(DMLType):
 class TTraitList(DMLType):
     __slots__ = ('traitname')
 
-    def __init__(self, traitname):
+    def __init__(self, traitname, const=False):
+        DMLType.__init__(self, const)
         self.traitname = traitname
-
-    const = True
 
     def __repr__(self):
         return "TTraitList(%s)" % (self.traitname,)
 
     def clone(self):
-        return TTraitList(self.traitname)
+        return TTraitList(self.traitname, self.const)
 
     def cmp(self, other):
         if isinstance(other, TTraitList) and self.traitname == other.traitname:

@@ -2097,16 +2097,26 @@ def init_trait_vtable(node, trait, param_overrides):
                     f'{TPtr(array_type).declaration(var)} = malloc('
                     f'sizeof(*{var}));\n')
                 if deep_const(t):
-                    k = TArray(t, mkIntegerLiteral(node.site, 1)).declaration("")
+                    k = (TArray(t, mkIntegerLiteral(node.site, 1))
+                         .declaration(""))
+                    target = f'(void *)&(*{var}){param_indices}'
+                    source = f'({k}) {{ {value} }}'
+                    size = f'sizeof({t.declaration("")})'
                     param_init.append(
-                        f' memcpy(&(*{var}){param_indices},'
-                        f' ({k}){{{value}}}, sizeof({t.declaration("")}));\n')
+                        f'memcpy({target}, {source}, {size});\n')
                 else:
                     param_init.append(
                         f'(*{var}){param_indices} = {value};\n')
             else:
                 if is_sequence:
                     args.append(value)
+                elif deep_const(t):
+                    k = (TArray(t, mkIntegerLiteral(node.site, 1))
+                         .declaration(""))
+                    size = f'sizeof({t.declaration("")})'
+                    args.append(
+                        f'memcpy(malloc({size}), ({k}) {{ {value} }}, '
+                        + f'{size})')
                 else:
                     # Reasons for alignment explained along with test
                     # in 1.4/structure/T_trait.dml
