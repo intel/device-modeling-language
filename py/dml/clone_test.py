@@ -35,12 +35,11 @@ class TestClone(unittest.TestCase):
             typ_clone.const = True
             self.assertEqual(typ.const, False)
         # special case for TraitList, because realtype requires global
-        # state (typedefs) and always has const=True
+        # state (typedefs)
         typ = dt.TTraitList("a")
         typ_clone = typ.clone()
         self.assertEqual(typ.cmp(typ_clone), 0)
         self.assertEqual(typ_clone.cmp(typ), 0)
-        self.assertEqual(typ.const, True)
         dml.globals.dml_version = (1, 2)
         # types which do not support clone
         with self.assertRaises(logging.ICE):

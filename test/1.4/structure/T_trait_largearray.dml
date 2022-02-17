@@ -1,0 +1,21 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+import "testing.dml";
+
+// Vtable size: 8 bytes
+template t {
+    shared method m() {}
+}
+
+// Before vtables were optimized to not naively allocate per element,
+// this declaration would cost 8 petabytes worth of memory.
+group g[i < 1 << 25][j < 1 << 25] is t;
+
+// prevent DCE of vtable
+method test() throws {
+    g[0][0].m();
+}

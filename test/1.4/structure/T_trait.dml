@@ -116,21 +116,32 @@ header %{
         const int y;
     } deep_const_t;
     static deep_const_t dc_val[2] = {{00,01},{10,11}};
+    static const int sc_val[2] = {1, 2};
 %}
 extern typedef struct {
     int x;
     const int y;
 } deep_const_t;
 extern deep_const_t dc_val[2];
+extern const int sc_val[2];
 template deep_const {
-    param val : deep_const_t;
+    param d_val : deep_const_t;
+    param s_val : const int;
     shared method test(int i) {
-        assert val.x == i * 10;
-        assert val.y == i * 10 + 1;
+        assert d_val.x == i * 10;
+        assert d_val.y == i * 10 + 1;
+        assert s_val == i + 1;
     }
 }
-group  dc[i<2] is deep_const {
-    param val = dc_val[i];
+
+group dc[i<2] is deep_const {
+    param d_val = dc_val[i];
+    param s_val = sc_val[i];
+}
+
+group dc_nonindexed is deep_const {
+    param d_val = dc_val[0];
+    param s_val = sc_val[0];
 }
 
 method test() throws {
@@ -173,4 +184,5 @@ method test() throws {
 
     dc[0].test(0);
     dc[1].test(1);
+    dc_nonindexed.test(0);
 }
