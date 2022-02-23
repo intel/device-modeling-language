@@ -2466,10 +2466,10 @@ It follows that:
 ## Comparison to C/C++
 <a id="comparison-to-c"/>
 
-The algorithmic language used to express method bodies in DML is an
-extended subset of ISO C, with some C++ extensions such as `new`
-and `delete`. The DML-specific statements and expressions are
-described in Sections [Statements](#statements) and [Expressions](#expressions).
+The algorithmic language used to express method bodies in DML is an extended
+subset of ISO C, with some C++ extensions such as `new` and `delete`. The
+DML-specific statements and expressions are described in Sections
+[Method Statements](#method-statements) and [Expressions](#expressions).
 
 DML defines the following additional built-in data types:
 
@@ -2697,7 +2697,7 @@ DML deviates from the C language in a number of ways:
   of `u_t` will work correctly together with the definition from
   the `header` declaration.
 
-## Statements
+## Method Statements
 
 All ISO C statements are available in DML, and have the same semantics
 as in C. Like ordinary C expressions, all DML expressions can also be
