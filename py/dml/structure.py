@@ -713,25 +713,19 @@ def merge_subobj_defs(def1, def2, parent):
                        "mixing declarations with different number "
                        "of array dimensions")
 
-    merged_arrayinfo = []
     if arrayinfo:
         parent_scope = Location(parent, static_indices(parent))
 
-        for ((idxvar1, len1), (idxvar2, len2)) in zip(arrayinfo, arrayinfo2):
+        for (idxvar1, len1), (idxvar2, len2) in zip(arrayinfo, arrayinfo2):
             if idxvar1 != idxvar2:
                 raise EAINCOMP(site1, site2, name,
                                "mismatching index variables")
 
-            if len1 is None:
-                merged_arrayinfo.append((idxvar1, len2))
-            elif len2 is not None and (eval_arraylen(len1, parent_scope)
-                                       != eval_arraylen(len2, parent_scope)):
+            if (eval_arraylen(len1, parent_scope)
+                != eval_arraylen(len2, parent_scope)):
                 raise EAINCOMP(site1, site2, name, "mismatching array sizes")
-            else:
-                merged_arrayinfo.append((idxvar1, len1))
 
-
-    return (objtype, name, merged_arrayinfo, obj_specs1 + obj_specs2)
+    return (objtype, name, arrayinfo, obj_specs1 + obj_specs2)
 
 def method_is_std(node, methname):
     """
@@ -1464,12 +1458,6 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             else:
                 symbols[ident] = subobj_spec.site
                 subobj_defs[ident] = subobj_def
-
-    for (_, _, arrayinfo, specs) in subobj_defs.values():
-        for (i, (idx, dimsize_ast)) in enumerate(arrayinfo):
-            if dimsize_ast is None:
-                report(EAUNKDIMSIZE(specs[0].site, i, idx))
-                arrayinfo[i] = (idx, ast.int(specs[0].site, 1))
 
     explicit_traits = {t for (_, t) in obj_traits}
     ancestors = explicit_traits.union(
