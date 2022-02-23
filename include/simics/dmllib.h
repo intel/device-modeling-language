@@ -2113,8 +2113,10 @@ _set_device_member(attr_value_t val,
                             &dimension_strides[1],
                             remaining_dimensions-1,
                             setter);
-                        // currently, generated deserialized cannot fail
-                        ASSERT(status == Sim_Set_Ok);
+                        // If deserialization fails, bail out.
+                        if (unlikely(status != Sim_Set_Ok)) {
+                            return status;
+                        }
                 }
                 return Sim_Set_Ok;
         }
