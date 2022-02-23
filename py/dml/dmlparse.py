@@ -569,11 +569,6 @@ def arraydef(t):
     '''arraydef : ident LT expression'''
     t[0] = (t[1], t[3])
 
-@prod_dml14
-def arraydef_implicit(t):
-    '''arraydef : ident LT ELLIPSIS'''
-    t[0] = (t[1], None)
-
 # Traits
 
 @prod_dml12
