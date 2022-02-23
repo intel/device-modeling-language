@@ -1541,7 +1541,6 @@ def stmt_session(stmt, location, scope):
         static_var_expr = make_static_var(stmt.site, location, etype, name,
                                           init, stmt)
         local_sym = ExpressionSymbol(name, static_var_expr, stmt.site)
-
         scope.add(local_sym)
 
     return []
@@ -1623,8 +1622,8 @@ def stmt_saved(stmt, location, scope):
         static_var_expr = make_static_var(stmt.site, location, etype, name,
                                           init, stmt, True)
         local_sym = ExpressionSymbol(name, static_var_expr, stmt.site)
-
         scope.add(local_sym)
+
     return []
 
 @statement_dispatcher
@@ -3047,8 +3046,6 @@ def codegen_method(site, inp, outp, throws, independent, idempotency, ast,
         # top-level locals share scope with parameters
         assert ast.kind == 'compound'
         [subs] = ast.args
-        # TODO(lwaern) insert idempotency logic HERE for regular (independent)
-        # methods
         with fail_handler, exit_handler:
             body = prelude()
             body.extend(codegen_statements(subs, location, fnscope))

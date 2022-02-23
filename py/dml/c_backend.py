@@ -1909,8 +1909,8 @@ def method_tinit_arg(trait, parent, name, scrambled_name):
             # impl_path[0] is a direct parent which provides
             # the correct default implementation
             assert impl_path[0] != parent
-            (_, inp, outp, throws,
-             independent, _) = vtable_trait.vtable_methods[name]
+            (_, inp, outp, throws, independent, _) = \
+                vtable_trait.vtable_methods[name]
             method_impl = impl_trait.method_impls[name]
             thunk = generate_adjustor_thunk(
                 trait.name, name, inp, outp, throws, independent,
@@ -1927,8 +1927,8 @@ def method_tinit_arg(trait, parent, name, scrambled_name):
         # not on canonical path; need to create an adjustor thunk
         # that trampolines to the implementation on the canonical path
         vtable_path = (parent,) + parent.ancestry_paths[vtable_trait][0]
-        (_, inp, outp, throws, independent, _) \
-            = vtable_trait.vtable_methods[name]
+        (_, inp, outp, throws, independent, _) = \
+            vtable_trait.vtable_methods[name]
         # Avoid an indirect call in the adjustor thunk, for
         # methods that are not overridable
         if impl_trait and not impl_trait.method_impls[name].overridable:

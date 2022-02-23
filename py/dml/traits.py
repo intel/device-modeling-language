@@ -212,7 +212,6 @@ class TraitMethod(TraitVTableItem):
                           'Methods with (partially) const output/return '
                           + 'values are not yet supported.')
 
-        # TODO(lwaern): here goes code for shared (independent) idempotents
         if self.idempotent:
             idempotency = (codegen.SharedIndependentIdempotent(self)
                            if self.independent
