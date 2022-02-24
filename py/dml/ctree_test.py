@@ -228,6 +228,9 @@ def variable(name, t):
 def lit(t):
     return ctree.mkLit(site, '', t)
 
+logging.DMLWarning.enable_werror()
+logging.max_errors = 1
+
 class ExprTests(GccTests):
     subtests = []
     subtest = GccTests.subtest_decorator(subtests)
@@ -1168,7 +1171,9 @@ class ExprTests(GccTests):
         rh_var = variable('rh', rh.ctype())
         var_cond = op(site, lh_var, rh_var)
         # compare constant and variable
+        logging.ignore_warning('WNEGCONSTCOMP')
         mix_cond = op(site, lh, rh_var)
+        logging.enable_warning('WNEGCONSTCOMP')
         self.assertIsInstance(var_cond.ctype(), types.TBool)
         self.assertIsInstance(mix_cond.ctype(), types.TBool)
         return ['%s = %s;' % (lh.ctype().declaration('lh'), lh.read()),
