@@ -820,6 +820,14 @@ class EAINCOMP(DMLError):
         if self.othersite:
             self.print_site_message(self.othersite, "conflicting declaration")
 
+class EAUNKDIMSIZE(DMLError):
+    """
+    The size of an array dimension of an object array must be defined at least
+    once across all declarations of that object array.
+    """
+    fmt = ("the size of dimension %d (with index variable '%s') is never "
+           + "defined")
+
 class ENCONST(DMLError):
     """
     A constant expression was expected.

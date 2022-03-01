@@ -291,4 +291,14 @@
   <build-id value="6145"><add-note> <tt>break</tt> may now be used within
       <tt>foreach</tt> statements <bug number="SIMICS-18719"/>.
   </add-note></build-id>
+  <build-id value="next"><add-note> When declaring an object array, any
+      dimension size specification may now be omitted if already defined through
+      a different declaration of the same object array
+      <bug number="22014423596"/>. Omission is done by specifying <tt>...</tt>
+      instead of the dimension size; for example, the following is now
+      supported:
+      <pre>
+      group g[i &lt; 4][j &lt; ...] { }
+      group g[i &lt; ...][j &lt; 7] { }
+      </pre></add-note></build-id>
 </rn>
