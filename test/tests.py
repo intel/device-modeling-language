@@ -120,9 +120,7 @@ os.environ['DMLC_DEBUG'] = 't'
 
 latest_api_version = "6"
 
-special_versions = {}
-for f in ["T_WREF.dml"]:
-    special_versions[f] = "5"
+special_versions = {"T_WREF.dml": "5"}
 
 def simics_api_version(filename):
     base = os.path.basename(filename)
@@ -199,7 +197,7 @@ class DMLFileTestCase(BaseTestCase):
         BaseTestCase.__init__(self, fullname)
         # Defaults
         self.filename = filename
-        self.api_version = None
+        self.api_version = latest_api_version
         self.includepath = None
         self.dmlc_extraargs = []
         self.cc_extraargs = []
@@ -851,15 +849,13 @@ all_tests.append(ErrorTest(
     errors=[(os.path.basename(os.devnull), 1, "EDEVICE")],
     warnings=[(os.path.basename(os.devnull), 1, "WNOVER")],
     includepath=()))
-all_tests.append(CTestCase(["minimal"], join(testdir, "minimal.dml"),
-                           api_version=latest_api_version))
+all_tests.append(CTestCase(["minimal"], join(testdir, "minimal.dml")))
 
 # Test that it fails with a good error message if it can't find
 # dml-builtins.dml etc.
 all_tests.append(ErrorTest(["noinclude"], join(testdir, "minimal.dml"),
                            errors=[("minimal.dml", 6, "EIMPORT")],
-                           includepath=(), api_version=latest_api_version,
-                           dmlc_extraargs=['--max-errors=1']))
+                           includepath=(), dmlc_extraargs=['--max-errors=1']))
 
 # Test DMLC_PROFILE
 all_tests.append(DMLCProfileTestCase(["dmlc_profile"],
@@ -876,12 +872,10 @@ all_tests.append(DMLCProfileTestCase(["dmlc_profile"],
 all_tests.append(CTestCase(
          ["debuggable-compile"],
          join(testdir, "1.2", "methods", "T_inline.dml"),
-         api_version=latest_api_version,
          dmlc_extraargs = ["-g"]))
 all_tests.append(CTestCase(
          ["debuggable-compile-connect"],
          join(testdir, "1.2", "structure", "T_connect_obj.dml"),
-         api_version=latest_api_version,
          dmlc_extraargs = ["-g"]))
 
 class SplitTestCase(CTestCase):
@@ -923,20 +917,17 @@ class SplitTestCase(CTestCase):
 all_tests.append(SplitTestCase(
          ["split"],
          join(testdir, "1.2", "misc", "T_split_output.dml"),
-         api_version=latest_api_version,
          dmlc_extraargs=["--split-c-file=1", "--state-change-dml12"]))
 
 all_tests.append(CTestCase(
          ["1.2", "misc", "test_dmlc_g"],
          join(testdir, "1.2", "misc", "test_dmlc_g.dml"),
-         api_version=latest_api_version,
          dmlc_extraargs = ["-g"]))
 
 # Test the --werror flag
 all_tests.append(CTestCase(
          ["werror"],
          join(testdir, "1.2", "werror", "T_WUNUSEDDEFAULT.dml"),
-         api_version=latest_api_version,
          status = 2,
          dmlc_extraargs = ["--werror"]))
 
@@ -1047,8 +1038,7 @@ class DmlDep(DmlDepBase):
 
 all_tests.append(DmlDep(['dmldep'],
                         join(testdir, '1.2', 'misc', 'T_import_rel_1.dml'),
-                        dmlc_extraargs = ['--dep', 'T_dmldep.dmldep'],
-                        api_version=latest_api_version))
+                        dmlc_extraargs = ['--dep', 'T_dmldep.dmldep']))
 
 class DmlDepArgs(DmlDepBase):
     '''Test optional arguments for dependency generation.'''
@@ -1064,8 +1054,7 @@ all_tests.append(
                dmlc_extraargs=[
                    '--dep=T_dmldepargs.dmldep', '--no-dep-phony',
                    '--dep-target=x.dml', '--dep-target=y.dml'
-               ],
-               api_version=latest_api_version))
+               ]))
 
 class PortingConvert(CTestCase):
     __slots__ = ('PORTING',)
@@ -1207,7 +1196,6 @@ class PortingConvertFail(PortingConvert):
 all_tests.append(PortingConvert(
     ["porting"],
     join(testdir, "1.2", "misc", "T_porting.dml"),
-    api_version=latest_api_version,
     PORTING=[("porting.dml", None, tag) for tag in [
         'PSHA1',
         'PVERSION',
@@ -1288,7 +1276,6 @@ all_tests.append(PortingConvert(
 all_tests.append(PortingConvertFail(
     ["porting_fail"],
     join(testdir, "1.2", "misc", "T_porting_fail.dml"),
-    api_version=latest_api_version,
     PORTING=[("T_porting_fail.dml", None, tag) for tag in [
         'PSHA1',
         'PVERSION',
@@ -1339,7 +1326,6 @@ all_tests.append(CompareIllegalAttrs('compare-illegal-attrs'))
 
 all_tests.append(CTestCase(["T_EIDXVAR_info"],
                            join(testdir, "1.2", "errors", "T_EIDXVAR.dml"),
-                           api_version=latest_api_version,
                            status=2, dmlc_extraargs = ["--info"]))
 
 class DevInfoCompare(BaseTestCase):
@@ -1518,7 +1504,6 @@ for version in ['1.2', '1.4']:
     generate = CTestCase(
         [testname],
         join(testdir, version, 'misc', 'devinfo.dml'),
-        api_version=latest_api_version,
         dmlc_extraargs=['--info'])
     all_tests.append(generate)
     all_tests.append(DevInfoCompare(
@@ -1529,37 +1514,31 @@ all_tests.append(
     XmlTestCase(
         ['1.2-register-view'],
         join(testdir, '1.2', 'misc', 'register_view.dml'),
-        api_version=latest_api_version,
         dmlc_extraargs=['--info']))
 all_tests.append(
     XmlTestCase(
         ['1.2-register-view-descriptions'],
         join(testdir, '1.2', 'misc', 'register_view_descriptions.dml'),
-        api_version=latest_api_version,
         dmlc_extraargs=['--info']))
 all_tests.append(
     XmlTestCase(
         ['1.2-register-view-bitorder-le'],
         join(testdir, '1.2', 'misc', 'register_view_bitorder_le.dml'),
-        api_version=latest_api_version,
         dmlc_extraargs=['--info']))
 all_tests.append(
     XmlTestCase(
         ['1.2-register-view-bitorder-be'],
         join(testdir, '1.2', 'misc', 'register_view_bitorder_be.dml'),
-        api_version=latest_api_version,
         dmlc_extraargs=['--info']))
 all_tests.append(
     XmlTestCase(
         ['1.2-register-view-inquiry'],
         join(testdir, '1.2', 'misc', 'register_view_inquiry.dml'),
-        api_version=latest_api_version,
         dmlc_extraargs=['--info']))
 all_tests.append(
     XmlTestCase(
         ['1.2-register-view-fields'],
         join(testdir, '1.2', 'misc', 'register_view_fields.dml'),
-        api_version=latest_api_version,
         dmlc_extraargs=['--info']))
 
 def walk(rootdir):
