@@ -23,6 +23,7 @@ from testparams import simics_root_path
 import traceback
 from depfile import parse_depfile
 import pstats
+import tarfile
 
 class TestFail(Exception):
     def __init__(self, reason):
@@ -821,6 +822,21 @@ class DMLCProfileTestCase(CTestCase):
                 raise TestFail(f'cannot load profile data')
         else:
             raise TestFail(f'stats file not generated')
+class DumpInputFilesTestCase(CTestCase):
+    '''Test that the DMLC_DUMP_INPUT_FILES variable works.  It creates a
+    tarball of input DML files that can be compiled standalone.'''
+    __slots__ = ()
+    def test(self):
+        super().test()
+        dir = Path(self.scratchdir) / 'dumped'
+        dir.mkdir()
+        with tarfile.open(Path(self.scratchdir) / f'T_{self.shortname}.tar.xz',
+                          'r:xz') as tf:
+            tf.extractall(dir)
+        subprocess.run(dmlc + ['_/' + os.path.basename(self.filename),
+                               self.shortname],
+                       cwd=dir, check=True)
+        assert (dir / (self.shortname + '.c')).is_file()
 
 all_tests = []
 
@@ -855,6 +871,11 @@ all_tests.append(ErrorTest(["noinclude"], join(testdir, "minimal.dml"),
 all_tests.append(DMLCProfileTestCase(["dmlc_profile"],
                                      join(testdir, "minimal.dml"),
                                      extraenv={'DMLC_PROFILE': '1'}))
+
+all_tests.append(DumpInputFilesTestCase(
+    ["dump-input-files"],
+    join(testdir, '1.4', 'misc', 'T_import_rel.dml'),
+    extraenv={'DMLC_DUMP_INPUT_FILES': '1'}))
 
 # Test that it fails with a good error message if it can't create the
 # output files.
