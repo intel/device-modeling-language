@@ -2375,11 +2375,10 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
     meth_node.refcount += 1        # regard method as used
 
     # Open the scope
-    with contextlib.ExitStack() as contexts:
-        contexts.enter_context(RecursiveInlineGuard(site, meth_node))
-        contexts.enter_context(ErrorContext(meth_node, site))
-        if not meth_node.throws:
-            contexts.enter_context(NoFailure(site))
+    # TODO: in python 3.10 we can use parentheses instead of \
+    with RecursiveInlineGuard(site, meth_node),  \
+         ErrorContext(meth_node, site),          \
+         contextlib.nullcontext() if meth_node.throws else NoFailure(site):
         param_scope = MethodParamScope(global_scope)
         param_scope.add(meth_node.default_method.default_sym(indices))
 
