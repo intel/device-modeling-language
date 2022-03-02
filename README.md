@@ -17,12 +17,15 @@ directory, `make dmlc`. To run unit tests, run `make test-dmlc` or
 `bin/test-runner --suite modules/dmlc/test`.
 
 ## Environment variables
-The following environment variables are handy when developing DMLC.
+The following environment variables are handy when developing DMLC. If you work
+regularly with a locally built DMLC, then consider setting the variables
+`DMLC_DIR` `T126_JOBS`, `DMLC_PATHSUBST` and `PY_SYMLINKS` in your
+`.bashrc`. Remaining variables are better to only enable when needed.
 
 ### DMLC_DIR
 After building DMLC, you need to set `DMLC_DIR` to `<your-project>/linux64/bin`
 in subsequent invocations of `make` in order to build devices with the locally
-build compiler.
+built compiler.
 
 ### T126_JOBS
 When set, the given number of tests are run in parallel.
@@ -49,3 +52,9 @@ Override the default compiler in unit tests.
 
 ### DMLC_PROFILE
 When set, DMLC does self-profiling and writes the profile to a .prof file.
+
+### DMLC_DUMP_INPUT_FILES
+When set, DMLC emits a `.tar.xz` archive containing all DML source files,
+packaged on a form that can be compiled standalone. This is useful when a DML
+problem appears within a complex build environment, and you want to reproduce
+the problem in isolation.

@@ -332,8 +332,8 @@ def parse_main_file(inputfilename, explicit_import_path, strict):
     # seen spellings. One spelling is a string in an import statement which
     # resolves to the file.
     imported = {}
-    # List of dependencies
-    deps = []
+    # imported file -> list of spellings
+    deps = {}
 
     while unimported:
         (importfile, importsite) = unimported.pop()
@@ -352,6 +352,8 @@ def parse_main_file(inputfilename, explicit_import_path, strict):
             if path is None:
                 raise EIMPORT(importsite, importfile)
 
+            deps.setdefault(path, set()).add(importfile)
+
             path = os.path.abspath(os.path.realpath(path))
             normalized = os.path.normcase(path)
             if normalized in imported:
@@ -366,7 +368,6 @@ def parse_main_file(inputfilename, explicit_import_path, strict):
                 continue
 
             imported[normalized] = [importfile]
-            deps.append(path)
 
             (i_site, i_stmts) = import_file(importsite, path)
         except DMLError as e:
