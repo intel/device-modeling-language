@@ -172,10 +172,13 @@ def dump_input_files(outputbase, imported):
     max_dotdot = max(dotdot_depth(p)
                      for (_, paths) in imported.items()
                      for p in paths)
+    # HACK: if any file is imported via ../, then store all DML files
+    # sufficiently deep in a directory hierarchy _/_/.../, so that the
+    # .. path can be resolved within the archive.
     prefix = '/'.join(['_'] * max_dotdot)
     basenames = set()
     with tarfile.open(outputbase + ".tar.xz", 'w:xz') as tf:
-        # if two different files foo.dml are imported, where one is
+        # HACK: if two different files foo.dml are imported, where one is
         # imported as "foo.dml" or "./foo.dml" and the other is only
         # imported using a qualified path such as "bar/foo.dml", then
         # the rename hack below has a better chance to work if we process
@@ -184,7 +187,7 @@ def dump_input_files(outputbase, imported):
             paths = imported[f]
             base = os.path.basename(f)
             while base in basenames:
-                # all DML files end up in the same directory; if two
+                # HACK: all DML files end up in the same directory; if two
                 # have the same name, then dodge that by renaming. In
                 # this case we may need to change some import directive
                 # manually in order for all files to be imported.
@@ -201,7 +204,8 @@ def dump_input_files(outputbase, imported):
                 if os.path.dirname(symlink) == os.path.normpath(prefix):
                     # import path resolves to file already present in tarfile
                     continue
-                # file imported through relative path, create symlink there
+                # file imported through relative path, create symlink where
+                # the relative path is resolved
                 ti = tarfile.TarInfo(symlink)
                 ti.type = tarfile.SYMTYPE
                 ti.linkname = os.path.normpath(os.path.join(
@@ -560,7 +564,7 @@ def main(argv):
             print_cdep(outputbase, headers, footers)
             if logging.failure:
                 sys.exit(2)
-            deplist = [inputfilename] + list(imported)
+            deplist = [inputfilename] + list(imported.keys())
             now = time.time()
             future_timestamps = [path for path in deplist
                                  if os.stat(path).st_mtime > now]
@@ -604,7 +608,7 @@ def main(argv):
 
         if output_c:
             dml.c_backend.generate(dev, headers, footers, outputbase,
-                                   [inputfilename] + list(imported),
+                                   [inputfilename] + list(imported.keys()),
                                    options.full_module)
             logtime("c")
             structure.check_unused_and_warn(dev)
