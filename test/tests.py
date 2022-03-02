@@ -323,7 +323,7 @@ class DMLFileTestCase(BaseTestCase):
         by zero or more context lines not on the form "In ..." (e.g.,
         "previously declared here").
 
-        The unittest_parse_messages() function contains a concrete example.
+        The _unittest_parse_messages() function contains a concrete example.
 
         """
 
@@ -543,6 +543,19 @@ class DMLFileTestCase(BaseTestCase):
         for kind in set().union(actual_msgs, expected_msgs):
             self.expect_messages(
                 kind, actual_msgs.get(kind, []), expected_msgs.get(kind, []))
+
+def _unittest_parse_messages():
+    stderr = '''
+/tmp/f.dml:3:20: In template abc
+/tmp/g.dml:4:9: error EDPARAM: blah blah
+/tmp/f.dml:8:12: conflicting definition
+'''.splitlines()
+    assert (list(DMLFileTestCase.parse_messages(stderr))
+            == [('error', 'EDPARAM',
+                 [('g.dml', 4, "/tmp/g.dml:4:9: error EDPARAM: blah blah"),
+                  ('f.dml', 3, "/tmp/f.dml:3:20: In template abc"),
+                  ('f.dml', 8, "/tmp/f.dml:8:12: conflicting definition")])])
+_unittest_parse_messages()
 
 class CTestCase(DMLFileTestCase):
     '''Compile a test DML file with the C backend and verify correct
@@ -816,16 +829,6 @@ class DMLCProfileTestCase(CTestCase):
                 raise TestFail(f'cannot load profile data')
         else:
             raise TestFail(f'stats file not generated')
-
-def _unittest_parse_messages():
-    stderr = '''
-/tmp/f.dml:3:20: In template abc
-/tmp/g.dml:4:9: error EDPARAM: duplicate assignment to parameter 'f'
-/tmp/f.dml:8:12: conflicting definition
-'''.splitlines()
-    assert (list(DMLFileTestCase.parse_messages(stderr))
-            == [('error', 'EDPARAM',
-                 [('g.dml', 4), ('f.dml', 3), ('f.dml', 8)])])
 
 all_tests = []
 
