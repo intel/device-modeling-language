@@ -20,6 +20,7 @@ import dml.dmlparse
 from .logging import *
 from .messages import *
 from .env import api_versions, default_api_version
+import tarfile
 
 def prerr(msg):
     sys.stderr.write(msg + "\n")
@@ -152,6 +153,64 @@ def print_cdep(outputbase, headers, footers):
             block.toc()
     f.close()
     f.commit()
+
+def dotdot_depth(path):
+    '''return how many levels of parent directories are required to resolve a
+    relative path'''
+    return os.path.normpath(path).count('..' + os.path.sep)
+
+assert dotdot_depth('./../../foo/../../../bar.dml') == 4
+
+def dump_input_files(outputbase, imported):
+    # DML is often invoked within a complex build system, with a large
+    # number of -I flags and many auto-generated files. It is often
+    # hard to reproduce a DML issue outside of this build system. This
+    # function tries to save all relevant DML files in a tree that is
+    # buildable or near-buildable, by placing all DML files in the
+    # same directory. For each files that is imported with a relative
+    # path, a back-pointing symlink is created on that relative path.
+    max_dotdot = max(dotdot_depth(p)
+                     for (_, paths) in imported.items()
+                     for p in paths)
+    # HACK: if any file is imported via ../, then store all DML files
+    # sufficiently deep in a directory hierarchy _/_/.../, so that the
+    # .. path can be resolved within the archive.
+    prefix = '/'.join(['_'] * max_dotdot)
+    basenames = set()
+    with tarfile.open(outputbase + ".tar.xz", 'w:xz') as tf:
+        # HACK: if two different files foo.dml are imported, where one is
+        # imported as "foo.dml" or "./foo.dml" and the other is only
+        # imported using a qualified path such as "bar/foo.dml", then
+        # the rename hack below has a better chance to work if we process
+        # the unqualified paths first.
+        for f in sorted(imported, key=lambda f: min(map(len, imported[f]))):
+            paths = imported[f]
+            base = os.path.basename(f)
+            while base in basenames:
+                # HACK: all DML files end up in the same directory; if two
+                # have the same name, then dodge that by renaming. In
+                # this case we may need to change some import directive
+                # manually in order for all files to be imported.
+                base = '_' + base
+            basenames.add(base)
+            path_in_tar = f'{prefix}/{base}'
+            tf.add(f, path_in_tar)
+            (_, hfile) = ctree.dmldir_macro(f)
+            if os.path.exists(hfile):
+                (_, h_path_in_tar) = ctree.dmldir_macro(path_in_tar)
+                tf.add(hfile, h_path_in_tar)
+            for path in paths:
+                symlink = os.path.normpath(os.path.join(prefix, path))
+                if os.path.dirname(symlink) == os.path.normpath(prefix):
+                    # import path resolves to file already present in tarfile
+                    continue
+                # file imported through relative path, create symlink where
+                # the relative path is resolved
+                ti = tarfile.TarInfo(symlink)
+                ti.type = tarfile.SYMTYPE
+                ti.linkname = os.path.normpath(os.path.join(
+                    '../' * (len(symlink.split(os.sep)) - 1) + prefix, base))
+                tf.addfile(ti)
 
 def is_warning_tag(w):
     return w and w[0] == 'W' and hasattr(messages, w)
@@ -498,11 +557,14 @@ def main(argv):
 
         dml.globals.strict_int_flag = options.strict or options.strict_int
 
+        if 'DMLC_DUMP_INPUT_FILES' in os.environ:
+            dump_input_files(outputbase, dict(
+                imported, **{inputfilename: [os.path.basename(inputfilename)]}))
         if options.makedep:
             print_cdep(outputbase, headers, footers)
             if logging.failure:
                 sys.exit(2)
-            deplist = [inputfilename] + imported
+            deplist = [inputfilename] + list(imported.keys())
             now = time.time()
             future_timestamps = [path for path in deplist
                                  if os.stat(path).st_mtime > now]
@@ -546,7 +608,7 @@ def main(argv):
 
         if output_c:
             dml.c_backend.generate(dev, headers, footers, outputbase,
-                                   [inputfilename] + imported,
+                                   [inputfilename] + list(imported.keys()),
                                    options.full_module)
             logtime("c")
             structure.check_unused_and_warn(dev)
