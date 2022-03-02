@@ -322,7 +322,7 @@ class DMLFileTestCase(BaseTestCase):
         by zero or more context lines not on the form "In ..." (e.g.,
         "previously declared here").
 
-        The _unittest_parse_messages() function contains a concrete example.
+        The unittest_parse_messages() function contains a concrete example.
 
         """
 
@@ -543,7 +543,7 @@ class DMLFileTestCase(BaseTestCase):
             self.expect_messages(
                 kind, actual_msgs.get(kind, []), expected_msgs.get(kind, []))
 
-def _unittest_parse_messages():
+def unittest_parse_messages():
     stderr = '''
 /tmp/f.dml:3:20: In template abc
 /tmp/g.dml:4:9: error EDPARAM: blah blah
@@ -554,7 +554,7 @@ def _unittest_parse_messages():
                  [('g.dml', 4, "/tmp/g.dml:4:9: error EDPARAM: blah blah"),
                   ('f.dml', 3, "/tmp/f.dml:3:20: In template abc"),
                   ('f.dml', 8, "/tmp/f.dml:8:12: conflicting definition")])])
-_unittest_parse_messages()
+unittest_parse_messages()
 
 class CTestCase(DMLFileTestCase):
     '''Compile a test DML file with the C backend and verify correct
