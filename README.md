@@ -21,7 +21,7 @@ future.
 
 ## Building and testing DMLC 
 
-To build the DML compiler (DMLC), you need to have a Simics
+To build DMLC, you need to have a Simics
 simulator installation and a Simics project set up.
 
 
@@ -29,7 +29,8 @@ simulator installation and a Simics project set up.
 
 If you do not already have a Simics simulator installation or access to the
 Simics simulator via commercial channels, install the [Public Release of
-the Intel Simics simulator](https://software.intel.com/simics-simulator) and create a Simics project (automatic in the default installation flow).
+the Intel Simics simulator](https://software.intel.com/simics-simulator) 
+and create a Simics project (automatic in the default installation flow).
 
 ### Building DMLC from a Simics project
 In your Simics project, check out the DML repository into the `modules/dmlc`
@@ -48,7 +49,8 @@ The following environment variables are handy when developing DMLC.
 ### DMLC_DIR
 After building DMLC, you need to set `DMLC_DIR` to `<your-project>/<hosttype>/bin`
 in subsequent invocations of `make` in order to build devices with the locally
-build compiler. `<hosttype>` is either `linux64` or `win64` depending on your host type. 
+build compiler. `<hosttype>` is either `linux64` or `win64` depending on your 
+host type. 
 
 ### T126_JOBS
 When set, the given number of tests are run in parallel.
@@ -58,7 +60,8 @@ The DMLC build copies a few DML library files, e.g. `dml-builtins.dml`, into
 `<hosttype>/bin`. When a compile error happens, error messages will normally point
 to this copy rather than the source. By setting `DMLC_PATHSUBST` to
 `<hosttype>/bin/dml=modules/dmlc/lib`, error messages will be rewritten to point
-to the source file instead.  `<hosttype>` is either `linux64` or `win64` depending on your host type. 
+to the source file instead.  `<hosttype>` is either `linux64` or `win64` 
+depending on your host type. 
 
 ### PY_SYMLINKS
 When set to `1`, `make dmlc` will symlink Python files instead of copying
