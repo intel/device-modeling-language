@@ -202,7 +202,7 @@ class DMLFileTestCase(BaseTestCase):
         self.dmlc_extraargs = []
         self.cc_extraargs = []
         self.status = 0
-        self.extraenv = dict()
+        self.extraenv = {}
         # Override defaults
         for k,v in info.items():
             setattr(self, k, v)
@@ -808,12 +808,6 @@ class XmlTestCase(CTestCase):
 
 class DMLCProfileTestCase(CTestCase):
     __slots__ = ()
-    def __init__(self, path, filename, **info):
-        extraenv_arg = 'extraenv'
-        if extraenv_arg not in info:
-            info[extraenv_arg] = dict()
-        info[extraenv_arg].update({'DMLC_PROFILE': '1'})
-        super().__init__(path, filename, **info)
 
     def test(self):
         super().test()
@@ -860,7 +854,7 @@ all_tests.append(ErrorTest(["noinclude"], join(testdir, "minimal.dml"),
 # Test DMLC_PROFILE
 all_tests.append(DMLCProfileTestCase(["dmlc_profile"],
                                      join(testdir, "minimal.dml"),
-                                     api_version=latest_api_version))
+                                     extraenv={'DMLC_PROFILE': '1'}))
 
 # Test that it fails with a good error message if it can't create the
 # output files.
