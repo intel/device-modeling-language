@@ -1120,36 +1120,35 @@ def generate_register_events(device):
             'event_class_t *%s' % (crep.get_evclass(method),))
     # Body of function is in class-context, so ensure generated code
     # does not use _dev
-    crep.in_static_context = True
-    start_function_definition('void _register_events(conf_class_t *class)')
-    out('{\n', postindent = 1)
-    if not events and not simple_events:
-        out('return;\n')
-    else:
-        for event in events:
-            if (dml.globals.dml_version == (1, 2)
-                and param_str(event, 'timebase') == 'stacked'
-                and event.dimensions > 0):
-                raise ICE(event, "stacked event array not supported")
-            for indices in event.all_indices():
-                out('%s%s = SIM_register_event("%s", class, 0, %s);\n'
-                    % (crep.get_evclass(event),
-                       ''.join('[' + str(i) + ']' for i in indices),
-                       event.logname_anonymized(indices),
-                       ', '.join(
-                           cname
-                           for (_, cname) in event_callbacks(event, indices))))
-        for (method, info) in list(simple_events.items()):
-            out(('%s = SIM_register_event("%s", class, 0, %s, %s, %s, %s, '
-                 + 'NULL);\n')
-                % ((crep.get_evclass(method),
-                    method.logname_anonymized())
-                   + tuple(info[fun] for fun in ('callback', 'destroy',
-                                                 'get_value', 'set_value'))))
-
-    out('}\n\n', preindent = -1)
-    splitting_point()
-    crep.in_static_context = False
+    with crep.StaticContext():
+        start_function_definition('void _register_events(conf_class_t *class)')
+        out('{\n', postindent = 1)
+        if not events and not simple_events:
+            out('return;\n')
+        else:
+            for event in events:
+                if (dml.globals.dml_version == (1, 2)
+                    and param_str(event, 'timebase') == 'stacked'
+                    and event.dimensions > 0):
+                    raise ICE(event, "stacked event array not supported")
+                for indices in event.all_indices():
+                    out('%s%s = SIM_register_event("%s", class, 0, %s);\n'
+                        % (crep.get_evclass(event),
+                        ''.join('[' + str(i) + ']' for i in indices),
+                        event.logname_anonymized(indices),
+                        ', '.join(
+                            cname
+                            for (_, cname) in event_callbacks(event,
+                                                              indices))))
+            for (method, info) in list(simple_events.items()):
+                out(('%s = SIM_register_event("%s", class, 0, %s, %s, %s, %s, '
+                    + 'NULL);\n')
+                    % ((crep.get_evclass(method),
+                        method.logname_anonymized())
+                    + tuple(info[fun] for fun in ('callback', 'destroy',
+                                                  'get_value', 'set_value'))))
+        out('}\n\n', preindent = -1)
+        splitting_point()
 
 def generate_events(device):
     events = device.get_recursive_components('event')
@@ -1969,71 +1968,72 @@ fields.
     '''
     # Body of the function is in static context, ensure generated code
     # does not use _dev
-    crep.in_static_context = True
-    # prevent argument names from shadowing trait types
-    def scramble_argname(name):
-        return "_%s_%s" % (trait.name, name)
-    initializers = []
-    for name in sorted(trait.vtable_methods):
-        scrambled_name = scramble_argname(name)
-        if name in trait.method_impls:
-            value = '%s == NULL ? %s : %s' % (
-                scrambled_name, trait.method_impls[name].cname(),
-                scrambled_name)
-        else:
-            # abstract method, so cannot be NULL
-            value = scrambled_name
-        initializers.append('.%s = %s' % (name, value))
-    for name in sorted(trait.vtable_params):
-        initializers.append('.%s = %s' % (name, scramble_argname(name)))
-    for name in sorted(trait.vtable_sessions):
-        initializers.append('.%s = %s' % (name, scramble_argname(name)))
-
-    tinit_calls = []
-    for parent in trait.direct_parents:
-        args = []
-        for name in tinit_args(parent):
+    with crep.StaticContext():
+        # prevent argument names from shadowing trait types
+        def scramble_argname(name):
+            return "_%s_%s" % (trait.name, name)
+        initializers = []
+        for name in sorted(trait.vtable_methods):
             scrambled_name = scramble_argname(name)
-            kind = parent.member_kind(name)
-            if kind in ('parameter', 'session'):
-                args.append(scrambled_name)
+            if name in trait.method_impls:
+                value = '%s == NULL ? %s : %s' % (
+                    scrambled_name, trait.method_impls[name].cname(),
+                    scrambled_name)
             else:
-                assert kind == 'method'
-                args.append(method_tinit_arg(trait, parent,
-                                             name, scrambled_name))
-        tinit_calls.append("_tinit_%s(%s);\n" % (
-            parent.name, ", ".join(['&_ret->' + cident(parent.name)] + args)))
+                # abstract method, so cannot be NULL
+                value = scrambled_name
+            initializers.append('.%s = %s' % (name, value))
+        for name in sorted(trait.vtable_params):
+            initializers.append('.%s = %s' % (name, scramble_argname(name)))
+        for name in sorted(trait.vtable_sessions):
+            initializers.append('.%s = %s' % (name, scramble_argname(name)))
 
-    out('static void\n')
-    out('_tinit_%s(struct _%s *_ret' % (trait.name,
-                                        cident(trait.name)))
-    inargs = tinit_args(trait)
-    for name in inargs:
-        scrambled_name = scramble_argname(name)
-        vtable_trait = trait.ancestor_vtables.get(name, trait)
-        member_kind = trait.member_kind(name)
-        if member_kind == 'method':
-            (_, inp, outp, throws, independent, _) \
-                = vtable_trait.vtable_methods[name]
-            mtype = vtable_trait.vtable_method_type(inp, outp, throws,
-                                                    independent)
-            out(', %s' % (mtype.declaration(scrambled_name),))
-        elif member_kind == 'parameter':
-            (site, typ) = vtable_trait.vtable_params[name]
-            out(', %s' % (typ.declaration(scrambled_name)))
-        else:
-            assert member_kind == 'session'
-            out(', uint32 %s' % (scrambled_name))
-    out(')\n{\n', postindent=1)
-    if initializers:
-        out('*_ret = (struct _%s){\n' % (cident(trait.name),), postindent=1)
-        for initializer in initializers:
-            out("%s,\n" % (initializer,))
-        out("};\n", postindent=-1)
-    for tinit_call in tinit_calls:
-        out(tinit_call)
-    out("}\n", preindent=-1)
-    crep.in_static_context = False
+        tinit_calls = []
+        for parent in trait.direct_parents:
+            args = []
+            for name in tinit_args(parent):
+                scrambled_name = scramble_argname(name)
+                kind = parent.member_kind(name)
+                if kind in ('parameter', 'session'):
+                    args.append(scrambled_name)
+                else:
+                    assert kind == 'method'
+                    args.append(method_tinit_arg(trait, parent,
+                                                 name, scrambled_name))
+            tinit_calls.append("_tinit_%s(%s);\n" % (
+                parent.name, ", ".join(['&_ret->' + cident(parent.name)]
+                                       + args)))
+
+        out('static void\n')
+        out('_tinit_%s(struct _%s *_ret' % (trait.name,
+                                            cident(trait.name)))
+        inargs = tinit_args(trait)
+        for name in inargs:
+            scrambled_name = scramble_argname(name)
+            vtable_trait = trait.ancestor_vtables.get(name, trait)
+            member_kind = trait.member_kind(name)
+            if member_kind == 'method':
+                (_, inp, outp, throws, independent, _) \
+                    = vtable_trait.vtable_methods[name]
+                mtype = vtable_trait.vtable_method_type(inp, outp, throws,
+                                                        independent)
+                out(', %s' % (mtype.declaration(scrambled_name),))
+            elif member_kind == 'parameter':
+                (site, typ) = vtable_trait.vtable_params[name]
+                out(', %s' % (typ.declaration(scrambled_name)))
+            else:
+                assert member_kind == 'session'
+                out(', uint32 %s' % (scrambled_name))
+        out(')\n{\n', postindent=1)
+        if initializers:
+            out('*_ret = (struct _%s){\n' % (cident(trait.name),),
+                postindent=1)
+            for initializer in initializers:
+                out("%s,\n" % (initializer,))
+            out("};\n", postindent=-1)
+        for tinit_call in tinit_calls:
+            out(tinit_call)
+        out("}\n", preindent=-1)
 
 def trait_trampoline_name(method, vtable_trait):
     return "%s__trampoline_from_%s" % (
@@ -2311,9 +2311,8 @@ def generate_init_trait_vtables(node, param_values):
         generate_trait_trampolines(subnode)
     # These initialization calls are output into static context,
     # so make sure they do not generate code that uses _dev
-    crep.in_static_context = True
-    init_calls = init_trait_vtables_for_node(node, param_values, (), ())
-    crep.in_static_context = False
+    with crep.StaticContext():
+        init_calls = init_trait_vtables_for_node(node, param_values, (), ())
     by_dims = {}
     for (dims, call) in init_calls:
         by_dims.setdefault(dims, []).append(call)
@@ -2496,12 +2495,11 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
 
     # These parameter values are output into static context, so make sure
     # the expressions do not use _dev
-    crep.in_static_context = True
-    trait_param_values = {
-        node: resolve_trait_param_values(node)
-        for node in flatten_object_subtree(device)
-        if node.traits}
-    crep.in_static_context = False
+    with crep.TypedParamContext():
+        trait_param_values = {
+            node: resolve_trait_param_values(node)
+            for node in flatten_object_subtree(device)
+            if node.traits}
 
     for t in list(dml.globals.traits.values()):
         for m in list(t.method_impls.values()):

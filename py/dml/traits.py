@@ -5,6 +5,7 @@
 
 import itertools
 import collections
+import contextlib
 import abc
 import os
 from . import objects, logging, crep, codegen, toplevel, topsort
@@ -186,55 +187,54 @@ class TraitMethod(TraitVTableItem):
             '%s(%s)' % (self.cname(), args))
 
     def codegen_body(self):
-        static_context_before = crep.in_static_context
-        crep.in_static_context = static_context_before or self.independent
-        scope = MethodParamScope(self.trait.scope(global_scope))
-        implicit_inargs = self.vtable_trait.implicit_args()
-        site = self.site
-        if self.default_trait:
-            default_method = self.default_trait.method_impls[self.name]
-            [(name, typ)] = implicit_inargs
-            default = ExpressionSymbol(
-                'default',
-                TraitMethodDirect(
-                    default_method.site,
-                    mkLit(self.site, cident(name), typ),
-                    default_method),
-                site)
-        else:
-            default = NoDefaultSymbol()
-            # TODO: we should also have a clause for AmbiguousDefault here
+        with (crep.StaticContext()
+              if self.independent else contextlib.nullcontext()):
+            scope = MethodParamScope(self.trait.scope(global_scope))
+            implicit_inargs = self.vtable_trait.implicit_args()
+            site = self.site
+            if self.default_trait:
+                default_method = self.default_trait.method_impls[self.name]
+                [(name, typ)] = implicit_inargs
+                default = ExpressionSymbol(
+                    'default',
+                    TraitMethodDirect(
+                        default_method.site,
+                        mkLit(self.site, cident(name), typ),
+                        default_method),
+                    site)
+            else:
+                default = NoDefaultSymbol()
+                # TODO: we should also have a clause for AmbiguousDefault here
 
-        for (n, t) in self.outp:
-            # See SIMICS-19028
-            if deep_const(t):
-                raise ICE(site,
-                          'Methods with (partially) const output/return '
-                          + 'values are not yet supported.')
+            for (n, t) in self.outp:
+                # See SIMICS-19028
+                if deep_const(t):
+                    raise ICE(site,
+                              'Methods with (partially) const output/return '
+                              + 'values are not yet supported.')
 
-        if self.idempotent:
-            idempotency = (codegen.SharedIndependentIdempotent(self)
-                           if self.independent
-                           else codegen.SharedIdempotent(self))
-        else:
-            idempotency = None
-        body = codegen_method(
-            self.site, self.inp, self.outp, self.throws, self.independent,
-            idempotency, self.astbody, default,
-            Location(dml.globals.device, ()), scope, self.rbrace_site)
+            if self.idempotent:
+                idempotency = (codegen.SharedIndependentIdempotent(self)
+                               if self.independent
+                               else codegen.SharedIdempotent(self))
+            else:
+                idempotency = None
+            body = codegen_method(
+                self.site, self.inp, self.outp, self.throws, self.independent,
+                idempotency, self.astbody, default,
+                Location(dml.globals.device, ()), scope, self.rbrace_site)
 
-        downcast_path = self.downcast_path()
-        if downcast_path:
-            trait_decl = mkInline(
-                site,
-                '%s UNUSED = DOWNCAST(%s, %s, %s);' % (
-                    self.trait.type().declaration('_' + cident(self.trait.name)),
-                    '_' + cident(self.vtable_trait.name),
-                    cident(self.trait.name),
-                    '.'.join(cident(t.name) for t in downcast_path)))
-            body = mkCompound(site, [trait_decl, body])
-        crep.in_static_context = static_context_before
-        return body
+            downcast_path = self.downcast_path()
+            if downcast_path:
+                trait_decl = mkInline(
+                    site,
+                    '%s UNUSED = DOWNCAST(%s, %s, %s);' % (
+                        self.trait.type().declaration('_' + cident(self.trait.name)),
+                        '_' + cident(self.vtable_trait.name),
+                        cident(self.trait.name),
+                        '.'.join(cident(t.name) for t in downcast_path)))
+                body = mkCompound(site, [trait_decl, body])
+            return body
 
 def merge_ancestor_vtables(ancestors, site):
     ancestor_vtables = {}
@@ -650,8 +650,9 @@ class Trait(SubTrait):
             try:
                 s.add(ExpressionSymbol(
                     name, mkSubRef(self.site, selfref, name, '.'), self.site))
-            except ESTATICVIOL:
-                s.add(InvalidExpressionSymbol(name, ESTATICVIOL, self.site))
+            except EINDEPENDENTVIOL:
+                s.add(InvalidExpressionSymbol(name, EINDEPENDENTVIOL,
+                                              self.site))
         # grammar prohibits name collision on 'this'
         s.add(ExpressionSymbol('this', selfref, self.site))
         return s

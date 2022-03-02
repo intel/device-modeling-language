@@ -1074,11 +1074,18 @@ class EIDXVAR(DMLError):
     def __init__(self, site, var):
         DMLError.__init__(self, site, var)
 
-class ESTATICVIOL(DMLError):
+class EINDEPENDENTVIOL(DMLError):
     """Expressions that depend on values stored in a device instance cannot be
-    evaluated in a static context. For example; when initializing typed
-    template parameters."""
-    fmt = "cannot access device instance in static context"
+    evaluated in contexts where the device instance is not available. This
+    is within static contexts -- for example when initializing typed
+    template parameters -- or within independent methods."""
+    fmt = "cannot access device instance in device independent context"
+
+class ETYPEDPARAMVIOL(DMLError):
+    """Independent method calls are not allowed within the definitions of
+    typed parameters."""
+    fmt = ("typed parameter definitions may not contain independent methods "
+           + "calls")
 
 class EFARRSZ(DMLError):
     """

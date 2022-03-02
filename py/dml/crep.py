@@ -21,19 +21,40 @@ __all__ = (
     'cloggroup',
     'dev',
     'require_dev',
-    'in_static_context',
     'maybe_dev',
     'maybe_dev_arg',
+    'StaticContext',
+    'TypedParamContext',
     )
 
-in_static_context = False
+
+class StaticContext:
+    active = False
+
+    def __enter__(self):
+        self.prev_context = StaticContext.active
+        StaticContext.active = True
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        StaticContext.active = self.prev_context
+
+class TypedParamContext(StaticContext):
+    active = False
+
+    def __enter__(self):
+        StaticContext.__enter__(self)
+        self.prev_typed_context = TypedParamContext.active
+        TypedParamContext.active = True
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        StaticContext.__exit__(self, exc_type, exc_val, exc_tb)
+        TypedParamContext.active = self.prev_typed_context
+
 def dev(site):
     require_dev(site)
     return "_dev"
 
 def require_dev(site):
-    if in_static_context:
-        raise ESTATICVIOL(site)
+    if StaticContext.active:
+        raise EINDEPENDENTVIOL(site)
 
 def maybe_dev(independent):
     return [] if independent else ['_dev']

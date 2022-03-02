@@ -23,27 +23,27 @@ template param_typed {
 
 session int64 s;
 template param_val {
-    /// ERROR ESTATICVIOL
+    /// ERROR EINDEPENDENTVIOL
     param p1 = a.val;
-    /// ERROR ESTATICVIOL
+    /// ERROR EINDEPENDENTVIOL
     param p2 = s;
 
     session int ts;
 
     shared independent method sm() -> (int) {
-        /// ERROR ESTATICVIOL
+        /// ERROR EINDEPENDENTVIOL
         log info: "r";
-        /// ERROR ESTATICVIOL
+        /// ERROR EINDEPENDENTVIOL
         dependent();
 
         local int i;
         local int j;
         local int k;
-        /// ERROR ESTATICVIOL
+        /// ERROR EINDEPENDENTVIOL
         i = s;
-        /// ERROR ESTATICVIOL
+        /// ERROR EINDEPENDENTVIOL
         j = ts;
-        /// ERROR ESTATICVIOL
+        /// ERROR EINDEPENDENTVIOL
         j = this.ts;
         return i + j + k;
     }
@@ -52,26 +52,26 @@ template param_val {
 port p is (param_typed, param_val);
 
 independent method q() -> (int) {
-    /// ERROR ESTATICVIOL
+    /// ERROR EINDEPENDENTVIOL
     log info: "q";
-    /// ERROR ESTATICVIOL
+    /// ERROR EINDEPENDENTVIOL
     dependent();
-    /// ERROR ESTATICVIOL
+    /// ERROR EINDEPENDENTVIOL
     local int to_ret = s;
-    /// ERROR ESTATICVIOL
+    /// ERROR EINDEPENDENTVIOL
     session int ses;
-    /// ERROR ESTATICVIOL
+    /// ERROR EINDEPENDENTVIOL
     saved int sav;
 
-    /// ERROR ESTATICVIOL
+    /// ERROR EINDEPENDENTVIOL
     local bool not_present = !ifaces.i2c_bus.start;
 
     if (!not_present) {
-        /// ERROR ESTATICVIOL
+        /// ERROR EINDEPENDENTVIOL
         to_ret += ifaces.i2c_bus.start(0);
     }
 
-    /// ERROR ESTATICVIOL
+    /// ERROR EINDEPENDENTVIOL
     increment(&to_ret);
 
     return to_ret;

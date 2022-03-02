@@ -3377,11 +3377,15 @@ class TraitMethodRef(NonValue):
     def outp(self): pass
     @abc.abstractproperty
     def throws(self): pass
+    @abc.abstractproperty
+    def independent(self): pass
 
     def apply(self, args):
         '''Return expression for application as a function'''
         if self.throws or len(self.outp) > 1:
             raise EAPPLYMETH(self.site, self)
+        if crep.TypedParamContext.active and self.independent:
+            raise ETYPEDPARAMVIOL(self.site)
         # Run typecheck before coercing endian integers, slightly better
         # error messages
         typecheck_inargs(self.site, args, self.inp, 'method')

@@ -2479,6 +2479,9 @@ def mkcall_method(site, func, indices):
         if isinstance(i, NonValue):
             raise i.exc()
     from .crep import dev
+    if crep.TypedParamContext.active and func.independent:
+        raise ETYPEDPARAMVIOL(site)
+
     devarg = ([] if func.independent
               else [mkLit(site, dev(site),
                           TDevice(crep.structtype(dml.globals.device)))])
@@ -2984,80 +2987,81 @@ def codegen_return(site, outp, throws, retvals):
 
 def codegen_method(site, inp, outp, throws, independent, idempotency, ast,
                    default, location, fnscope, rbrace_site):
-    static_context_before = crep.in_static_context
-    crep.in_static_context = static_context_before or independent
-    for (arg, etype) in inp:
-        fnscope.add_variable(arg, type=etype, site=site, make_unique=False)
-    initializers = [get_initializer(site, parmtype, None, None, None)
-                    for (_, parmtype) in outp]
+    with crep.StaticContext() if independent else contextlib.nullcontext():
+        for (arg, etype) in inp:
+            fnscope.add_variable(arg, type=etype, site=site, make_unique=False)
+        initializers = [get_initializer(site, parmtype, None, None, None)
+                        for (_, parmtype) in outp]
 
-    fnscope.add(default)
+        fnscope.add(default)
 
-    if idempotency:
-        prelude = idempotency.prelude
-        fail_handler = idempotency.fail_handler()
-        exit_handler = idempotency.exit_handler()
-    else:
-        def prelude():
-            return []
-        fail_handler = (ReturnFailure(rbrace_site) if throws
-                        else NoFailure(site))
-        exit_handler = (GotoExit_dml12() if ast.site.dml_version() == (1, 2)
-                        else ReturnExit(outp, throws))
-
-    if ast.site.dml_version() == (1, 2):
-        if throws:
-            # Declare and initialize one variable for each output
-            # parameter.  We cannot write to the output parameters
-            # directly, because they should be left untouched if an
-            # exception is thrown.
-            code = []
-            for ((varname, parmtype), init) in zip(outp, initializers):
-                sym = fnscope.add_variable(
-                    varname, type=parmtype, init=init, make_unique=True)
-                sym.incref()
-                code.append(sym_declaration(sym))
+        if idempotency:
+            prelude = idempotency.prelude
+            fail_handler = idempotency.fail_handler()
+            exit_handler = idempotency.exit_handler()
         else:
-            if outp:
-                # pass first out argument as return value
-                (name, typ) = outp[0]
-                sym = fnscope.add_variable(name, typ, site=site,
-                                           init=initializers[0],
-                                           make_unique=False)
-                sym.incref()
-                code = [sym_declaration(sym)]
-                for ((name, typ), init) in zip(outp[1:], initializers[1:]):
-                    # remaining output arguments pass-by-pointer
-                    param = mkDereference(site, mkLit(site, name, TPtr(typ)))
-                    fnscope.add(ExpressionSymbol(name, param, site))
-                    code.append(mkAssignStatement(site, param, init))
-            else:
-                code = []
+            def prelude():
+                return []
+            fail_handler = (ReturnFailure(rbrace_site) if throws
+                            else NoFailure(site))
+            exit_handler = (GotoExit_dml12()
+                            if ast.site.dml_version() == (1, 2)
+                            else ReturnExit(outp, throws))
 
-        with fail_handler, exit_handler:
-            code.append(codegen_statement(ast, location, fnscope))
-        if exit_handler.used:
-            code.append(mkLabel(site, exit_handler.label))
-        code.append(codegen_return(site, outp, throws, [
-            lookup_var(site, fnscope, varname) for (varname, _) in outp]))
-        to_return = mkCompound(site, code)
-    else:
-        # manually deconstruct compound AST node, to make sure
-        # top-level locals share scope with parameters
-        assert ast.kind == 'compound'
-        [subs] = ast.args
-        with fail_handler, exit_handler:
-            body = prelude()
-            body.extend(codegen_statements(subs, location, fnscope))
-            code = mkCompound(site, body)
-            if code.control_flow().fallthrough:
+        if ast.site.dml_version() == (1, 2):
+            if throws:
+                # Declare and initialize one variable for each output
+                # parameter.  We cannot write to the output parameters
+                # directly, because they should be left untouched if an
+                # exception is thrown.
+                code = []
+                for ((varname, parmtype), init) in zip(outp, initializers):
+                    sym = fnscope.add_variable(
+                        varname, type=parmtype, init=init, make_unique=True)
+                    sym.incref()
+                    code.append(sym_declaration(sym))
+            else:
                 if outp:
-                    report(ENORET(site))
+                    # pass first out argument as return value
+                    (name, typ) = outp[0]
+                    sym = fnscope.add_variable(name, typ, site=site,
+                                               init=initializers[0],
+                                               make_unique=False)
+                    sym.incref()
+                    code = [sym_declaration(sym)]
+                    for ((name, typ), init) in zip(outp[1:], initializers[1:]):
+                        # remaining output arguments pass-by-pointer
+                        param = mkDereference(site,
+                                              mkLit(site, name, TPtr(typ)))
+                        fnscope.add(ExpressionSymbol(name, param, site))
+                        code.append(mkAssignStatement(site, param, init))
                 else:
-                    code = mkCompound(site, body + [codegen_exit(site, [])])
-        to_return = code
-    crep.in_static_context = static_context_before
-    return to_return
+                    code = []
+
+            with fail_handler, exit_handler:
+                code.append(codegen_statement(ast, location, fnscope))
+            if exit_handler.used:
+                code.append(mkLabel(site, exit_handler.label))
+            code.append(codegen_return(site, outp, throws, [
+                lookup_var(site, fnscope, varname) for (varname, _) in outp]))
+            to_return = mkCompound(site, code)
+        else:
+            # manually deconstruct compound AST node, to make sure
+            # top-level locals share scope with parameters
+            assert ast.kind == 'compound'
+            [subs] = ast.args
+            with fail_handler, exit_handler:
+                body = prelude()
+                body.extend(codegen_statements(subs, location, fnscope))
+                code = mkCompound(site, body)
+                if code.control_flow().fallthrough:
+                    if outp:
+                        report(ENORET(site))
+                    else:
+                        code = mkCompound(site, body + [codegen_exit(site,
+                                                                     [])])
+            to_return = code
+        return to_return
 
 # Keep track of methods that we need to generate code for
 def mark_method_referenced(func):

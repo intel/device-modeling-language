@@ -1140,11 +1140,7 @@ named parameter:
   declaration](#parameter-declarations)). This can be done either within the
   template itself, within sub-templates, or within individual objects
   instantiating the template.
-
-  This requirement is enforced by the compiler.
 * The parameter definition must be a valid expression of the specified type.
-
-  This requirement is enforced by the compiler.
 * The parameter definition must be free of side-effects, and must not rely on
   the specific device instance of the DML model &mdash; in particular, the
   definition must be independent of device state.
@@ -1158,9 +1154,7 @@ named parameter:
 
   Examples of expressions that may *not* be used include method calls and
   references to `session`/`saved` variables.
-
-  This requirement is *not* enforced by the compiler &mdash; DML models
-  violating this requirement have undefined behavior.
+* The parameter definition must not contain calls to independent methods.
 
 Typed parameters are most often used to allow a shared method defined within
 the template to access parameters of the template. For example:
