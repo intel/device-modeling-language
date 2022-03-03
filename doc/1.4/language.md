@@ -240,33 +240,36 @@ A device is made up of a number of member objects and methods, where any object
 may contain further objects and methods of its own. Many object types only make
 sense in a particular context and are not allowed elsewhere:
 
-* Objects of type [`bank`](#register-banks) or [`connect`](#connects) may only
-  appear as part of a `device`.
+* There is exactly one [`device`](#the-device) object. It resides on the top
+  level.
+
+* Objects of type [`bank`](#register-banks), [`port`](#ports) or
+  [`subdevice`](#subdevices) may only appear as part of a `device` or
+  `subdevice` object.
 
 * Objects of type [`implement`](#implements) may only appear as part of a
-`device`, `port` or `bank`.
+  `device`, `port`, `bank`, or `subdevice` object.
 
-* Objects of type [`group`](#groups) may appear anywhere.
+* Objects of type [`register`](#registers) may only appear as part of a `bank`.
 
-* Objects of type [`register`](#registers) may only appear as part of
-a `bank`, or indirectly as part of a (possibly nested) `group` that
-is part of a `bank`.
+* Objects of type [`field`](#fields) may only appear as part of a `register`.
 
-* Objects of type [`field`](#fields) may only appear as part of a `register`, or
-indirectly as part of a (possibly nested) `group` that is part of a
-`register`.
+* Objects of type [`connect`](#connects) may only appear as part of a `device`,
+  `subdevice`, `bank`, or `port` object.
 
-* Objects of type [`interface`](#interfaces) may only appear as part of a
-  `connect`.
+* Objects of type [`interface`](#interfaces) may only appear directly below a
+  `connect` object.
 
 * Objects of type [`attribute`](#attributes) may only appear as part of a
-  `device`, `bank`, `port`, or `implement`, or indirectly as part of a (possibly
-  nested) `group` that is part of an object of any one of these types.
+  `device`, `bank`, `port`, `subdevice`, or `implement` object.
 
 * Objects of type [`event`](#events) may appear anywhere **except** as part of a
-  `field`, `interface`, `implement`, or another `event`. They may also not
-  appear indirectly as part of a (possibly nested) `group` that is part of an
-  object of any one of these types.
+  `field`, `interface`, `implement`, or another `event`.
+
+* Objects of type [`group`](#groups) are neutral: Any object may contain a
+  `group` object, and a `group` object may contain any object that its parent
+  object may contain, with the exception that a `group` cannot contain an
+  object of type `interface` or `implement`.
 
 ### Parameters
 
@@ -338,10 +341,15 @@ through the Simics interface `io_memory`, and exposed to scripting and
 user interfaces through the `register_view`, `register_view_read_only`
 and `bank_instrumentation_subscribe` Simics interfaces.
 
-It is possible to define *bank arrays* to model a row of similar
-banks. Each element in the bank array is a separate configuration
-object in Simics, and can thus be individually mapped in a memory
-space.
+It is possible to define *bank arrays* to model a row of similar banks. Each
+element in the bank array is a separate configuration object in Simics, and can
+thus be individually mapped in a memory space.
+
+Simics configuration objects for bank instances are named like the bank but
+with a `.bank` prefix. For instance, if a device model has a declaration `bank
+regs[i < 2]` on top level, and a device instance is named `dev` in Simics, then
+the two banks are represented in Simics by configuration objects named
+`dev.bank.regs[0]` and `dev.bank.regs[1]`.
 
 ### Registers
 
@@ -787,13 +795,14 @@ checkpointing of the event.
 
 ### Groups
 
-Objects of type `attribute`, `connect`, `event`, `field` and `register` can be
-organized into *groups*. A group is a neutral object, which can be used just for
-namespacing, or to help structuring an array of a collection of objects. Groups
-may appear anywhere, but are most commonly used to group registers: If a bank
-has a sequence of blocks, each containing the same registers, it can be written
-as a group array. In the following example eight homogeneous groups of registers
-are created, resulting in 8&#215;6 instances of register `r3`.
+Objects of type `attribute`, `connect`, `event`, `field`, `register`, `bank`,
+`port` and `subdevice` can be organized into *groups*. A group is a neutral
+object, which can be used just for namespacing, or to help structuring an array
+of a collection of objects. Groups may appear anywhere, but are most commonly
+used to group registers: If a bank has a sequence of blocks, each containing
+the same registers, it can be written as a group array. In the following
+example eight homogeneous groups of registers are created, resulting in
+8&#215;6 instances of register `r3`.
 
 ```
 bank regs {
@@ -829,7 +838,7 @@ bank regs {
 }
 ```
 
-In addition, Groups can be nested.
+In addition, groups can be nested.
 
 ```
 bank regs {
@@ -844,6 +853,11 @@ bank regs {
 }
 ```
 
+Banks, ports and subdevices can be placed inside groups; in this case, the
+Simics configuration object that represents the bank, port or subdevice will be
+placed under a namespace object; for instance, if a device with `group g { bank
+regs; }` is instantiated as `dev`, then the bank is represented by an object
+`dev.g.bank.regs`, where `g` and `bank` are both `namespace` objects.
 
 As groups have no special properties or restrictions, they can be used as a tool
 for building abstractions &mdash; in particular in combination with templates.
@@ -941,6 +955,21 @@ implementing high-level communication interfaces.
 
 It is also possible to define port arrays that are indexed
 with an integer parameter, to model a row of similar connectors.
+
+In Simics, a port is represented by a separate configuration object, named like
+the port but with a `.port` prefix. For instance, if a device model has a
+declaration `port p[i<2]` on top level, and a device instance is named `dev` in
+Simics, then the two ports are represented in Simics by objects named
+`dev.port.p[0]` and `dev.port.p[1]`.
+
+### Subdevices
+
+A subdevice is a structural element that represents a distinct subsystem of the
+device. Like a `group`, a subdevice can be used to group a set of related
+banks, ports and attributes, but a subdevice is presented to the end-user as a
+separate configuration object. If a subdevice contains `attribute` or `connect`
+objects, or `saved` declarations, then the corresponding configuration
+attributes appears as members of the subdevice object rather than the device.
 
 ## Templates
 

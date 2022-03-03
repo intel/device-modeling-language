@@ -434,6 +434,11 @@ def object3(t):
               | IMPLEMENT objident array_list maybe_istemplate object_spec'''
     t[0] = ast.object_(site(t), t[2], t[1], t[3], t[4] + t[5])
 
+@prod_dml14
+def object_subdevice(t):
+    '''object : SUBDEVICE objident array_list maybe_istemplate object_spec'''
+    t[0] = ast.object_(site(t), t[2], t[1], t[3], t[4] + t[5])
+
 @prod_dml12
 def maybe_extern_yes(t):
     '''maybe_extern : EXTERN'''

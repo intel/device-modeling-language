@@ -62,7 +62,7 @@ def cref(method_node):
     return '__'.join(ancestor_cnames(method_node)[1:])
 
 def cref_portobj(node, indices):
-    assert node.objtype in {'port', 'bank'}
+    assert node.objtype in {'port', 'bank', 'subdevice'}
     components = ['_obj']
     parent = node
     while parent.parent:
@@ -152,14 +152,15 @@ def node_storage_type_dml12(node, site):
         lsb = expr_intval(param_expr(node, 'lsb', indices))
         signed = param_bool(node, 'signed')
         return TInt(msb - lsb + 1, signed)
-    elif node.objtype in ('bank', 'group', 'event', 'port', 'connect'):
+    elif node.objtype in ('bank', 'group', 'event', 'port', 'connect',
+                          'subdevice'):
         return None
     else:
         raise ICE(site or node, "No storage type for a "+node.objtype)
 
 def conf_object(node, indices):
     '''return a C expression for the conf_object_t* the given node belongs to'''
-    while node.objtype not in ['bank', 'port', 'device']:
+    while node.objtype not in ['bank', 'port', 'device', 'subdevice']:
         node = node.parent
     if node.objtype == 'device' or (dml.globals.dml_version == (1, 2)
                                     and node.name is None):

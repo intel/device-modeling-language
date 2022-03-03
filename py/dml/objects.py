@@ -287,7 +287,7 @@ class Device(CompositeObject):
     objtype = 'device'
     allowed_components = [ 'parameter', 'method', 'saved', 'session', 'bank',
                            'connect', 'attribute', 'event', 'port', 'implement',
-                           'group', 'staticvars', 'initdata']
+                           'group', 'subdevice', 'staticvars', 'initdata']
     def __init__(self, ident, site):
         super(Device, self).__init__(ident, site, None)
         self.static_idx = 0
@@ -323,6 +323,9 @@ class Group(CompositeObject):
                          'connect',
                          'event',
                          'field',
+                         'subdevice',
+                         'bank',
+                         'port',
                          'group'}
     def accepts_child_type(self, comp):
         if comp not in self.groupable_objects:
@@ -447,6 +450,13 @@ class Port(CompositeObject):
     objtype = 'port'
     allowed_components = [ 'parameter', 'method', 'saved', 'session', 'connect',
                            'event', 'implement', 'attribute', 'group' ]
+
+class Subdevice(CompositeObject):
+    __slots__ = ()
+    objtype = 'subdevice'
+    allowed_components = [ 'parameter', 'method', 'saved', 'session', 'connect',
+                           'event', 'implement', 'attribute', 'group',
+                           'port', 'bank', 'subdevice' ]
 
 class Implement(CompositeObject):
     __slots__ = ()

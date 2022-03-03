@@ -171,6 +171,12 @@ template group {
     is object;
     parameter objtype = "group";
     parameter log_group = undefined;
+    if (($this._nongroup_parent.objtype == "port"
+         || $this._nongroup_parent.objtype == "device")
+        && $this.name == "port") {
+         error "Cannot name a group 'port' in a location where"
+             + " port objects are allowed";
+    }
 }
 
 template device {
@@ -1870,6 +1876,14 @@ template event {
 template port {
     is object;
     parameter objtype = "port";
+}
+
+template subdevice {
+    is object;
+    parameter objtype = "subdevice";
+    if ($this.name == "port") {
+         error "A subdevice may not be named 'port'";
+    }
 }
 
 template implement {

@@ -1,0 +1,12 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.2;
+
+device test;
+
+// 1.4+ only
+/// ERROR ESYNTAX
+subdevice d;

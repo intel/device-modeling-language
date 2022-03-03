@@ -5,6 +5,8 @@
 dml 1.2;
 device test;
 import "simics/devs/signal.dml";
+/// SCAN-FOR-TAGS ENALLOW_dml14.dml
+import "ENALLOW_dml14.dml";
 
 connect foo {
     interface signal {
@@ -30,8 +32,9 @@ bank b {
 }
 
 group g {
-    /// ERROR ENALLOW
+    // no error
     port p;
+    // see SIMICS-19009
     /// ERROR ENALLOW
     bank b;
 }

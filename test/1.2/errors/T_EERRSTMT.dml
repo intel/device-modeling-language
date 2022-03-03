@@ -15,11 +15,11 @@ bank b {
     parameter miss_pattern = -1;
 }
 
-port p0 {
+port p3 {
     /// ERROR EERRSTMT
     error;
 }
-port p1 {
+port p4 {
     /// ERROR EERRSTMT
     error "foo";
 }

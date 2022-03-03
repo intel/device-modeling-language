@@ -30,28 +30,28 @@ methods. (See *Simics Model Builder User's Guide* for details.)
 
 ## Device Structure
 
-A device is made up of a number of member objects and methods, where any
-object may contain further objects and methods of its own. Although some
-object types, such as `events`, are generic and can appear
-almost anywhere, many object types only make sense in a particular
-context and are not allowed elsewhere:
+A device is made up of a number of member objects and methods, where any object
+may contain further objects and methods of its own. Although some object types,
+such as `events`, are generic and can appear almost anywhere, many object types
+only make sense in a particular context and are not allowed elsewhere.
 
-* Objects of type <tt>attribute</tt>,
-<tt>bank</tt>, <tt>implement</tt>, or
-<tt>connect</tt>, may only appear as
-part of a <tt>device</tt>.
+* Objects of type `bank` or `port` may only appear in a `device`.
 
-* Objects of type <tt>register</tt> may only appear as
-part of a <tt>bank</tt>, or indirectly as a
-part of a <tt>group</tt> that is (directly or indirectly)
-a part of a `bank`.
+* Objects of type `implement` may only appear in a `device`, `port`, or `bank`.
 
-* Objects of type <tt>field</tt> may only appear
-as part of a `register`.
+* Objects of type `connect` may only appear in a `device`, `port`, or `bank`.
 
-* Objects of type <tt>interface</tt> may only appear
-as part of a <tt>connect</tt>.
+* Objects of type `attribute` may only appear in a `device`, `port`, `bank`, or
+  `implement`.
 
+* Objects of type `interface` may only appear in a `connect`.
+
+* Objects of type `register` may only appear in a `bank`.
+
+* Objects of type `field` may only appear in a `register`.
+
+In addition, the generic container object `group` may be inserted
+as parent of any object type except `bank`, `interface`, and `implement`.
 
 ## Object Types
 

@@ -1,0 +1,69 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+import "simics/simulator/conf-object.dml";
+import "testing.dml";
+
+port p[i < 2] {
+    attribute pa is uint64_attr {
+        method set(attr_value_t a) throws {
+            log info: "PP";
+        }
+    }
+    saved int ps;
+}
+
+subdevice d[i < 2] {
+    attribute da is uint64_attr {
+        method set(attr_value_t a) throws {
+            log spec_viol: "DD";
+        }
+    }
+    saved int ds;
+}
+
+bank b[i < 2] {
+    attribute ba is uint64_attr {
+        method set(attr_value_t a) throws {
+            log unimpl: "BB";
+        }
+    }
+    saved int bs;
+}
+
+method test() throws {
+    // Attributes are registered on the containing port object and not on the
+    // main device (except for legacy attributes).
+    p[1].pa.val = 4;
+    assert SIM_attr_integer(SIM_get_attribute(p[1].obj, "pa")) == 4;
+    p[1].ps = 5;
+    assert SIM_attr_integer(SIM_get_attribute(p[1].obj, "ps")) == 5;
+    d[1].da.val = 6;
+    assert SIM_attr_integer(SIM_get_attribute(d[1].obj, "da")) == 6;
+    d[1].ds = 7;
+    assert SIM_attr_integer(SIM_get_attribute(d[1].obj, "ds")) == 7;
+    b[1].ba.val = 8;
+    assert SIM_attr_integer(SIM_get_attribute(b[1].obj, "ba")) == 8;
+    b[1].bs = 9;
+    assert SIM_attr_integer(SIM_get_attribute(b[1].obj, "bs")) == 9;
+
+    // legacy trampoline attributes
+    assert SIM_class_has_attribute(SIM_object_class(dev.obj), "p_pa");
+    assert SIM_class_has_attribute(SIM_object_class(dev.obj), "b_ba");
+    // no legacy trampoline needed in subdevices (which didn't exist in 5)
+    assert !SIM_class_has_attribute(SIM_object_class(dev.obj), "d_da");
+    // no legacy trampoline attribute for saved variables
+    #foreach name in (["p_ps", "d_ds", "b_bs"]) {
+        assert !SIM_class_has_attribute(SIM_object_class(dev.obj), name);
+    }
+    // In attribute registration code, there is some code that stops port
+    // attributes to also be registered on the base object, so check that too.
+    #foreach name in (["pa", "ps", "da", "ds", "ba", "bs"]) {
+        assert !SIM_class_has_attribute(SIM_object_class(dev.obj), name);
+    }
+}
