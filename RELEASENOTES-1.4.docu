@@ -303,4 +303,12 @@
       </pre></add-note></build-id>
   <build-id value="6148"><add-note>The <tt>issue</tt> method in the
       <tt>map_target</tt> template can now be overridden.</add-note></build-id>
+  <build-id value="next"><add-note> Objects of type `port` and `bank`
+      can now be placed inside `group` objects.</add-note></build-id>
+  <build-id value="next"><add-note> Added a new object type
+      `subdevice`. This object behaves similar to a `port`, with two
+      differences: It may contain `port` and `bank` objects, and the
+      corresponding Simics object does not add a `port.` prefix. For
+      instance, the object for `subdevice x;` is named `dev.x` instead
+      of `dev.port.x`.</add-note></build-id>
 </rn>

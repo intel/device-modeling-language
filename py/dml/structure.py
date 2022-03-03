@@ -901,6 +901,8 @@ def create_object(site, ident, objtype, parent,
         return objects.Event(ident, site, parent, array_lens, index_vars)
     elif objtype == 'port':
         return objects.Port(ident, site, parent, array_lens, index_vars)
+    elif objtype == 'subdevice':
+        return objects.Subdevice(ident, site, parent, array_lens, index_vars)
     elif objtype == 'implement':
         assert not arraylen_asts
         return objects.Implement(ident, site, parent)
@@ -1578,7 +1580,11 @@ def mkobj2(obj, obj_specs, params, each_stmts):
 
     for name in sorted(subobj_defs, key=lambda name: name or ''):
         (objtype, ident, arrayinfo, subobj_specs) = subobj_defs[name]
-        if not obj.accepts_child_type(objtype):
+        if (not obj.accepts_child_type(objtype)
+            # HACK: disallow non-toplevel banks in DML 1.2, see SIMICS-19009
+            or (dml.globals.dml_version == (1, 2)
+                and obj.objtype != 'device'
+                and objtype == 'bank')):
             report(ENALLOW(subobj_specs[0].site, obj))
             continue
         try:

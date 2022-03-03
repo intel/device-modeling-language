@@ -1155,6 +1155,25 @@ _init_port_object(conf_object_t *dev, const char *portname, int ndims,
         return &po->obj;
 }
 
+UNUSED static conf_object_t *
+_dmllib_port_obj_from_device_obj(
+        conf_object_t *dev, const char *qname, const char *port_prefix)
+{
+        // HACK: This function finds the conf-object of a port by mangling
+        // qname. Currently, the extra .port/.bank namespace can only appears
+        // once, as the second last namespace component, because we don't allow
+        // nested ports. Thus, the port name differs from qname only by this
+        // one inserted namespace.
+        const char *dot = strrchr(qname, '.');
+        const char *suffix = dot == NULL ? qname : dot + 1;
+        int prefix_len = suffix - qname;
+        char name[strlen(qname) + strlen(port_prefix) + 1];
+        sprintf(name, "%.*s%s%s", prefix_len, qname, port_prefix, suffix);
+        conf_object_t *ret = SIM_object_descendant(dev, name);
+        ASSERT(ret);
+        return ret;
+}
+
 /*
 Before Simics 6, there were no port objects, so attributes in ports and banks
 were registered on the device object using the name <portname>_<attrname>.  In

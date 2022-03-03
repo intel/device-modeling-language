@@ -12,8 +12,8 @@ import re
 reserved_idents_common = (
     'ATTRIBUTE', 'BANK', 'BITORDER', 'CONNECT', 'CONSTANT', 'DATA',
     'DEVICE', 'EVENT', 'FIELD', 'FOOTER', 'GROUP', 'HEADER', 'IMPLEMENT',
-    'IMPORT', 'INTERFACE', 'LOGGROUP', 'METHOD', 'PORT', 'SIZE', 'NOTHROW',
-    'THEN', 'THROWS', '_HEADER',
+    'IMPORT', 'INTERFACE', 'LOGGROUP', 'METHOD', 'PORT', 'SIZE',
+    'SUBDEVICE', 'NOTHROW', 'THEN', 'THROWS', '_HEADER',
 )
 
 reserved = reserved_idents_common + (

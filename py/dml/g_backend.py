@@ -28,6 +28,7 @@ ID_IMPLEMENT = 10
 ID_INTERFACE = 11
 ID_GROUP     = 12
 ID_DEVICE    = 13
+ID_SUBDEVICE = 14
 
 def array_info(obj):
     return list(zip(obj._arraylens, obj._idxvars))
@@ -102,9 +103,13 @@ def en_group(node):
 def en_device(node):
     return (ID_DEVICE, node.name, crep.structtype(node), en_subobjs(node))
 
+def en_subdevice(node):
+    return (ID_SUBDEVICE, node.name, array_info(node), en_subobjs(node))
+
 obj_encoder_map = {
     'device'    : en_device,
     'bank'      : en_bank,
+    'subdevice' : en_subdevice,
     'connect'   : en_connect,
     'port'      : en_port,
     'attribute' : en_attribute,
@@ -129,7 +134,8 @@ def subobjs(node):
         if s.objtype == 'parameter':
             if s.name in ('this', 'name', 'qname', 'parent', 'index',
                           'indexvar', '_confidentiality', 'desc', 'shown_desc',
-                          'dev', 'bank', 'documentation', 'limitations'):
+                          'dev', 'bank', 'documentation', 'limitations',
+                          'subdevice'):
                 continue
             if (node.objtype == 'device' and
                 s.name in ('obj', 'logobj', 'simics_api_version',

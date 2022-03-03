@@ -532,15 +532,24 @@ template device {
 
 Group objects are generic container objects, used to group other objects.
 They can appear anywhere in the object hierarchy, but some object types
-(currently `implement`, `interface`, `bank` and `port`) may not have a group
+(currently `implement` and `interface`) may not have a group
 as parent.
 
 The `group` template contains no particular methods or parameters other
 than what is inherited from the [`object`](#object) template.
+
+In a group hierarchy directly below a `port` or `device` object, none of the
+group object may be named `bank` or `port`; this is to avoid name clashes.
 */
 template group is object {
     param objtype = "group";
     param log_group = undefined;
+    #if ((_nongroup_parent.objtype == "subdevice"
+          || _nongroup_parent.objtype == "device")
+         && (this.name == "port" || this.name == "bank")) {
+         error "Cannot name a group 'port' or 'bank' in a location where"
+             + " port or bank objects are allowed";
+    }
 }
 
 session bool _issuing_state_callbacks = false;
@@ -1044,6 +1053,8 @@ template interface is object {
     param _required = required;
 }
 
+extern conf_object_t *_dmllib_port_obj_from_device_obj(
+    conf_object_t *dev, const char *qname, const char *prefix);
 /**
 ## Port objects
 
@@ -1058,16 +1069,43 @@ template port is (object, _qname) {
     param limitations = undefined;
     param obj = (simics_api_version == "5" || simics_api_version == "4.8")
         #? dev.obj #: _port_obj();
+
     session conf_object_t *_cached_port_obj;
     shared method _port_obj() -> (conf_object_t *) {
         if (this._cached_port_obj != NULL) {
             return this._cached_port_obj;
         }
-        local char name[strlen(this._qname()) + 6];
-        strcpy(name, "port.");
-        strcpy(name + 5, this._qname());
-        this._cached_port_obj = SIM_object_descendant(dev.obj, name);
+        this._cached_port_obj = _dmllib_port_obj_from_device_obj(
+            dev.obj, this._qname(), "port.");
+        assert this._cached_port_obj != NULL;
         return this._cached_port_obj;
+    }
+}
+
+/**
+## Subdevice objects
+
+The `subdevice` template exposes one parameter, `obj`, which evaluates to the
+`conf_object_t *` of the Simics object that represents the subdevice.
+*/
+
+template subdevice is (object, _qname) {
+    param objtype = "subdevice";
+    // limitations for subdevices are not recognized
+    param limitations = undefined;
+    param obj = _port_obj();
+
+    session conf_object_t *_cached_port_obj;
+    shared method _port_obj() -> (conf_object_t *) {
+        if (this._cached_port_obj != NULL) {
+            return this._cached_port_obj;
+        }
+        this._cached_port_obj = SIM_object_descendant(dev.obj, this._qname());
+        assert this._cached_port_obj != NULL;
+        return this._cached_port_obj;
+    }
+    #if (this.name == "port" || this.name == "bank") {
+         error "A subdevice may not be named 'port' or 'bank'";
     }
 }
 
@@ -1812,10 +1850,8 @@ template bank is (object, shown_desc, _qname) {
         if (this._cached_bank_obj != NULL) {
             return this._cached_bank_obj;
         }
-        local char name[strlen(this._qname()) + 6];
-        strcpy(name, "bank.");
-        strcpy(name + 5, this._qname());
-        this._cached_bank_obj = SIM_object_descendant(dev.obj, name);
+        this._cached_bank_obj = _dmllib_port_obj_from_device_obj(
+            dev.obj, _qname(), "bank.");
         return this._cached_bank_obj;
     }
 

@@ -1,0 +1,33 @@
+/*
+  © 2021-2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+device test;
+
+port p {
+    /// ERROR ENALLOW
+    port p;
+    /// ERROR ENALLOW
+    subdevice d;
+    /// ERROR ENALLOW
+    bank b;
+}
+
+bank b {
+    /// ERROR ENALLOW
+    port p;
+    /// ERROR ENALLOW
+    subdevice d;
+    /// ERROR ENALLOW
+    bank b;
+}
+
+subdevice d {
+    // no problem
+    port p;
+    subdevice d;
+    bank b;
+}

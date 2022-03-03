@@ -38,6 +38,29 @@ group g {
     }
 }
 
+group ga[i < 2][j < 3] {
+    port p[k < 5][l < 7];
+    // 1.2 doesn't allow banks in ports, SIMICS-19009
+    #if (!dml_1_2) {
+         bank b[k < 5][l < 7];
+    }
+}
+subdevice pa[i < 2][j < 3] {
+    port p[k < 5][l < 7];
+    // 1.2 doesn't allow banks in ports, SIMICS-19009
+    #if (!dml_1_2) {
+        bank b[k < 5][l < 7];
+    }
+}
+#if (!dml_1_2) {
+    subdevice weinen {
+        param name = "sorgen";
+        port klagen {
+            param name = "zagen";
+        }
+    }
+}
+
 attribute a is (uint64_attr) { group g { method m() {} } }
 
 connect c {
@@ -106,4 +129,38 @@ method init() {
     assert SIM_class_has_attribute(p, "i_g_a");
     assert SIM_class_has_attribute(p, "i_g_s");
     assert dev.p.i.g.x == 5;
+    local conf_object_t *ga_p = SIM_object_descendant(
+        dev.obj, "ga[1][2].port.p[4][6]");
+    assert SIM_object_class(ga_p) == SIM_get_class("test.ga.p");
+    #if (!dml_1_2) {
+        // 1.2 doesn't have the port.obj param
+        assert ga[1][2].p[4][6].obj == ga_p;
+        // 1.2 doesn't allow banks in ports, SIMICS-19009
+        local conf_object_t *ga_b
+            = SIM_object_descendant(dev.obj, "ga[1][2].bank.b[4][6]");
+        assert SIM_object_class(ga_b) == SIM_get_class("test.ga.b");
+        assert ga[1][2].b[4][6].obj == ga_b;
+    }
+    local conf_object_t *pa_obj = SIM_object_descendant(dev.obj, "pa[1][2]");
+    assert SIM_object_class(pa_obj) == SIM_get_class("test.pa");
+    assert SIM_object_descendant(dev.obj, "port.pa") == NULL;
+    #if (!dml_1_2) {
+        assert pa[1][2].obj == pa_obj;
+    }
+    local conf_object_t *pa_p
+        = SIM_object_descendant(dev.obj, "pa[1][2].port.p[4][6]");
+    assert SIM_object_class(pa_p) == SIM_get_class("test.pa.p");
+    assert SIM_port_object_parent(pa_p) == pa_obj;
+    #if (!dml_1_2) {
+        assert pa[1][2].p[4][6].obj == pa_p;
+        local conf_object_t *pa_b
+            = SIM_object_descendant(dev.obj, "pa[1][2].bank.b[4][6]");
+        assert SIM_object_class(pa_b) == SIM_get_class("test.pa.b");
+        assert pa[1][2].b[4][6].obj == pa_b;
+        local conf_object_t *sorgen_zagen
+            = SIM_object_descendant(dev.obj, "sorgen.port.zagen");
+        assert SIM_object_class(sorgen_zagen)
+            == SIM_get_class("test.sorgen.zagen");
+        assert weinen.klagen.obj == sorgen_zagen;
+   }
 }

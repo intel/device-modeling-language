@@ -204,6 +204,9 @@ register. The hierarchy is composed of the following object types:
 * An [`event` object](language.html#events) is an encapsulation of a Simics
   event, that can be posted on a time queue (CPU or clock).
 
+* A [`subdevice` object](language.html#subdevices) represents a subsystem of a
+  device, which can contain its own ports, banks, and attributes.
+
 ## Methods and Mutable Variables
 [Methods](language.html#methods-detailed) are the DML representation of subroutines.
 They may be declared as members of any object or template. Any method may have

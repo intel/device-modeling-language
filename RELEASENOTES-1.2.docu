@@ -144,4 +144,10 @@
       A warning is now emitted when <tt>qname</tt> of a non-confidential child
       of a confidential object is used outside of <tt>log</tt> statements
       <bug number="SIMICS-18428"/>.</add-note></build-id>
+  <build-id value="next"><add-note> Like in DML 1.4, objects of type
+      `port` can now be placed inside `group` objects. However, `bank`
+      objects are still restricted to top level
+      <bug number="SIMICS-19009"/>. The new object type `subobject` is not
+      directly accessible in DML 1.2, but it is permitted to import DML 1.4
+      code that declares `subobject` objects.</add-note></build-id>
 </rn>

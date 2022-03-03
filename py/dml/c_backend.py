@@ -173,7 +173,7 @@ def print_device_substruct(node):
                     yield (crep.cname(sub), print_device_substruct(sub))
             return composite_ctype(node, members)
 
-    elif node.objtype in ('bank', 'port'):
+    elif node.objtype in ('bank', 'port', 'subdevice'):
         if node.name is None:
             assert dml.globals.dml_version == (1, 2)
             obj = []
@@ -552,7 +552,7 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
 
     register_attribute(node.site, port, attrname)
     if port:
-        if port.dimensions == 0:
+        if port.dimensions == 0 and port.objtype in {'port', 'bank'}:
             register_attribute(node.site, None, "%s_%s" % (port.name, attrname))
             initcode.out(
                 '_register_port_attr(class, %s, offsetof(%s, %s), %s,'
@@ -563,7 +563,7 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
                 + ' "%s", "%s", %s, %s, %s, "%s", %s);\n'
                 % (port.name, attrname, getter, setter,
                    attr_flag, attr_type, doc.read()))
-        elif port.dimensions == 1:
+        elif port.dimensions == 1 and port.objtype in {'port', 'bank'}:
             # Generate an accessor attribute for legacy reasons
             register_attribute(node.site, None, "%s_%s" % (port.name, attrname))
             member = crep.cref_portobj(
@@ -627,17 +627,13 @@ def generate_attributes(initcode, node, port=None,
         for child in children:
             generate_attributes(initcode, child, port, dimsizes, prefix,
                                 loopvars)
-    elif node.objtype in {'device', 'bank', 'port'}:
-        assert prefix == ''
-        assert dimsizes == ()
-        assert loopvars == ()
-        if node.objtype in ('bank', 'port') and (
+    elif node.objtype in {'device', 'bank', 'port', 'subdevice'}:
+        if node.objtype in ('bank', 'port', 'subdevice') and (
                 # anonymous bank
                 dml.globals.dml_version != (1, 2) or node.name != None):
             port = node
         for child in children:
-            generate_attributes(initcode, child, port, dimsizes, prefix,
-                                loopvars)
+            generate_attributes(initcode, child, port)
     else:
         raise ICE(node, f"unknown object type {node.objtype}")
 
@@ -815,29 +811,22 @@ def generate_implement(code, device, impl):
     if not isinstance(ifacestruct, (TStruct, TExternStruct)):
         raise EIFTYPE(impl.site, ifacetype)
 
-    portexpr = param_expr(impl, "parent")
-    assert isinstance(portexpr, NodeRef)
-    (port, indices) = portexpr.get_ref()
+    port = impl.parent
+    assert port.objtype in  {'port', 'bank', 'device', 'subdevice'}
+    assert not impl.local_dimensions()
     if not port.name:
         # anonymous bank
         assert dml.globals.dml_version == (1, 2)
         raise EANONPORT(impl.site, port)
+    code.out("{\n", postindent = 1)
     if not port.parent:
         # device
-        port = None
-
-    code.out("{\n", postindent = 1)
-
-    if not port:
         code.out("static const %s = %s;\n" %
                  (ifacetype.declaration(varname),
                   interface_block(device, ifacestruct, methods, ())))
         code.out('SIM_register_interface(class, "%s", &%s);\n' %
                  (impl.name, varname))
     else:
-        assert ((impl.dimensions == 0 and not port.isindexed()) or
-                (impl.dimensions == port.local_dimensions()))
-
         desc = string_literal(get_short_doc(port))
 
         code.out("static const %s = %s;\n" % (
@@ -845,14 +834,19 @@ def generate_implement(code, device, impl):
             interface_block(device, ifacestruct, methods, PORTOBJ)))
         code.out('SIM_register_interface(%s, "%s", &%s);\n'
                  % (port_class_ident(port), impl.name, varname))
-        if port.local_dimensions() == 0:
+        # Legacy interface ports are only added for ports and banks that were
+        # available in Simics 5, i.e. zero or one dimensional direct
+        # descendants of the device object
+        if (port.local_dimensions() == 0 and port.parent.parent is None
+            and port.objtype != 'subdevice'):
             code.out("static const %s = %s;\n" % (
                 ifacetype.declaration('port_iface'),
                 interface_block(device, ifacestruct, methods, ())))
             code.out('SIM_register_port_interface'
                      '(class, "%s", &port_iface, "%s", %s);\n'
                      % (impl.name, crep.cname(port), desc))
-        elif port.local_dimensions() == 1:
+        elif (port.local_dimensions() == 1 and port.parent.parent is None
+              and port.objtype != 'subdevice'):
             [arrlen] = port.arraylens()
             code.out("static const %s%s = %s;\n" %
                      (ifacetype.declaration("ifaces"),
@@ -880,39 +874,74 @@ def port_class_ident(port):
     initialization function'''
     return '_port_class_' + port.attrname()
 
+def port_prefix(port):
+    return {'bank': 'bank.', 'port': 'port.', 'subdevice': ''}[port.objtype]
+
+def find_port_parent(port, indices):
+    '''Given a port or bank node, find the port node that correspond to
+    port object's port parent, and the name of the port object
+    relative to port parent and the device. The return value is a
+    triple (node, prefix, suffix), where node is the port parent,
+    suffix is the conf-object name as descendant of the port parent,
+    and (prefix+suffix) is the conf-object name as descendant of the
+    device. E.g., for a node subdev.p, returns (subdev.obj, "subdev",
+    "port.p").'''
+    ancestor = port.parent
+    suffix_parts = [port_prefix(port) + port.name_anonymized
+                    + ''.join(f'[{i}]' for i in indices[ancestor.dimensions:])]
+    indices = indices[:ancestor.dimensions]
+    while ancestor.objtype not in {'device', 'subdevice'}:
+        assert ancestor.objtype == 'group'
+        name = ancestor.name_anonymized
+        idx = ''.join(f'[{i}]' for i in indices[ancestor.parent.dimensions:])
+        suffix_parts.append(f'{name}{idx}.')
+        ancestor = ancestor.parent
+        indices = indices[:ancestor.dimensions]
+    if ancestor.objtype == 'device':
+        prefix = ''
+    else:
+        (_, prefix_prefix, prefix_suffix) = find_port_parent(ancestor, indices)
+        prefix = f'{prefix_prefix}{prefix_suffix}.'
+    return (ancestor, prefix, ''.join(reversed(suffix_parts)))
+
+def node_ancestors(node, since):
+    while True:
+        if node is since:
+            return
+        yield node
+        node = node.parent
+
 def generate_port_class(code, device, port):
-    # this will break when we add support for nested ports. Then,
-    # the inner port class should be expressed as a port class of
-    # the outer port class, rather than of the device.
-    assert port.parent.parent is None
-    name = port.name
+    (port_parent, prefix, suffix) = find_port_parent(
+        port, ('%d',) * port.dimensions)
+    portclass_name_comps = [o.name_anonymized
+                            for o in node_ancestors(port, device)]
+    portclass_name_comps.append(param_str(device, 'classname', fallback=''))
+    portclass_name = '.'.join(reversed(portclass_name_comps))
     desc = string_literal(get_short_doc(port))
     doc = string_literal(get_long_doc(port))
-    code.out('conf_class_t *%s = _register_port_class("%s.%s", %s, %s);\n' % (
-        port_class_ident(port), param_str(device, 'classname', fallback=''),
-        name, desc, doc))
-    port_prefix = {objects.Bank: 'bank.', objects.Port: 'port.'}[type(port)]
-    if port.dimensions:
-        for (i, sz) in enumerate(port.dimsizes):
-            code.out('for (int _i%d = 0; _i%d < %d; ++_i%d) {\n'
-                % (i, i, sz, i), postindent=1)
-        code.out('strbuf_t portname = sb_newf("%s%s"%s);\n'
-                     % (port_prefix,
-                        port.logname_anonymized(('%d',) * port.dimensions),
-                        ''.join(', _i%d' % (i,)
-                                for i in range(port.dimensions))))
-        code.out('SIM_register_port(class, sb_str(&portname), %s, %s);\n' % (
-            port_class_ident(port), desc))
+    code.out(f'conf_class_t *{port_class_ident(port)} = _register_port_class('
+             f'"{portclass_name}", {desc}, {doc});\n')
+    port_parent_class = ('class' if port_parent.objtype == 'device'
+                         else port_class_ident(port_parent))
+    port_dims = port.dimensions - port_parent.dimensions
+    if port_dims:
+        for (i, sz) in enumerate(port.dimsizes[port_parent.dimensions:]):
+            code.out(f'for (int _i{i} = 0; _i{i} < {sz}; ++_i{i}) {{\n',
+                     postindent=1)
+        fmtargs = ''.join(f', _i{i}' for i in range(port_dims))
+        code.out(f'strbuf_t portname = sb_newf("{suffix}"{fmtargs});\n')
+        code.out(f'SIM_register_port({port_parent_class}, sb_str(&portname),'
+                 f' {port_class_ident(port)}, {desc});\n')
         code.out('sb_free(&portname);\n')
-        for _ in range(port.dimensions):
+        for _ in range(port_dims):
             code.out('}\n', preindent=-1)
     else:
-        code.out('SIM_register_port(class, "%s%s", %s, %s);\n' % (
-            port_prefix, port.logname_anonymized(), port_class_ident(port),
-            desc))
+        code.out(f'SIM_register_port({port_parent_class},'
+                 f' "{suffix}", {port_class_ident(port)}, {desc});\n')
 
 def generate_port_classes(code, device):
-    for port in device.get_recursive_components('port', 'bank'):
+    for port in device.get_recursive_components('port', 'bank', 'subdevice'):
         if port.name is None:
             assert dml.globals.dml_version == (1, 2)
             continue
@@ -1486,21 +1515,20 @@ def generate_init_port_objs(device):
     start_function_definition(
         'void _init_port_objs(%s *_dev)' % (crep.structtype(device),))
     out('{\n', postindent = 1)
-    for port in device.get_recursive_components('port', 'bank'):
+    for port in device.get_recursive_components('port', 'bank', 'subdevice'):
         if port.name is None:
             # anonymous bank
             continue
-        port_prefix = {objects.Bank: 'bank.', objects.Port: 'port.'}[type(port)]
+        (_, prefix, suffix) = find_port_parent(
+            port, ('%d',) * port.dimensions)
+        portname = prefix + suffix
         if port.dimensions:
             index_enumeration = get_index_enumeration(port.site, port.dimsizes)
             for (i, sz) in enumerate(port.dimsizes):
-                out('for (int _i%d = 0; _i%d < %d; ++_i%d) {\n'
-                    % (i, i, sz, i), postindent=1)
-            out('strbuf_t portname = sb_newf("%s%s"%s);\n'
-                % (port_prefix,
-                   port.logname_anonymized(('%d',) * port.dimensions),
-                   ''.join(', _i%d' % (i,)
-                           for i in range(port.dimensions))))
+                out(f'for (int _i{i} = 0; _i{i} < {sz}; ++_i{i}) {{\n',
+                    postindent=1)
+            fmtargs = ''.join(f', _i{i}' for i in range(port.dimensions))
+            out(f'strbuf_t portname = sb_newf("{portname}"{fmtargs});\n')
             loop_indices = tuple(
                 mkLit(port.site, '_i%d' % i, TInt(32, False))
                 for i in range(port.dimensions))
@@ -1513,12 +1541,10 @@ def generate_init_port_objs(device):
                 % (port.dimensions, index_array))
             out('sb_free(&portname);\n')
             for _ in range(port.dimensions):
-                out('\n}', preindent=-1)
+                out('}\n', preindent=-1)
         else:
-            out('_dev->%s = _init_port_object('
-                % (crep.cref_portobj(port, ()),)
-                + '&_dev->obj, "%s%s", 0, NULL);\n'
-                % (port_prefix, port.logname_anonymized()))
+            out(f'_dev->{crep.cref_portobj(port, ())} = _init_port_object('
+                f'&_dev->obj, "{portname}", 0, NULL);\n')
     out('}\n', preindent=-1)
 
 def generate_init_static_vars(device):
@@ -1660,7 +1686,8 @@ def generate_init(device, initcode, outprefix):
         out('NULL\n')
         out('};\n', preindent = -1)
         out('SIM_log_register_groups(class, log_groups);\n')
-        for port in device.get_recursive_components('port', 'bank'):
+        for port in device.get_recursive_components('port', 'bank',
+                                                    'subdevice'):
             if port.name is None:
                 assert dml.globals.dml_version == (1, 2)
             else:
@@ -1964,7 +1991,7 @@ def flatten_object_subtree(node):
     '''return a list of all composite subobjects inside node'''
     return [node] + node.get_recursive_components(
         'event', 'port', 'implement', 'attribute', 'connect',
-        'interface', 'bank', 'group', 'register', 'field')
+        'interface', 'bank', 'group', 'register', 'field', 'subdevice')
 
 def init_trait_vtables_for_node(node, param_values, dims, parent_indices):
     init_calls = []
@@ -2146,14 +2173,14 @@ def generate_saved_userdata(node, dimensions, prefix):
                     except ESERIALIZE as e:
                         report(e)
         elif (isinstance(child, objects.CompositeObject)
-              and child.objtype not in ('bank', 'port')):
+              and child.objtype not in ('bank', 'port', 'subdevice')):
             yield from generate_saved_userdata(
                 child, dimensions + child.arraylens(),
                 prefix + param_str(child, "name") + "_")
 
 def register_saved_attributes(initcode, node):
     if node is dml.globals.device:
-        for port in node.get_components('bank', 'port'):
+        for port in node.get_components('bank', 'port', 'subdevice'):
             register_saved_attributes(initcode, port)
         cls = 'class'
         getter = '_get_saved_variable'
