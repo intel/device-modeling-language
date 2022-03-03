@@ -57,4 +57,9 @@ When set, DMLC does self-profiling and writes the profile to a .prof file.
 When set, DMLC emits a `.tar.xz` archive containing all DML source files,
 packaged on a form that can be compiled standalone. This is useful when a DML
 problem appears within a complex build environment, and you want to reproduce
-the problem in isolation.
+the problem in isolation. In the created archive, all DML files are located in
+the same directory (either top level or under a series of subdirectories called
+`_`), and relative imports are handled by also including symlinks in the
+archive. On Windows, DMLC is sometimes unable to resolve these symlinks
+correctly; for this reason, it is recommended that the archive is only
+extracted and compiled on Linux.
