@@ -820,10 +820,6 @@ def register_fields(reg):
             # site is probably more relevant
             report(EFARRSZ(param_expr_site(field, 'msb')))
 
-obj_node_types = {'device', 'bank', 'group', 'register',
-                  'field', 'connect', 'interface',
-                  'attribute', 'event', 'port', 'implement'}
-
 def report_unused_templates():
     for tpl in PWUNUSED.used_templates:
         if not tpl.name.startswith('@'):
