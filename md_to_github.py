@@ -11,11 +11,12 @@ import json
 import functools
 import traceback
 import validate_md_links
+import tarfile
+from io import BytesIO
 
-(toc, outdir, *dirs) = sys.argv[1:]
+(toc, outfile, *dirs) = sys.argv[1:]
 
 toc = json.loads(Path(toc).read_text())
-outdir = Path(outdir)
 dirs = list(map(Path, dirs))
 
 def toc_md_files(toc, indices):
@@ -70,23 +71,30 @@ for (path, indices) in toc_md_files(toc, []):
         '#' * len(indices) + f'# [{title}]({basename})')
     filename = basename + '.md'
     filename_map[path.with_suffix('.html').name] = basename
-    bodies.append((outdir / filename, body))
+    bodies.append((filename, body))
 
-for (path, body) in bodies:
-    for match in reversed(list(link_re.finditer(body))):
-        start = match.start(1)
-        end = match.end(1)
-        if end > start:
-            body = body[:start] + filename_map[match[1]] + body[end:]
-    path.write_text(copyright + body)
+def add_to_tar(tf, path, contents):
+    ti = tarfile.TarInfo(name=path)
+    contents = contents.encode('utf-8')
+    ti.size = len(contents)
+    tf.addfile(ti, BytesIO(contents))
 
-# When built in a Simics tree, this will detect the current Simics version
-specs = outdir / '..' / '..' / '..' / '..' / 'package-specs.json'
-pkgs = json.loads(specs.read_bytes()) if specs.is_file() else {}
-version = pkgs.get('Simics-Base-linux64', {}).get('version', '6.0.xxx')
+with tarfile.open(outfile, "w:gz") as tgz:
+    for (path, body) in bodies:
+        for match in reversed(list(link_re.finditer(body))):
+            start = match.start(1)
+            end = match.end(1)
+            if end > start:
+                body = body[:start] + filename_map[match[1]] + body[end:]
+        add_to_tar(tgz, path, copyright + body)
 
-head = [copyright,
-        f'This is the reference manual of DML 1.4, as of Simics {version}, '
-        'converted to GitHub markdown.']
-(outdir / 'DML-1.4-Reference-Manual.md').write_text(
-    '\n'.join(head + frontpage_links))
+    # When built in a Simics tree, this will detect the current Simics version
+    specs = Path('..') / '..' / '..' / 'package-specs.json'
+    pkgs = json.loads(specs.read_bytes()) if specs.is_file() else {}
+    version = pkgs.get('Simics-Base-linux64', {}).get('version', '6.0.xxx')
+
+    head = [copyright,
+            f'This is the reference manual of DML 1.4, as of Simics {version}, '
+            'converted to GitHub markdown.']
+    add_to_tar(tgz, 'DML-1.4-Reference-Manual.md',
+               '\n'.join(head + frontpage_links))
