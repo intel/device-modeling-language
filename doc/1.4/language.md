@@ -1638,12 +1638,18 @@ and inline methods remain mainly for compatibility reasons.
 In DML 1.4, methods can be `exported` using the
 [`export` declaration](#export-declarations).
 
-### Independent Methods
+### Method Qualifiers
+There are a number of qualifiers that can be applied to method declarations.
+These are specified through a space delimited list immediately before the
+`method` keyword in a declaration, and any method declaration overriding another
+must share the same qualifiers as the overridden method declaration. Method
+qualifiers can be used for both regular methods as well as`shared` methods.
 
+#### Independent Methods
 Methods that do not rely on the particular instance of the device model may
 be declared `independent`:
 ```
-independent method m(...) -> (...) [throws] {...}
+independent method m(...) -> (...) {...}
 ```
 [Exported](#export-declarations) independent methods do not have the input
 parameter corresponding to the device instance, allowing them to be called
@@ -1656,28 +1662,28 @@ Within a template, `shared independent method`s may be declared. An example of
 this is the `model_init()` method of the
 [`model_init`](dml-builtins.html#model_init) template.
 
-### Idempotent Methods
+#### Memoized Methods
 
-Methods can be declared `idempotent` as a means of memoization: after the
-first call of an idempotent method, all subsequent calls for the simulation
+Methods can be declared `memoized` as a means of memoization: after the
+first call of an memoized method, all subsequent calls for the simulation
 session return the results of the first call without executing the body of the
-method. Idempotent methods are declared as follows:
+method. Memoized methods are declared as follows:
 ```
-[independent] idempotent method m() -> (...) [throws] {...}
+memoized method m() -> (...) {...}
 ```
-Note that idempotent methods may not have any input parameters. If an idempotent
-method call throws, then subsequent calls will throw without executing the body.
+Memoized methods have the restriction that they may not take any input
+parameters. If a memoized method call throws, then subsequent calls will throw
+without executing the body.
 
-Results are cached per device instance, except for `independent idempotent`
-methods, where result caching is shared across all device instances. This
-mechanism can be used to compute device-independent data which is then shared
-across all instances of the device model.
+Results are cached per device instance, except for memoized methods that are
+also declared independent, in which case result caching is shared across all
+device instances. This mechanism can be used to compute device-independent data
+which is then shared across all device instances of the model.
 
-Within a template, both `shared idempotent method`s and
-`shared independent idempotent method`s may be declared. Result caching
-is done per-instance, and is not shared across template instances.
+For `shared` memoized methods, result caching is done per-instance, and is not
+shared across template instances.
 
-(Indirectly) recursive idempotent method calls are not allowed; the result of
+(Indirectly) recursive memoized method calls are not allowed; the result of
 such a call is undefined. Performing such a method call will result in a
 run-time critical error.
 

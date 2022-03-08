@@ -479,17 +479,17 @@ class MethodDefault(metaclass=abc.ABCMeta):
 
 class Method(DMLObject):
     objtype = 'method'
-    __slots__ = ('inp', 'outp', 'throws', 'independent', 'idempotent',
+    __slots__ = ('inp', 'outp', 'throws', 'independent', 'memoized',
                  'astcode', 'fully_typed', 'funcs', 'refcount',
                  'default_method', 'rbrace_site')
     def __init__(self, name, site, parent, inp, outp, throws, independent,
-                 idempotent, astcode, default_method, rbrace_site):
+                 memoized, astcode, default_method, rbrace_site):
         DMLObject.__init__(self, name, site, parent)
         self.inp = tuple(inp)
         self.outp = tuple(outp)
         self.throws = throws
         self.independent = independent
-        self.idempotent = idempotent
+        self.memoized = memoized
         self.astcode = astcode
         # A flag indicating whether all parameters have types
         self.fully_typed = all(t for p, t in self.inp + self.outp)

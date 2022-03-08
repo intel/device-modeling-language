@@ -11,136 +11,136 @@ header %{
 %}
 extern bool fired;
 
-idempotent method idemp_0() {
+memoized method idemp_0() {
     fired = true;
 }
 
-idempotent method idemp_0_t() throws {
+memoized method idemp_0_t() throws {
     fired = true;
     throw;
 }
 
-idempotent method idemp_0_nt() throws {
+memoized method idemp_0_nt() throws {
     fired = true;
 }
 
-idempotent method idemp_1() -> (int) {
+memoized method idemp_1() -> (int) {
     fired = true;
     return 4;
 }
 
-idempotent method idemp_2() -> (int, double) {
+memoized method idemp_2() -> (int, double) {
     fired = true;
     return (4, 7.2);
 }
 
-idempotent method idemp_2_t() -> (int, double) throws {
+memoized method idemp_2_t() -> (int, double) throws {
     fired = true;
     throw;
 }
 
-idempotent method idemp_2_nt() -> (int, double) throws {
+memoized method idemp_2_nt() -> (int, double) throws {
     fired = true;
     return (4, 7.2);
 }
 
-independent idempotent method indep_idemp_0() {
+memoized independent method indep_idemp_0() {
     fired = true;
 }
 
-independent idempotent method indep_idemp_0_t() throws {
+memoized independent method indep_idemp_0_t() throws {
     fired = true;
     throw;
 }
 
-independent idempotent method indep_idemp_0_nt() throws {
+memoized independent method indep_idemp_0_nt() throws {
     fired = true;
 }
 
-independent idempotent method indep_idemp_1() -> (int) {
+memoized independent method indep_idemp_1() -> (int) {
     fired = true;
     return 4;
 }
 
-independent idempotent method indep_idemp_2() -> (int, double) {
+memoized independent method indep_idemp_2() -> (int, double) {
     fired = true;
     return (4, 7.2);
 }
 
-independent idempotent method indep_idemp_2_t() -> (int, double) throws {
+memoized independent method indep_idemp_2_t() -> (int, double) throws {
     fired = true;
     throw;
 }
 
-independent idempotent method indep_idemp_2_nt() -> (int, double) throws {
+memoized independent method indep_idemp_2_nt() -> (int, double) throws {
     fired = true;
     return (4, 7.2);
 }
 
 template t {
-    shared idempotent method s_idemp_0() {
+    shared memoized method s_idemp_0() {
         fired = true;
     }
 
-    shared idempotent method s_idemp_0_t() throws {
+    shared memoized method s_idemp_0_t() throws {
         fired = true;
         throw;
     }
 
-    shared idempotent method s_idemp_0_nt() throws {
+    shared memoized method s_idemp_0_nt() throws {
         fired = true;
     }
 
-    shared idempotent method s_idemp_1() -> (int) {
+    shared memoized method s_idemp_1() -> (int) {
         fired = true;
         return 4;
     }
 
-    shared idempotent method s_idemp_2() -> (int, double) {
+    shared memoized method s_idemp_2() -> (int, double) {
         fired = true;
         return (4, 7.2);
     }
 
-    shared idempotent method s_idemp_2_t() -> (int, double) throws {
+    shared memoized method s_idemp_2_t() -> (int, double) throws {
         fired = true;
         throw;
     }
 
-    shared idempotent method s_idemp_2_nt() -> (int, double) throws {
+    shared memoized method s_idemp_2_nt() -> (int, double) throws {
         fired = true;
         return (4, 7.2);
     }
 
-    shared independent idempotent method s_indep_idemp_0() {
+    shared memoized independent method s_indep_idemp_0() {
         fired = true;
     }
 
-    shared independent idempotent method s_indep_idemp_0_t() throws {
+    shared memoized independent method s_indep_idemp_0_t() throws {
         fired = true;
         throw;
     }
 
-    shared independent idempotent method s_indep_idemp_0_nt() throws {
+    shared memoized independent method s_indep_idemp_0_nt() throws {
         fired = true;
     }
 
-    shared independent idempotent method s_indep_idemp_1() -> (int) {
+    shared memoized independent method s_indep_idemp_1() -> (int) {
         fired = true;
         return 4;
     }
 
-    shared independent idempotent method s_indep_idemp_2() -> (int, double) {
+    shared memoized independent method s_indep_idemp_2() -> (int, double) {
         fired = true;
         return (4, 7.2);
     }
 
-    shared independent idempotent method s_indep_idemp_2_t() -> (int, double)
+    shared memoized independent method s_indep_idemp_2_t() -> (int, double)
         throws {
         fired = true;
         throw;
     }
 
-    shared independent idempotent method s_indep_idemp_2_nt() -> (int, double)
+    shared memoized independent method s_indep_idemp_2_nt() -> (int, double)
         throws {
         fired = true;
         return (4, 7.2);

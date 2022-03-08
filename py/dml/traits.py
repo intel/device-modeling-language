@@ -50,7 +50,7 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
     for ast in subasts:
         try:
             if ast.kind == 'sharedmethod':
-                (mname, inp_asts, outp_asts, throws, independent, idempotent,
+                (mname, inp_asts, outp_asts, throws, independent, memoized,
                  overridable, body, rbrace_site) = ast.args
                 # TODO: a trait method cannot use a subtrait in the
                 # argument list
@@ -58,7 +58,7 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                 outp = eval_method_outp(outp_asts, None, global_scope)
                 check_namecoll(mname, ast.site)
                 methods[mname] = (ast.site, inp, outp, throws, independent,
-                                  idempotent, overridable, body, rbrace_site)
+                                  memoized, overridable, body, rbrace_site)
             elif ast.kind in ('session', 'saved'):
                 (decls, _) = ast.args
                 for decl_ast in decls:
@@ -114,11 +114,11 @@ class TraitVTableItem(metaclass=abc.ABCMeta):
     def name(self): '''Field name in vtable struct'''
 
 class TraitMethod(TraitVTableItem):
-    __slots__ = ('site', 'inp', 'outp', 'throws', 'independent', 'idempotent',
+    __slots__ = ('site', 'inp', 'outp', 'throws', 'independent', 'memoized',
                  'astbody', 'name', 'trait', 'default_trait', 'overridable',
-                 'rbrace_site', '_idemp_outs_struct', 'id')
+                 'rbrace_site', '_memo_outs_struct', 'id')
 
-    def __init__(self, site, inp, outp, throws, independent, idempotent,
+    def __init__(self, site, inp, outp, throws, independent, memoized,
                  overridable, astbody, trait, name, default_trait,
                  rbrace_site):
         self.site = site
@@ -126,7 +126,7 @@ class TraitMethod(TraitVTableItem):
         self.outp = outp
         self.throws = throws
         self.independent = independent
-        self.idempotent = idempotent
+        self.memoized = memoized
         self.overridable = overridable
         self.astbody = astbody
         self.trait = trait
@@ -134,7 +134,7 @@ class TraitMethod(TraitVTableItem):
         # the trait whose implementation we override, or None
         self.default_trait = default_trait
         self.rbrace_site = rbrace_site
-        self._idemp_outs_struct = None
+        self._memo_outs_struct = None
 
     def __str__(self):
         return '%s.%s' % (self.trait.name, self.name)
@@ -144,16 +144,16 @@ class TraitMethod(TraitVTableItem):
         return '_DML_TM_%s__%s' % (self.trait.name, self.name)
 
     @property
-    def idemp_outs_struct(self):
-        assert self.idempotent
-        if self._idemp_outs_struct is None:
-            idemp_dict = {'p_' + name: typ for (name, typ) in self.outp}
-            idemp_dict['ran'] = TInt(8, False)
+    def memo_outs_struct(self):
+        assert self.memoized
+        if self._memo_outs_struct is None:
+            memo_dict = {'p_' + name: typ for (name, typ) in self.outp}
+            memo_dict['ran'] = TInt(8, False)
             if self.throws:
-                idemp_dict['threw'] = TBool()
-            self._idemp_outs_struct = TStruct(
-                idemp_dict, label=f'_idemp_{self.trait.name}__{self.name}')
-        return self._idemp_outs_struct
+                memo_dict['threw'] = TBool()
+            self._memo_outs_struct = TStruct(
+                memo_dict, label=f'_memo_{self.trait.name}__{self.name}')
+        return self._memo_outs_struct
 
     @property
     def vtable_trait(self):
@@ -213,15 +213,15 @@ class TraitMethod(TraitVTableItem):
                               'Methods with (partially) const output/return '
                               + 'values are not yet supported.')
 
-            if self.idempotent:
-                idempotency = (codegen.SharedIndependentIdempotent(self)
+            if self.memoized:
+                memoization = (codegen.SharedIndependentMemoized(self)
                                if self.independent
-                               else codegen.SharedIdempotent(self))
+                               else codegen.SharedMemoized(self))
             else:
-                idempotency = None
+                memoization = None
             body = codegen_method(
                 self.site, self.inp, self.outp, self.throws, self.independent,
-                idempotency, self.astbody, default,
+                memoization, self.astbody, default,
                 Location(dml.globals.device, ()), scope, self.rbrace_site)
 
             downcast_path = self.downcast_path()
@@ -286,7 +286,7 @@ def mktrait(site, tname, ancestors, methods, params, sessions,
         del sessions[name]
 
     bad_methods = set()
-    for (name, (msite, inp, outp, throws, independent, idempotent, overridable,
+    for (name, (msite, inp, outp, throws, independent, memoized, overridable,
                 body, rbrace_site)) in list(methods.items()):
         for ancestor in direct_parents:
             coll = ancestor.member_declaration(name)
@@ -318,7 +318,7 @@ def mktrait(site, tname, ancestors, methods, params, sessions,
                     try:
                         typecheck_method_override(
                             (msite, inp, outp, throws, independent,
-                             idempotent),
+                             memoized),
                             ancestor_vtables[name].vtable_methods[name])
                     except DMLError as e:
                         report(e)
@@ -341,8 +341,8 @@ def mktrait(site, tname, ancestors, methods, params, sessions,
                  ancestor_vtables, ancestor_method_impls, reserved_symbols)
 
 def typecheck_method_override(left, right):
-    (site0, inp0, outp0, throws0, independent0, idempotent0) = left
-    (site1, inp1, outp1, throws1, independent1, idempotent1) = right
+    (site0, inp0, outp0, throws0, independent0, memoized0) = left
+    (site1, inp1, outp1, throws1, independent1, memoized1) = right
     if len(inp0) != len(inp1):
         raise EMETH(site0, site1, "different number of input arguments")
     if len(outp0) != len(outp1):
@@ -359,7 +359,7 @@ def typecheck_method_override(left, right):
                         "mismatching types in output argument %d" % (i + 1,))
 
     if independent0 > independent1:
-        raise EMETH(site0, site1
+        raise EMETH(site0, site1,
                     ("overriding method is declared independent, "
                      + "but the overridden method is not"))
     elif independent0 < independent1:
@@ -367,13 +367,13 @@ def typecheck_method_override(left, right):
                     ("overridden method is declared independent, "
                      + "but the overriding method is not"))
 
-    if idempotent0 > idempotent1:
-        raise EMETH(site0, site1
-                    ("overriding method is declared idempotent, "
-                     + "but the overridden method is not"))
-    elif idempotent0 < idempotent1:
+    if memoized0 > memoized1:
         raise EMETH(site0, site1,
-                    ("overridden method is declared idempotent, "
+                    ("overriding method is declared memoized, "
+                     + "but the overridden method is not"))
+    elif memoized0 < memoized1:
+        raise EMETH(site0, site1,
+                    ("overridden method is declared memoized, "
                      + "but the overriding method is not"))
 
 def merge_method_impl_maps(site, parents):
@@ -598,9 +598,9 @@ class Trait(SubTrait):
                  ancestor_vtables, ancestor_method_impls, reserved_symbols):
         method_impls = {
             name: TraitMethod(
-                msite, inp, outp, throws, independent, idempotent, overridable,
+                msite, inp, outp, throws, independent, memoized, overridable,
                 body, self, name, ancestor_method_impls.get(name), rbrace_site)
-            for (name, (msite, inp, outp, throws, independent, idempotent,
+            for (name, (msite, inp, outp, throws, independent, memoized,
                         overridable, body, rbrace_site))
             in list(methods.items())
             if body is not None}
@@ -622,8 +622,8 @@ class Trait(SubTrait):
 
         # methods and parameters that are direct members of this trait's vtable
         self.vtable_methods = {
-            name: (msite, inp, outp, throws, independent, idempotent)
-            for (name, (msite, inp, outp, throws, independent, idempotent,
+            name: (msite, inp, outp, throws, independent, memoized)
+            for (name, (msite, inp, outp, throws, independent, memoized,
                         overridable, _, _))
             in list(methods.items())
             if overridable and name not in ancestor_vtables}
@@ -749,13 +749,13 @@ class Trait(SubTrait):
             yield (name, ptype)
         for (name, (_, ptype)) in list(self.vtable_sessions.items()):
             yield (name, TInt(32, False))
-        for (name, (_, inp, outp, throws, independent, idempotent)) \
+        for (name, (_, inp, outp, throws, independent, memoized)) \
             in list(self.vtable_methods.items()):
             yield (name, self.vtable_method_type(inp, outp, throws,
                                                  independent))
         for method in self.method_impls.values():
-            if method.independent and method.idempotent:
-                yield (f'_{method.name}_outs', method.idemp_outs_struct)
+            if method.independent and method.memoized:
+                yield (f'_{method.name}_outs', method.memo_outs_struct)
 
     def mark_referenced(self):
         if not self in Trait.referenced:

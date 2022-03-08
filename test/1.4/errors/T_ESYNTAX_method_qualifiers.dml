@@ -1,0 +1,36 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+// no error
+independent memoized method a() {}
+memoized independent method b() {}
+
+/// ERROR ESYNTAX
+independent independent method c() {}
+/// ERROR ESYNTAX
+memoized memoized method d() {}
+/// ERROR ESYNTAX
+memoized independent memoized method e() {}
+/// ERROR ESYNTAX
+independent memoized independent method f() {}
+
+template t {
+    // no error
+    shared independent memoized method g() {}
+    shared memoized independent method h() {}
+
+    /// ERROR ESYNTAX
+    shared independent independent method i() {}
+    /// ERROR ESYNTAX
+    shared memoized memoized method j() {}
+    /// ERROR ESYNTAX
+    shared memoized independent memoized method k() {}
+    /// ERROR ESYNTAX
+    shared independent memoized independent method l() {}
+}
+
+is t;

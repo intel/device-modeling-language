@@ -238,7 +238,7 @@ class ReturnExit(ExitHandler):
         assert retvals is not None, 'dml 1.2/1.4 mixup'
         return codegen_return(site, self.outp, self.throws, retvals)
 
-class IdempotentReturnFailure(Failure):
+class MemoizedReturnFailure(Failure):
     '''Generate boolean return statements to signal success. False
     means success.'''
 
@@ -262,7 +262,7 @@ class IdempotentReturnFailure(Failure):
                  mkReturn(site, mkBoolConstant(site, False))]
         return mkCompound(site, stmts)
 
-class IdempotentReturnExit(ExitHandler):
+class MemoizedReturnExit(ExitHandler):
     def __init__(self, site, outp, throws, mkRef):
         self.site = site
         self.outp = outp
@@ -283,7 +283,7 @@ class IdempotentReturnExit(ExitHandler):
         stmts.append(codegen_return(site, self.outp, self.throws, targets))
         return mkCompound(site, stmts)
 
-class Idempotency():
+class Memoization:
     def prelude(self):
         pass
     def exit_handler(self):
@@ -291,7 +291,7 @@ class Idempotency():
     def fail_handler(self):
         pass
 
-class Idempotent(Idempotency):
+class Memoized(Memoization):
     def __init__(self, func, location):
         self.func = func
         self.method = func.method
@@ -307,78 +307,78 @@ class Idempotent(Idempotency):
         assert safe_realtype(expr.ctype()).cmp(safe_realtype(typ)) == 0
         return expr
     def prelude(self):
-        return idempotency_common_prelude(
+        return memoization_common_prelude(
             self.method.logname_anonymized(), self.method.site, self.func.outp,
             self.func.throws, self.mkRef)
     def exit_handler(self):
-        return IdempotentReturnExit(self.method.site, self.func.outp,
+        return MemoizedReturnExit(self.method.site, self.func.outp,
                                     self.func.throws, self.mkRef)
     def fail_handler(self):
-        return (IdempotentReturnFailure(self.method.rbrace_site, self.mkRef)
+        return (MemoizedReturnFailure(self.method.rbrace_site, self.mkRef)
                 if self.func.throws else NoFailure(self.method.site))
 
-class IndependentIdempotent(Idempotency):
+class IndependentMemoized(Memoization):
     def __init__(self, func):
         self.func = func
         self.method = func.method
 
     def mkRef(self, ref, typ):
-        return mkLit(self.method.site, f'_idemp__{ref}', typ)
+        return mkLit(self.method.site, f'_memo__{ref}', typ)
 
     def prelude(self):
         stmts = [
             mkInline(
                 self.method.site,
-                f'static {typ.declaration(f"_idemp__{name}")};')
+                f'static {typ.declaration(f"_memo__{name}")};')
             for (name, typ) in (
                 [('ran', TInt(8, True))]
                 + ([('threw', TBool())] if self.func.throws else [])
                 + [(f'p_{name}', typ)
                    for (name, typ) in self.func.outp])]
-        return stmts + idempotency_common_prelude(
+        return stmts + memoization_common_prelude(
             self.method.logname_anonymized(), self.method.site, self.func.outp,
             self.func.throws, self.mkRef)
     def exit_handler(self):
-        return IdempotentReturnExit(self.method.site, self.func.outp,
+        return MemoizedReturnExit(self.method.site, self.func.outp,
                                     self.func.throws, self.mkRef)
     def fail_handler(self):
-        return (IdempotentReturnFailure(self.method.rbrace_site, self.mkRef)
+        return (MemoizedReturnFailure(self.method.rbrace_site, self.mkRef)
                 if self.func.throws else NoFailure(self.method.site))
 
-class SharedIdempotent(Idempotency):
+class SharedMemoized(Memoization):
     count = 0
     def __init__(self, method):
         self.method = method
-        self.id = SharedIdempotent.count
-        SharedIdempotent.count += 1
+        self.id = SharedMemoized.count
+        SharedMemoized.count += 1
 
     def mkRef(self, ref, typ):
-        return mkLit(self.method.site, f'_idemp_outs->{ref}', typ)
+        return mkLit(self.method.site, f'_memo_outs->{ref}', typ)
     def prelude(self):
-        idemp_outs_ptr = TPtr(self.method.idemp_outs_struct)
+        memo_outs_ptr = TPtr(self.method.memo_outs_struct)
         site = self.method.site
         fetch_outs_call = mkLit(
             site,
-            '_get_shared_idempotent_outs(&_dev->_shared_idemp_ht,'
+            '_get_shared_memoized_outs(&_dev->_shared_memo_ht,'
             + f' _identity_to_key(_{cident(self.method.trait.name)}.id), '
-            + f'{self.id}, sizeof(*_idemp_outs))',
-            idemp_outs_ptr)
+            + f'{self.id}, sizeof(*_memo_outs))',
+            memo_outs_ptr)
         outs_decl = mkDeclaration(
-            site, '_idemp_outs',
-            TPtr(self.method.idemp_outs_struct),
+            site, '_memo_outs',
+            TPtr(self.method.memo_outs_struct),
             init=ExpressionInitializer(fetch_outs_call), unused=True)
 
-        return [outs_decl] + idempotency_common_prelude(
+        return [outs_decl] + memoization_common_prelude(
             self.method.name, site, self.method.outp, self.method.throws,
             self.mkRef)
     def exit_handler(self):
-        return IdempotentReturnExit(self.method.site, self.method.outp,
+        return MemoizedReturnExit(self.method.site, self.method.outp,
                                     self.method.throws, self.mkRef)
     def fail_handler(self):
-        return (IdempotentReturnFailure(self.method.rbrace_site, self.mkRef)
+        return (MemoizedReturnFailure(self.method.rbrace_site, self.mkRef)
                 if self.method.throws else NoFailure(self.method.site))
 
-class SharedIndependentIdempotent(Idempotency):
+class SharedIndependentMemoized(Memoization):
     def __init__(self, method):
         self.method = method
     def mkRef(self, ref, typ):
@@ -387,17 +387,17 @@ class SharedIndependentIdempotent(Idempotency):
                      f'((struct _{traitname} *) _{traitname}.trait)'
                      + f'->_{self.method.name}_outs.{ref}', typ)
     def prelude(self):
-        return idempotency_common_prelude(
+        return memoization_common_prelude(
             self.method.name, self.method.site, self.method.outp,
             self.method.throws, self.mkRef)
     def exit_handler(self):
-        return IdempotentReturnExit(self.method.site, self.method.outp,
+        return MemoizedReturnExit(self.method.site, self.method.outp,
                                     self.method.throws, self.mkRef)
     def fail_handler(self):
-        return (IdempotentReturnFailure(self.method.rbrace_site, self.mkRef)
+        return (MemoizedReturnFailure(self.method.rbrace_site, self.mkRef)
                 if self.method.throws else NoFailure(self.method.site))
 
-def idempotency_common_prelude(name, site, outp, throws, mkRef):
+def memoization_common_prelude(name, site, outp, throws, mkRef):
     stmts = []
     if throws:
         stmts.append(
@@ -413,7 +413,7 @@ def idempotency_common_prelude(name, site, outp, throws, mkRef):
                mkBreak(site)]
     has_run = [mkCase(site, mkIntegerLiteral(site, 1))] + stmts
     running = [mkDefault(site),
-               mkInline(site, f'_idempotent_recursion("{name}");')]
+               mkInline(site, f'_memoized_recursion("{name}");')]
     return [mkSwitch(site,
                  mkRef('ran', TInt(8, True)),
                  mkCompound(site, unrun + has_run + running))]
@@ -1929,7 +1929,7 @@ def stmt_return(stmt, location, scope):
     [inits] = stmt.args
     if isinstance(ExitHandler.current, GotoExit_dml14):
         outp_typs = [var.ctype() for var in ExitHandler.current.outvars]
-    elif isinstance(ExitHandler.current, (ReturnExit, IdempotentReturnExit)):
+    elif isinstance(ExitHandler.current, (ReturnExit, MemoizedReturnExit)):
         outp_typs = [typ for (_, typ) in ExitHandler.current.outp]
     else:
         raise ICE(stmt.site, ("Unexpected ExitHandler "
@@ -2816,9 +2816,9 @@ class MethodFunc(object):
     parameter removed from the signature, and the constant propagated
     into the method body.'''
     __slots__ = ('method', 'inp', 'outp', 'throws', 'independent',
-                 'idempotent', 'cparams', 'rettype', 'suffix')
+                 'memoized', 'cparams', 'rettype', 'suffix')
 
-    def __init__(self, method, inp, outp, throws, independent, idempotent,
+    def __init__(self, method, inp, outp, throws, independent, memoized,
                  cparams, suffix):
         '''(inp, outp, throws) describe the method's signature; cparams
         describe the generated C function parameters corresponding to
@@ -2833,7 +2833,7 @@ class MethodFunc(object):
         self.outp = tuple(outp)
         self.throws = throws
         self.independent = independent
-        self.idempotent = idempotent
+        self.memoized = memoized
         self.suffix = suffix
 
         # rettype is the return type of the C function
@@ -2898,7 +2898,7 @@ def untyped_method_instance(method, signature):
     cparams = [(n, t) for (n, t) in inp if isinstance(t, DMLType)]
 
     func = MethodFunc(method, inp, outp, method.throws, method.independent,
-                      method.idempotent, cparams, "__"+str(len(method.funcs)))
+                      method.memoized, cparams, "__"+str(len(method.funcs)))
 
     method.funcs[canon_signature] = func
     return func
@@ -2910,7 +2910,7 @@ def method_instance(method):
         return method.funcs[None]
 
     func = MethodFunc(method, method.inp, method.outp, method.throws,
-                      method.independent, method.idempotent, method.inp, "")
+                      method.independent, method.memoized, method.inp, "")
 
     method.funcs[None] = func
     return func
@@ -2944,14 +2944,14 @@ def codegen_method_func(func):
 
     with ErrorContext(method):
         location = Location(method, indices)
-        if func.idempotent:
-            idempotency = (IndependentIdempotent(func) if func.independent
-                           else Idempotent(func, location))
+        if func.memoized:
+            memoization = (IndependentMemoized(func) if func.independent
+                           else Memoized(func, location))
         else:
-            idempotency = None
+            memoization = None
         code = codegen_method(
             method.site, inp, func.outp, func.throws, func.independent,
-            idempotency, method.astcode,
+            memoization, method.astcode,
             method.default_method.default_sym(indices),
             location, inline_scope, method.rbrace_site)
     return code
@@ -2985,7 +2985,7 @@ def codegen_return(site, outp, throws, retvals):
     stmts.append(ret)
     return mkCompound(site, stmts)
 
-def codegen_method(site, inp, outp, throws, independent, idempotency, ast,
+def codegen_method(site, inp, outp, throws, independent, memoization, ast,
                    default, location, fnscope, rbrace_site):
     with crep.StaticContext() if independent else contextlib.nullcontext():
         for (arg, etype) in inp:
@@ -2995,10 +2995,10 @@ def codegen_method(site, inp, outp, throws, independent, idempotency, ast,
 
         fnscope.add(default)
 
-        if idempotency:
-            prelude = idempotency.prelude
-            fail_handler = idempotency.fail_handler()
-            exit_handler = idempotency.exit_handler()
+        if memoization:
+            prelude = memoization.prelude
+            fail_handler = memoization.fail_handler()
+            exit_handler = memoization.exit_handler()
         else:
             def prelude():
                 return []

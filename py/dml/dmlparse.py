@@ -485,7 +485,7 @@ def object_method_noinparams(t):
     name = t[3]
     (inp, outp, throws) = ([], t[4], True)
     independent = False
-    idempotent = False
+    memoized = False
     if logging.show_porting:
         i = min([4, 5, 6], key=lambda i: t.lexpos(i))
         report(PINPARAMLIST(site(t, i)))
@@ -503,25 +503,25 @@ def object_method_noinparams(t):
 
     body = t[6]
     t[0] = ast.method(site(t), name,
-                      (inp, outp, throws, independent, idempotent, body),
+                      (inp, outp, throws, independent, memoized, body),
                       t[5], t[2], lex_end_site(t, -1))
 
 @prod_dml14
 def object_method(t):
-    '''method : maybe_independent maybe_idempotent METHOD objident method_params_typed maybe_default compound_statement'''
-    name = t[4]
-    (inp, outp, throws) = t[5]
-    independent = t[1]
-    idempotent = t[2]
-    body = t[7]
-    if idempotent and inp:
-        report(ESYNTAX(site(t), None,
-                       'idempotent methods may not have input parameters'))
+    '''method : method_qualifier_list METHOD objident method_params_typed maybe_default compound_statement'''
+    name = t[3]
+    (inp, outp, throws) = t[4]
+    independent = 'independent' in t[1]
+    memoized = 'memoized' in t[1]
+    body = t[6]
+    if memoized and inp:
+        report(ESYNTAX(site(t, 4), None,
+                       'memoized methods may not have input parameters'))
         inp = []
 
     t[0] = ast.method(site(t), name,
-                      (inp, outp, throws, independent, idempotent, body),
-                      t[6], False, lex_end_site(t, -1))
+                      (inp, outp, throws, independent, memoized, body),
+                      t[5], False, lex_end_site(t, -1))
 
 @prod_dml14
 def object_inline_method(t):
@@ -529,7 +529,7 @@ def object_inline_method(t):
     name = t[3]
     (inp, outp, throws) = t[4]
     independent = False
-    idempotent = False
+    memoized = False
     if all(typ for (_, asite, name, typ) in inp):
         # inline annotation would have no effect for fully typed methods.
         # We forbid it as a way to strongly discourage unneeded use of inline.
@@ -537,7 +537,7 @@ def object_inline_method(t):
                        'only use inline if there are untyped arguments'))
     body = t[6]
     t[0] = ast.method(site(t), name,
-                      (inp, outp, throws, independent, idempotent, body),
+                      (inp, outp, throws, independent, memoized, body),
                       t[5], False, lex_end_site(t, -1))
 
 @prod_dml12
@@ -548,7 +548,7 @@ def object_method(t):
     outp = t[7]
     throws = t[8]
     independent = False
-    idempotent = False
+    memoized = False
     if logging.show_porting and any(not typ for (_, _, name, typ) in inp):
         # some standard methods are assigned a type later on
         if name not in ['set', 'write']:
@@ -570,7 +570,7 @@ def object_method(t):
 
     body = t[10]
     t[0] = ast.method(site(t), name,
-                      (inp, outp, throws, independent, idempotent, body),
+                      (inp, outp, throws, independent, memoized, body),
                       t[9], t[2], lex_end_site(t, -1))
 
 @prod_dml12
@@ -669,16 +669,16 @@ def template_statement_obj(t):
 
 @prod_dml14
 def template_statement_shared_method(t):
-    '''template_stmt : SHARED maybe_independent maybe_idempotent METHOD shared_method'''
-    (name, (inp, outp, throws), overridable, body, rbrace_site) = t[5]
-    independent = t[2]
-    idempotent = t[3]
-    if idempotent and inp:
+    '''template_stmt : SHARED method_qualifier_list METHOD shared_method'''
+    (name, (inp, outp, throws), overridable, body, rbrace_site) = t[4]
+    independent = 'independent' in t[2]
+    memoized = 'memoized' in t[2]
+    if memoized and inp:
         report(ESYNTAX(site(t), None,
-                       'idempotent methods may not have input parameters'))
+                       'memoized methods may not have input parameters'))
         inp = []
     t[0] = [ast.sharedmethod(site(t), name, inp, outp, throws, independent,
-                             idempotent, overridable, body, rbrace_site)]
+                             memoized, overridable, body, rbrace_site)]
 
 @prod_dml12
 def trait_template(t):
@@ -692,33 +692,31 @@ def trait_template(t):
     t[0] = t[3]
 
 @prod_dml14
-def maybe_independent_no(t):
-    '''maybe_independent : '''
-    t[0] = False
+def method_qualifier(t):
+    '''method_qualifier : INDEPENDENT
+                        | MEMOIZED'''
+    t[0] = t[1]
 
 @prod_dml14
-def maybe_independent_yes(t):
-    '''maybe_independent : INDEPENDENT'''
-    t[0] = True
+def method_qualifier_list_none(t):
+    '''method_qualifier_list : '''
+    t[0] = set()
 
 @prod_dml14
-def maybe_idempotent_no(t):
-    '''maybe_idempotent : '''
-    t[0] = False
-
-@prod_dml14
-def maybe_idempotent_yes(t):
-    '''maybe_idempotent : IDEMPOTENT'''
-    t[0] = True
+def method_qualifier_list_some(t):
+    '''method_qualifier_list : method_qualifier_list method_qualifier'''
+    if t[2] in t[1]:
+        report(ESYNTAX(site(t, 1), t[2], "duplicate method qualifier"))
+    t[0] = t[1].union({t[2]})
 
 @prod_dml12
 def trait_method(t):
     '''trait_method : METHOD shared_method'''
     (name, (inp, outp, throws), overridable, body, rbrace_site) = t[2]
     independent = False
-    idempotent = False
+    memoized = False
     t[0] = ast.sharedmethod(site(t), name, inp, outp, throws, independent,
-                            idempotent, overridable, body, rbrace_site)
+                            memoized, overridable, body, rbrace_site)
 
 @prod
 def shared_method_abstract(t):
@@ -886,7 +884,7 @@ def object_statement_bad_shared_method(t):
 
 @prod_dml14
 def bad_shared_method(t):
-    '''bad_shared_method : SHARED maybe_independent maybe_idempotent METHOD shared_method'''
+    '''bad_shared_method : SHARED method_qualifier_list METHOD shared_method'''
     report(ESYNTAX(site(t), 'shared',
                    'shared method declaration only permitted'
                    + ' in top level template block'))

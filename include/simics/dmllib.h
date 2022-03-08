@@ -2410,7 +2410,7 @@ UNUSED static uint64 _select_log_level(ht_int_table_t *ht,
 
 // The internal format for ht is:
 // dict(trait_identifier -> dict(method_idx -> outs_struct))
-UNUSED static void *_get_shared_idempotent_outs(
+UNUSED static void *_get_shared_memoized_outs(
     ht_int_table_t *ht, uint64 first_key, uint64 second_key, size_t size) {
     ht_int_table_t *sub_table = ht_lookup_int(ht, first_key);
     void *entry = sub_table ? ht_lookup_int(sub_table, second_key) : NULL;
@@ -2427,10 +2427,10 @@ UNUSED static void *_get_shared_idempotent_outs(
 }
 
 
-UNUSED static void _idempotent_recursion(const char *name) {
+UNUSED static void _memoized_recursion(const char *name) {
     char msg[512];
     snprintf(msg, 512,
-             "Recursive call to idempotent method %s. "
+             "Recursive call to memoized method %s. "
              "This is considered undefined behavior.", name);
     VT_critical_error(msg, msg);
 }

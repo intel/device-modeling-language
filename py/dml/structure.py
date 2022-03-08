@@ -613,9 +613,9 @@ def merge_parameters(defs, obj_specs):
 def typecheck_method_override(m1, m2):
     '''check that m1 can override m2'''
     assert m1.kind == m2.kind == 'method'
-    (_, (inp1, outp1, throws1, independent1, idempotent1, _), _, _, _) \
+    (_, (inp1, outp1, throws1, independent1, memoized1, _), _, _, _) \
         = m1.args
-    (_, (inp2, outp2, throws2, independent2, idempotent2, _), _, _, _) \
+    (_, (inp2, outp2, throws2, independent2, memoized2, _), _, _, _) \
         = m2.args
 
     # We should also check parameter types here (bug 20686)
@@ -676,13 +676,13 @@ def typecheck_method_override(m1, m2):
                     ("overridden method is declared independent, "
                      + "but the overriding method is not"))
 
-    if idempotent1 > idempotent2:
+    if memoized1 > memoized2:
         raise EMETH(method_ast.site, overridden_ast.site,
-                    ("overriding method is declared idempotent, "
+                    ("overriding method is declared memoized, "
                      + "but the overridden method is not"))
     elif independent1 < independent2:
         raise EMETH(method_ast.site, overridden_ast.site,
-                    ("overridden method is declared idempotent, "
+                    ("overridden method is declared memoized, "
                      + "but the overriding method is not"))
 
     # 'throws' annotations are verified later
@@ -1294,7 +1294,7 @@ def process_method_implementations(obj, name, implementations,
         else:
             default = InvalidDefault(traits.AmbiguousDefaultSymbol(
                 [m.site for m in defaults]))
-        (name, (inp_ast, outp_ast, throws, independent, idempotent, body), _,
+        (name, (inp_ast, outp_ast, throws, independent, memoized, body), _,
          _, rbrace_site) = impl.method_ast.args
         if (impl.method_ast.site.dml_version() == (1, 2) and throws
             and vtable_nothrow_dml14):
@@ -1343,7 +1343,7 @@ def process_method_implementations(obj, name, implementations,
         method = mkmethod(impl.site, rbrace_site,
                           Location(obj, static_indices(obj)),
                           obj, name, inp_ast,
-                          outp_ast, throws, independent, idempotent, body,
+                          outp_ast, throws, independent, memoized, body,
                           default, default_level)
         impl_to_method[impl] = method
 
@@ -1687,7 +1687,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
 
             vtable_trait = trait.vtable_trait(member)
             if member_kind == 'method':
-                (tsite, tinp, toutp, tthrows, tindep, tidemp) \
+                (tsite, tinp, toutp, tthrows, tindep, tmemod) \
                     = vtable_trait.vtable_methods[member]
                 if not override.fully_typed:
                     for (n, t) in override.inp:
@@ -1707,8 +1707,8 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                 traits.typecheck_method_override(
                     (override.site, override.inp, override.outp,
                      override.throws, override.independent,
-                     override.idempotent),
-                    (tsite, tinp, toutp, tthrows, tindep, tidemp))
+                     override.memoized),
+                    (tsite, tinp, toutp, tthrows, tindep, tmemod))
                 trait_method_overrides[member] = override
             else:
                 assert member_kind == 'parameter'
@@ -2580,7 +2580,7 @@ method io_memory_access(generic_transaction_t *memop, uint64 offset, void *aux) 
         report(PTRAMPOLINE(site, tramp14, tramp12))
 
 def mkmethod(site, rbrace_site, location, parent_obj, name, inp_ast,
-             outp_ast, throws, independent, idempotent, body, default,
+             outp_ast, throws, independent, memoized, body, default,
              default_level):
     # check for duplicate parameter names
     named_args = inp_ast
@@ -2626,7 +2626,7 @@ def mkmethod(site, rbrace_site, location, parent_obj, name, inp_ast,
     if default_level:
         name += "___default%d" % (default_level,)
     method = objects.Method(name, site, parent_obj,
-                            inp, outp, throws, independent, idempotent, body,
+                            inp, outp, throws, independent, memoized, body,
                             default, rbrace_site)
     if logging.show_porting:
         if method.fully_typed:

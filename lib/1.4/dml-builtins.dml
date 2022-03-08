@@ -587,8 +587,8 @@ session bool _issuing_state_callbacks = false;
 session bool _has_state_callbacks = false;
 // Used by "X then Y" log level feature
 session ht_int_table_t _subsequent_log_ht;
-// Used by shared idempotent methods
-session ht_int_table_t _shared_idemp_ht;
+// Used by shared memoized methods
+session ht_int_table_t _shared_memo_ht;
 
 // Shared parameters for attributes, registers and connects, which all produce
 // attributes. Methods get_attribute and set_attribute are abstract.

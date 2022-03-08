@@ -321,8 +321,8 @@ def generate_hfile(device, headers, filename):
 
     for (name, t) in list(dml.globals.traits.items()):
         for method in t.method_impls.values():
-            if method.idempotent:
-                method.idemp_outs_struct.print_struct_definition()
+            if method.memoized:
+                method.memo_outs_struct.print_struct_definition()
         t.type().print_vtable_struct_declaration()
     out('\n')
 
@@ -1360,7 +1360,7 @@ def generate_initialize(device):
 
     # Initialize table for tracking log-once feature
     out('ht_init_int_table(&(_dev->_subsequent_log_ht));\n')
-    out('ht_init_int_table(&(_dev->_shared_idemp_ht));\n')
+    out('ht_init_int_table(&(_dev->_shared_memo_ht));\n')
 
     out('return _obj;\n')
     out('}\n\n', preindent = -1)
@@ -1450,7 +1450,7 @@ def generate_deinit(device):
                      mkBoolConstant(device.site, free_vals)]
                     ))
     code.append(mkFreeTable('_subsequent_log_ht', False))
-    code.append(mkFreeTable('_shared_idemp_ht', True))
+    code.append(mkFreeTable('_shared_memo_ht', True))
     code = mkCompound(device.site, declarations(scope) + code)
     code.toc()
     out('}\n\n', preindent = -1)

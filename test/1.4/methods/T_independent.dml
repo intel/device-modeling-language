@@ -43,11 +43,11 @@ independent method P() -> (int, int) {
     return (j, i);
 }
 
-template t is (device, model_init) {
+template t is device {
     param m_companion : int;
     param m_companion = 4;
 
-    shared independent idempotent method th_companion() -> (int) throws {
+    shared independent method th_companion() -> (int) throws {
         throw;
     }
 
@@ -58,10 +58,6 @@ template t is (device, model_init) {
         return 1;
     }
     shared independent method th() -> (int) throws default {
-    //     return this.n() + *th_companion;
-    // }
-
-    // independent method model_init() {
         local int c;
         try {
             c = th_companion();

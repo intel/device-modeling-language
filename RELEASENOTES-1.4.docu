@@ -329,7 +329,7 @@
       }
       </pre></add-note></build-id>
   <build-id value="next"><add-note> Added independent methods
-      <bug number="SIMICS-6181"/> and idempotent methods.
+      <bug number="SIMICS-6181"/> and memoized methods.
   </add-note></build-id>
   <build-id value="next"><add-note> Invalid definitions of typed parameters
       now emit compile errors <bug number="SIMICS-6182"/>.
