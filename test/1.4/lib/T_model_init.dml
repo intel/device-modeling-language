@@ -1,0 +1,28 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// INSTANTIATE-MANUALLY
+
+independent method call_on_model_init(const char *name) {
+    local attr_value_t args = SIM_make_attr_list(
+        1, SIM_make_attr_string(name));
+    local attr_value_t val = VT_call_python_module_function(
+        "__main__", "on_model_init", &args);
+    SIM_attr_free(&val);
+    SIM_attr_free(&args);
+}
+
+group g is (model_init) {
+    independent method model_init() {
+        call_on_model_init("dev.g");
+    }
+}
+
+independent method model_init() {
+    call_on_model_init("dev");
+}
