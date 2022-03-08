@@ -218,7 +218,6 @@ DOC_FILES_14 += $(GENERATED_MD_FILES_14)
 $(GENERATED_MD_FILES_14): | generated-md-1.4
 $(DOC_MARKER_14): $(DOC_FILES_14) | github-wiki
 	$(PYTHON) $(DMLC_DIR)/validate_md_links.py $(DOC_SRC_DIR_14)/toc.json $(DOC_SRC_DIR_14) generated-md-1.4
-	$(PYTHON) $(DMLC_DIR)/md_to_github.py $(DOC_SRC_DIR_14)/toc.json github-wiki.tar.gz $(DOC_SRC_DIR_14) generated-md-1.4
 	$(DODOC) --css simics.css $(SIMICS_BASE)/src/docs/dodoc -o $(DOC_DEST_14) $(DOC_SRC_DIR_14) generated-md-1.4
 
 all: $(DOC_MARKER_14)

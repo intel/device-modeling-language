@@ -14,7 +14,7 @@ import validate_md_links
 import tarfile
 from io import BytesIO
 
-(toc, outfile, *dirs) = sys.argv[1:]
+(toc, outfile, package_specs, *dirs) = sys.argv[1:]
 
 toc = json.loads(Path(toc).read_text())
 dirs = list(map(Path, dirs))
@@ -79,6 +79,11 @@ def add_to_tar(tf, path, contents):
     ti.size = len(contents)
     tf.addfile(ti, BytesIO(contents))
 
+# Detect the current Simics version.
+# Currently this only works when run as part of a Simics build.
+pkgs = json.loads(Path(package_specs).read_bytes())
+version = pkgs['Simics-Base-linux64']['version']
+
 with tarfile.open(outfile, "w:gz") as tgz:
     for (path, body) in bodies:
         for match in reversed(list(link_re.finditer(body))):
@@ -87,11 +92,6 @@ with tarfile.open(outfile, "w:gz") as tgz:
             if end > start:
                 body = body[:start] + filename_map[match[1]] + body[end:]
         add_to_tar(tgz, path, copyright + body)
-
-    # When built in a Simics tree, this will detect the current Simics version
-    specs = Path('..') / '..' / '..' / 'package-specs.json'
-    pkgs = json.loads(specs.read_bytes()) if specs.is_file() else {}
-    version = pkgs.get('Simics-Base-linux64', {}).get('version', '6.0.xxx')
 
     head = [copyright,
             f'This is the reference manual of DML 1.4, as of Simics {version}, '
