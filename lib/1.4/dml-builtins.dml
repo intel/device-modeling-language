@@ -342,7 +342,8 @@ template limitations {
 ### model\_init
 
 Provides an abstract independent method `model_init`, which is called when the
-model is loaded, *before* any device is created.
+model (corresponding to the Simics device module) is loaded, *before* any
+device is created.
 
 The method `model_init` is automatically called on all objects that implement
 the `model_init` template.
