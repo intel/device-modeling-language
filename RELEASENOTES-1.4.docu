@@ -301,4 +301,6 @@
       group g[i &lt; 4][j &lt; ...] { }
       group g[i &lt; ...][j &lt; 7] { }
       </pre></add-note></build-id>
+  <build-id value="next"><add-note>The <tt>issue</tt> method in the
+      <tt>map_target<tt> template can now be overridden.</add-note></build-id>
 </rn>
