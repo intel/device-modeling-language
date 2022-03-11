@@ -2065,89 +2065,86 @@ def flatten_object_subtree(node):
         'event', 'port', 'implement', 'attribute', 'connect',
         'interface', 'bank', 'group', 'register', 'field', 'subdevice')
 
-def init_trait_vtables_for_node(node, param_values):
-    if node.traits:
-        method_overrides = node.traits.method_overrides
-        param_overrides = param_values[node]
-        for trait in node.traits.referenced:
-            args = []
-            param_decl = []
-            param_init = []
-            param_indices = ''.join(f'[_i{i}]' for i in range(node.dimensions))
-            for name in tinit_args(trait):
-                member_kind = trait.member_kind(name)
-                if member_kind == 'method':
+def init_trait_vtable(node, trait, param_overrides):
+    method_overrides = node.traits.method_overrides
+    args = []
+    param_decl = []
+    param_init = []
+    param_indices = ''.join(f'[_i{i}]' for i in range(node.dimensions))
+    for name in tinit_args(trait):
+        member_kind = trait.member_kind(name)
+        if member_kind == 'method':
+            args.append(
+                trait_trampoline_name(
+                    method_overrides[name], trait.vtable_trait(name))
+                if name in method_overrides else "NULL")
+        elif member_kind == 'parameter':
+            # param_overrides contains C expression strings
+            (value, t, indexed, is_sequence) = param_overrides[name]
+            var = f'_param_{name}'
+            if indexed:
+                if is_sequence:
                     args.append(
-                        trait_trampoline_name(
-                            method_overrides[name], trait.vtable_trait(name))
-                        if name in method_overrides else "NULL")
-                elif member_kind == 'parameter':
-                    # param_overrides contains C expression strings
-                    (value, t, indexed, is_sequence) = param_overrides[name]
-                    var = f'_param_{name}'
-                    if indexed:
-                        if is_sequence:
-                            args.append(
-                                '(_each_in_t){(_vtable_list_t *)%s,' % (var,)
-                                + ' 1, 0, 0, 0}')
-                        else:
-                            args.append(f'(void *)((uintptr_t){var} + 1)')
-                        array_type = t
-                        for d in reversed(node.dimsizes):
-                            array_type = TArray(array_type,
-                                                mkIntegerLiteral(node.site, d))
-                        param_decl.append(
-                            f'{TPtr(array_type).declaration(var)} = malloc('
-                            f'sizeof(*{var}));\n')
-                        if deep_const(t):
-                            k = TArray(t, mkIntegerLiteral(node.site, 1)).declaration("")
-                            param_init.append(
-                                f' memcpy(&(*{var}){param_indices},'
-                                f' ({k}){{{value}}}, sizeof({t.declaration("")}));\n')
-                        else:
-                            param_init.append(
-                                f'(*{var}){param_indices} = {value};\n')
-                    else:
-                        if is_sequence:
-                            args.append(value)
-                        else:
-                            # Reasons for alignment explained along with test
-                            # in 1.4/structure/T_trait.dml
-                            args.append(
-                                '({static %s __attribute__((aligned(2)));'
-                                ' %s = %s; &%s;})'
-                                % (t.declaration(var), var, value, var))
+                        '(_each_in_t){(_vtable_list_t *)%s,' % (var,)
+                        + ' 1, 0, 0, 0}')
                 else:
-                    assert member_kind == 'session'
-                    session_node = node.get_component(name)
-                    assert session_node.objtype in ('session', 'saved')
-                    args.append('offsetof(%s, %s)' % (
-                        crep.structtype(dml.globals.device),
-                        crep.cref_session(
-                            session_node,
-                            (mkIntegerConstant(node.site, 0, False),)
-                            * node.dimensions)))
-            # initialize vtable instance
-            vtable_arg = f'&{node.traits.vtable_cname(trait)}'
-            init_call = ('_tinit_%s(%s);\n'
-                 % (trait.name, ', '.join([vtable_arg] + args)))
-
-            if param_init:
-                out('{\n', postindent=1)
-                for decl in param_decl:
-                    out(decl)
-                for (i, d) in enumerate(node.dimsizes):
-                    out(f'for (unsigned _i{i} = 0; _i{i} < {d}; ++_i{i}) {{',
-                        postindent=1)
-                for init in param_init:
-                    out(init)
-                for _ in range(node.dimensions):
-                    out('}\n', preindent=-1)
-                out(init_call)
-                out('}\n', preindent=-1)
+                    args.append(f'(void *)((uintptr_t){var} + 1)')
+                array_type = t
+                for d in reversed(node.dimsizes):
+                    array_type = TArray(array_type,
+                                        mkIntegerLiteral(node.site, d))
+                param_decl.append(
+                    f'{TPtr(array_type).declaration(var)} = malloc('
+                    f'sizeof(*{var}));\n')
+                if deep_const(t):
+                    k = TArray(t, mkIntegerLiteral(node.site, 1)).declaration("")
+                    param_init.append(
+                        f' memcpy(&(*{var}){param_indices},'
+                        f' ({k}){{{value}}}, sizeof({t.declaration("")}));\n')
+                else:
+                    param_init.append(
+                        f'(*{var}){param_indices} = {value};\n')
             else:
-                assert not param_decl
-                out(init_call)
+                if is_sequence:
+                    args.append(value)
+                else:
+                    # Reasons for alignment explained along with test
+                    # in 1.4/structure/T_trait.dml
+                    args.append(
+                        '({static %s __attribute__((aligned(2)));'
+                        ' %s = %s; &%s;})'
+                        % (t.declaration(var), var, value, var))
+        else:
+            assert member_kind == 'session'
+            session_node = node.get_component(name)
+            assert session_node.objtype in ('session', 'saved')
+            args.append('offsetof(%s, %s)' % (
+                crep.structtype(dml.globals.device),
+                crep.cref_session(
+                    session_node,
+                    (mkIntegerConstant(node.site, 0, False),)
+                    * node.dimensions)))
+    # initialize vtable instance
+    vtable_arg = f'&{node.traits.vtable_cname(trait)}'
+    init_call = ('_tinit_%s(%s);\n'
+         % (trait.name, ', '.join([vtable_arg] + args)))
+
+    if param_decl:
+        out('{\n', postindent=1)
+        for decl in param_decl:
+            out(decl)
+        for (i, d) in enumerate(node.dimsizes):
+            out(f'for (unsigned _i{i} = 0; _i{i} < {d}; ++_i{i}) {{',
+                postindent=1)
+        for init in param_init:
+            out(init)
+        for _ in range(node.dimensions):
+            out('}\n', preindent=-1)
+        out(init_call)
+        out('}\n', preindent=-1)
+    else:
+        assert not param_init
+        out(init_call)
 
 def generate_trait_trampoline(method, vtable_trait):
     implicit_inargs = vtable_trait.implicit_args()
@@ -2445,13 +2442,30 @@ def generate_init_trait_vtables(node, param_values):
     generate_vtable_instances(node)
     for trait in traits.Trait.referenced:
         generate_tinit(trait)
-    for subnode in flatten_object_subtree(node):
+    all_nodes = list(flatten_object_subtree(node))
+    for subnode in all_nodes:
         generate_trait_trampolines(subnode)
+    # Hack: Split up trait initialization in small functions, to avoid
+    # performance problems with `gcc -fvar-tracking`. This is
+    # required because of a GCC bug that is fixed in GCC 12:
+    # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=104468
+    chunks = [all_nodes[i:i+20] for i in range(0, len(all_nodes), 20)]
+    for (i, chunk) in enumerate(chunks):
+        out('static void __attribute__((optimize("O0")))'
+            f' _initialize_traits{i}(void)\n')
+        out('{\n', postindent=1)
+        for subnode in chunk:
+            if subnode.traits:
+                param_overrides = param_values[subnode]
+                for trait in subnode.traits.referenced:
+                    init_trait_vtable(subnode, trait, param_overrides)
+        out('}\n', preindent=-1)
+
     start_function_definition('void __attribute__((optimize("O0")))'
                               ' _initialize_traits(void)')
     out('{\n', postindent=1)
-    for subnode in flatten_object_subtree(node):
-        init_trait_vtables_for_node(subnode, param_values)
+    for i in range(len(chunks)):
+        out(f'_initialize_traits{i}();\n')
     out('}\n', preindent=-1)
     splitting_point()
 
