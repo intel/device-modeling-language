@@ -1365,7 +1365,7 @@ template map_target is (connect, _qname) {
        * `issue(transaction_t *t, uint64 addr) -> (exception_type_t)`
 
          Provides a shorthand to the API function `SIM_issue_transaction`.
-         This method is called by the read/write methods in this template, it
+         This method is called by the read/write methods in this template. It
          can be overridden, e.g. to add additional atoms to the transactions,
          while still allowing the ease-of-use from the simpler methods.
     */
