@@ -19,7 +19,10 @@ extern uint64 call_brfm(conf_object_t *);
 extern uint64 call_m(conf_object_t *);
 extern uint64 call_indie(uint64);
 
+session int s;
+
 method foo(uint64 a) -> (uint64) {
+    ++s;
     return a + 1;
 }
 
@@ -54,14 +57,17 @@ export foo as "foo";
 
 bank b {
     method m() -> (uint64) {
+        ++s;
         return 10;
     }
     register r size 4 @ 0 {
         method m() -> (uint64) {
+            ++s;
             return 5;
         }
         field f @ [0:0] {
             method m() -> (uint64) {
+                ++s;
                 return 1;
             }
         }
@@ -74,6 +80,7 @@ export b.r.f.m as "brfm";
 
 template m_holder {
     method m() -> (uint64) {
+        ++s;
         return 3;
     }
 }
@@ -88,16 +95,22 @@ independent method indie(uint64 i) -> (uint64) {
 export indie as "indie";
 
 method test() throws {
+       assert s == 0;
        expect(call_foo(this.obj, 1) == 2,
-              "trivial method with argument and return");
+              "trivial method with argument, dev access, and return");
+       assert s == 1;
        expect(call_bm(this.obj) == 10,
               "method exported from bank");
+       assert s == 2;
        expect(call_brm(this.obj) == 5,
               "method exported from register");
+       assert s == 3;
        expect(call_brfm(this.obj) == 1,
               "method exported from field");
+       assert s == 4;
        expect(call_m(this.obj) == 3,
               "method accessing template parameters");
+       assert s == 5;
        expect(call_indie(1) == 8,
               "independent method with argument and return");
 }

@@ -1,0 +1,68 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+import "testing.dml";
+
+session int s;
+
+method foo(uint64 a) -> (uint64) {
+    ++s;
+    return a + 1;
+}
+
+bank b {
+    method m() -> (uint64) {
+        ++s;
+        return 10;
+    }
+    register r size 4 @ 0 {
+        method m() -> (uint64) {
+            ++s;
+            return 5;
+        }
+        field f @ [0:0] {
+            method m() -> (uint64) {
+                ++s;
+                return 1;
+            }
+        }
+    }
+}
+template m_holder {
+    method m() -> (uint64) {
+        ++s;
+        return 3;
+    }
+}
+
+is m_holder;
+
+independent method indie(uint64 i) -> (uint64) {
+    return i + 7;
+}
+
+method test() throws {
+       assert s == 0;
+       expect((&foo)(dev.obj, 1) == 2,
+              "trivial method with argument, dev access, and return");
+       assert s == 1;
+       expect((&b.m)(dev.obj) == 10,
+              "method statically exported from bank");
+       assert s == 2;
+       expect((&b.r.m)(dev.obj) == 5,
+              "method statically exported from register");
+       assert s == 3;
+       expect((&b.r.f.m)(dev.obj) == 1,
+              "method statically exported from field");
+       assert s == 4;
+       expect((&m)(dev.obj) == 3,
+              "method accessing template parameters");
+       assert s == 5;
+       expect((&indie)(1) == 8,
+              "independent method with argument and return");
+}

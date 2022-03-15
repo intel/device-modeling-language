@@ -26,6 +26,7 @@ __all__ = (
     'mark_method_exported',
     'mark_method_referenced',
     'exported_methods',
+    'statically_exported_methods',
     'method_queue',
     'saved_method_variables',
     'simple_events',
@@ -82,6 +83,7 @@ def gensym(prefix = '_gensym'):
 referenced_methods = {}
 method_queue = []
 exported_methods = {}
+statically_exported_methods = set()
 
 # Saved variables in methods, method->list of symbols
 saved_method_variables = {}
@@ -552,6 +554,19 @@ def expr_unop(tree, location, scope):
         if op == '!' and isinstance(rh, InterfaceMethodRef):
             # see bug 24144
             return mkNot(tree.site, mkMethodPresent(tree.site, rh))
+        if (op == '&' and isinstance(rh, NodeRef)
+            and tree.site.dml_version() != (1, 2)):
+            (method, indices) = rh.get_ref()
+            if method.objtype == 'method':
+                if (indices or not method.fully_typed or method.throws
+                    or len(method.outp) > 1):
+                    raise ESTATICEXPORT(method.site, tree.site)
+                else:
+                    func = method_instance(method)
+                    mark_method_referenced(func)
+                    if not func.independent:
+                        mark_method_statically_exported(func)
+                    return ctree.AddressOfMethod(tree.site, func)
         raise rh.exc()
     if   op == '!':
         if dml.globals.compat_dml12 and dml.globals.api_version <= "5":
@@ -3065,7 +3080,16 @@ def mark_method_exported(func, name, export_site):
         (otherfunc, othersite) = exported_methods[name]
         report(ENAMECOLL(export_site, othersite, name))
     else:
+        if (export_site.dml_version() != (1, 2)
+            and not func.independent):
+            # extern trampolines for 1.4 methods rely on static trampolines
+            # for non-independent methods. Thus they must also be statically
+            # exported.
+            mark_method_statically_exported(func)
         exported_methods[name] = (func, export_site)
+
+def mark_method_statically_exported(func):
+    statically_exported_methods.add(func)
 
 def methfunc_param(ptype, arg):
     if ptype:

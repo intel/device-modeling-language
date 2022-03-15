@@ -31,3 +31,11 @@ stest.expect_equal(obj.count, 4)
 obj.iface.signal.signal_raise()
 
 stest.expect_equal(obj.count, 5)
+
+SIM_notify(obj, SIM_notifier_type("exported-entry"))
+
+stest.expect_equal(obj.count, 6)
+
+SIM_notify(obj, SIM_notifier_type("statically-exported-entry"))
+
+stest.expect_equal(obj.count, 7)

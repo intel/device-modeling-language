@@ -13,17 +13,32 @@ header %{
     void state_cb(conf_object_t *obj, conf_object_t *_, lang_void *__) {
         (*get_count_pointer(obj))++;
     }
+    extern void exported_method(conf_object_t *);
+    void exported_trampoline(conf_object_t * obj, conf_object_t *_,
+                            lang_void *__) {
+        exported_method(obj);
+    }
+    extern void independent_exported_method(conf_object_t *);
+    void independent_exported_trampoline(conf_object_t * obj, conf_object_t *_,
+                                        lang_void *__) {
+        independent_exported_method(obj);
+    }
     void register_callbacks(conf_object_t *obj) {
         SIM_add_notifier(obj,
                          Sim_Notify_State_Change,
                          obj,
                          state_cb,
                          NULL);
-    }
+        notifier_type_t notifier_type = SIM_notifier_type("exported-entry");
+        SIM_register_notifier(SIM_object_class(obj), notifier_type,
+                              "exported entry");
+        SIM_add_notifier(obj, notifier_type, obj, exported_trampoline, NULL);
 
-    extern void exported_method(conf_object_t *);
-    void c_exported(conf_object_t * obj) {
-        exported_method(obj);
+        notifier_type = SIM_notifier_type("statically-exported-entry");
+        SIM_register_notifier(SIM_object_class(obj), notifier_type,
+                              "statically exported entry");
+        SIM_add_notifier(obj, notifier_type, obj,
+                         independent_exported_trampoline, NULL);
     }
 %}
 
@@ -54,7 +69,15 @@ method exposed_method() {
     log info, 1: "Exposed method called";
 }
 export exposed_method as "exported_method";
-extern void c_exported();
+
+method indirectly_exposed_method() {
+    log info, 1: "Indirectly exposed method called";
+}
+
+independent method indie_exposed_method(conf_object_t *obj) {
+    (&indirectly_exposed_method)(obj);
+}
+export indie_exposed_method as "independent_exported_method";
 
 attribute a is pseudo_attr {
     param type = "n";
