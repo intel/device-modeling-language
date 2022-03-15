@@ -1452,10 +1452,6 @@ class ENSHARED(DMLError):
         if self.decl_site:
             self.print_site_message(self.decl_site, "declared here")
 
-class EMDOBJECT(DMLError):
-    """ Bank arrays and port arrays cannot be multi-dimensional in simics 5"""
-    fmt = "cannot declare a multi-dimensional %s in simics 5"
-
 class ESERIALIZE(DMLError):
     """Some complex types, in particular most pointer types, cannot be
     automatically checkpointed by DML, and are therefore disallowed in
