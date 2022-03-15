@@ -1,0 +1,18 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+// ok
+group g1[i < (1 << 31) - 1];
+
+/// ERROR EASZLARGE
+group g2[i < 1 << 31];
+
+group g3[i < 1 << 16] {
+    /// ERROR EASZLARGE
+    group g[j < 1 << 15];
+}

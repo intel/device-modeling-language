@@ -847,6 +847,16 @@ class EASZR(DMLError):
     def __init__(self, site):
         DMLError.__init__(self, site)
 
+class EASZLARGE(DMLError):
+    """
+    Object arrays with huge dimensions are not allowed; the product of
+    dimension sizes must be smaller than 2<sup>31</sup>.
+    """
+    # It would be cheap to bump the limit to 2**32 elements, but that
+    # would require some additional testing to check that we never use
+    # signed 32-bit integer arithmetic on packed indices.
+    fmt = f"array has too many elements (%d >= {2**31})"
+
 class EAINCOMP(DMLError):
     """
     The array has been declared more than once, in an incompatible way.
