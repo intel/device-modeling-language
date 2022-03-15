@@ -8,6 +8,8 @@ import collections
 import abc
 import re
 from contextlib import ExitStack
+import functools
+import operator
 from . import objects, logging, crep, ast
 from . import traits
 from . import toplevel
@@ -889,6 +891,9 @@ def mkobj(ident, objtype, arrayinfo, obj_specs, parent, each_stmts):
 
     obj = create_object(site, ident, objtype, parent,
                         arraylen_asts, index_vars)
+    num_elems = functools.reduce(operator.mul, obj.dimsizes, 1)
+    if num_elems >= 1 << 31:
+        raise EASZLARGE(site, num_elems)
 
     with ErrorContext(obj):
         obj_specs = add_templates(obj_specs, each_stmts)
