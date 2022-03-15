@@ -339,4 +339,9 @@
   <build-id value="next"><add-note> Invalid definitions of typed parameters
       now emit compile errors <bug number="SIMICS-6182"/>.
   </add-note></build-id>
+  <build-id value="next"><add-note> Method references can now be converted
+      into function pointers using <tt>&amp;</tt>. This can only be used with
+      methods that that may also be exported using the <tt>export</tt>
+      statement <bug number="SIMICS-14921"/>.
+  </add-note></build-id>
 </rn>

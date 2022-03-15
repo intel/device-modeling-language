@@ -1298,6 +1298,9 @@ def generate_identity_data_decls():
     add_variable_declaration('ht_str_table_t _id_info_ht',
                              'HT_STR_NULL(false)')
 
+def generate_class_var_decl():
+    add_variable_declaration('conf_class_t *_dev_class')
+
 def generate_init_identity_hashtable():
     start_function_definition('void _initialize_identity_ht(void)')
     out('{\n', postindent=1)
@@ -1686,6 +1689,7 @@ def generate_init(device, initcode, outprefix):
     out('\n')
     out('conf_class_t *class = SIM_create_class("'
         + param_str(device, 'classname', fallback='') + '", &funcs);\n')
+    out('_dev_class = class;\n')
     out('if (SIM_clear_exception() != SimExc_No_Exception) {\n', postindent = 1)
     out('fprintf(stderr, "Failed to register class '
         + param_str(device, 'classname', fallback='')
@@ -1731,25 +1735,40 @@ def generate_init(device, initcode, outprefix):
     out('}\n\n', preindent = -1)
     splitting_point()
 
-def generate_extern_trampoline(exported_name, func):
-    params = (func.cparams if func.independent else
-              [("_obj", TPtr(TNamed("conf_object_t")))] + func.cparams[1:])
-    out("extern %s\n" % (func.rettype.declaration(
-                         "%s(%s)" % (exported_name,
-                                     ", ".join(t.declaration(n)
-                                               for (n, t) in params)))))
+def generate_static_trampoline(func):
+    # static trampolines never need to be generated for independent methods
+    assert not func.independent
+    params = [("_obj", TPtr(TNamed("conf_object_t")))] + func.cparams[1:]
+    params_string = ('void' if not params
+                     else ", ".join(t.declaration(n) for (n, t) in params))
+    start_function_definition(func.rettype.declaration(
+        "%s(%s)" % ("_trampoline" + func.get_cname(), params_string)))
     out("{\n", postindent=1)
-    if not func.independent:
-        (name, typ) = func.cparams[0]
-        out("%s = (%s)_obj;\n" % (typ.declaration(name), typ.declaration("")))
+    out('ASSERT(_obj);\n')
+    out('ASSERT(SIM_object_class(_obj) == _dev_class);\n')
+    (name, typ) = func.cparams[0]
+    out("%s = (%s)_obj;\n" % (typ.declaration(name), typ.declaration("")))
     out("%s%s(%s);\n" % ("" if func.rettype.void
                          else func.rettype.declaration("result") + " = ",
                          func.get_cname(),
                          ", ".join(n for (n, t) in func.cparams)))
-    if not func.independent:
-        output_dml_state_change(name)
+    output_dml_state_change(name)
     if not func.rettype.void:
         out("return result;\n")
+    out("}\n", preindent=-1)
+
+def generate_extern_trampoline(exported_name, func):
+    params = (func.cparams if func.independent else
+              [("_obj", TPtr(TNamed("conf_object_t")))] + func.cparams[1:])
+    params_string = ('void' if not params
+                     else ", ".join(t.declaration(n) for (n, t) in params))
+    out("extern %s\n" % (func.rettype.declaration(
+                         "%s(%s)" % (exported_name, params_string))))
+    out("{\n", postindent=1)
+    out("%s%s(%s);\n" % ("return " * (not func.rettype.void),
+                         "_trampoline" * (not func.independent)
+                         + func.get_cname(),
+                         ", ".join(n for (n, t) in params)))
     out("}\n", preindent=-1)
 
 def generate_extern_trampoline_dml12(exported_name, func):
@@ -2585,6 +2604,7 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     generate_dealloc(device)
     generate_events(device)
     generate_identity_data_decls()
+    generate_class_var_decl()
     generate_startup_calls_entry_function(device)
     if dml.globals.dml_version == (1, 2):
         generate_reset(device, 'hard')
@@ -2661,6 +2681,9 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     # generate_serialize must take place after register_saved_attributes
     # and generate_simple_events
     generate_serialize(device)
+
+    for func in statically_exported_methods:
+        generate_static_trampoline(func)
 
     for (name, (func, export_site)) in list(exported_methods.items()):
         if export_site.dml_version() == (1, 2):

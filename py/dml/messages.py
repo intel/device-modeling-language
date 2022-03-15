@@ -358,6 +358,22 @@ class EEXPORT(DMLError):
         DMLError.log(self)
         self.print_site_message(self.export_site, "exported here")
 
+class ESTATICEXPORT(DMLError):
+    """A method reference can only be converted to a function pointer if the
+    method is non-inline, non-shared, non-throwing, and declared outside an
+    object array."""
+    fmt = "cannot convert this method reference to a function pointer"
+    version = "1.4"
+
+    def __init__(self, method_site, addressof_site):
+        DMLError.__init__(self, method_site)
+        self.addressof_site = addressof_site
+
+    def log(self):
+        DMLError.log(self)
+        self.print_site_message(self.addressof_site,
+                                "attempted conversion here")
+
 class EINVALID(DMLError):
     """
     The expression does not produce a proper value.

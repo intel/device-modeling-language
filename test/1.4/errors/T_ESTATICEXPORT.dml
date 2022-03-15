@@ -1,0 +1,36 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// ERROR ESTATICEXPORT
+inline method m1(inline x) {}
+
+/// ERROR ESTATICEXPORT
+method m2(uint64 x) throws {}
+
+/// ERROR ESTATICEXPORT
+method m3() -> (uint64, uint64) {
+    return (0, 0);
+}
+
+group g[i < 1] {
+    /// ERROR ESTATICEXPORT
+    method m4() -> (uint64) {
+        return 0;
+    }
+}
+
+method init() {
+    /// ERROR ESTATICEXPORT
+    &m1;
+    /// ERROR ESTATICEXPORT
+    &m2;
+    /// ERROR ESTATICEXPORT
+    &m3;
+    /// ERROR ESTATICEXPORT
+    &g[0].m4;
+}

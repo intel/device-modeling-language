@@ -3092,6 +3092,19 @@ class FloatConstant(Constant):
 
 mkFloatConstant = FloatConstant
 
+class AddressOfMethod(Constant):
+    def ctype(self):
+        params = (self.value.cparams if self.value.independent else
+                  [("_obj", TPtr(TNamed("conf_object_t")))]
+                  + self.value.cparams[1:])
+        return TPtr(TFunction([typ for (_, typ) in params],
+                              self.value.rettype))
+
+    def read(self):
+        prefix = '_trampoline' * (not self.value.independent)
+        return f'(&{prefix}{self.value.get_cname()})'
+
+
 def char_escape(m):
     c = m.group(0)
     if c == b'"' or c == b'\\':

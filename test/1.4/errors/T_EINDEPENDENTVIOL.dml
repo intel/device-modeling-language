@@ -88,4 +88,10 @@ inline method increment(inline x) {
 method test() throws {
     local param_typed _p = cast(p, param_typed);
     local int a = q() + p.sm();
+    not_truly_independent(dev.obj);
+}
+
+independent method not_truly_independent(conf_object_t *obj) {
+    // no error
+    (&dependent)(obj);
 }

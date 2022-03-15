@@ -1639,6 +1639,11 @@ and inline methods remain mainly for compatibility reasons.
 In DML 1.4, methods can be `exported` using the
 [`export` declaration](#export-declarations).
 
+### Retrieving Function Pointers to Methods
+
+In DML 1.4, [method references can be converted to function pointers using
+`&`](#method-references-as-function-pointers).
+
 ### Independent Methods
 
 Methods that do not rely on the particular instance of the device model may
@@ -1654,6 +1659,15 @@ example, `session` or `saved` variables may not be referenced, `after` and `log`
 statements may not be used, and non-`independent` may not be called.
 
 Within a template, `shared` independent methods may be declared.
+
+When independent methods are used as callbacks, it can sometimes be desirable to
+mutate device state. In order to do this safely, device state should be mutated
+within a method not declared `independent`, which can called from independent
+methods [through the use of `&`](#method-references-as-function-pointers).
+Device state should not be mutated directly within an independent method as this
+could cause certain Simics breakpoints to not function correctly; for example,
+an independent method should not mutate a session variable through a pointer to
+that variable.
 
 #### Independent Startup Methods
 
@@ -3253,6 +3267,39 @@ will give a compile error unless it appears in one of the following contexts:
 * An unknown index may be used as an index to an object array; in the
   resulting object reference, the corresponding index variable of
   the object array will have an unknown value.
+
+### Method References as Function Pointers
+It is possible to retrieve a function pointer for a method by using the prefix
+operator `&` with a reference to that method. The methods this is possible with
+are subject to the same restrictions as with the [`export` object
+statement](#export-declarations): it's not possible to retrieve a function
+pointer to any inline method, shared method, method that throws, method with
+more than one return argument, or method declared inside an object array.
+
+For example, with the following method in DML:
+```
+method my_method(int x) { ... }
+```
+
+then the expression `&my_method` will be a function pointer of type:
+```
+void (*)(conf_object_t *, int);
+```
+
+The `conf_object_t *` parameter corresponds to the device instance, and is
+omitted when the referenced method is [independent](#independent-methods).
+
+Note that due to the precedence rules of `&`, if you want to immediately call a
+method reference converted to a function pointer, then you will need to wrap
+parentheses around the converted method reference. An example of where this may
+be useful is in order to call a non-independent method from within an
+independent method:
+```
+independent method callback(int i, void *aux) {
+  local conf_object_t *obj = aux;
+  (&my_method)(obj, i);
+}
+```
 
 ### New Expressions
 
