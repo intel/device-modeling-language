@@ -17,7 +17,7 @@
     defined templates. </add-note></build-id>
   <build-id value="6019"><add-note> The <tt>get</tt> and <tt>set</tt> methods
     are now shared in attributes
-    inheriting from the dml 1.4 utility templates
+    inheriting from the DML 1.4 utility templates
     (<tt>bool_attr</tt> etc.). </add-note></build-id>
   <build-id value="6024"><add-note> The <tt>import</tt> statement has been
     changed: If the path
