@@ -4,7 +4,7 @@
 -->
 
 <rn id="dml-1.4">
-  <name>DML 1.4</name>
+  <name>Device Modeling Language (DML) 1.4</name>
   <build-id value="6012"><add-note> Initial release of DML version 1.4. The new
     language version is
     documented in the <em>DML 1.4 reference manual</em>

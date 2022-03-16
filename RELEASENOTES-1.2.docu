@@ -4,7 +4,7 @@
 -->
 
 <rn id="dml-1.2">
-  <name>DML 1.2</name>
+  <name>Device Modeling Language (DML) 1.2</name>
   <build-id value="6012"><add-note> Fixed a bug that caused a crash on the
     expression
     <tt>1 &lt;&lt; 64</tt> <bug number="1306575446"/>. </add-note></build-id>
