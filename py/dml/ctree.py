@@ -2715,7 +2715,7 @@ class TraitMethodApplyIndirect(Expression):
         infix_independent = 'INDEPENDENT_' if self.independent else ''
         suffix_noarg = '' if self.inargs else '0'
         macro = f'CALL_{infix_independent}TRAIT_METHOD{suffix_noarg}'
-        args = (crep.maybe_dev(self.independent)
+        args = (['_dev'] * (not self.independent)
                 + [arg.read() for arg in [self.traitref] + self.inargs])
         trait_name = cident(realtype(self.traitref.ctype()).trait.name)
         return f"{macro}({trait_name}, {self.methname}, {', '.join(args)})"
@@ -2736,7 +2736,7 @@ class TraitMethodApplyDirect(Expression):
     def read(self):
         return "%s(%s)" % (
             self.methodref.cname(),
-            ', '.join(crep.maybe_dev(self.methodref.independent)
+            ', '.join(['_dev'] * (not self.methodref.independent)
                       + [arg.read() for arg in [self.traitref] + self.inargs]))
 
 class New(Expression):

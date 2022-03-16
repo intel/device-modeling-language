@@ -11,136 +11,136 @@ header %{
 %}
 extern bool fired;
 
-memoized method idemp_0() {
+memoized method memo_0() {
     fired = true;
 }
 
-memoized method idemp_0_t() throws {
+memoized method memo_0_t() throws {
     fired = true;
     throw;
 }
 
-memoized method idemp_0_nt() throws {
+memoized method memo_0_nt() throws {
     fired = true;
 }
 
-memoized method idemp_1() -> (int) {
+memoized method memo_1() -> (int) {
     fired = true;
     return 4;
 }
 
-memoized method idemp_2() -> (int, double) {
+memoized method memo_2() -> (int, double) {
     fired = true;
     return (4, 7.2);
 }
 
-memoized method idemp_2_t() -> (int, double) throws {
+memoized method memo_2_t() -> (int, double) throws {
     fired = true;
     throw;
 }
 
-memoized method idemp_2_nt() -> (int, double) throws {
+memoized method memo_2_nt() -> (int, double) throws {
     fired = true;
     return (4, 7.2);
 }
 
-memoized independent method indep_idemp_0() {
+memoized independent method indep_memo_0() {
     fired = true;
 }
 
-memoized independent method indep_idemp_0_t() throws {
+memoized independent method indep_memo_0_t() throws {
     fired = true;
     throw;
 }
 
-memoized independent method indep_idemp_0_nt() throws {
+memoized independent method indep_memo_0_nt() throws {
     fired = true;
 }
 
-memoized independent method indep_idemp_1() -> (int) {
+memoized independent method indep_memo_1() -> (int) {
     fired = true;
     return 4;
 }
 
-memoized independent method indep_idemp_2() -> (int, double) {
+memoized independent method indep_memo_2() -> (int, double) {
     fired = true;
     return (4, 7.2);
 }
 
-memoized independent method indep_idemp_2_t() -> (int, double) throws {
+memoized independent method indep_memo_2_t() -> (int, double) throws {
     fired = true;
     throw;
 }
 
-memoized independent method indep_idemp_2_nt() -> (int, double) throws {
+memoized independent method indep_memo_2_nt() -> (int, double) throws {
     fired = true;
     return (4, 7.2);
 }
 
 template t {
-    shared memoized method s_idemp_0() {
+    shared memoized method s_memo_0() {
         fired = true;
     }
 
-    shared memoized method s_idemp_0_t() throws {
+    shared memoized method s_memo_0_t() throws {
         fired = true;
         throw;
     }
 
-    shared memoized method s_idemp_0_nt() throws {
+    shared memoized method s_memo_0_nt() throws {
         fired = true;
     }
 
-    shared memoized method s_idemp_1() -> (int) {
+    shared memoized method s_memo_1() -> (int) {
         fired = true;
         return 4;
     }
 
-    shared memoized method s_idemp_2() -> (int, double) {
+    shared memoized method s_memo_2() -> (int, double) {
         fired = true;
         return (4, 7.2);
     }
 
-    shared memoized method s_idemp_2_t() -> (int, double) throws {
+    shared memoized method s_memo_2_t() -> (int, double) throws {
         fired = true;
         throw;
     }
 
-    shared memoized method s_idemp_2_nt() -> (int, double) throws {
+    shared memoized method s_memo_2_nt() -> (int, double) throws {
         fired = true;
         return (4, 7.2);
     }
 
-    shared memoized independent method s_indep_idemp_0() {
+    shared memoized independent method s_indep_memo_0() {
         fired = true;
     }
 
-    shared memoized independent method s_indep_idemp_0_t() throws {
+    shared memoized independent method s_indep_memo_0_t() throws {
         fired = true;
         throw;
     }
 
-    shared memoized independent method s_indep_idemp_0_nt() throws {
+    shared memoized independent method s_indep_memo_0_nt() throws {
         fired = true;
     }
 
-    shared memoized independent method s_indep_idemp_1() -> (int) {
+    shared memoized independent method s_indep_memo_1() -> (int) {
         fired = true;
         return 4;
     }
 
-    shared memoized independent method s_indep_idemp_2() -> (int, double) {
+    shared memoized independent method s_indep_memo_2() -> (int, double) {
         fired = true;
         return (4, 7.2);
     }
 
-    shared memoized independent method s_indep_idemp_2_t() -> (int, double)
+    shared memoized independent method s_indep_memo_2_t() -> (int, double)
         throws {
         fired = true;
         throw;
     }
 
-    shared memoized independent method s_indep_idemp_2_nt() -> (int, double)
+    shared memoized independent method s_indep_memo_2_nt() -> (int, double)
         throws {
         fired = true;
         return (4, 7.2);
@@ -149,21 +149,21 @@ template t {
 
 is t;
 
-param zero_params       = [idemp_0, indep_idemp_0, s_idemp_0, s_indep_idemp_0];
-param one_param         = [idemp_1, indep_idemp_1, s_idemp_1, s_indep_idemp_1];
-param two_params        = [idemp_2, indep_idemp_2, s_idemp_2, s_indep_idemp_2];
-param zero_params_t     = [idemp_0_t, indep_idemp_0_t, s_idemp_0_t,
-                           s_indep_idemp_0_t];
-param zero_params_nt    = [idemp_0_nt, indep_idemp_0_nt, s_idemp_0_nt,
-                           s_indep_idemp_0_nt];
-param two_params_t      = [idemp_2_t, indep_idemp_2_t, s_idemp_2_t,
-                           s_indep_idemp_2_t];
-param two_params_nt     = [idemp_2_nt, indep_idemp_2_nt, s_idemp_2_nt,
-                           s_indep_idemp_2_nt];
+param zero_params       = [memo_0, indep_memo_0, s_memo_0, s_indep_memo_0];
+param one_param         = [memo_1, indep_memo_1, s_memo_1, s_indep_memo_1];
+param two_params        = [memo_2, indep_memo_2, s_memo_2, s_indep_memo_2];
+param zero_params_t     = [memo_0_t, indep_memo_0_t, s_memo_0_t,
+                           s_indep_memo_0_t];
+param zero_params_nt    = [memo_0_nt, indep_memo_0_nt, s_memo_0_nt,
+                           s_indep_memo_0_nt];
+param two_params_t      = [memo_2_t, indep_memo_2_t, s_memo_2_t,
+                           s_indep_memo_2_t];
+param two_params_nt     = [memo_2_nt, indep_memo_2_nt, s_memo_2_nt,
+                           s_indep_memo_2_nt];
 
 method test() throws {
-    local int i = 0;
-    local double j = 0;
+    local int i = 1;
+    local double j = 1;
 
     #foreach m in (zero_params) {
         m();
@@ -177,20 +177,20 @@ method test() throws {
         i = m();
         assert fired && i == 4;
         fired = false;
-        i = 0;
-        i = idemp_1();
+        i = 1;
+        i = memo_1();
         assert !fired && i == 4;
-        i = 0;
+        i = 1;
     }
 
     #foreach m in (two_params) {
         (i, j) = m();
         assert fired && i == 4 && j == 7.2;
-        i = j = 0;
+        i = j = 1;
         fired = false;
         (i, j) = m();
         assert !fired && i == 4 && j == 7.2;
-        i = j = 0;
+        i = j = 1;
     }
 
     #foreach m in (zero_params_t) {
@@ -228,13 +228,13 @@ method test() throws {
             (i, j) = m();
             assert false;
         } catch;
-        assert fired && i == 0 && j == 0;
+        assert fired && i == 1 && j == 1;
         fired = false;
         try {
             (i, j) = m();
             assert false;
         } catch;
-        assert !fired && i == 0 && j == 0;
+        assert !fired && i == 1 && j == 1;
     }
 
     #foreach m in (two_params_nt) {
@@ -244,7 +244,7 @@ method test() throws {
             assert false;
         }
         assert fired && i == 4 && j == 7.2;
-        i = j = 0;
+        i = j = 1;
         fired = false;
         try {
             (i, j) = m();
@@ -252,6 +252,6 @@ method test() throws {
             assert false;
         }
         assert !fired && i == 4 && j == 7.2;
-        i = j = 0;
+        i = j = 1;
     }
 }

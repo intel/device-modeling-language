@@ -9,6 +9,7 @@
 #define SIMICS_DMLLIB_H
 
 #include <stddef.h>
+#include <pthread.h>
 
 #include <simics/base/types.h>
 #include <simics/base/log.h>
@@ -2426,6 +2427,27 @@ UNUSED static void *_get_shared_memoized_outs(
     return entry;
 }
 
+UNUSED static void _independent_memoized_init_mutex(pthread_mutex_t *lock) {
+    pthread_mutexattr_t attributes;
+    int error = pthread_mutexattr_init(&attributes);
+    ASSERT(error == 0);
+    error = pthread_mutexattr_settype(&attributes, PTHREAD_MUTEX_RECURSIVE);
+    ASSERT(error == 0);
+    error = pthread_mutex_init(lock, &attributes);
+    ASSERT(error == 0);
+    error = pthread_mutexattr_destroy(&attributes);
+    ASSERT(error == 0);
+}
+
+UNUSED static void _independent_memoized_lock(
+    pthread_mutex_t *lock, int8 *ran) {
+    if (unlikely(*ran != 1)) {
+        pthread_mutex_lock(lock);
+        if (*ran == 1) {
+            pthread_mutex_unlock(lock);
+        }
+    }
+}
 
 UNUSED static void _memoized_recursion(const char *name) {
     char msg[512];

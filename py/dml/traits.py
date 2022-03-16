@@ -148,7 +148,7 @@ class TraitMethod(TraitVTableItem):
         assert self.memoized
         if self._memo_outs_struct is None:
             memo_dict = {'p_' + name: typ for (name, typ) in self.outp}
-            memo_dict['ran'] = TInt(8, False)
+            memo_dict['ran'] = TInt(8, True)
             if self.throws:
                 memo_dict['threw'] = TBool()
             self._memo_outs_struct = TStruct(

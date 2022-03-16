@@ -88,11 +88,9 @@ is u;
 method test() throws {
     local char buf[50];
     M(buf);
-    /// GREP \[obj info\] overridden M;default M
-    log info: "%s", buf;
+    assert strcmp(buf, "overridden M;default M") == 0;
     O(buf, 2);
-    /// GREP \[obj info\] overridden O 2;default O 3
-    log info: "%s", buf;
+    assert strcmp(buf, "overridden O 2;default O 3") == 0;
     local int i;
     local int j;
     (i, j) = P();

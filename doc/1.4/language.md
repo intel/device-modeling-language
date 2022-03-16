@@ -1643,7 +1643,9 @@ There are a number of qualifiers that can be applied to method declarations.
 These are specified through a space delimited list immediately before the
 `method` keyword in a declaration, and any method declaration overriding another
 must share the same qualifiers as the overridden method declaration. Method
-qualifiers can be used for both regular methods as well as`shared` methods.
+qualifiers can be used for both regular methods as well as
+[`shared` methods](#shared-methods). They can't be used for
+[`inline` methods](#inline-methods).
 
 #### Independent Methods
 Methods that do not rely on the particular instance of the device model may
@@ -1675,13 +1677,14 @@ Memoized methods have the restriction that they may not take any input
 parameters. If a memoized method call throws, then subsequent calls will throw
 without executing the body.
 
-Results are cached per device instance, except for memoized methods that are
-also declared independent, in which case result caching is shared across all
-device instances. This mechanism can be used to compute device-independent data
-which is then shared across all device instances of the model.
+Results for a memoized method is cached per device instance, except for memoized
+methods that are also declared independent, in which case result caching is
+shared across all device instances. This mechanism can be used to compute
+device-independent data which is then shared across all device instances of the
+model.
 
-For `shared` memoized methods, result caching is done per-instance, and is not
-shared across template instances.
+The results of `shared` memoized methods are cached per template instance,
+and are not shared across all objects instantiating the template.
 
 (Indirectly) recursive memoized method calls are not allowed; the result of
 such a call is undefined. Performing such a method call will result in a

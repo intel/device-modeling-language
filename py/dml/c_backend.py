@@ -1319,6 +1319,9 @@ def generate_alloc(device):
     out('return %s;\n' % objarg)
     out('}\n\n', preindent = -1)
 
+def generate_independent_memoized_mutex():
+    add_variable_declaration('pthread_mutex_t _independent_memoized_mutex')
+
 def generate_initialize(device):
     if dml.globals.api_version <= '6':
         start_function_definition(
@@ -1705,6 +1708,7 @@ def generate_init(device, initcode, outprefix):
             ');\n')
         out('}\n', preindent = -1)
 
+    out('_independent_memoized_init_mutex(&_independent_memoized_mutex);\n')
     out('_allocate_traits();\n')
     out('_initialize_traits();\n')
     out('_initialize_identity_ht();\n')
@@ -1828,7 +1832,7 @@ def generate_adjustor_thunk(traitname, name, inp, outp, throws, independent,
         out('return ')
     fun = hardcoded_impl or ('((struct _%s *) %s.trait)->%s'
                              % (cident(vtable_trait.name), vt_name, name))
-    out('%s(%s);\n' % (fun, ", ".join(crep.maybe_dev(independent) + [vt_name]
+    out('%s(%s);\n' % (fun, ", ".join(['_dev'] * (not independent) + [vt_name]
                                       + [name for (name, _) in inargs])))
     out('}\n', preindent=-1)
     return generated_name
@@ -2483,12 +2487,14 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
         generate_state_existence_callback(device)
     if dml.globals.dml_version != (1, 2):
         generate_model_initialize(device)
+
     generate_alloc(device)
     generate_initialize(device)
     generate_finalize(device)
     generate_dealloc(device)
     generate_events(device)
     generate_identity_data_decls()
+    generate_independent_memoized_mutex()
     if dml.globals.dml_version == (1, 2):
         generate_reset(device, 'hard')
         generate_reset(device, 'soft')
