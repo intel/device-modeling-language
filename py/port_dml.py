@@ -1040,7 +1040,7 @@ def main(argv):
                          % (args.src,) + ' ignoring --compat flag\n')
         args.compat = False
     src = SourceFile(args.src, args.compat)
-    fail = False
+    errors = 0
     for phase in sorted(transformations):
         for (t, lineno, line) in transformations[phase]:
             try:
@@ -1050,19 +1050,23 @@ def main(argv):
                 sys.stderr.write("%s error%s: %s\n" % (
                     loc, '' if e.tag is None else ' ' + e.tag, e))
                 sys.stderr.write("%s:%d: found here\n" % (tagfilename, lineno))
-                fail = True
+                errors += 1
             except:
                 sys.stderr.write("Unexpected error on this porting tag:\n")
                 sys.stderr.write(line)
                 sys.stderr.write("%s:%d: found here\n" % (tagfilename, lineno))
                 traceback.print_exc()
-                fail = True
+                errors += 1
 
     PWUNUSED.report(src, args.dest)
 
     with (open(args.dest, 'w', newline='') if args.dest else sys.stdout) as f:
         src.commit(f)
-    if fail:
+    if errors:
+        total = sum(map(len, transformations.values()))
+        sys.stderr.write(f'''\
+*** Failed to apply {errors} out of {total} porting tags; partial result saved to {args.dest}. Consider applying the failed tags manually.
+''')
         exit(1)
 
 if __name__ == '__main__':
