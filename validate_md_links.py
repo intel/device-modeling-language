@@ -57,9 +57,24 @@ link_re = re.compile(r'\[.*?\]\((.*?)\)', re.DOTALL)
 assert link_re.findall('[blah\nblah](foo.html#xyz) [glurp](#bar)') == [
     'foo.html#xyz', '#bar']
 
-def report(path, match, message):
-    line = md_files[path][:match.start()].count('\n') + 1
-    sys.stderr.write(f'{path}:{line}: error: {message}\n')
+class Error(Exception): pass
+
+def validate_link(link, path, dirs, md_files):
+    if link.count('#') == 0 and link.endswith('.html'):
+        (f, anchor) = (link, '')
+    elif link.count('#') == 1:
+        (f, anchor) = link.split('#')
+    else:
+        raise Error(f"malformed link, expected '#': {link}")
+    if f:
+        assert f.endswith('.html')
+        f = f[:-5] + '.md'
+        f = lookup(Path(f), dirs)
+        assert f in md_files
+    else:
+        f = path
+    if anchor not in anchors(md_files[f]):
+        raise Error(f"broken link: {link}")
 
 def main():
     (toc, *dirs) = sys.argv[1:]
@@ -72,25 +87,12 @@ def main():
     for path in md_files:
         for match in link_re.finditer(md_files[path]):
             [link] = match.groups()
-            if link.count('#') == 0 and link.endswith('.html'):
-                (f, anchor) = (link, '')
-            elif link.count('#') == 1:
-                (f, anchor) = link.split('#')
-            else:
-                report(path, match, f"malformed link, expected '#': {link}")
+            try:
+                validate_link(link, path, dirs, md_files)
+            except Error as message:
+                line = md_files[path][:match.start()].count('\n') + 1
+                sys.stderr.write(f'{path}:{line}: error: {message}\n')
                 ok = False
-                continue
-            if f:
-                assert f.endswith('.html')
-                f = f[:-5] + '.md'
-                f = lookup(Path(f), dirs)
-                assert f in md_files
-            else:
-                f = path
-            if anchor not in anchors(md_files[f]):
-                report(path, match, f"broken link: {link}")
-                ok = False
-
     sys.exit(0 if ok else 1)
 
 if __name__ == '__main__':

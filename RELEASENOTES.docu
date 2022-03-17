@@ -4,7 +4,7 @@
 -->
 
 <rn id="dml">
-  <name>DML</name>
+  <name>Device Modeling Language (DML)</name>
   <build-id value="1313"><add-note> A bug that caused bad C code to be
     generated when using 'switch'
     was fixed <bug number="4766"/> <bug number="4788"/>. </add-note></build-id>

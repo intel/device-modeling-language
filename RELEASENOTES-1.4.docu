@@ -4,7 +4,7 @@
 -->
 
 <rn id="dml-1.4">
-  <name>DML 1.4</name>
+  <name>Device Modeling Language (DML) 1.4</name>
   <build-id value="6012"><add-note> Initial release of DML version 1.4. The new
     language version is
     documented in the <em>DML 1.4 reference manual</em>
@@ -34,9 +34,9 @@
     <tt>method extern</tt>. </add-note></build-id>
   <build-id value="6018"><add-note> The dml12-compatibility.dml library file is
     now available.
-    This file should be included from dml 1.4 files that
-    use or override templates defined in dml-builtins and
-    are meant to be backwards-compatible with dml
+    This file should be included from DML 1.4 files that
+    use or override templates defined in <tt>dml-builtins.dml</tt> and
+    are meant to be backwards-compatible with DML
     1.2 devices. </add-note></build-id>
   <build-id value="6018"><add-note> Templates can now override <tt>get</tt> or
     <tt>set</tt> method

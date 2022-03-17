@@ -750,11 +750,6 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
             for (_, msite, name, type_ast) in info:
                 (member_struct_defs, member_type) = eval_type(
                     type_ast, msite, location, scope, extern)
-                # TODO This can be removed once nested deserialization of
-                # identity is properly supported
-                if isinstance(member_type, TObjIdentity):
-                    raise ICE(msite, ('_identity_t is not allowed as part of '
-                                      + 'struct or array'))
                 members[name] = member_type
                 struct_defs.extend(member_struct_defs)
             if extern:
@@ -857,11 +852,6 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
         elif asttype[0] == 'array':
             if etype.void:
                 raise EVOID(site)
-            # TODO This can be removed once nested deserialization of
-            # identity is properly supported
-            elif isinstance(etype, TObjIdentity):
-                raise ICE(site, ('_identity_t is not allowed as part of '
-                                 + 'struct or array'))
             alen = codegen_expression(asttype[1], location, scope)
             etype = TArray(etype, as_int(alen))
             asttype = asttype[2:]
