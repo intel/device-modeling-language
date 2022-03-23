@@ -7,6 +7,7 @@ import itertools
 import collections
 import abc
 import re
+from contextlib import ExitStack
 from . import objects, logging, crep, ast
 from . import traits
 from . import toplevel
@@ -978,7 +979,8 @@ def make_autoparams(obj, index_vars, index_var_sites):
             mkBoolConstant(site, site.bitorder() == 'be'))
 
     if obj.objtype == 'device':
-        autoparams['obj'] = SimpleParamExpr(mkDeviceObject(site))
+        with crep.DeviceInstanceContext():
+            autoparams['obj'] = SimpleParamExpr(mkDeviceObject(site))
         if dml.globals.dml_version == (1, 2):
             autoparams['banks'] = UninitializedParamExpr(site, 'banks')
         autoparams['simics_api_version'] = SimpleParamExpr(
@@ -1762,7 +1764,9 @@ def mkobj2(obj, obj_specs, params, each_stmts):
         # identifiers. TODO: perhaps this should not be done?
         zero_index = (mkIntegerLiteral(obj.site, 0),)
         for param in obj.get_recursive_components('parameter'):
-            with ErrorContext(param, None):
+            with ExitStack() as stack:
+                stack.enter_context(ErrorContext(param, None))
+                stack.enter_context(crep.DeviceInstanceContext())
                 try:
                     try:
                         # Evaluate statically, because it triggers caching

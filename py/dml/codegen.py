@@ -238,7 +238,6 @@ class ReturnExit(ExitHandler):
         assert retvals is not None, 'dml 1.2/1.4 mixup'
         return codegen_return(site, self.outp, self.throws, retvals)
 
-
 def memoized_return_failure_leave(site, mkRef, independent, failed):
     ran = mkRef('ran', TInt(8, True))
     threw = mkRef('threw', TBool())
@@ -313,12 +312,15 @@ class Memoized(Memoization):
         self.func = func
         self.method = func.method
         self.static_dict = {}
-        for (name, typ) in ([(f'p_{name}', typ) for (name, typ) in func.outp]
-                            + [('ran', TInt(8, True))]
-                            + ([('threw', TBool())] if func.throws else [])):
-            self.static_dict[name] = make_static_var(
-                self.method.site, location, typ,
-                f'_{self.method.name}__{name}')
+        with crep.DeviceInstanceContext():
+            for (name, typ) in ([(f'p_{name}', typ)
+                                 for (name, typ) in func.outp]
+                                + [('ran', TInt(8, True))]
+                                + ([('threw', TBool())] if func.throws
+                                   else [])):
+                self.static_dict[name] = make_static_var(
+                    self.method.site, location, typ,
+                    f'_{self.method.name}__{name}')
     def mkRef(self, ref, typ):
         expr = self.static_dict[ref]
         assert safe_realtype(expr.ctype()).cmp(safe_realtype(typ)) == 0
@@ -2958,11 +2960,12 @@ def codegen_method_func(func):
     intercepted = intercepted_method(method)
     if intercepted:
         assert method.throws
-        return intercepted(
-            method.parent, indices,
-            [mkLit(method.site, n, t) for (n, t) in func.inp],
-            [mkLit(method.site, "*%s" % n, t) for (n, t) in func.outp],
-            method.site)
+        with crep.DeviceInstanceContext():
+            return intercepted(
+                method.parent, indices,
+                [mkLit(method.site, n, t) for (n, t) in func.inp],
+                [mkLit(method.site, "*%s" % n, t) for (n, t) in func.outp],
+                method.site)
     inline_scope = MethodParamScope(global_scope)
     for (name, e) in func.inp:
         if dml.globals.dml_version == (1, 2) and not dml.globals.compat_dml12:
@@ -3019,7 +3022,8 @@ def codegen_return(site, outp, throws, retvals):
 
 def codegen_method(site, inp, outp, throws, independent, memoization, ast,
                    default, location, fnscope, rbrace_site):
-    with crep.StaticContext() if independent else contextlib.nullcontext():
+    with (crep.DeviceInstanceContext() if not independent
+          else contextlib.nullcontext()):
         for (arg, etype) in inp:
             fnscope.add_variable(arg, type=etype, site=site, make_unique=False)
         initializers = [get_initializer(site, parmtype, None, None, None)

@@ -5,6 +5,7 @@ import sys, os
 import itertools
 import operator
 import re
+from contextlib import ExitStack, nullcontext
 from functools import reduce
 
 from . import objects, logging, crep, output, ctree, serialize
@@ -405,7 +406,10 @@ def generate_attr_setter(fname, node, port, dimsizes, cprefix, loopvars,
         out('attr_value_t attr%d = %s;\n' % (dim, list_item))
         valuevar = 'attr%d' % (dim,)
 
-    with NoFailure(node.site):
+    with ExitStack() as stack:
+        stack.enter_context(NoFailure(node.site))
+        stack.enter_context(crep.DeviceInstanceContext())
+
         setcode = [
             codegen_inline_byname(
                 node, port_indices + loopvars,
@@ -468,7 +472,10 @@ def generate_attr_getter(fname, node, port, dimsizes, cprefix, loopvars):
         out('attr_value_t %s;\n' % (next_valuevar.read()))
         valuevar = next_valuevar
 
-    with NoFailure(node.site):
+    with ExitStack() as stack:
+        stack.enter_context(NoFailure(node.site))
+        stack.enter_context(crep.DeviceInstanceContext())
+
         getcode = codegen_inline_byname(
             node, port_indices + loopvars,
             '_get_attribute' if dml.globals.dml_version == (1, 2)
@@ -709,18 +716,19 @@ def wrap_method(meth, wrapper_name, indices=()):
         assert meth.dimensions == len(indices)
         out(devstruct+' *_dev UNUSED = ('+devstruct+'*)_obj;\n')
         indices = tuple(mkIntegerLiteral(meth.site, i) for i in indices)
-    if retvar:
-        decl = mkDeclaration(meth.site, retvar, rettype,
-                             init = get_initializer(meth.site, rettype,
-                                                    None, None, None))
-        decl.toc()
+    with crep.DeviceInstanceContext():
+        if retvar:
+            decl = mkDeclaration(meth.site, retvar, rettype,
+                                 init = get_initializer(meth.site, rettype,
+                                                        None, None, None))
+            decl.toc()
 
-    with LogFailure(meth.site, meth, indices):
-        inargs = [mkLit(meth.site, v, t) for v, t in meth.inp]
-        outargs = [mkLit(meth.site, v, t) for v, t in meth.outp]
-        codegen_call(meth.site, meth,
-                     indices,
-                     inargs, outargs).toc()
+        with LogFailure(meth.site, meth, indices):
+            inargs = [mkLit(meth.site, v, t) for v, t in meth.inp]
+            outargs = [mkLit(meth.site, v, t) for v, t in meth.outp]
+            codegen_call(meth.site, meth,
+                         indices,
+                         inargs, outargs).toc()
     output_dml_state_change("_dev")
 
     reset_line_directive()
@@ -1030,7 +1038,10 @@ def generate_simple_events(device):
                         for i in range(method.dimensions))
         params = tuple(mkLit(site, f'_args->{pname}', ptype)
                        for (pname, ptype) in method.inp)
-        with LogFailure(site, method, indices):
+        with ExitStack() as stack:
+            stack.enter_context(LogFailure(site, method, indices))
+            stack.enter_context(crep.DeviceInstanceContext())
+
             code = codegen_call(site, method, indices, params, ())
         code = mkCompound(site, [code])
         code.toc()
@@ -1118,37 +1129,34 @@ def generate_register_events(device):
     for (method, _) in list(simple_events.items()):
         add_variable_declaration(
             'event_class_t *%s' % (crep.get_evclass(method),))
-    # Body of function is in class-context, so ensure generated code
-    # does not use _dev
-    with crep.StaticContext():
-        start_function_definition('void _register_events(conf_class_t *class)')
-        out('{\n', postindent = 1)
-        if not events and not simple_events:
-            out('return;\n')
-        else:
-            for event in events:
-                if (dml.globals.dml_version == (1, 2)
-                    and param_str(event, 'timebase') == 'stacked'
-                    and event.dimensions > 0):
-                    raise ICE(event, "stacked event array not supported")
-                for indices in event.all_indices():
-                    out('%s%s = SIM_register_event("%s", class, 0, %s);\n'
-                        % (crep.get_evclass(event),
-                        ''.join('[' + str(i) + ']' for i in indices),
-                        event.logname_anonymized(indices),
-                        ', '.join(
-                            cname
-                            for (_, cname) in event_callbacks(event,
-                                                              indices))))
-            for (method, info) in list(simple_events.items()):
-                out(('%s = SIM_register_event("%s", class, 0, %s, %s, %s, %s, '
-                    + 'NULL);\n')
-                    % ((crep.get_evclass(method),
-                        method.logname_anonymized())
-                    + tuple(info[fun] for fun in ('callback', 'destroy',
-                                                  'get_value', 'set_value'))))
-        out('}\n\n', preindent = -1)
-        splitting_point()
+    start_function_definition('void _register_events(conf_class_t *class)')
+    out('{\n', postindent = 1)
+    if not events and not simple_events:
+           out('return;\n')
+    else:
+           for event in events:
+               if (dml.globals.dml_version == (1, 2)
+                   and param_str(event, 'timebase') == 'stacked'
+                   and event.dimensions > 0):
+                   raise ICE(event, "stacked event array not supported")
+               for indices in event.all_indices():
+                   out('%s%s = SIM_register_event("%s", class, 0, %s);\n'
+                       % (crep.get_evclass(event),
+                       ''.join('[' + str(i) + ']' for i in indices),
+                       event.logname_anonymized(indices),
+                       ', '.join(
+                           cname
+                           for (_, cname) in event_callbacks(event,
+                                                             indices))))
+           for (method, info) in list(simple_events.items()):
+               out(('%s = SIM_register_event("%s", class, 0, %s, %s, %s, %s, '
+                   + 'NULL);\n')
+                   % ((crep.get_evclass(method),
+                       method.logname_anonymized())
+                   + tuple(info[fun] for fun in ('callback', 'destroy',
+                                                 'get_value', 'set_value'))))
+    out('}\n\n', preindent = -1)
+    splitting_point()
 
 def generate_events(device):
     events = device.get_recursive_components('event')
@@ -1174,7 +1182,9 @@ def generate_reg_callback(meth, name):
     out('%s *_dev = _obj;\n' % dev_t)
     scope = Symtab(global_scope)
     fail = ReturnFailure(meth.site)
-    with fail:
+    with ExitStack() as stack:
+        stack.enter_context(fail)
+        stack.enter_context(crep.DeviceInstanceContext())
         inargs = [mkLit(meth.site, n, t) for n, t in meth.inp]
         outargs = [mkLit(meth.site, "*" + n, t) for n, t in meth.outp]
         code = [codegen_call(
@@ -1341,20 +1351,23 @@ def generate_initialize(device):
     out('_init_port_objs(_dev);\n')
     out('_init_static_vars(_dev);\n')
     out('_init_data_objs(_dev);\n')
-    if dml.globals.dml_version == (1, 2):
-        # Functions called from init_object shouldn't throw any
-        # exceptions. But we don't want to force them to insert try-catch
-        # in the init method.
-        with InitFailure(device.site):
-            # Inline the init method
-            init = codegen_inline_byname(device, (), 'init', [], [], device.site)
-            # Call hard_reset
-            hard_reset = codegen_call_byname(device.site, device, (),
-                                             'hard_reset', [], [])
 
-        mkCompound(device.site, [init, hard_reset]).toc()
-    else:
-        codegen_inline_byname(device, (), '_init', [], [], device.site).toc()
+    with crep.DeviceInstanceContext():
+        if dml.globals.dml_version == (1, 2):
+            # Functions called from init_object shouldn't throw any
+            # exceptions. But we don't want to force them to insert try-catch
+            # in the init method.
+            with InitFailure(device.site):
+                # Inline the init method
+                init = codegen_inline_byname(device, (), 'init', [], [],
+                                             device.site)
+                # Call hard_reset
+                hard_reset = codegen_call_byname(device.site, device, (),
+                                                 'hard_reset', [], [])
+
+            mkCompound(device.site, [init, hard_reset]).toc()
+        else:
+            codegen_inline_byname(device, (), '_init', [], [], device.site).toc()
 
     reset_line_directive()
     if dml.globals.api_version <= '6':
@@ -1390,15 +1403,16 @@ def generate_finalize(device):
     out(crep.structtype(device) + ' *_dev UNUSED = ('
         + crep.structtype(device) + ' *)_obj;\n')
 
-    if dml.globals.dml_version == (1, 2):
-        # Functions called from new_instance shouldn't throw any
-        # exceptions.  But we don't want to force them to insert try-catch
-        # in the init method.
-        with LogFailure(device.site, device, ()):
-            code = codegen_inline_byname(device, (), 'post_init', [], [],
-                                         device.site)
-    else:
-        code = codegen_inline_byname(device, (), '_post_init', [], [],
+    with crep.DeviceInstanceContext():
+        if dml.globals.dml_version == (1, 2):
+            # Functions called from new_instance shouldn't throw any
+            # exceptions.  But we don't want to force them to insert try-catch
+            # in the init method.
+            with LogFailure(device.site, device, ()):
+                code = codegen_inline_byname(device, (), 'post_init', [], [],
+                                             device.site)
+        else:
+            code = codegen_inline_byname(device, (), '_post_init', [], [],
                                      device.site)
     code.toc()
     out('}\n\n', preindent = -1)
@@ -1411,51 +1425,54 @@ def generate_deinit(device):
     out('{\n', postindent = 1)
     out(crep.structtype(device) + ' *_dev UNUSED = ('
         + crep.structtype(device) + ' *)_obj;\n')
-    scope = Symtab(global_scope)
-    code = []
 
-    # Cancel all events
-    events = device.get_recursive_components('event')
+    with crep.DeviceInstanceContext():
+        scope = Symtab(global_scope)
+        code = []
+        # Cancel all events
+        events = device.get_recursive_components('event')
 
-    for event in events:
-        method = event.get_component('_cancel_all', 'method')
-        for index_ints in event.all_indices():
-            # Functions called from pre_delete_instance shouldn't throw any
-            # exceptions.  But we don't want to force them to insert try-catch
-            # in the init method.
-            indices = tuple(
-                mkIntegerLiteral(device.site, i) for i in index_ints)
-            with LogFailure(device.site, event, indices):
-                code.append(codegen_inline(
-                        device.site, method, indices, [], []))
+        for event in events:
+            method = event.get_component('_cancel_all', 'method')
+            for index_ints in event.all_indices():
+                # Functions called from pre_delete_instance shouldn't throw any
+                # exceptions. But we don't want to force them to insert
+                # try-catch in the init method.
+                indices = tuple(
+                    mkIntegerLiteral(device.site, i) for i in index_ints)
+                with LogFailure(device.site, event, indices):
+                    code.append(codegen_inline(
+                            device.site, method, indices, [], []))
 
-        for (method, _) in list(simple_events.items()):
-            code.append(mkExpressionStatement
-                        (device.site,
-                         mkLit(None,
-                               'SIM_event_cancel_time(_obj, %s, _obj, 0, NULL)'
-                               % crep.get_evclass(method),
-                               TVoid())))
+            for (method, _) in list(simple_events.items()):
+                code.append(mkExpressionStatement
+                            (device.site,
+                             mkLit(None,
+                                   ('SIM_event_cancel_time(_obj, %s, _obj, 0, '
+                                    + 'NULL)')
+                                   % crep.get_evclass(method),
+                                   TVoid())))
 
-    with LogFailure(device.site, device, ()):
-        code.append(codegen_inline_byname(device, (), 'destroy', [], [],
-                                          device.site))
-    # Free the tables used for log_once after all calls into device code
-    # are done
-    def mkFreeTable(target, free_vals):
-        table_ptr = TPtr(TNamed("ht_int_table_t"))
-        return mkExpressionStatement(
-            device.site,
-            mkApply(device.site,
-                    mkLit(device.site, "_free_table",
-                          TFunction([table_ptr, TBool()], TVoid())),
-                    [mkLit(device.site, f'&(_dev->{target})', table_ptr),
-                     mkBoolConstant(device.site, free_vals)]
-                    ))
-    code.append(mkFreeTable('_subsequent_log_ht', False))
-    code.append(mkFreeTable('_shared_memo_ht', True))
-    code = mkCompound(device.site, declarations(scope) + code)
-    code.toc()
+        with LogFailure(device.site, device, ()):
+            code.append(codegen_inline_byname(device, (), 'destroy', [], [],
+                                              device.site))
+        # Free the tables used for log_once after all calls into device code
+        # are done
+        def mkFreeTable(target, free_vals):
+            table_ptr = TPtr(TNamed("ht_int_table_t"))
+            return mkExpressionStatement(
+                device.site,
+                mkApply(device.site,
+                        mkLit(device.site, "_free_table",
+                              TFunction([table_ptr, TBool()], TVoid())),
+                        [mkLit(device.site, f'&(_dev->{target})', table_ptr),
+                         mkBoolConstant(device.site, free_vals)]
+                        ))
+        code.append(mkFreeTable('_subsequent_log_ht', False))
+        code.append(mkFreeTable('_shared_memo_ht', True))
+        code = mkCompound(device.site, declarations(scope) + code)
+        code.toc()
+
     out('}\n\n', preindent = -1)
     reset_line_directive()
     splitting_point()
@@ -1468,7 +1485,10 @@ def generate_reset(device, hardness):
     out(crep.structtype(device) + ' *_dev UNUSED = ('
         + crep.structtype(device) + ' *)_obj;\n\n')
     scope = Symtab(global_scope)
-    with LogFailure(device.site, device, ()):
+    with ExitStack() as stack:
+        stack.enter_context(LogFailure(device.site, device, ()))
+        stack.enter_context(crep.DeviceInstanceContext())
+
         code = codegen_call_byname(device.site, device, (),
                                    hardness+'_reset', [], [])
     code = mkCompound(device.site, declarations(scope) + [code])
@@ -1588,11 +1608,12 @@ def generate_init_static_vars(device):
     start_function_definition(
         'void _init_static_vars(%s *_dev)' % (crep.structtype(device),))
     out('{\n', postindent = 1)
-    for v in device.staticvars:
-        if v.init:
-            assert isinstance(v.init, Initializer)
-            var = mkStaticVariable(v.site, v)
-            v.init.assign_to(var, var.sym.type)
+    with crep.DeviceInstanceContext():
+        for v in device.staticvars:
+            if v.init:
+                assert isinstance(v.init, Initializer)
+                var = mkStaticVariable(v.site, v)
+                v.init.assign_to(var, var.sym.type)
     out('}\n\n', preindent = -1)
     reset_line_directive()
 
@@ -1600,49 +1621,53 @@ def generate_init_data_objs(device):
     start_function_definition(
         'void _init_data_objs(%s *_dev)' % (crep.structtype(device),))
     out('{\n', postindent = 1)
-    for node in device.initdata:
-        # Usually, the initializer is constant, but we permit that it
-        # depends on index. When the initializer is constant, we
-        # use a loop to initialize all instances of the variable across arrays;
-        # if the initializer depends on an index variable, then we unfold the
-        # loop to allow the initializer to be evaluated as a constant
-        # expression once for every index.
-        # TODO: we should change initializer to permit certain non-constant
-        # expressions, as long as they don't access the device instance.
-        # That way, it would always work to generate a loop.
-        try:
-            # only data/method obj
-            assert not node.isindexed()
-            init = eval_initializer(
-                node.site, node._type, node.astinit,
-                Location(node.parent, static_indices(node)),
-                global_scope, True)
-        # mainly meant to capture EIDXVAR; for other errors, the error will
-        # normally re-appear when evaluating per instance
-        except DMLError:
-            for indices in node.all_indices():
-                index_exprs = tuple(mkIntegerLiteral(node.site, i)
-                                    for i in indices)
+    with crep.DeviceInstanceContext():
+        for node in device.initdata:
+            # Usually, the initializer is constant, but we permit that it
+            # depends on index. When the initializer is constant, we use a loop
+            # to initialize all instances of the variable across arrays; if the
+            # initializer depends on an index variable, then we unfold the loop
+            # to allow the initializer to be evaluated as a constant expression
+            # once for every index.
+            # TODO: we should change initializer to permit certain non-constant
+            # expressions, as long as they don't access the device instance.
+            # That way, it would always work to generate a loop.
+
+            try:
+                # only data/method obj
+                assert not node.isindexed()
+                init = eval_initializer(
+                    node.site, node._type, node.astinit,
+                    Location(node.parent, static_indices(node)),
+                    global_scope, True)
+            # mainly meant to capture EIDXVAR; for other errors, the error will
+            # normally re-appear when evaluating per instance
+            except DMLError:
+                for indices in node.all_indices():
+                    index_exprs = tuple(mkIntegerLiteral(node.site, i)
+                                        for i in indices)
+                    nref = mkNodeRef(node.site, node, index_exprs)
+                    try:
+                        init = eval_initializer(
+                            node.site, node._type, node.astinit,
+                            Location(node.parent, index_exprs), global_scope,
+                            True)
+                    except DMLError as e:
+                        report(e)
+                    else:
+                        init.assign_to(nref, node._type)
+            else:
+                index_exprs = ()
+                for (i, sz) in enumerate(node.dimsizes):
+                    var = 'i%d' % (i,)
+                    out(('for (int %s = 0; %s < %s; ++%s) {\n'
+                         % (var, var, sz, var)),
+                        postindent=1)
+                    index_exprs += (mkLit(node.site, var, TInt(64, True)),)
                 nref = mkNodeRef(node.site, node, index_exprs)
-                try:
-                    init = eval_initializer(node.site, node._type, node.astinit,
-                                            Location(node.parent, index_exprs),
-                                            global_scope, True)
-                except DMLError as e:
-                    report(e)
-                else:
-                    init.assign_to(nref, node._type)
-        else:
-            index_exprs = ()
-            for (i, sz) in enumerate(node.dimsizes):
-                var = 'i%d' % (i,)
-                out('for (int %s = 0; %s < %s; ++%s) {\n' % (var, var, sz, var),
-                    postindent=1)
-                index_exprs += (mkLit(node.site, var, TInt(64, True)),)
-            nref = mkNodeRef(node.site, node, index_exprs)
-            init.assign_to(nref, node._type)
-            for _ in range(node.dimensions):
-                out('}\n', postindent=-1)
+                init.assign_to(nref, node._type)
+                for _ in range(node.dimensions):
+                    out('}\n', postindent=-1)
     out('}\n\n', preindent = -1)
     reset_line_directive()
     splitting_point()
@@ -1970,74 +1995,71 @@ occurrence of the method in the vtable. The _tinit_* function is
 responsible for filling in adjustor thunks in the remaining vtable
 fields.
     '''
-    # Body of the function is in static context, ensure generated code
-    # does not use _dev
-    with crep.StaticContext():
-        # prevent argument names from shadowing trait types
-        def scramble_argname(name):
-            return "_%s_%s" % (trait.name, name)
-        initializers = []
-        for name in sorted(trait.vtable_methods):
-            scrambled_name = scramble_argname(name)
-            if name in trait.method_impls:
-                value = '%s == NULL ? %s : %s' % (
-                    scrambled_name, trait.method_impls[name].cname(),
-                    scrambled_name)
-            else:
-                # abstract method, so cannot be NULL
-                value = scrambled_name
-            initializers.append('.%s = %s' % (name, value))
-        for name in sorted(trait.vtable_params):
-            initializers.append('.%s = %s' % (name, scramble_argname(name)))
-        for name in sorted(trait.vtable_sessions):
-            initializers.append('.%s = %s' % (name, scramble_argname(name)))
+    # prevent argument names from shadowing trait types
+    def scramble_argname(name):
+        return "_%s_%s" % (trait.name, name)
+    initializers = []
+    for name in sorted(trait.vtable_methods):
+        scrambled_name = scramble_argname(name)
+        if name in trait.method_impls:
+            value = '%s == NULL ? %s : %s' % (
+                scrambled_name, trait.method_impls[name].cname(),
+                scrambled_name)
+        else:
+            # abstract method, so cannot be NULL
+            value = scrambled_name
+        initializers.append('.%s = %s' % (name, value))
+    for name in sorted(trait.vtable_params):
+        initializers.append('.%s = %s' % (name, scramble_argname(name)))
+    for name in sorted(trait.vtable_sessions):
+        initializers.append('.%s = %s' % (name, scramble_argname(name)))
 
-        tinit_calls = []
-        for parent in trait.direct_parents:
-            args = []
-            for name in tinit_args(parent):
-                scrambled_name = scramble_argname(name)
-                kind = parent.member_kind(name)
-                if kind in ('parameter', 'session'):
-                    args.append(scrambled_name)
-                else:
-                    assert kind == 'method'
-                    args.append(method_tinit_arg(trait, parent,
-                                                 name, scrambled_name))
-            tinit_calls.append("_tinit_%s(%s);\n" % (
-                parent.name, ", ".join(['&_ret->' + cident(parent.name)]
-                                       + args)))
-
-        out('static void\n')
-        out('_tinit_%s(struct _%s *_ret' % (trait.name,
-                                            cident(trait.name)))
-        inargs = tinit_args(trait)
-        for name in inargs:
+    tinit_calls = []
+    for parent in trait.direct_parents:
+        args = []
+        for name in tinit_args(parent):
             scrambled_name = scramble_argname(name)
-            vtable_trait = trait.ancestor_vtables.get(name, trait)
-            member_kind = trait.member_kind(name)
-            if member_kind == 'method':
-                (_, inp, outp, throws, independent, _) \
-                    = vtable_trait.vtable_methods[name]
-                mtype = vtable_trait.vtable_method_type(inp, outp, throws,
-                                                        independent)
-                out(', %s' % (mtype.declaration(scrambled_name),))
-            elif member_kind == 'parameter':
-                (site, typ) = vtable_trait.vtable_params[name]
-                out(', %s' % (typ.declaration(scrambled_name)))
+            kind = parent.member_kind(name)
+            if kind in ('parameter', 'session'):
+                args.append(scrambled_name)
             else:
-                assert member_kind == 'session'
-                out(', uint32 %s' % (scrambled_name))
-        out(')\n{\n', postindent=1)
-        if initializers:
-            out('*_ret = (struct _%s){\n' % (cident(trait.name),),
-                postindent=1)
-            for initializer in initializers:
-                out("%s,\n" % (initializer,))
-            out("};\n", postindent=-1)
-        for tinit_call in tinit_calls:
-            out(tinit_call)
-        out("}\n", preindent=-1)
+                assert kind == 'method'
+                args.append(method_tinit_arg(trait, parent,
+                                             name, scrambled_name))
+        tinit_calls.append("_tinit_%s(%s);\n" % (
+            parent.name, ", ".join(['&_ret->' + cident(parent.name)]
+                                   + args)))
+
+    out('static void\n')
+    out('_tinit_%s(struct _%s *_ret' % (trait.name,
+                                        cident(trait.name)))
+    inargs = tinit_args(trait)
+    for name in inargs:
+        scrambled_name = scramble_argname(name)
+        vtable_trait = trait.ancestor_vtables.get(name, trait)
+        member_kind = trait.member_kind(name)
+        if member_kind == 'method':
+            (_, inp, outp, throws, independent, _) \
+                = vtable_trait.vtable_methods[name]
+            mtype = vtable_trait.vtable_method_type(inp, outp, throws,
+                                                    independent)
+            out(', %s' % (mtype.declaration(scrambled_name),))
+        elif member_kind == 'parameter':
+            (site, typ) = vtable_trait.vtable_params[name]
+            out(', %s' % (typ.declaration(scrambled_name)))
+        else:
+            assert member_kind == 'session'
+            out(', uint32 %s' % (scrambled_name))
+    out(')\n{\n', postindent=1)
+    if initializers:
+        out('*_ret = (struct _%s){\n' % (cident(trait.name),),
+            postindent=1)
+        for initializer in initializers:
+            out("%s,\n" % (initializer,))
+        out("};\n", postindent=-1)
+    for tinit_call in tinit_calls:
+        out(tinit_call)
+    out("}\n", preindent=-1)
 
 def trait_trampoline_name(method, vtable_trait):
     return "%s__trampoline_from_%s" % (
@@ -2113,27 +2135,30 @@ def generate_trait_trampoline(method, vtable_trait):
         rettype.declaration('%s(%s)' % (
             trait_trampoline_name(method, vtable_trait), inparams))),
         postindent=1)
-    [(tname, ttype)] = implicit_inargs
-    site = method.site
-    obj = method.parent
-    path = obj.traits.ancestry_paths[vtable_trait][0]
-    if obj.dimensions:
-        if path[0] is vtable_trait:
-            downcast = tname
-        else:
-            downcast = 'DOWNCAST(%s, %s, %s)' % (
-                tname, cident(path[0].name),
-                '.'.join(cident(t.name) for t in path[1:]))
-        name = cident(path[0].name)
-        out('int _flat_index = ((struct _%s *)%s.trait) - (struct _%s *)%s;\n'
-            % (name, downcast, name, obj.traits.vtable_cname(path[0])))
-    indices = [
-        mkLit(site, '((_flat_index / %d) %% %d)' % (
-            reduce(operator.mul, obj.dimsizes[dim + 1:], 1),
-            obj.dimsizes[dim]), TInt(32, True))
-        for dim in range(obj.dimensions)]
-    args = [mkLit(site, n, t) for (n, t) in explicit_inargs]
-    call_expr = mkcall_method(site, func, indices)(args)
+    with (crep.DeviceInstanceContext() if not method.independent
+          else nullcontext()):
+        [(tname, ttype)] = implicit_inargs
+        site = method.site
+        obj = method.parent
+        path = obj.traits.ancestry_paths[vtable_trait][0]
+        if obj.dimensions:
+            if path[0] is vtable_trait:
+                downcast = tname
+            else:
+                downcast = 'DOWNCAST(%s, %s, %s)' % (
+                    tname, cident(path[0].name),
+                    '.'.join(cident(t.name) for t in path[1:]))
+            name = cident(path[0].name)
+            out(('int _flat_index = ((struct _%s *)%s.trait) '
+                 + '- (struct _%s *)%s;\n')
+                % (name, downcast, name, obj.traits.vtable_cname(path[0])))
+        indices = [
+            mkLit(site, '((_flat_index / %d) %% %d)' % (
+                reduce(operator.mul, obj.dimsizes[dim + 1:], 1),
+                obj.dimsizes[dim]), TInt(32, True))
+            for dim in range(obj.dimensions)]
+        args = [mkLit(site, n, t) for (n, t) in explicit_inargs]
+        call_expr = mkcall_method(site, func, indices)(args)
     if not rettype.void:
         out('return ')
     out('%s;\n' % call_expr.read())
@@ -2313,10 +2338,7 @@ def generate_init_trait_vtables(node, param_values):
         generate_tinit(trait)
     for subnode in flatten_object_subtree(node):
         generate_trait_trampolines(subnode)
-    # These initialization calls are output into static context,
-    # so make sure they do not generate code that uses _dev
-    with crep.StaticContext():
-        init_calls = init_trait_vtables_for_node(node, param_values, (), ())
+    init_calls = init_trait_vtables_for_node(node, param_values, (), ())
     by_dims = {}
     for (dims, call) in init_calls:
         by_dims.setdefault(dims, []).append(call)
@@ -2478,10 +2500,11 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
 
     if dml.globals.dml_version == (1, 2):
         generate_register_tables(device)
-    generate_port_classes(init_code, device)
-    generate_attributes(init_code, device)
-    generate_subobj_connects(init_code, device)
-    generate_implements(init_code, device)
+    with crep.DeviceInstanceContext():
+        generate_port_classes(init_code, device)
+        generate_attributes(init_code, device)
+        generate_subobj_connects(init_code, device)
+        generate_implements(init_code, device)
     if dml.globals.dml_version != (1, 2) or dml.globals.state_change_dml12:
         generate_state_notify(device)
         generate_state_existence_callback(device)
@@ -2550,8 +2573,9 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
             reset_line_directive()
             splitting_point()
 
-    register_saved_attributes(init_code, device)
-    generate_init(device, init_code, filename_prefix)
+    with crep.DeviceInstanceContext():
+        register_saved_attributes(init_code, device)
+        generate_init(device, init_code, filename_prefix)
 
     generate_alloc_trait_vtables(device)
     generate_init_trait_vtables(device, trait_param_values)

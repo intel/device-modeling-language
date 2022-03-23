@@ -22,37 +22,35 @@ __all__ = (
     'dev',
     'require_dev',
     'maybe_dev_arg',
-    'StaticContext',
+    'DeviceInstanceContext',
     'TypedParamContext',
     )
 
 
-class StaticContext:
+class DeviceInstanceContext:
     active = False
 
     def __enter__(self):
-        self.prev_context = StaticContext.active
-        StaticContext.active = True
+        self.prev_context = DeviceInstanceContext.active
+        DeviceInstanceContext.active = True
     def __exit__(self, exc_type, exc_val, exc_tb):
-        StaticContext.active = self.prev_context
+        DeviceInstanceContext.active = self.prev_context
 
-class TypedParamContext(StaticContext):
+class TypedParamContext:
     active = False
 
     def __enter__(self):
         self.prev_typed_context = TypedParamContext.active
         TypedParamContext.active = True
-        return StaticContext.__enter__(self)
     def __exit__(self, exc_type, exc_val, exc_tb):
         TypedParamContext.active = self.prev_typed_context
-        return StaticContext.__exit__(self, exc_type, exc_val, exc_tb)
 
 def dev(site):
     require_dev(site)
     return '_dev'
 
 def require_dev(site):
-    if StaticContext.active:
+    if not DeviceInstanceContext.active:
         raise EINDEPENDENTVIOL(site)
 
 def maybe_dev_arg(independent):

@@ -187,8 +187,8 @@ class TraitMethod(TraitVTableItem):
             '%s(%s)' % (self.cname(), args))
 
     def codegen_body(self):
-        with (crep.StaticContext()
-              if self.independent else contextlib.nullcontext()):
+        with (crep.DeviceInstanceContext()
+              if not self.independent else contextlib.nullcontext()):
             scope = MethodParamScope(self.trait.scope(global_scope))
             implicit_inargs = self.vtable_trait.implicit_args()
             site = self.site

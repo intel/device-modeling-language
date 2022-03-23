@@ -9,6 +9,7 @@ from dml.traits import (
 import dml.objects
 import dml.ast
 import dml.ctree
+from dml import crep
 from dml import types
 from dml import traits
 
@@ -49,4 +50,5 @@ class Test_traits(unittest.TestCase):
         ref = ot.lookup_shared_method_impl(self.site, 'm', ())
         self.assertTrue(ref)
         # does not crash
-        ref.call_expr([], types.TVoid()).read()
+        with crep.DeviceInstanceContext():
+            ref.call_expr([], types.TVoid()).read()

@@ -2506,9 +2506,15 @@ def read_iface_struct(iface_noderef):
     else:
         assert isinstance(iface_noderef, PlainNodeRef)
         struct_name = param_str(iface_noderef.node, '_c_type')
-        return mkCast(iface_noderef.site,
-                      mkSubRef(iface_noderef.site, iface_noderef, 'val', '.'),
-                      TPtr(TNamed(struct_name, const=True))).read()
+
+        # HACK this ad-hoc DeviceInstanceContect is needed to construct this
+        # expression (which is then immediately .read()) as at this point,
+        # DMLC is at the output stage.
+        with crep.DeviceInstanceContext():
+            return mkCast(iface_noderef.site,
+                          mkSubRef(iface_noderef.site, iface_noderef, 'val',
+                                   '.'),
+                          TPtr(TNamed(struct_name, const=True))).read()
 
 class MethodPresent(Expression):
     '''Whether a method in an interface object is NULL'''
