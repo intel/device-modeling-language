@@ -28,6 +28,11 @@ stest.expect_equal(obj.sub[1].classname, 'namespace')
 stest.expect_equal(obj.sub[1].renamed.classname, 'signal_stub')
 stest.expect_equal(obj.attr.sub_renamed, [obj.sub[0].renamed,
                                           obj.sub[1].renamed])
+
+stest.expect_true(SIM_object_descendant(obj, "a2[1].bank.b2[2].c2[4].d[6]"))
+stest.expect_true(SIM_object_descendant(obj, "a2[1].e.f"))
+stest.expect_true(SIM_object_descendant(obj, "a2[1].port.p.q"))
+
 # by default, init_as_subobj connects have configuration=none
 stest.expect_false(SIM_class_has_attribute('test', 'noconf'))
 

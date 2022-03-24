@@ -36,6 +36,29 @@ group sub[i < 2] {
     }
 }
 
+subdevice a[i < 2] {
+    param name = "a2";
+    bank b[j < 3] {
+        param name = "b2";
+        group c[k < 5] {
+            param name = "c2";
+            connect d[l < 7] is init_as_subobj {
+                param classname = "signal_stub";
+            }
+        }
+    }
+    subdevice e {
+        connect f is init_as_subobj {
+            param classname = "signal_stub";
+        }
+    }
+    port p {
+        connect q is init_as_subobj {
+            param classname = "signal_stub";
+        }
+    }
+}
+
 connect noconf is init_as_subobj {
     param classname = "signal_stub";
     interface signal;

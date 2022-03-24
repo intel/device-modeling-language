@@ -637,20 +637,33 @@ def generate_attributes(initcode, node, port=None,
     else:
         raise ICE(node, f"unknown object type {node.objtype}")
 
-def generate_subobj_connects(init_code, device):
+def find_connects(node, subobj_parent):
+    if node.objtype == 'connect':
+        yield (subobj_parent, node)
+    for sub in node.get_components():
+        if sub.objtype in {'bank', 'port', 'subdevice'}:
+            yield from find_connects(sub, sub)
+        else:
+            yield from find_connects(sub, subobj_parent)
+
+def generate_subobj_connects(init_code, device, prefixes=("",)):
     if dml.globals.dml_version != (1, 2):
         t = dml.globals.traits['init_as_subobj']
-        for node in device.get_recursive_components('connect'):
+        for (parent, node) in find_connects(device, device):
             if t in node.traits.ancestors:
                 classname = mkStringConstant(
                     None, param_str(node, 'classname')).quoted
                 desc = (mkStringConstant(None, param_str(node, "desc")).quoted
                         if param_defined(node, 'desc') else 'NULL')
-                for indices in node.all_indices():
+                cls = port_class_ident(parent)
+                for indices in itertools.product(
+                        *(list(range(i)) for i in node.dimsizes[
+                            parent.dimensions:])):
+                    name = node.logname_anonymized(
+                        indices, relative=parent.objtype)
                     init_code.out(
-                        '_DML_register_subobj_connect(class, '
-                        + f'{classname}, "{node.logname_anonymized(indices)}",'
-                        + f' {desc});\n')
+                        f'_DML_register_subobj_connect({cls}, '
+                        + f'{classname}, "{name}", {desc});\n')
 
 def apply(f):
     return f()
@@ -872,7 +885,8 @@ def generate_implement(code, device, impl):
 def port_class_ident(port):
     '''The C identifier used for a port class within the device class
     initialization function'''
-    return '_port_class_' + port.attrname()
+    return ('class' if port.objtype == 'device'
+            else '_port_class_' + port.attrname())
 
 def port_prefix(port):
     return {'bank': 'bank.', 'port': 'port.', 'subdevice': ''}[port.objtype]
