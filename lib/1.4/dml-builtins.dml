@@ -1008,10 +1008,14 @@ template init_as_subobj is (connect, init, _qname) {
     param classname;
     param configuration default "none";
     method init() default {
-        local conf_object_t *o = SIM_object_descendant(dev.obj, this._qname());
+        local int portname_len = this._nongroup_parent.objtype == "device"
+            #? 0 #: strlen(this._nongroup_parent._qname()) + 1;
+        local conf_object_t *o = SIM_object_descendant(
+            this._nongroup_parent.obj, this._qname() + portname_len);
         if (o == NULL) {
             // should not happen
-            log critical: "subobject %s not found", this._qname();
+            log critical: "subobject %s not found",
+                this._qname() + portname_len;
         }
         local set_error_t err = this.set_attribute(SIM_make_attr_object(o));
         if (err != Sim_Set_Ok) {

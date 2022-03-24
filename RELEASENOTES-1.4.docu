@@ -311,4 +311,8 @@
       corresponding Simics object does not add a `port.` prefix. For
       instance, the object for `subdevice x;` is named `dev.x` instead
       of `dev.port.x`.</add-note></build-id>
+  <build-id value="next"><add-note> Fixed a bug that caused incorrect
+      Simics object names when the `init_as_subobj` template is
+      instantiated on a `connect` object inside a `bank` or `port`
+      object.</add-note></build-id>
 </rn>
