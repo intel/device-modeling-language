@@ -142,7 +142,8 @@ extern void _cancel_simple_events(conf_object_t *obj, _identity_t id);
 /**
 # Libraries and Built-ins
 
-Most standard functionality in DML is implemented in templates. Built-in
+Most standard functionality in Device Modeling Language (DML) is implemented in
+templates. Built-in
 templates can be categorized as follows:
 
 * Each object type has a corresponding template which is instantiated for all
