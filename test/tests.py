@@ -91,7 +91,7 @@ def dmlc_reaper_args(exitcode_file, timeout_multiplier = 1):
             "-r", "-e", exitcode_file]
 
 common_cflags = ["-O2", "-std=gnu99", '-Wall', '-Werror', '-Wpointer-arith',
-                 '-Wwrite-strings', '-Wformat-nonliteral',]
+                 '-Wwrite-strings', '-Wformat-nonliteral', "-lpthread",]
 cc = os.environ.get('DMLC_CC')
 if is_windows():
     if not cc:
@@ -648,7 +648,7 @@ class CTestCase(DMLFileTestCase):
                 self.cfilename + ".o",
                 module_id_base + ".o",
                 "-L"+join(host_path(), "bin", "py3")] + ldflags + \
-                ["-lsimics-common", "-lvtutils"]
+                ["-lsimics-common", "-lvtutils", "-lpthread"]
         args.append("-Wl,--no-undefined")
 
         status = subprocess.call(args,
