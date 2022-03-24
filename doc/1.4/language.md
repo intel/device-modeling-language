@@ -3,9 +3,9 @@
   SPDX-License-Identifier: MPL-2.0
 -->
 
-# DML 1.4
+# Device Modeling Language, version 1.4
 
-This chapter describes the DML language, version 1.4. It will
+This chapter describes the Device Modeling Language (DML), version 1.4. It will
 help to have read and understood the object model in the previous
 chapter before reading this chapter.
 
@@ -2344,7 +2344,7 @@ methods can sometimes be practical in tight cross-language
 integrations, when the implementation of one device is split between
 one DML part and one C/C++ part.
 
-Example: the following code in dml:
+Example: the following code in DML:
 
 ```
 method my_method(int x) { ... }

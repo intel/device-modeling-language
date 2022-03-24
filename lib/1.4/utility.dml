@@ -19,7 +19,8 @@ template _reg_or_field {
 
 # Standard Templates
 
-This chapter describes the standard templates included the DML
+This chapter describes the standard templates included the
+Device Modeling Language (DML)
 library. The templates can be used for both registers and fields. The
 templates can be accessed after importing `utility.dml`.
 
