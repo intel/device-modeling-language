@@ -91,7 +91,7 @@ def dmlc_reaper_args(exitcode_file, timeout_multiplier = 1):
             "-r", "-e", exitcode_file]
 
 common_cflags = ["-O2", "-std=gnu99", '-Wall', '-Werror', '-Wpointer-arith',
-                 '-Wwrite-strings', '-Wformat-nonliteral', "-lpthread",]
+                 '-Wwrite-strings', '-Wformat-nonliteral',]
 cc = os.environ.get('DMLC_CC')
 if is_windows():
     if not cc:

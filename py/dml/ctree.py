@@ -2507,7 +2507,7 @@ def read_iface_struct(iface_noderef):
         assert isinstance(iface_noderef, PlainNodeRef)
         struct_name = param_str(iface_noderef.node, '_c_type')
 
-        # HACK this ad-hoc DeviceInstanceContect is needed to construct this
+        # HACK this ad-hoc DeviceInstanceContext is needed to construct this
         # expression (which is then immediately .read()) as at this point,
         # DMLC is at the output stage.
         with crep.DeviceInstanceContext():

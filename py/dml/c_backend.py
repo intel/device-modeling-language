@@ -1132,29 +1132,29 @@ def generate_register_events(device):
     start_function_definition('void _register_events(conf_class_t *class)')
     out('{\n', postindent = 1)
     if not events and not simple_events:
-           out('return;\n')
+        out('return;\n')
     else:
-           for event in events:
-               if (dml.globals.dml_version == (1, 2)
-                   and param_str(event, 'timebase') == 'stacked'
-                   and event.dimensions > 0):
-                   raise ICE(event, "stacked event array not supported")
-               for indices in event.all_indices():
-                   out('%s%s = SIM_register_event("%s", class, 0, %s);\n'
-                       % (crep.get_evclass(event),
-                       ''.join('[' + str(i) + ']' for i in indices),
-                       event.logname_anonymized(indices),
-                       ', '.join(
-                           cname
-                           for (_, cname) in event_callbacks(event,
-                                                             indices))))
-           for (method, info) in list(simple_events.items()):
-               out(('%s = SIM_register_event("%s", class, 0, %s, %s, %s, %s, '
-                   + 'NULL);\n')
-                   % ((crep.get_evclass(method),
-                       method.logname_anonymized())
-                   + tuple(info[fun] for fun in ('callback', 'destroy',
-                                                 'get_value', 'set_value'))))
+        for event in events:
+            if (dml.globals.dml_version == (1, 2)
+                and param_str(event, 'timebase') == 'stacked'
+                and event.dimensions > 0):
+                raise ICE(event, "stacked event array not supported")
+            for indices in event.all_indices():
+                out('%s%s = SIM_register_event("%s", class, 0, %s);\n'
+                    % (crep.get_evclass(event),
+                    ''.join('[' + str(i) + ']' for i in indices),
+                    event.logname_anonymized(indices),
+                    ', '.join(
+                        cname
+                        for (_, cname) in event_callbacks(event,
+                                                          indices))))
+        for (method, info) in list(simple_events.items()):
+            out(('%s = SIM_register_event("%s", class, 0, %s, %s, %s, %s, '
+                + 'NULL);\n')
+                % ((crep.get_evclass(method),
+                    method.logname_anonymized())
+                + tuple(info[fun] for fun in ('callback', 'destroy',
+                                              'get_value', 'set_value'))))
     out('}\n\n', preindent = -1)
     splitting_point()
 
