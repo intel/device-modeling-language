@@ -112,18 +112,21 @@ extern void _disable_connection_callbacks(conf_object_t *connection,
                                           _connection_vect_t *connections);
 
 extern void _callback_before_read(conf_object_t *bank,
+                                  conf_object_t *initiator,
                                   bool *inquiry,
                                   physical_address_t *offset,
                                   physical_address_t size,
                                   _connection_vect_t *connections,
                                   _callback_vect_t *anonymous_callbacks);
 extern void _callback_after_read(conf_object_t *bank,
+                                 conf_object_t *initiator,
                                  physical_address_t *offset,
                                  physical_address_t size,
                                  uint64 *value, bool *success,
                                  _connection_vect_t *connections,
                                  _callback_vect_t *anonymous_callbacks);
 extern void _callback_before_write(conf_object_t *bank,
+                                   conf_object_t *initiator,
                                    physical_address_t *offset,
                                    physical_address_t size,
                                    uint64 *value,
@@ -131,6 +134,7 @@ extern void _callback_before_write(conf_object_t *bank,
                                    _connection_vect_t *connections,
                                    _callback_vect_t *anonymous_callbacks);
 extern void _callback_after_write(conf_object_t *bank,
+                                  conf_object_t *initiator,
                                   physical_address_t *offset,
                                   physical_address_t size,
                                   bool *success,
@@ -1866,8 +1870,9 @@ template bank is (object, shown_desc, _qname) {
         local uint64 size = SIM_get_mem_op_size(memop);
         local bool inquiry = SIM_get_mem_op_inquiry(memop);
         local bool inquiry_override = false;
+        local conf_object_t *ini = SIM_get_mem_op_initiator(memop);
         if (SIM_mem_op_is_read(memop) && !inquiry) {
-            _callback_before_read(this._bank_obj(), &inquiry_override,
+            _callback_before_read(this._bank_obj(), ini, &inquiry_override,
                                   &offset, size,
                                   &_connections, &_before_read_callbacks);
             if (inquiry_override) {
@@ -1888,7 +1893,7 @@ template bank is (object, shown_desc, _qname) {
                 }
 
                 if (inquiry_override) {
-                    _callback_after_read(this._bank_obj(), &offset, size,
+                    _callback_after_read(this._bank_obj(), ini, &offset, size,
                                          &value, &success, &_connections,
                                          &_after_read_callbacks);
                 }
@@ -1909,7 +1914,7 @@ template bank is (object, shown_desc, _qname) {
                     success = false;
                 }
 
-                _callback_after_read(this._bank_obj(), &offset, size,
+                _callback_after_read(this._bank_obj(), ini, &offset, size,
                                      &value, &success, &_connections,
                                      &_after_read_callbacks);
 
@@ -1921,7 +1926,7 @@ template bank is (object, shown_desc, _qname) {
 
                 local bool suppress = false;
                 _callback_before_write(
-                    this._bank_obj(), &offset, size, &writevalue,
+                    this._bank_obj(), ini, &offset, size, &writevalue,
                     &suppress, &_connections, &_before_write_callbacks);
                 if (!suppress) {
                     try {
@@ -1934,7 +1939,7 @@ template bank is (object, shown_desc, _qname) {
         }
 
         if (!SIM_mem_op_is_read(memop) && !inquiry) {
-            _callback_after_write(this._bank_obj(), &offset, size,
+            _callback_after_write(this._bank_obj(), ini, &offset, size,
                                   &success, &_connections,
                                   &_after_write_callbacks);
         }
@@ -1952,6 +1957,7 @@ template bank is (object, shown_desc, _qname) {
     shared method transaction_access(transaction_t *t, uint64 offset,
                                      void *aux) -> (exception_type_t) default {
         local uint64 size = SIM_transaction_size(t);
+        local conf_object_t *ini = SIM_transaction_initiator(t);
         local uint8 buf[size];
         if (SIM_transaction_is_write(t)) {
             local buffer_t bytes;
@@ -1962,14 +1968,15 @@ template bank is (object, shown_desc, _qname) {
         local bool inquiry = SIM_transaction_is_inquiry(t);
         local bool is_read = SIM_transaction_is_read(t);
         if (size <= 8) {
-            if (!_transaction_access(is_read, inquiry, offset, size, buf, aux))
+            if (!_transaction_access(ini, is_read, inquiry, offset, size,
+                                     buf, aux))
                 return Sim_PE_IO_Not_Taken;
         } else {
             local int sz = 8 - (offset % 8);
             local uint64 offs = 0;
             while (offs < size) {
-                if (!_transaction_access(is_read, inquiry, offset + offs, sz,
-                                         buf + offs, aux))
+                if (!_transaction_access(ini, is_read, inquiry,
+                                         offset + offs, sz, buf + offs, aux))
                     return Sim_PE_IO_Not_Taken;
                 offs += sz;
                 sz = 8 > (size - offs) ? (size - offs) : 8;
@@ -1986,11 +1993,12 @@ template bank is (object, shown_desc, _qname) {
     }
 
     shared method _transaction_access(
-        bool is_read, bool inquiry, uint64 offset, uint64 size, uint8 *buf,
-        void *aux) -> (bool) {
+        conf_object_t *ini, bool is_read, bool inquiry,
+        uint64 offset, uint64 size, uint8 *buf, void *aux) -> (bool) {
         local bool inquiry_override = false;
         if (is_read && !inquiry) {
-            _callback_before_read(this._bank_obj(), &inquiry_override, &offset,
+            _callback_before_read(this._bank_obj(), ini,
+                                  &inquiry_override, &offset,
                                   size, &_connections, &_before_read_callbacks);
             if (inquiry_override) {
                 inquiry = true;
@@ -2008,7 +2016,7 @@ template bank is (object, shown_desc, _qname) {
                 }
 
                 if (inquiry_override) {
-                    _callback_after_read(this._bank_obj(), &offset, size,
+                    _callback_after_read(this._bank_obj(), ini, &offset, size,
                                          &value, &success, &_connections,
                                          &_after_read_callbacks);
                 }
@@ -2029,7 +2037,7 @@ template bank is (object, shown_desc, _qname) {
                     success = false;
                 }
 
-                _callback_after_read(this._bank_obj(), &offset, size,
+                _callback_after_read(this._bank_obj(), ini, &offset, size,
                                      &value, &success, &_connections,
                                      &_after_read_callbacks);
 
@@ -2041,7 +2049,7 @@ template bank is (object, shown_desc, _qname) {
 
                 local bool suppress = false;
                 _callback_before_write(
-                    this._bank_obj(), &offset, size, &writevalue,
+                    this._bank_obj(), ini, &offset, size, &writevalue,
                     &suppress, &_connections, &_before_write_callbacks);
                 if (!suppress) {
                     try {
@@ -2054,7 +2062,7 @@ template bank is (object, shown_desc, _qname) {
         }
 
         if (!is_read && !inquiry) {
-            _callback_after_write(this._bank_obj(), &offset, size,
+            _callback_after_write(this._bank_obj(), ini, &offset, size,
                                   &success, &_connections,
                                   &_after_write_callbacks);
         }
