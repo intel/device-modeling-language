@@ -1850,6 +1850,7 @@ struct bank_access {
         uint64 *value;
         bool *success;
         bool *suppress;
+        conf_object_t *initiator;
 };
 
 static void
@@ -1917,6 +1918,12 @@ _set_value_and_forgive_miss(bank_access_t *handle, uint64 value) {
         _set_miss(handle, false);
 }
 
+static conf_object_t *
+_initiator(bank_access_t *handle)
+{
+        return handle->initiator;
+}
+
 static void
 _issue_callback(_callback_type_t type,
                 _callback_entry_t *callback,
@@ -1930,7 +1937,8 @@ _issue_callback(_callback_type_t type,
                         .offset = _offset,
                         .size = _size,
                         .set_offset = _set_offset,
-                        .inquire = _inquire};
+                        .inquire = _inquire,
+                        .initiator = _initiator};
                 callback->callback.before_read(connection,
                                                &bank_before_read_interface,
                                                handle,
@@ -1945,7 +1953,8 @@ _issue_callback(_callback_type_t type,
                         .missed = _is_miss,
                         .value = _value_unless_miss,
                         .set_missed = _set_miss,
-                        .set_value = _set_value_and_forgive_miss};
+                        .set_value = _set_value_and_forgive_miss,
+                        .initiator = _initiator};
                 callback->callback.after_read(
                         connection, &bank_after_read_interface,
                         handle,
@@ -1960,7 +1969,8 @@ _issue_callback(_callback_type_t type,
                         .value = _value,
                         .suppress = _set_suppress,
                         .set_offset = _set_offset,
-                        .set_value = _set_value};
+                        .set_value = _set_value,
+                        .initiator = _initiator};
                 callback->callback.before_write(
                         connection, &bank_before_write_interface,
                         handle,
@@ -1973,7 +1983,8 @@ _issue_callback(_callback_type_t type,
                         .offset = _offset,
                         .size = _size,
                         .missed = _is_miss,
-                        .set_missed = _set_miss};
+                        .set_missed = _set_miss,
+                        .initiator = _initiator};
                 callback->callback.after_write(connection,
                                                &bank_after_write_interface,
                                                handle,
@@ -2039,6 +2050,7 @@ _issue_callbacks_for_type(conf_object_t *bank,
 
 UNUSED static void
 _callback_before_read(conf_object_t *bank,
+                      conf_object_t *initiator,
                       bool *inquiry,
                       physical_address_t *offset,
                       physical_address_t size,
@@ -2049,13 +2061,15 @@ _callback_before_read(conf_object_t *bank,
                 .bank = bank,
                 .inquiry = inquiry,
                 .offset = offset,
-                .size = size};
-        _issue_callbacks_for_type(bank, connections, anonymous_callbacks,
-                                  &access,
+                .size = size,
+                .initiator = initiator};
+        _issue_callbacks_for_type(bank, connections,
+                                  anonymous_callbacks, &access,
                                   Callback_Before_Read);
 }
 UNUSED static void
 _callback_after_read(conf_object_t *bank,
+                     conf_object_t *initiator,
                      physical_address_t *offset,
                      physical_address_t size,
                      uint64 *value,
@@ -2069,14 +2083,16 @@ _callback_after_read(conf_object_t *bank,
                 .offset = offset,
                 .size = size,
                 .value = value,
-                .success = success};
-        _issue_callbacks_for_type(bank, connections, anonymous_callbacks,
-                                  &access,
+                .success = success,
+                .initiator = initiator};
+        _issue_callbacks_for_type(bank, connections,
+                                  anonymous_callbacks, &access,
                                   Callback_After_Read);
 }
 
 UNUSED static void
 _callback_before_write(conf_object_t *bank,
+                       conf_object_t *initiator,
                        physical_address_t *offset,
                        physical_address_t size,
                        uint64 *value,
@@ -2090,13 +2106,15 @@ _callback_before_write(conf_object_t *bank,
                 .offset = offset,
                 .size = size,
                 .value = value,
-                .suppress = suppress};
+                .suppress = suppress,
+                .initiator = initiator};
         _issue_callbacks_for_type(bank, connections, anonymous_callbacks,
                                   &access,
                                   Callback_Before_Write);
 }
 UNUSED static void
 _callback_after_write(conf_object_t *bank,
+                      conf_object_t *initiator,
                       physical_address_t *offset,
                       physical_address_t size,
                       bool *success,
@@ -2108,7 +2126,8 @@ _callback_after_write(conf_object_t *bank,
                 .inquiry = NULL,
                 .offset = offset,
                 .size = size,
-                .success = success};
+                .success = success,
+                .initiator = initiator};
         _issue_callbacks_for_type(bank, connections, anonymous_callbacks,
                                   &access,
                                   Callback_After_Write);

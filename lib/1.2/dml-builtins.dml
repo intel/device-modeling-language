@@ -105,18 +105,21 @@ extern void _disable_connection_callbacks(conf_object_t *connection,
                                           _connection_vect_t *connections);
 
 extern void _callback_before_read(conf_object_t *bank,
+                                  conf_object_t *initiator,
                                   bool *inquiry,
                                   physical_address_t *offset,
                                   physical_address_t size,
                                   _connection_vect_t *connections,
                                   _callback_vect_t *anonymous_callbacks);
 extern void _callback_after_read(conf_object_t *bank,
+                                 conf_object_t *initiator,
                                  physical_address_t *offset,
                                  physical_address_t size,
                                  uint64 *value, bool *success,
                                  _connection_vect_t *connections,
                                  _callback_vect_t *anonymous_callbacks);
 extern void _callback_before_write(conf_object_t *bank,
+                                   conf_object_t *initiator,
                                    physical_address_t *offset,
                                    physical_address_t size,
                                    uint64 *value,
@@ -124,6 +127,7 @@ extern void _callback_before_write(conf_object_t *bank,
                                    _connection_vect_t *connections,
                                    _callback_vect_t *anonymous_callbacks);
 extern void _callback_after_write(conf_object_t *bank,
+                                  conf_object_t *initiator,
                                   physical_address_t *offset,
                                   physical_address_t size,
                                   bool *success,
@@ -468,8 +472,10 @@ template bank {
 
         local bool inquiry = SIM_get_mem_op_inquiry(memop);
         local bool inquiry_override = false;
+        local conf_object_t *ini = SIM_get_mem_op_initiator(memop);
         if (!inquiry) {
-            _callback_before_read(bank_obj, &inquiry_override, &offset, size,
+            _callback_before_read(bank_obj, ini, &inquiry_override,
+                                  &offset, size,
                                   &$_connections, &$_before_read_callbacks);
             if (inquiry_override) {
                 // restored before return
@@ -484,7 +490,7 @@ template bank {
             success = accessed_size == size;
             if (!inquiry || inquiry_override) {
                 _callback_after_read(
-                    bank_obj, &offset, size, &readvalue, &success,
+                    bank_obj, ini, &offset, size, &readvalue, &success,
                     &$_connections, &$_after_read_callbacks);
             }
             if (inquiry_override) {
@@ -508,7 +514,7 @@ template bank {
                     success = false;
                     if (!inquiry || inquiry_override) {
                         _callback_after_read(
-                            bank_obj, &offset, size, &readvalue,
+                            bank_obj, ini, &offset, size, &readvalue,
                             &success, &$_connections, &$_after_read_callbacks);
                     }
                     if (inquiry_override) {
@@ -527,7 +533,7 @@ template bank {
                     success = remaining_size == accessed_size;
                     if (!inquiry || inquiry_override) {
                         _callback_after_read(
-                            bank_obj, &offset, size, &readvalue,
+                            bank_obj, ini, &offset, size, &readvalue,
                             &success, &$_connections, &$_after_read_callbacks);
                     }
                     if (inquiry_override) {
@@ -587,15 +593,16 @@ template bank {
         call $_non_anonymous_bank_obj() -> (bank_obj);
 
         local bool suppress = false;
+        local conf_object_t *ini = SIM_get_mem_op_initiator(memop);
         if(!SIM_get_mem_op_inquiry(memop)) {
-            _callback_before_write(bank_obj, &offset, size, &writevalue,
+            _callback_before_write(bank_obj, ini, &offset, size, &writevalue,
                                    &suppress, &$_connections,
                                    &$_before_write_callbacks);
         }
         if (suppress) {
             success = true;
             if(!SIM_get_mem_op_inquiry(memop)) {
-                _callback_after_write(bank_obj, &offset, size, &success,
+                _callback_after_write(bank_obj, ini, &offset, size, &success,
                                       &$_connections, &$_after_write_callbacks);
             }
             return;
@@ -607,7 +614,7 @@ template bank {
                 -> (accessed_size);
             success = accessed_size == size;
             if(!SIM_get_mem_op_inquiry(memop)) {
-                _callback_after_write(bank_obj, &offset, size, &success,
+                _callback_after_write(bank_obj, ini, &offset, size, &success,
                                       &$_connections, &$_after_write_callbacks);
             }
         } else {
@@ -620,7 +627,7 @@ template bank {
                 if (accessed_size == 0) {
                     success = false;
                     if(!SIM_get_mem_op_inquiry(memop)) {
-                        _callback_after_write(bank_obj, &offset, size,
+                        _callback_after_write(bank_obj, ini, &offset, size,
                                               &success, &$_connections,
                                               &$_after_write_callbacks);
                     }
@@ -629,7 +636,7 @@ template bank {
                 if (remaining_size <= accessed_size) {
                     success = remaining_size == accessed_size;
                     if(!SIM_get_mem_op_inquiry(memop)) {
-                        _callback_after_write(bank_obj, &offset, size,
+                        _callback_after_write(bank_obj, ini, &offset, size,
                                               &success, &$_connections,
                                               &$_after_write_callbacks);
                     }
