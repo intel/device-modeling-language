@@ -2876,10 +2876,14 @@ class EachIn(Expression):
         return TTraitList(self.trait.name)
 
     @staticmethod
-    def ident(node, trait):
+    def index_ident(node, trait):
         '''C identifier name for vtable_list_t instance'''
-        return '_each__%s__in__%s' % (trait.name,
-                                      node.attrname() or node.name)
+        return f'_each__{trait.name}__in__{node.attrname() or node.name}'
+
+    @staticmethod
+    def array_ident(trait):
+        '''C identifier name for vtable_list_t instance'''
+        return f'_each__{trait.name}'
 
     @staticmethod
     def subobjs_implementing(node, trait):
@@ -2893,8 +2897,7 @@ class EachIn(Expression):
                 elif trait in sub.traits.ancestors:
                     yield sub
                 else:
-                    for match in EachIn.subobjs_implementing(sub, trait):
-                        yield match
+                    yield from EachIn.subobjs_implementing(sub, trait)
 
     def mark_referenced(self, subobjs):
         key = (self.node, self.trait)
@@ -2903,12 +2906,12 @@ class EachIn(Expression):
             for sub in subobjs:
                 sub.traits.mark_referenced(self.trait)
 
-    def read(self, each_in_this=False):
+    def each_in_t_members(self):
         subobjs = list(self.subobjs_implementing(self.node, self.trait))
         if not subobjs:
-            # Iteration will never start, so NULL will suffice
-            return '(_each_in_t){NULL, 0,  0, 0}'
-        self.mark_referenced(subobjs)
+            # Iteration will never start. Note: array_size==1, because
+            # 0 is used as a sentinel value by _each_in_param_t.
+            return ([], '0', 0, '0', 1)
         if self.indices:
             dimsizes = self.node.dimsizes
             array_size = reduce(operator.mul, dimsizes)
@@ -2916,11 +2919,14 @@ class EachIn(Expression):
         else:
             array_size = 1
             array_idx = "0"
-        if each_in_this:
-            array_idx = "0xffffffffu"
-        return '(_each_in_t){%s, 0, %d, %s, %d}' % (
-            self.ident(self.node, self.trait),
-            len(subobjs), array_idx, array_size)
+        return (subobjs, self.index_ident(self.node, self.trait),
+                len(subobjs), array_idx, array_size)
+
+    def read(self):
+        (subobjs, ident, num, array_idx, array_size) = self.each_in_t_members()
+        self.mark_referenced(subobjs)
+        return '(_each_in_t){%s, %d, %s, %d}' % (
+            ident, num, array_idx, array_size)
 
 mkEachIn = EachIn
 
@@ -2934,7 +2940,8 @@ class SequenceLength(Expression):
     def __str__(self):
         return "%s.len" % self.expr
     def read(self):
-        return "_count_eachin(%s)" % self.expr.read()
+        return (f'_count_eachin({self.expr.read()}'
+                f', {EachIn.array_ident(self.expr.trait)})')
 
 mkSequenceLength = SequenceLength
 

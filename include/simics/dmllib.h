@@ -180,11 +180,10 @@ typedef struct {
 } _vtable_list_t;
 
 typedef struct {
-        const _vtable_list_t *base;
-        // iteration interval in list of vtable_list_t. Interval includes start
-        // point but not endpoint. starti is currently always 0.
-        uint32 starti;
-        uint32 endi;
+        // index in global list of _vtable_list_t
+        uint32 base_idx;
+        // number of _vtable_list_t elements to iterate
+        uint32 num;
         // When iterating inside an array, the vtable_list_t instances show
         // number of elements globally. If one or more outer object array index
         // is fixed in the 'in each' expression, then these members show which
@@ -195,10 +194,23 @@ typedef struct {
         uint32 array_size;
 } _each_in_t;
 
-UNUSED static uint64 _count_eachin(_each_in_t each_in) {
+typedef struct {
+        uint32 array_idx;
+        uint32 array_size;
+        union {
+                _each_in_t *array;
+                struct {
+                        uint32 base_idx;
+                        uint32 num;
+                };
+        };
+} _each_in_param_t;
+
+UNUSED static uint64 _count_eachin(_each_in_t each_in,
+                                   const _vtable_list_t *base) {
         uint64 count = 0;
-        for (int i = each_in.starti; i < each_in.endi; ++i) {
-                count += each_in.base[i].num / each_in.array_size;
+        for (int i = 0; i < each_in.num; ++i) {
+                count += base[each_in.base_idx + i].num / each_in.array_size;
         }
         return count;
 }
@@ -273,14 +285,17 @@ UNUSED static uint64 _count_eachin(_each_in_t each_in) {
 static UNUSED _each_in_t
 _vtable_sequence_param(_traitref_t traitref, size_t vtable_member_offset)
 {
-        _each_in_t seq = *(_each_in_t *)((char *)traitref.trait
-                                         + vtable_member_offset);
-        if (unlikely(seq.starti == 1)) {
-                return ((_each_in_t *)seq.base)[traitref.id.encoded_index];
+        _each_in_param_t p = *(_each_in_param_t *)((char *)traitref.trait
+                                                   + vtable_member_offset);
+        if (unlikely(p.array_size == 0)) {
+                return p.array[traitref.id.encoded_index];
         } else {
-                if (seq.array_idx == 0xffffffffu)
-                        seq.array_idx = traitref.id.encoded_index;
-                return seq;
+                return (_each_in_t){
+                        .base_idx = p.base_idx,
+                        .num = p.num,
+                        .array_idx = p.array_idx == 0xffffffffu
+                        ? traitref.id.encoded_index : p.array_idx,
+                        .array_size = p.array_size};
         }
 }
 

@@ -812,19 +812,6 @@ class TTrait(DMLType):
     def declaration(self, var):
         return '%s %s' % (cident(self.trait.name), var)
 
-    def print_vtable_struct_declaration(self):
-        out('struct _%s {\n' % cident(self.trait.name), postindent=1)
-        empty = True
-        for p in self.trait.direct_parents:
-            out("struct _%s %s;\n" % (cident(p.name), cident(p.name)))
-            empty = False
-        for (name, typ) in self.trait.vtable():
-            out("%s;\n" % (typ.declaration(name),))
-            empty = False
-        if empty:
-            out('uint8 _dummy;\n')
-        out('};\n', preindent=-1)
-
 class TTraitList(DMLType):
     __slots__ = ('traitname')
 

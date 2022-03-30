@@ -751,21 +751,6 @@ class Trait(SubTrait):
                 outp, throws)],
             c_rettype(outp, throws)))
 
-    def vtable(self):
-        for (name, (_, ptype)) in list(self.vtable_params.items()):
-            yield (name,
-                   ptype if isinstance(realtype(ptype), TTraitList)
-                   else TPtr(ptype))
-        for (name, (_, ptype)) in list(self.vtable_sessions.items()):
-            yield (name, TInt(32, False))
-        for (name, (_, inp, outp, throws, independent, startup, memoized)) \
-            in list(self.vtable_methods.items()):
-            yield (name, self.vtable_method_type(inp, outp, throws,
-                                                 independent))
-        for method in self.method_impls.values():
-            if method.independent and method.memoized:
-                yield (f'_{method.name}_outs', method.memo_outs_struct)
-
     def mark_referenced(self):
         if not self in Trait.referenced:
             for p in self.direct_parents:
