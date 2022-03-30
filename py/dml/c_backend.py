@@ -7,6 +7,8 @@ import operator
 import re
 from contextlib import nullcontext
 from functools import reduce
+from abc import ABC, abstractmethod
+import dataclasses
 
 from . import objects, logging, crep, output, ctree, serialize, structure
 from . import traits
@@ -323,11 +325,11 @@ def generate_hfile(device, headers, filename):
         t.print_struct_definition()
     out('\n')
 
-    for (name, t) in list(dml.globals.traits.items()):
+    for t in dml.globals.traits.values():
         for method in t.method_impls.values():
             if method.memoized:
                 method.memo_outs_struct.print_struct_definition()
-        t.type().print_vtable_struct_declaration()
+        print_vtable_struct_declaration(t)
     out('\n')
 
     for args_type in (eventinfo['args_type']
@@ -1798,23 +1800,42 @@ def eom_linemark(site):
     if dml.globals.linemarks:
         out('#line %d "%s"\n' % (site.lineno, quote_filename(site.filename())))
 
-def generate_each_in_table(node, trait, subnodes):
-    ident = EachIn.ident(node, trait)
+def generate_each_in_table(trait, instances):
+    index = 0
     items = []
-    for sub in subnodes:
-        # vtables exist, because trait instances are marked referenced
-        # when an 'each in' instance is referenced
-        ancestry_path = sub.traits.ancestry_paths[trait][0]
-        base = '&%s%s' % (
-            sub.traits.vtable_cname(ancestry_path[0]),
-            ''.join('.' + cident(t.name)
-                    for t in ancestry_path[1:]))
-        num = reduce(operator.mul, sub.dimsizes, 1)
-        uniq = sub.uniq
-        items.append("{%s, %d, %d}\n" % (base, num, uniq))
-    init = '{\n%s}' % (',\n'.join('    %s' % (item,) for item in items),)
+    for (node, subnodes) in instances:
+        ident = EachIn.index_ident(node, trait)
+        if subnodes:
+            add_variable_declaration(f'const uint32 {ident}', str(index))
+        index += len(subnodes)
+
+        for sub in subnodes:
+            # vtables exist, because trait instances are marked referenced
+            # when an 'each in' instance is referenced
+            ancestry_path = sub.traits.ancestry_paths[trait][0]
+            base = '&%s%s' % (
+                sub.traits.vtable_cname(ancestry_path[0]),
+                ''.join('.' + cident(t.name)
+                        for t in ancestry_path[1:]))
+            num = reduce(operator.mul, sub.dimsizes, 1)
+            uniq = sub.uniq
+            items.append("{%s, %d, %d}" % (base, num, uniq))
+    init = '{\n%s\n}' % (',\n'.join(f'    {item}' for item in items),)
     add_variable_declaration(
-        'const _vtable_list_t %s[%d]' % (ident, len(subnodes)), init)
+        f'const _vtable_list_t {EachIn.array_ident(trait)}[{index}]', init)
+
+def generate_each_in_tables():
+    by_trait = {}
+    for ((node, trait), subobjs) in list(EachIn.instances.items()):
+        by_trait.setdefault(trait, []).append((node, subobjs))
+    for t in by_trait:
+        generate_each_in_table(t, by_trait[t])
+    for t in set(dml.globals.traits.values()) - set(by_trait):
+        # Need by shared methods that belong to unused templates;
+        # when dereferencing sequence params, these methods reference
+        # the base array.
+        add_variable_declaration(
+            f'const _vtable_list_t *const {EachIn.array_ident(t)}', 'NULL')
 
 def generate_trait_method(m):
     code = m.codegen_body()
@@ -1973,6 +1994,33 @@ def method_tinit_arg(trait, parent, name, scrambled_name):
         else:
             return thunk
 
+def print_vtable_struct_declaration(trait):
+    out('struct _%s {\n' % cident(trait.name), postindent=1)
+    empty = True
+    for p in trait.direct_parents:
+        out("struct _%s %s;\n" % (cident(p.name), cident(p.name)))
+        empty = False
+    for (name, (_, ptype)) in list(trait.vtable_params.items()):
+        if isinstance(realtype(ptype), TTraitList):
+            out(f"_each_in_param_t {name};\n")
+        else:
+            out(f'{TPtr(ptype).declaration(name)};\n')
+    for (name, (_, ptype)) in list(trait.vtable_sessions.items()):
+        out(f'uint32 {name};\n')
+    for (name, (_, inp, outp, throws, independent, startup,
+                memoized)) in trait.vtable_methods.items():
+        t = trait.vtable_method_type(inp, outp, throws, independent)
+        out(f'{t.declaration(name)};\n')
+        empty = False
+
+    for method in trait.method_impls.values():
+        if method.independent and method.memoized:
+            decl = method.memo_outs_struct.declaration(f'_{method.name}_outs')
+            out(f'{decl};\n')
+    if empty:
+        out('uint8 _dummy;\n')
+    out('};\n', preindent=-1)
+
 def generate_tinit(trait):
     '''Generate a _tinit_* function, which initializes a trait vtable.
 
@@ -2038,9 +2086,10 @@ fields.
             out(', %s' % (mtype.declaration(scrambled_name),))
         elif member_kind == 'parameter':
             (site, typ) = vtable_trait.vtable_params[name]
-            if not isinstance(realtype(typ), TTraitList):
-                typ = TPtr(typ)
-            out(', %s' % (typ.declaration(scrambled_name)))
+            if isinstance(realtype(typ), TTraitList):
+                out(f', _each_in_param_t {scrambled_name}')
+            else:
+                out(f', {TPtr(typ).declaration(scrambled_name)}')
         else:
             assert member_kind == 'session'
             out(', uint32 %s' % (scrambled_name))
@@ -2065,12 +2114,125 @@ def flatten_object_subtree(node):
         'event', 'port', 'implement', 'attribute', 'connect',
         'interface', 'bank', 'group', 'register', 'field', 'subdevice')
 
+class ParamValue(ABC):
+    indexed = False
+    @staticmethod
+    def indexvars(node):
+        return (f'_i{i}' for i in range(node.dimensions))
+
+class IndexedParamValue(ParamValue):
+    indexed = True
+    @abstractmethod
+    def decl(self, varname): pass
+    @abstractmethod
+    def init(self, varname): pass
+    @abstractmethod
+    def tinit_arg(self, varname): pass
+
+@dataclasses.dataclass
+class SingleParamValue(ParamValue):
+    # evaluates to the parameter value
+    value: str
+    ptype: DMLType
+    def tinit_arg(self):
+        if deep_const(self.ptype):
+            k = (TArray(self.ptype, mkIntegerLiteral(logging.SimpleSite(""), 1))
+                 .declaration(""))
+            size = f'sizeof({self.ptype.declaration("")})'
+            return f'memcpy(malloc({size}), ({k}) {{ {self.value} }}, {size})'
+        else:
+            # Reasons for alignment explained along with test
+            # in 1.4/structure/T_trait.dml
+            decl = (f'static {self.ptype.declaration("_tmp")}'
+                    ' __attribute__((aligned(2)))')
+            return f'({{{decl}; _tmp = {self.value}; &_tmp; }})'
+
+@dataclasses.dataclass
+class SingleEachInParamValue(ParamValue):
+    '''a parameter value representing a single 'in each', which is encoded
+    into an _each_in_param_t. Either the 'in each' expression does not
+    depend on an index variable, or it is the sentinel value that
+    represents `each T in this` inside an array.
+    '''
+    base_idx : str
+    num : int
+    array_idx : str
+    array_size : int
+    def tinit_arg(self):
+        return (f'(_each_in_param_t){{.base_idx = {self.base_idx}'
+                f', .num = {self.num}, .array_idx = {self.array_idx}'
+                f', .array_size = {self.array_size}}}')
+
+@dataclasses.dataclass
+class ArrayParamValue(IndexedParamValue):
+    # evaluates to the value in one
+    value : str
+    ptype : DMLType
+    node : objects.DMLObject
+    def decl(self, var):
+        array_type = self.ptype
+        for d in reversed(self.node.dimsizes):
+            array_type = TArray(array_type,
+                                mkIntegerLiteral(self.node.site, d))
+        return (f'{TPtr(array_type).declaration(var)} = malloc('
+                f'sizeof(*{var}));\n')
+    def init(self, var):
+        param_indices = ''.join(f'[{i}]' for i in self.indexvars(self.node))
+        if deep_const(self.ptype):
+            # partially const values requires memcpy for
+            # initialization
+            k = (TArray(self.ptype, mkIntegerLiteral(self.node.site, 1))
+                 .declaration(""))
+            target = f'(void *)&(*{var}){param_indices}'
+            source = f'({k}) {{ {self.value} }}'
+            size = f'sizeof({self.ptype.declaration("")})'
+            return f'memcpy({target}, {source}, {size});\n'
+        else:
+            return f'(*{var}){param_indices} = {self.value};\n'
+    def tinit_arg(self, var):
+        return f'(void *)((uintptr_t){var} + 1)'
+
+@dataclasses.dataclass
+class EachInArrayParamValue(IndexedParamValue):
+    '''An indexed "each in" expressions other than "each X in this". This
+    is represented as a pointer to an _each_in_t, marked by the
+    sentinel value array_size=0. The "each X in this" case has another
+    special representation, see the "not indexed" case.
+    '''
+
+    # evaluates to _each_in_t, depends on index variable
+    value : str
+    node : objects.DMLObject
+
+    def decl(self, var):
+        sizes = ''.join(f'[{sz}]' for sz in self.node.dimsizes)
+        return f'_each_in_t (*{var}){sizes} = malloc(sizeof(*{var}));\n'
+    def init(self, var):
+        param_indices = ''.join(f'[{i}]' for i in self.indexvars(self.node))
+        return f'(*{var}){param_indices} = {self.value};\n'
+    def tinit_arg(self, var):
+        return ('(_each_in_param_t){.array_size = 0,'
+                f' .array = &(*{var}){"[0]" * self.node.dimensions}}}')
+
 def init_trait_vtable(node, trait, param_overrides):
     method_overrides = node.traits.method_overrides
+    # List of strings with the arguments passed to the _tinit_* function
     args = []
+    # Sometimes, the vtable of an object array has one or more
+    # arguments that must be initialized by evaluating an expression
+    # once for each index, e.g. `param offset = i > 2 ? 10 - i : i`
+    # requires an argument of type uint64[SIZE], where each array
+    # element is initialized to the offset expression.  In this case,
+    # we create a C block that declares one temporary variable for
+    # each such parameter, followed by a for loop that initializes all
+    # indices, followed by the _tinit_* call. param_decl is a list of
+    # strings with declarations of array variables, and param_init is
+    # a list of strings for initializing these inside the for loop.
+    # For each argument, either there is no corresponding
+    # param_decl/param_init, or both exist and `args` is a reference
+    # to the declared array.
     param_decl = []
     param_init = []
-    param_indices = ''.join(f'[_i{i}]' for i in range(node.dimensions))
     for name in tinit_args(trait):
         member_kind = trait.member_kind(name)
         if member_kind == 'method':
@@ -2079,51 +2241,14 @@ def init_trait_vtable(node, trait, param_overrides):
                     method_overrides[name], trait.vtable_trait(name))
                 if name in method_overrides else "NULL")
         elif member_kind == 'parameter':
-            # param_overrides contains C expression strings
-            (value, t, indexed, is_sequence) = param_overrides[name]
+            override = param_overrides[name]
             var = f'_param_{name}'
-            if indexed:
-                if is_sequence:
-                    args.append(
-                        '(_each_in_t){(_vtable_list_t *)%s,' % (var,)
-                        + ' 1, 0, 0, 0}')
-                else:
-                    args.append(f'(void *)((uintptr_t){var} + 1)')
-                array_type = t
-                for d in reversed(node.dimsizes):
-                    array_type = TArray(array_type,
-                                        mkIntegerLiteral(node.site, d))
-                param_decl.append(
-                    f'{TPtr(array_type).declaration(var)} = malloc('
-                    f'sizeof(*{var}));\n')
-                if deep_const(t):
-                    k = (TArray(t, mkIntegerLiteral(node.site, 1))
-                         .declaration(""))
-                    target = f'(void *)&(*{var}){param_indices}'
-                    source = f'({k}) {{ {value} }}'
-                    size = f'sizeof({t.declaration("")})'
-                    param_init.append(
-                        f'memcpy({target}, {source}, {size});\n')
-                else:
-                    param_init.append(
-                        f'(*{var}){param_indices} = {value};\n')
+            if override.indexed:
+                param_decl.append(override.decl(var))
+                param_init.append(override.init(var))
+                args.append(override.tinit_arg(var))
             else:
-                if is_sequence:
-                    args.append(value)
-                elif deep_const(t):
-                    k = (TArray(t, mkIntegerLiteral(node.site, 1))
-                         .declaration(""))
-                    size = f'sizeof({t.declaration("")})'
-                    args.append(
-                        f'memcpy(malloc({size}), ({k}) {{ {value} }}, '
-                        + f'{size})')
-                else:
-                    # Reasons for alignment explained along with test
-                    # in 1.4/structure/T_trait.dml
-                    args.append(
-                        '({static %s __attribute__((aligned(2)));'
-                        ' %s = %s; &%s;})'
-                        % (t.declaration(var), var, value, var))
+                args.append(override.tinit_arg())
         else:
             assert member_kind == 'session'
             session_node = node.get_component(name)
@@ -2143,8 +2268,8 @@ def init_trait_vtable(node, trait, param_overrides):
         out('{\n', postindent=1)
         for decl in param_decl:
             out(decl)
-        for (i, d) in enumerate(node.dimsizes):
-            out(f'for (unsigned _i{i} = 0; _i{i} < {d}; ++_i{i}) {{',
+        for (v, d) in zip(IndexedParamValue.indexvars(node), node.dimsizes):
+            out(f'for (unsigned {v} = 0; {v} < {d}; ++{v}) {{\n',
                 postindent=1)
         for init in param_init:
             out(init)
@@ -2487,24 +2612,39 @@ def trait_param_value(node, param_type_site, param_type):
             if isinstance(expr, NonValue):
                 raise expr.exc()
             expr = source_for_assignment(expr.site, param_type, expr)
-            indexed = False
         except EIDXVAR:
-            indexed = True
-            indices = tuple(mkLit(node.site, '_i%d' % (dim,), TInt(32, False))
-                            for dim in range(node.dimensions))
+            indices = tuple(mkLit(node.site, v, TInt(32, False))
+                            for v in IndexedParamValue.indexvars(node))
             expr = node.get_expr(indices)
-            if (is_sequence and isinstance(expr, EachIn)
-                and expr.node is node.parent
-                and expr.indices == indices[:node.dimensions]):
-                return (expr.read(each_in_this=True),
-                        param_type, False, True)
             if isinstance(expr, NonValue):
                 raise expr.exc()
             expr = source_for_assignment(expr.site, param_type, expr)
-        return (expr.read(), param_type, indexed, is_sequence)
+            if is_sequence:
+                if (isinstance(expr, EachIn)
+                    and expr.node is node.parent
+                    and expr.indices == indices[:node.dimensions]):
+                    (subobjs, base_idx, num, array_idx,
+                     array_size) = expr.each_in_t_members()
+                    expr.mark_referenced(subobjs)
+                    return SingleEachInParamValue(base_idx, num, '0xffffffff',
+                                                  array_size)
+                else:
+                    return EachInArrayParamValue(expr.read(), node)
+            else:
+                return ArrayParamValue(expr.read(), param_type, node)
+        else:
+            if is_sequence:
+                assert isinstance(expr, EachIn), repr(expr)
+                (subobjs, base_idx, num, array_idx,
+                 array_size) = expr.each_in_t_members()
+                expr.mark_referenced(subobjs)
+                return SingleEachInParamValue(base_idx, num, array_idx,
+                                              array_size)
+            else:
+                return SingleParamValue(expr.read(), param_type)
     except DMLError as e:
         report(e)
-        return ("0", param_type, False, is_sequence)
+        return SingleParamValue("NULL", param_type)
 
 def resolve_trait_param_values(node):
     '''Generate code for parameter initialization of all traits
@@ -2685,8 +2825,7 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
         generate_init(device, init_code, filename_prefix)
 
     generate_init_trait_vtables(device, trait_param_values)
-    for ((node, trait), subobjs) in list(EachIn.instances.items()):
-        generate_each_in_table(node, trait, subobjs)
+    generate_each_in_tables()
     generate_simple_events(device)
     generate_simple_event_only_domains_funs()
     generate_simple_events_control_methods()

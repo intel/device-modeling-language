@@ -2250,14 +2250,15 @@ def foreach_each_in(site, itername, trait, each_in,
             + codegen_statements([body_ast], location, inner_scope))
     loop = mkFor(
         site,
-        [mkLit(site, 'int _outer_idx = %s.starti' % (ident,), TVoid())],
-        mkLit(site, '_outer_idx < %s.endi' % (ident,), TBool()),
+        [mkLit(site, 'int _outer_idx = 0', TVoid())],
+        mkLit(site, f'_outer_idx < {ident}.num', TBool()),
         [mkExpressionStatement(
             site, mkLit(site, '++_outer_idx', TInt(32, True)))],
         mkCompound(
             site,
-            [mkInline(site,
-                      '_vtable_list_t _list = %s.base[_outer_idx];' % (ident,)),
+            [mkInline(
+                site, f'_vtable_list_t _list = {EachIn.array_ident(trait)}['
+                f'{ident}.base_idx + _outer_idx];'),
              mkInline(site, 'uint64 _num = _list.num / %s.array_size;' % (ident,)),
              mkInline(site, 'uint64 _start = _num * %s.array_idx;' % (ident,)),
              mkFor(site,

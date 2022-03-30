@@ -45,9 +45,6 @@ class Test_traits(unittest.TestCase):
                   {}, {}, {}, {}, {})
         ot = ObjTraits(self.dev, {t}, {'m': t}, {}, {})
         self.dev.set_traits(ot)
-        [(m, typ)] = list(t.vtable())
-        # don't worry about the type for now
-        self.assertEqual(m, 'm')
         ref = ot.lookup_shared_method_impl(self.site, 'm', ())
         self.assertTrue(ref)
         # does not crash
