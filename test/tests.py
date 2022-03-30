@@ -716,11 +716,14 @@ class CTestCase(DMLFileTestCase):
         env['SIMICS_HOST'] = os.path.basename(host_path())
         env['SIMICS_ROOT'] = simics_root_path()
         # self.pr("ARGS: %r" % args)
-        return subprocess.call(args,
-                               stdout = open(self.simics_stdout, "w"),
-                               stderr = open(self.simics_stderr, "w"),
-                               env = env,
-                               cwd=self.scratchdir)
+        ret = subprocess.call(args,
+                              stdout = open(self.simics_stdout, "w"),
+                              stderr = open(self.simics_stderr, "w"),
+                              env = env,
+                              cwd=self.scratchdir)
+        if ret:
+            self.pr(f"Simics command-line: {' '.join(args)}")
+        return ret
 
     def test(self):
         "This actually runs the test, after filtering"
