@@ -16,6 +16,7 @@ from . import output
 import dml.c_backend
 import dml.info_backend
 import dml.g_backend
+import dml.udi_backend
 import dml.globals
 import dml.dmlparse
 from .logging import *
@@ -347,6 +348,21 @@ def main(argv):
         callback = set_debuggable,
         help = 'generate artifacts and C code that allow for easier debugging')
 
+    # <dt>-g</dt>
+    # <dd>Generate extensive information about banks and registers within a
+    # device, suitable for static, off-line, device validation.</dd>
+    optpar.add_option(
+        '-u', "--udi", dest = 'udi_enabled', action = 'store_true',
+        help = 'generate static unrolled device info')
+    # <dt>-g</dt>
+    # <dd>Specify a template that is of interest to the unrolled device info.
+    # Implies --udi.</dd>
+    optpar.add_option(
+        "--udi-template", dest = 'udi_extra_templates', action = 'append',
+        metavar = 'TEMPLATE',
+        default = [],
+        help = 'specify tracked templates for unrolled device info')
+
     # <dt>--warn=<i>tag</i></dt>
     # <dd>Enable selected warnings. The tags can be found using
     # the <tt>-T</tt> option.</dd>
@@ -642,16 +658,25 @@ def main(argv):
             dml.info_backend.generate(dev, outputbase + '.xml')
             logtime("info")
 
-        if output_c:
+
+        if output_c or options.output_udi:
             dml.c_backend.generate(dev, headers, footers, outputbase,
                                    [inputfilename] + list(imported.keys()),
                                    options.full_module)
             logtime("c")
             structure.check_unused_and_warn(dev)
+
+        if output_c:
             if dml.globals.debuggable:
                 dml.g_backend.generate(expr_util.param_str(dev, 'classname'),
                                        dev, dml_version, outputbase + '.g')
                 logtime("g")
+
+        if options.udi_enabled or options.udi_extra_templates:
+            dml.udi_backend.generate(expr_util.param_str(dev, 'classname'),
+                                     options.udi_extra_templates,
+                                     dev, dml_version, outputbase + '.udi')
+            logtime("udi")
 
         if not logging.failure:
             # report WREF for broken unused parameters. But just ignore it

@@ -12,6 +12,7 @@ PYFILES := dml/__init__.py			\
 	  dml/ast.py				\
 	  dml/c_backend.py			\
 	  dml/g_backend.py			\
+	  dml/udi_backend.py			\
 	  dml/codegen.py			\
           dml/crep.py				\
           dml/ctree.py				\
