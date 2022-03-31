@@ -2288,6 +2288,91 @@ def init_trait_vtable(node, trait, param_overrides):
         assert not param_init
         out(init_call)
 
+def generate_init_trait_vtables(node, param_values):
+    '''Return a list of pairs (dimsizes, 'call();\n')
+    meaning that call() is to be invoked with variables (_i0, _i1, ..) given by
+    all possible indices within dimsizes'''
+    generate_vtable_instances(node)
+    for trait in traits.Trait.referenced:
+        generate_tinit(trait)
+    all_nodes = list(flatten_object_subtree(node))
+    for subnode in all_nodes:
+        generate_trait_trampolines(subnode)
+    # Hack: Split up trait initialization in small functions, to avoid
+    # performance problems with `gcc -fvar-tracking`. This is
+    # required because of a GCC bug that is fixed in GCC 12:
+    # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=104468
+    chunks = [all_nodes[i:i+20] for i in range(0, len(all_nodes), 20)]
+    for (i, chunk) in enumerate(chunks):
+        out('static void __attribute__((optimize("O0")))'
+            f' _initialize_traits{i}(void)\n')
+        out('{\n', postindent=1)
+        for subnode in chunk:
+            if subnode.traits:
+                param_overrides = param_values[subnode]
+                for trait in subnode.traits.referenced:
+                    init_trait_vtable(subnode, trait, param_overrides)
+        out('}\n', preindent=-1)
+
+    start_function_definition('void __attribute__((optimize("O0")))'
+                              ' _initialize_traits(void)')
+    out('{\n', postindent=1)
+    for i in range(len(chunks)):
+        out(f'_initialize_traits{i}();\n')
+    out('}\n', preindent=-1)
+    splitting_point()
+
+def trait_param_value(node, param_type_site, param_type):
+    is_sequence = isinstance(realtype(param_type), TTraitList)
+    try:
+        try:
+            expr = node.get_expr(static_indices(node))
+            if isinstance(expr, NonValue):
+                raise expr.exc()
+            expr = source_for_assignment(expr.site, param_type, expr)
+        except EIDXVAR:
+            indices = tuple(mkLit(node.site, v, TInt(32, False))
+                            for v in IndexedParamValue.indexvars(node))
+            expr = node.get_expr(indices)
+            if isinstance(expr, NonValue):
+                raise expr.exc()
+            expr = source_for_assignment(expr.site, param_type, expr)
+            if is_sequence:
+                if (isinstance(expr, EachIn)
+                    and expr.node is node.parent
+                    and expr.indices == indices[:node.dimensions]):
+                    (subobjs, base_idx, num, array_idx,
+                     array_size) = expr.each_in_t_members()
+                    expr.mark_referenced(subobjs)
+                    return SingleEachInParamValue(base_idx, num, '0xffffffff',
+                                                  array_size)
+                else:
+                    return EachInArrayParamValue(expr.read(), node)
+            else:
+                return ArrayParamValue(expr.read(), param_type, node)
+        else:
+            if is_sequence:
+                assert isinstance(expr, EachIn), repr(expr)
+                (subobjs, base_idx, num, array_idx,
+                 array_size) = expr.each_in_t_members()
+                expr.mark_referenced(subobjs)
+                return SingleEachInParamValue(base_idx, num, array_idx,
+                                              array_size)
+            else:
+                return SingleParamValue(expr.read(), param_type)
+    except DMLError as e:
+        report(e)
+        return SingleParamValue("NULL", param_type)
+
+def resolve_trait_param_values(node):
+    '''Generate code for parameter initialization of all traits
+    implemented by a node, as a dict name -> str (as C code)'''
+    traits = node.traits
+    return {
+        name: trait_param_value(
+            pnode, *traits.ancestor_vtables[name].vtable_params[name])
+        for (name, pnode) in list(traits.param_nodes.items())}
+
 def generate_trait_trampoline(method, vtable_trait):
     implicit_inargs = vtable_trait.implicit_args()
     explicit_inargs = c_inargs(list(method.inp), method.outp, method.throws)
@@ -2474,7 +2559,6 @@ def register_saved_attributes(initcode, node):
                  postindent = -1)
     initcode.out('}\n', preindent=-1)
     initcode.out('}\n', preindent=-1)
-
 def generate_startup_call_loops(startup_methods):
     by_dims = {}
     for (method_data_tuple, dims) in startup_methods:
@@ -2577,90 +2661,6 @@ def generate_startup_calls_entry_function(devnode):
         generate_startup_call_loops(startups)
     out('}\n', preindent=-1)
 
-def generate_init_trait_vtables(node, param_values):
-    '''Return a list of pairs (dimsizes, 'call();\n')
-    meaning that call() is to be invoked with variables (_i0, _i1, ..) given by
-    all possible indices within dimsizes'''
-    generate_vtable_instances(node)
-    for trait in traits.Trait.referenced:
-        generate_tinit(trait)
-    all_nodes = list(flatten_object_subtree(node))
-    for subnode in all_nodes:
-        generate_trait_trampolines(subnode)
-    # Hack: Split up trait initialization in small functions, to avoid
-    # performance problems with `gcc -fvar-tracking`. This is
-    # required because of a GCC bug that is fixed in GCC 12:
-    # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=104468
-    chunks = [all_nodes[i:i+20] for i in range(0, len(all_nodes), 20)]
-    for (i, chunk) in enumerate(chunks):
-        out('static void __attribute__((optimize("O0")))'
-            f' _initialize_traits{i}(void)\n')
-        out('{\n', postindent=1)
-        for subnode in chunk:
-            if subnode.traits:
-                param_overrides = param_values[subnode]
-                for trait in subnode.traits.referenced:
-                    init_trait_vtable(subnode, trait, param_overrides)
-        out('}\n', preindent=-1)
-
-    start_function_definition('void __attribute__((optimize("O0")))'
-                              ' _initialize_traits(void)')
-    out('{\n', postindent=1)
-    for i in range(len(chunks)):
-        out(f'_initialize_traits{i}();\n')
-    out('}\n', preindent=-1)
-    splitting_point()
-
-def trait_param_value(node, param_type_site, param_type):
-    is_sequence = isinstance(realtype(param_type), TTraitList)
-    try:
-        try:
-            expr = node.get_expr(static_indices(node))
-            if isinstance(expr, NonValue):
-                raise expr.exc()
-            expr = source_for_assignment(expr.site, param_type, expr)
-        except EIDXVAR:
-            indices = tuple(mkLit(node.site, v, TInt(32, False))
-                            for v in IndexedParamValue.indexvars(node))
-            expr = node.get_expr(indices)
-            if isinstance(expr, NonValue):
-                raise expr.exc()
-            expr = source_for_assignment(expr.site, param_type, expr)
-            if is_sequence:
-                if (isinstance(expr, EachIn)
-                    and expr.node is node.parent
-                    and expr.indices == indices[:node.dimensions]):
-                    (subobjs, base_idx, num, array_idx,
-                     array_size) = expr.each_in_t_members()
-                    expr.mark_referenced(subobjs)
-                    return SingleEachInParamValue(base_idx, num, '0xffffffff',
-                                                  array_size)
-                else:
-                    return EachInArrayParamValue(expr.read(), node)
-            else:
-                return ArrayParamValue(expr.read(), param_type, node)
-        else:
-            if is_sequence:
-                assert isinstance(expr, EachIn), repr(expr)
-                (subobjs, base_idx, num, array_idx,
-                 array_size) = expr.each_in_t_members()
-                expr.mark_referenced(subobjs)
-                return SingleEachInParamValue(base_idx, num, array_idx,
-                                              array_size)
-            else:
-                return SingleParamValue(expr.read(), param_type)
-    except DMLError as e:
-        report(e)
-        return SingleParamValue("NULL", param_type)
-
-def resolve_trait_param_values(node):
-    '''Generate code for parameter initialization of all traits
-    implemented by a node, as a dict name -> str (as C code)'''
-    traits = node.traits
-    return {
-        name: trait_param_value(
-            pnode, *traits.ancestor_vtables[name].vtable_params[name])
-        for (name, pnode) in list(traits.param_nodes.items())}
 
 class MultiFileOutput(FileOutput):
     def __init__(self, stem, header):
