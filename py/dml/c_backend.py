@@ -1801,13 +1801,11 @@ def eom_linemark(site):
         out('#line %d "%s"\n' % (site.lineno, quote_filename(site.filename())))
 
 def generate_each_in_table(trait, instances):
-    index = 0
     items = []
     for (node, subnodes) in instances:
         ident = EachIn.index_ident(node, trait)
         if subnodes:
-            add_variable_declaration(f'const uint32 {ident}', str(index))
-        index += len(subnodes)
+            add_variable_declaration(f'const uint32 {ident}', str(len(items)))
 
         for sub in subnodes:
             # vtables exist, because trait instances are marked referenced
@@ -1820,9 +1818,18 @@ def generate_each_in_table(trait, instances):
             num = reduce(operator.mul, sub.dimsizes, 1)
             uniq = sub.uniq
             items.append("{%s, %d, %d}" % (base, num, uniq))
-    init = '{\n%s\n}' % (',\n'.join(f'    {item}' for item in items),)
-    add_variable_declaration(
-        f'const _vtable_list_t {EachIn.array_ident(trait)}[{index}]', init)
+    arrayname = EachIn.array_ident(trait)
+    if items:
+        init = '{\n%s\n}' % (',\n'.join(f'    {item}' for item in items),)
+        add_variable_declaration(
+            f'const _vtable_list_t {arrayname}[{len(items)}]', init)
+    else:
+        # avoid array of size 0, e.g. when foreach:ing over `each X in
+        # Y` where template X is never instantiated. GCC 11 complains
+        # about indexing an empty array in the loop body, but accepts
+        # dereferencing NULL.
+        add_variable_declaration(
+            f'const _vtable_list_t *const {arrayname}', 'NULL')
 
 def generate_each_in_tables():
     by_trait = {}
