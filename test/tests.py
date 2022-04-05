@@ -925,7 +925,7 @@ class SplitTestCase(CTestCase):
                 return result
         self.cc_stdout = join(self.scratchdir, self.shortname + '.cc_stdout')
         self.cc_stderr = join(self.scratchdir, self.shortname + '.cc_stderr')
-        ld = cc + ['-Wl,-r', '-nostdlib', '-o', self.cfilename + '.o'] + [
+        ld = cc + ['-r', '-nostdlib', '-o', self.cfilename + '.o'] + [
             fn[:-2] + '.o' for fn in files]
 
         result = subprocess.call(ld,
