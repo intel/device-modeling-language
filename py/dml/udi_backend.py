@@ -102,11 +102,10 @@ def en_compobj(node, indices = []):
         new_indices = itertools.product(*new_indices)
         expanded = {}
         for extra_indices in new_indices:
-            expanded["{}{}".format(
-                node.name,
-                "".join("[{}]".format(enc(ind)) for
-                        ind in extra_indices))] = do_enc(
-                            node, indices + list(extra_indices))
+            full_name = "{}{}".format(node.name,
+                                      "".join("[{}]".format(enc(ind)) for
+                                              ind in extra_indices))
+            expanded[full_name] = do_enc(node, indices + list(extra_indices))
         return expanded
     else:
         content = {}
@@ -131,16 +130,36 @@ def en_obj(output, obj, indices = []):
         output.setdefault(collection, {}).update(subobjdict)
     # Group is a special case, merge subobj names into the group name
     elif obj.objtype == 'group':
-        for s in subobjs(obj):
-            subdict = encoder(s, indices)
-            for sub in subobjdict:
-                output.setdefault(
-                    collection,
-                    {})["{}.{}".format(obj.name, sub)] = subdict[sub]
+        new_indices = [[ctree.mkIntegerConstant(obj.site, i, False)
+                        for i in range(arrsize)] for arrsize in obj._arraylens]
+        if new_indices:
+            new_indices = itertools.product(*new_indices)
+            for extra_indices in new_indices:
+                full_name = "{}{}".format(obj.name,
+                                          "".join("[{}]".format(enc(ind)) for
+                                                  ind in extra_indices))
+                for s in subobjs(obj):
+                    (collection, encoder) = obj_encoder_map[s.objtype]
+                    subdict = encoder(s, indices + list(extra_indices))
+                    for sub in subdict:
+                        output.setdefault(
+                            collection,
+                            {})["{}.{}".format(full_name, sub)] = subdict[sub]
+        else:
+            for s in subobjs(obj):
+                (collection, encoder) = obj_encoder_map[s.objtype]
+                subdict = encoder(s, indices)
+                for sub in subobjdict:
+                    output.setdefault(
+                        collection,
+                        {})["{}.{}".format(obj.name, sub)] = subdict[sub]
 
 def subobjs(node):
     for s in node.get_components():
-        # Skip these
+        # skip implicit field
+        if s.objtype == 'field' and not s.name:
+            continue
+        # skip "internal" objects
         if s.name.startswith("_"):
             continue
 
@@ -151,7 +170,7 @@ def subobjs(node):
                           'dev', 'bank',
                           'documentation', 'shown_documentation',
                           'limitations', 'shown_limitations',
-                          'dml_1_4'):
+                          'dml_1_4', "dml_1_2"):
                 continue
             if (node.objtype == 'device' and
                 s.name in ('obj', 'logobj', 'simics_api_version',
@@ -167,9 +186,6 @@ def subobjs(node):
             if (node.objtype == 'field' and
                 s.name in ('notinfield', 'reg',)):
                 continue
-        # skip implicit field
-        if s.objtype == 'field' and not s.name:
-            continue
         yield s
 
 def en_subobjs(output, obj, indices = []):
