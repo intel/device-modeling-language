@@ -1485,6 +1485,7 @@ SPDX-License-Identifier: MPL-2.0
             # config files
             '.github/workflows/dependent-issues.yml',
             '.gitignore',
+            '_config.yml',
         }
         for f in ignorelist:
             assert (root / f).is_file(), f
