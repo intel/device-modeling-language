@@ -38,7 +38,7 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
     sessions = {}
     def check_namecoll(name, site):
         if name in methods:
-            (othersite, _, _, _, _, _, _, _, _) = methods[name]
+            (othersite, _, _, _, _, _, _, _, _, _) = methods[name]
             raise ENAMECOLL(site, othersite, name)
         if name in params:
             (othersite, _) = params[name]
@@ -50,15 +50,25 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
     for ast in subasts:
         try:
             if ast.kind == 'sharedmethod':
-                (mname, inp_asts, outp_asts, throws, independent, memoized,
+                (mname, inp_asts, outp_asts, throws, qualifiers,
                  overridable, body, rbrace_site) = ast.args
+                independent = 'independent' in qualifiers
+                startup = 'startup' in qualifiers
+                memoized = 'memoized' in qualifiers
+                if (startup and not independent) or (memoized and not startup):
+                    raise ICE(impl.method_ast.site,
+                              'Invalid qualifier combination: '
+                              + ' '.join(['independent']*independent
+                                         + ['startup']*startup
+                                         + ['memoized']*memoized))
                 # TODO: a trait method cannot use a subtrait in the
                 # argument list
                 inp = eval_method_inp(inp_asts, None, global_scope)
                 outp = eval_method_outp(outp_asts, None, global_scope)
                 check_namecoll(mname, ast.site)
                 methods[mname] = (ast.site, inp, outp, throws, independent,
-                                  memoized, overridable, body, rbrace_site)
+                                  startup, memoized, overridable, body,
+                                  rbrace_site)
             elif ast.kind in ('session', 'saved'):
                 (decls, _) = ast.args
                 for decl_ast in decls:
@@ -114,11 +124,11 @@ class TraitVTableItem(metaclass=abc.ABCMeta):
     def name(self): '''Field name in vtable struct'''
 
 class TraitMethod(TraitVTableItem):
-    __slots__ = ('site', 'inp', 'outp', 'throws', 'independent', 'memoized',
-                 'astbody', 'name', 'trait', 'default_trait', 'overridable',
-                 'rbrace_site', '_memo_outs_struct', 'id')
+    __slots__ = ('site', 'inp', 'outp', 'throws', 'independent', 'startup',
+                 'memoized', 'astbody', 'name', 'trait', 'default_trait',
+                 'overridable', 'rbrace_site', '_memo_outs_struct', 'id')
 
-    def __init__(self, site, inp, outp, throws, independent, memoized,
+    def __init__(self, site, inp, outp, throws, independent, startup, memoized,
                  overridable, astbody, trait, name, default_trait,
                  rbrace_site):
         self.site = site
@@ -126,6 +136,7 @@ class TraitMethod(TraitVTableItem):
         self.outp = outp
         self.throws = throws
         self.independent = independent
+        self.startup = startup
         self.memoized = memoized
         self.overridable = overridable
         self.astbody = astbody
@@ -214,9 +225,8 @@ class TraitMethod(TraitVTableItem):
                               + 'values are not yet supported.')
 
             if self.memoized:
-                memoization = (codegen.SharedIndependentMemoized(self)
-                               if self.independent
-                               else codegen.SharedMemoized(self))
+                assert self.independent and self.startup
+                memoization = codegen.SharedIndependentMemoized(self)
             else:
                 memoization = None
             body = codegen_method(
@@ -286,7 +296,7 @@ def mktrait(site, tname, ancestors, methods, params, sessions,
         del sessions[name]
 
     bad_methods = set()
-    for (name, (msite, inp, outp, throws, independent, memoized, overridable,
+    for (name, (msite, inp, outp, throws, independent, startup, memoized, overridable,
                 body, rbrace_site)) in list(methods.items()):
         for ancestor in direct_parents:
             coll = ancestor.member_declaration(name)
@@ -317,7 +327,7 @@ def mktrait(site, tname, ancestors, methods, params, sessions,
                                   'ancestor is overridable but not in vtable')
                     try:
                         typecheck_method_override(
-                            (msite, inp, outp, throws, independent,
+                            (msite, inp, outp, throws, independent, startup,
                              memoized),
                             ancestor_vtables[name].vtable_methods[name])
                     except DMLError as e:
@@ -341,8 +351,8 @@ def mktrait(site, tname, ancestors, methods, params, sessions,
                  ancestor_vtables, ancestor_method_impls, reserved_symbols)
 
 def typecheck_method_override(left, right):
-    (site0, inp0, outp0, throws0, independent0, memoized0) = left
-    (site1, inp1, outp1, throws1, independent1, memoized1) = right
+    (site0, inp0, outp0, throws0, independent0, startup0, memoized0) = left
+    (site1, inp1, outp1, throws1, independent1, startup1, memoized1) = right
     if len(inp0) != len(inp1):
         raise EMETH(site0, site1, "different number of input arguments")
     if len(outp0) != len(outp1):
@@ -358,23 +368,19 @@ def typecheck_method_override(left, right):
             raise EMETH(site0, site1,
                         "mismatching types in output argument %d" % (i + 1,))
 
-    if independent0 > independent1:
-        raise EMETH(site0, site1,
-                    ("overriding method is declared independent, "
-                     + "but the overridden method is not"))
-    elif independent0 < independent1:
-        raise EMETH(site0, site1,
-                    ("overridden method is declared independent, "
-                     + "but the overriding method is not"))
+    def qualifier_check(qualifier_name, qualifier0, qualifier1):
+        if qualifier0 > qualifier1:
+            raise EMETH(site0, site1,
+                        (f"overriding method is declared {qualifier_name}, "
+                         + "but the overridden method is not"))
+        elif qualifier0 < qualifier1:
+            raise EMETH(site0, site1,
+                        (f"overridden method is declared {qualifier_name}, "
+                         + "but the overriding method is not"))
 
-    if memoized0 > memoized1:
-        raise EMETH(site0, site1,
-                    ("overriding method is declared memoized, "
-                     + "but the overridden method is not"))
-    elif memoized0 < memoized1:
-        raise EMETH(site0, site1,
-                    ("overridden method is declared memoized, "
-                     + "but the overriding method is not"))
+    qualifier_check('independent', independent0, independent1)
+    qualifier_check('startup', startup0, startup1)
+    qualifier_check('memoized', memoized0, memoized1)
 
 def merge_method_impl_maps(site, parents):
     '''Return a dictionary mapping method name to the most specific trait
@@ -598,10 +604,11 @@ class Trait(SubTrait):
                  ancestor_vtables, ancestor_method_impls, reserved_symbols):
         method_impls = {
             name: TraitMethod(
-                msite, inp, outp, throws, independent, memoized, overridable,
-                body, self, name, ancestor_method_impls.get(name), rbrace_site)
-            for (name, (msite, inp, outp, throws, independent, memoized,
-                        overridable, body, rbrace_site))
+                msite, inp, outp, throws, independent, startup, memoized,
+                overridable, body, self, name, ancestor_method_impls.get(name),
+                rbrace_site)
+            for (name, (msite, inp, outp, throws, independent, startup,
+                        memoized, overridable, body, rbrace_site))
             in list(methods.items())
             if body is not None}
 
@@ -622,8 +629,8 @@ class Trait(SubTrait):
 
         # methods and parameters that are direct members of this trait's vtable
         self.vtable_methods = {
-            name: (msite, inp, outp, throws, independent, memoized)
-            for (name, (msite, inp, outp, throws, independent, memoized,
+            name: (msite, inp, outp, throws, independent, startup, memoized)
+            for (name, (msite, inp, outp, throws, independent, startup, memoized,
                         overridable, _, _))
             in list(methods.items())
             if overridable and name not in ancestor_vtables}
@@ -686,7 +693,7 @@ class Trait(SubTrait):
         if name in self.method_impl_traits:
             return (self.method_impl_traits[name].method_impls[name].site, self)
         elif name in self.vtable_methods:
-            (site, _, _, _, _, _) = self.vtable_methods[name]
+            (site, _, _, _, _, _, _) = self.vtable_methods[name]
             return (site, self)
         elif name in self.vtable_params:
             (site, _) = self.vtable_params[name]
@@ -716,7 +723,8 @@ class Trait(SubTrait):
                     expr = TraitUpcast(site, expr, impl.vtable_trait)
                 return TraitMethodDirect(site, expr, impl)
         if name in self.vtable_methods:
-            (_, inp, outp, throws, independent, _) = self.vtable_methods[name]
+            (_, inp, outp, throws, independent, _, _) = \
+                self.vtable_methods[name]
             return TraitMethodIndirect(site, expr, name, inp, outp, throws,
                                        independent)
         if name in self.vtable_params:
@@ -749,7 +757,7 @@ class Trait(SubTrait):
             yield (name, ptype)
         for (name, (_, ptype)) in list(self.vtable_sessions.items()):
             yield (name, TInt(32, False))
-        for (name, (_, inp, outp, throws, independent, memoized)) \
+        for (name, (_, inp, outp, throws, independent, startup, memoized)) \
             in list(self.vtable_methods.items()):
             yield (name, self.vtable_method_type(inp, outp, throws,
                                                  independent))

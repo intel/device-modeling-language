@@ -232,8 +232,6 @@ data bool _issuing_state_callbacks = false;
 data bool _has_state_callbacks = false;
 // Used by "X then Y" log level feature
 data ht_int_table_t _subsequent_log_ht;
-// Used by shared memoized methods
-data ht_int_table_t _shared_memo_ht;
 
 template conf_attribute {
     parameter configuration             default "optional";

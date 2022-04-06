@@ -9,7 +9,6 @@
 #define SIMICS_DMLLIB_H
 
 #include <stddef.h>
-#include <pthread.h>
 
 #include <simics/base/types.h>
 #include <simics/base/log.h>
@@ -2409,44 +2408,15 @@ UNUSED static uint64 _select_log_level(ht_int_table_t *ht,
         return subsequent;
 }
 
-// The internal format for ht is:
-// dict(trait_identifier -> dict(method_idx -> outs_struct))
-UNUSED static void *_get_shared_memoized_outs(
-    ht_int_table_t *ht, uint64 first_key, uint64 second_key, size_t size) {
-    ht_int_table_t *sub_table = ht_lookup_int(ht, first_key);
-    void *entry = sub_table ? ht_lookup_int(sub_table, second_key) : NULL;
-    if (!sub_table) {
-        sub_table = MM_MALLOC(1, ht_int_table_t);
-        ht_init_int_table(sub_table);
-        ht_insert_int(ht, first_key, sub_table);
-    }
-    if (!entry) {
-        entry = MM_ZALLOC(size, uint8);
-        ht_insert_int(sub_table, second_key, entry);
-    }
-    return entry;
+UNUSED static int _free_sub_table(ht_int_table_t *table,
+                                  uint64 key, void *val, void *_) {
+        ht_clear_int_table(table, false);
+        return 0;
 }
 
-UNUSED static void _independent_memoized_init_mutex(pthread_mutex_t *lock) {
-    pthread_mutexattr_t attributes;
-    int error = pthread_mutexattr_init(&attributes);
-    ASSERT(error == 0);
-    error = pthread_mutexattr_settype(&attributes, PTHREAD_MUTEX_RECURSIVE);
-    ASSERT(error == 0);
-    error = pthread_mutex_init(lock, &attributes);
-    ASSERT(error == 0);
-    error = pthread_mutexattr_destroy(&attributes);
-    ASSERT(error == 0);
-}
-
-UNUSED static void _independent_memoized_lock(
-    pthread_mutex_t *lock, int8 *ran) {
-    if (unlikely(*ran != 1)) {
-        pthread_mutex_lock(lock);
-        if (*ran == 1) {
-            pthread_mutex_unlock(lock);
-        }
-    }
+UNUSED static void _free_table(ht_int_table_t *table) {
+        ht_for_each_entry_int(table, _free_sub_table, NULL);
+        ht_clear_int_table(table, true);
 }
 
 UNUSED static void _memoized_recursion(const char *name) {
@@ -2455,18 +2425,6 @@ UNUSED static void _memoized_recursion(const char *name) {
              "Recursive call to memoized method %s. "
              "This is considered undefined behavior.", name);
     VT_critical_error(msg, msg);
-}
-
-UNUSED static int _free_sub_table(ht_int_table_t *table,
-                                  uint64 key, void *val, void *free_vals) {
-        ht_clear_int_table(table, free_vals != NULL);
-        return 0;
-}
-
-UNUSED static void _free_table(ht_int_table_t *table, bool free_vals) {
-        ht_for_each_entry_int(table, _free_sub_table,
-                              free_vals ? (void *)(uintptr_t)1 : NULL);
-        ht_clear_int_table(table, true);
 }
 
 #endif

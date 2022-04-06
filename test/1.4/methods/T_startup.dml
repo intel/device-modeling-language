@@ -8,21 +8,21 @@ device test;
 
 /// INSTANTIATE-MANUALLY
 
-independent method call_on_model_init(const char *name) {
+independent method call_on_startup(const char *name) {
     local attr_value_t args = SIM_make_attr_list(
         1, SIM_make_attr_string(name));
     local attr_value_t val = VT_call_python_module_function(
-        "__main__", "on_model_init", &args);
+        "__main__", "on_startup", &args);
     SIM_attr_free(&val);
     SIM_attr_free(&args);
 }
 
-group g is (model_init) {
-    independent method model_init() {
-        call_on_model_init("dev.g");
-    }
+independent startup method a() {
+    call_on_startup("a");
 }
 
-independent method model_init() {
-    call_on_model_init("dev");
+group g[i < 2][j < 2] {
+    independent startup method b() {
+        call_on_startup("b");
+    }
 }

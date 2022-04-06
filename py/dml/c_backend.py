@@ -8,7 +8,7 @@ import re
 from contextlib import ExitStack, nullcontext
 from functools import reduce
 
-from . import objects, logging, crep, output, ctree, serialize
+from . import objects, logging, crep, output, ctree, serialize, structure
 from . import traits
 import dml.globals
 from .logging import *
@@ -1329,9 +1329,6 @@ def generate_alloc(device):
     out('return %s;\n' % objarg)
     out('}\n\n', preindent = -1)
 
-def generate_independent_memoized_mutex():
-    add_variable_declaration('pthread_mutex_t _independent_memoized_mutex')
-
 def generate_initialize(device):
     if dml.globals.api_version <= '6':
         start_function_definition(
@@ -1376,17 +1373,8 @@ def generate_initialize(device):
 
     # Initialize table for tracking log-once feature
     out('ht_init_int_table(&(_dev->_subsequent_log_ht));\n')
-    out('ht_init_int_table(&(_dev->_shared_memo_ht));\n')
 
     out('return _obj;\n')
-    out('}\n\n', preindent = -1)
-
-def generate_model_initialize(device):
-    start_function_definition('void _model_init()')
-    out('{\n', postindent = 1)
-    codegen_inline_byname(device, (), '_model_init', [], [],
-                          device.site).toc()
-    reset_line_directive()
     out('}\n\n', preindent = -1)
 
 def generate_dealloc(device):
@@ -1458,18 +1446,15 @@ def generate_deinit(device):
                                               device.site))
         # Free the tables used for log_once after all calls into device code
         # are done
-        def mkFreeTable(target, free_vals):
-            table_ptr = TPtr(TNamed("ht_int_table_t"))
-            return mkExpressionStatement(
-                device.site,
-                mkApply(device.site,
-                        mkLit(device.site, "_free_table",
-                              TFunction([table_ptr, TBool()], TVoid())),
-                        [mkLit(device.site, f'&(_dev->{target})', table_ptr),
-                         mkBoolConstant(device.site, free_vals)]
-                        ))
-        code.append(mkFreeTable('_subsequent_log_ht', False))
-        code.append(mkFreeTable('_shared_memo_ht', True))
+        table_ptr = TPtr(TNamed("ht_int_table_t"))
+        code.append(mkExpressionStatement(
+            device.site,
+            mkApply(device.site,
+                    mkLit(device.site, "_free_table",
+                          TFunction([table_ptr], TVoid())),
+                    [mkLit(device.site, '&(_dev->_subsequent_log_ht)',
+                           table_ptr)]
+                    )))
         code = mkCompound(device.site, declarations(scope) + code)
         code.toc()
 
@@ -1733,14 +1718,11 @@ def generate_init(device, initcode, outprefix):
             ');\n')
         out('}\n', preindent = -1)
 
-    out('_independent_memoized_init_mutex(&_independent_memoized_mutex);\n')
     out('_allocate_traits();\n')
     out('_initialize_traits();\n')
     out('_initialize_identity_ht();\n')
     out('_register_events(class);\n')
-    if dml.globals.dml_version != (1, 2):
-        out('_model_init();\n')
-
+    out('_startup_calls();\n')
     # initcode is independently indented
     out(initcode.buf, preindent = -1, postindent = 1)
     out('\n')
@@ -1937,7 +1919,7 @@ def method_tinit_arg(trait, parent, name, scrambled_name):
             # impl_path[0] is a direct parent which provides
             # the correct default implementation
             assert impl_path[0] != parent
-            (_, inp, outp, throws, independent, _) = \
+            (_, inp, outp, throws, independent, _, _) = \
                 vtable_trait.vtable_methods[name]
             method_impl = impl_trait.method_impls[name]
             thunk = generate_adjustor_thunk(
@@ -1955,7 +1937,7 @@ def method_tinit_arg(trait, parent, name, scrambled_name):
         # not on canonical path; need to create an adjustor thunk
         # that trampolines to the implementation on the canonical path
         vtable_path = (parent,) + parent.ancestry_paths[vtable_trait][0]
-        (_, inp, outp, throws, independent, _) = \
+        (_, inp, outp, throws, independent, _, _) = \
             vtable_trait.vtable_methods[name]
         # Avoid an indirect call in the adjustor thunk, for
         # methods that are not overridable
@@ -2039,7 +2021,7 @@ fields.
         vtable_trait = trait.ancestor_vtables.get(name, trait)
         member_kind = trait.member_kind(name)
         if member_kind == 'method':
-            (_, inp, outp, throws, independent, _) \
+            (_, inp, outp, throws, independent, _, _) \
                 = vtable_trait.vtable_methods[name]
             mtype = vtable_trait.vtable_method_type(inp, outp, throws,
                                                     independent)
@@ -2329,6 +2311,114 @@ def generate_alloc_trait_vtables(node):
     out('}\n', preindent=-1)
     splitting_point()
 
+def generate_startup_calls(devnode):
+    start_function_definition('void _startup_calls(void)')
+    out('{\n', postindent=1)
+
+    def startup_calls(startup_methods):
+        by_dims = {}
+        for (method_data_tuple, dims) in startup_methods:
+            by_dims.setdefault(dims, []).append(method_data_tuple)
+        all_dims = sorted(by_dims)
+        prev_dims = ()
+        for dims in all_dims:
+            for (site, gen_call, data) in by_dims[dims]:
+                common_dims = []
+                for (a, b) in zip(dims, prev_dims):
+                    if a == b:
+                        common_dims.append(a)
+                    else:
+                        break
+                for _ in range(len(common_dims), len(prev_dims)):
+                    out('}\n', preindent=-1)
+                for i in range(len(common_dims), len(dims)):
+                    idxvar = '_i%d' % (i,)
+                    out('for (uint32 %s = 0; %s < %d; %s++) {\n'
+                        % (idxvar, idxvar, dims[i], idxvar),
+                        postindent=1)
+                prev_dims = dims
+
+                idxvars = ['_i%d' % (i,) for i in range(len(dims))]
+                gen_call(data, idxvars)
+
+        for _ in prev_dims:
+            out('}\n', preindent=-1)
+
+    def generate_regular_call(method, idxvars):
+        site = method.site
+        indices = tuple(mkLit(site, idx, TInt(32, False)) for idx in idxvars)
+        outargs = [mkLit(site,
+                         ('*((%s) {0})'
+                          % ((TArray(t, mkIntegerLiteral(site, 1))
+                              .declaration('')),)),
+                         t)
+                   for (_, t) in method.outp]
+        with IgnoreFailure(site):
+            codegen_call(method.site, method, indices, [], outargs).toc()
+
+    def generate_trait_calls(data, idxvars):
+        (node, traits) = data
+        site = node.site
+
+        indices = tuple(mkLit(site, idx, TInt(32, False)) for idx in idxvars)
+
+        out('{\n', postindent=1)
+        out('_traitref_t _tref;\n')
+        for (trait, trait_methods) in traits.items():
+            ref = ObjTraitRef(site, node, trait, indices)
+            out(f'_tref = {ref.read()};\n')
+            for method in trait_methods:
+                outargs = [mkLit(site,
+                                 ('*((%s) {0})'
+                                  % ((TArray(t, mkIntegerLiteral(site, 1))
+                                      .declaration('')),)),
+                                 t)
+                           for (_, t) in method.outp]
+
+                method_ref = TraitMethodDirect(
+                    site, mkLit(site, '_tref', TTrait(trait)), method)
+                with IgnoreFailure(site):
+                    codegen_call_traitmethod(site, method_ref, [],
+                                             outargs) .toc()
+        out('}\n', preindent=-1)
+
+    trait_startups = []
+    trait_memoized_startups = []
+    for subnode in flatten_object_subtree(devnode):
+        if subnode.traits:
+            startups = {}
+            startup_memoizeds = {}
+            for trait in subnode.traits.ancestors:
+                for trait_method in trait.method_impls.values():
+                    if trait_method.startup:
+                        target_dict = (
+                            startup_memoizeds if trait_method.memoized
+                            else startups)
+                        target_dict.setdefault(trait, []).append(trait_method)
+                        subnode.traits.mark_referenced(trait)
+
+            if startups:
+                trait_startups.append((subnode, startups))
+
+            if startup_memoizeds:
+                trait_memoized_startups.append((subnode, startup_memoizeds))
+
+    all_startups = \
+        ([((method.site, generate_regular_call, method), method.dimsizes)
+          for method in structure.startups]
+         + [((node.site, generate_trait_calls, (node, startups)),
+             node.dimsizes)
+            for (node, startups) in trait_startups])
+    all_memoized_startups = \
+        ([((method.site, generate_regular_call, method), method.dimsizes)
+          for method in structure.memoized_startups]
+         + [((node.site, generate_trait_calls, (node, startups)),
+             node.dimsizes)
+            for (node, startups) in trait_memoized_startups])
+    for startups in (all_startups, all_memoized_startups):
+        startup_calls(startups)
+    out('}\n', preindent=-1)
+
 def generate_init_trait_vtables(node, param_values):
     '''Return a list of pairs (dimsizes, 'call();\n')
     meaning that call() is to be invoked with variables (_i0, _i1, ..) given by
@@ -2508,8 +2598,6 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     if dml.globals.dml_version != (1, 2) or dml.globals.state_change_dml12:
         generate_state_notify(device)
         generate_state_existence_callback(device)
-    if dml.globals.dml_version != (1, 2):
-        generate_model_initialize(device)
 
     generate_alloc(device)
     generate_initialize(device)
@@ -2517,7 +2605,7 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     generate_dealloc(device)
     generate_events(device)
     generate_identity_data_decls()
-    generate_independent_memoized_mutex()
+    generate_startup_calls(device)
     if dml.globals.dml_version == (1, 2):
         generate_reset(device, 'hard')
         generate_reset(device, 'soft')

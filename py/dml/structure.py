@@ -35,6 +35,12 @@ __all__ = (
 # A list of extern declarations, as tuples (name,site,type)
 externs = []
 
+# A list of independent methods declared startup
+startups = []
+
+# A list of independent methods declared startup memoized
+memoized_startups = []
+
 def check_constant_expr(expr):
     '''Check that an expression in a constant declaration is either a
     proper value, or (recursively) a list of proper values; raise an
@@ -614,10 +620,16 @@ def merge_parameters(defs, obj_specs):
 def typecheck_method_override(m1, m2):
     '''check that m1 can override m2'''
     assert m1.kind == m2.kind == 'method'
-    (_, (inp1, outp1, throws1, independent1, memoized1, _), _, _, _) \
+    (_, (inp1, outp1, throws1, qualifiers1, _), _, _, _) \
         = m1.args
-    (_, (inp2, outp2, throws2, independent2, memoized2, _), _, _, _) \
+    (_, (inp2, outp2, throws2, qualifiers2, _), _, _, _) \
         = m2.args
+    (independent1, startup1, memoized1) = ('independent' in qualifiers1,
+                                           'startup' in qualifiers1,
+                                           'memoized' in qualifiers1)
+    (independent2, startup2, memoized2) = ('independent' in qualifiers2,
+                                           'startup' in qualifiers2,
+                                           'memoized' in qualifiers2)
 
     # We should also check parameter types here (bug 20686)
     if len(inp1) != len(inp2):
@@ -668,23 +680,19 @@ def typecheck_method_override(m1, m2):
         # hack to change 'inline method' -> 'method' if needed
         report(PINARGTYPE(m1.site, 'method'))
 
-    if independent1 > independent2:
-        raise EMETH(method_ast.site, overridden_ast.site,
-                    ("overriding method is declared independent, "
-                     + "but the overridden method is not"))
-    elif independent1 < independent2:
-        raise EMETH(method_ast.site, overridden_ast.site,
-                    ("overridden method is declared independent, "
-                     + "but the overriding method is not"))
+    def qualifier_check(qualifier_name, qualifier1, qualifier2):
+        if qualifier1 > qualifier2:
+            raise EMETH(m1.site, m2.site,
+                        (f"overriding method is declared {qualifier_name}, "
+                         + "but the overridden method is not"))
+        elif qualifier1 < qualifier2:
+            raise EMETH(site0, site1,
+                        (f"overridden method is declared {qualifier_name}, "
+                         + "but the overriding method is not"))
 
-    if memoized1 > memoized2:
-        raise EMETH(method_ast.site, overridden_ast.site,
-                    ("overriding method is declared memoized, "
-                     + "but the overridden method is not"))
-    elif independent1 < independent2:
-        raise EMETH(method_ast.site, overridden_ast.site,
-                    ("overridden method is declared memoized, "
-                     + "but the overriding method is not"))
+    qualifier_check('independent', independent1, independent2)
+    qualifier_check('startup', startup1, startup2)
+    qualifier_check('memoized', memoized1, memoized2)
 
     # 'throws' annotations are verified later
 
@@ -1184,7 +1192,7 @@ def report_pbefaft(obj, method_asts):
             del combined[dml.globals.templates[lib_tpl].spec.rank]
             for (bef, aft) in combined.values():
                 if aft:
-                    (_, _, _, _, _, aft_body) = aft.args[1]
+                    (_, _, _, _, aft_body) = aft.args[1]
                     aft_args = [aft.site, dmlparse.start_site(aft_body.site),
                                 dmlparse.end_site(aft_body.site)]
                 else:
@@ -1199,7 +1207,7 @@ def report_pbefaft(obj, method_asts):
                 else:
                     return_stmt = None
                 if bef:
-                    (bef_inp, _, _, _, _, bef_body) = bef.args[1]
+                    (bef_inp, _, _, _, bef_body) = bef.args[1]
                     if before_name == 'before_write':
                         # find name of 'value' arg
                         (_, _, _, value_cdecl) = bef_inp
@@ -1239,7 +1247,7 @@ def wrap_method_body_in_try(site, overridden_site, obj, name, body):
 class ObjMethodHandle(traits.MethodHandle):
     shared = False
     def __init__(self, method_ast, rank):
-        (name, (_, _, throws, _, _, _), overridable, _, _) = method_ast.args
+        (name, (_, _, throws, _, _), overridable, _, _) = method_ast.args
         super(ObjMethodHandle, self).__init__(
             method_ast.site, name, rank, overridable)
         self.method_ast = method_ast
@@ -1296,8 +1304,18 @@ def process_method_implementations(obj, name, implementations,
         else:
             default = InvalidDefault(traits.AmbiguousDefaultSymbol(
                 [m.site for m in defaults]))
-        (name, (inp_ast, outp_ast, throws, independent, memoized, body), _,
+        (name, (inp_ast, outp_ast, throws, qualifiers, body), _,
          _, rbrace_site) = impl.method_ast.args
+        independent = 'independent' in qualifiers
+        startup = 'startup' in qualifiers
+        memoized = 'memoized' in qualifiers
+        if (startup and not independent) or (memoized and not startup):
+            raise ICE(impl.method_ast.site,
+                      'Invalid qualifier combination: '
+                      + ' '.join(['independent']*independent
+                                 + ['startup']*startup
+                                 + ['memoized']*memoized))
+
         if (impl.method_ast.site.dml_version() == (1, 2) and throws
             and vtable_nothrow_dml14):
             body = wrap_method_body_in_try(
@@ -1345,8 +1363,8 @@ def process_method_implementations(obj, name, implementations,
         method = mkmethod(impl.site, rbrace_site,
                           Location(obj, static_indices(obj)),
                           obj, name, inp_ast,
-                          outp_ast, throws, independent, memoized, body,
-                          default, default_level)
+                          outp_ast, throws, independent, startup, memoized,
+                          body, default, default_level)
         impl_to_method[impl] = method
 
     if dml.globals.dml_version == (1, 2):
@@ -1542,8 +1560,8 @@ def mkobj2(obj, obj_specs, params, each_stmts):
         if dml.globals.dml_version == (1, 2):
             for trait in ancestors:
                 if name in trait.vtable_methods:
-                    (tsite, _, _,
-                     throws_in_vtable, _, _) = trait.vtable_methods[name]
+                    (tsite, _, _, throws_in_vtable, _, _, _) = \
+                        trait.vtable_methods[name]
                     # Whether a 1.4 file declares the method as
                     # non-throwing in a vtable
                     vtable_nothrow_dml14 = (
@@ -1689,7 +1707,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
 
             vtable_trait = trait.vtable_trait(member)
             if member_kind == 'method':
-                (tsite, tinp, toutp, tthrows, tindep, tmemod) \
+                (tsite, tinp, toutp, tthrows, tindep, tstartup, tmemod) \
                     = vtable_trait.vtable_methods[member]
                 if not override.fully_typed:
                     for (n, t) in override.inp:
@@ -1708,9 +1726,9 @@ def mkobj2(obj, obj_specs, params, each_stmts):
 
                 traits.typecheck_method_override(
                     (override.site, override.inp, override.outp,
-                     override.throws, override.independent,
+                     override.throws, override.independent, override.startup,
                      override.memoized),
-                    (tsite, tinp, toutp, tthrows, tindep, tmemod))
+                    (tsite, tinp, toutp, tthrows, tindep, tstartup, tmemod))
                 trait_method_overrides[member] = override
             else:
                 assert member_kind == 'parameter'
@@ -2583,8 +2601,9 @@ method io_memory_access(generic_transaction_t *memop, uint64 offset, void *aux) 
                        % (tramp12.replace('\n', '\n    ')))
         report(PTRAMPOLINE(site, tramp14, tramp12))
 
+
 def mkmethod(site, rbrace_site, location, parent_obj, name, inp_ast,
-             outp_ast, throws, independent, memoized, body, default,
+             outp_ast, throws, independent, startup, memoized, body, default,
              default_level):
     # check for duplicate parameter names
     named_args = inp_ast
@@ -2630,8 +2649,13 @@ def mkmethod(site, rbrace_site, location, parent_obj, name, inp_ast,
     if default_level:
         name += "___default%d" % (default_level,)
     method = objects.Method(name, site, parent_obj,
-                            inp, outp, throws, independent, memoized, body,
-                            default, rbrace_site)
+                            inp, outp, throws, independent, startup, memoized,
+                            body, default, rbrace_site)
+    if startup:
+        (memoized_startups if memoized else startups).append(method)
+        func = method_instance(method)
+        mark_method_referenced(func)
+
     if logging.show_porting:
         if method.fully_typed:
             PWUNUSED.typed_methods.add(method)

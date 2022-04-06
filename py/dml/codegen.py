@@ -43,6 +43,7 @@ __all__ = (
     'LogFailure',
     'CatchFailure',
     'ReturnFailure',
+    'IgnoreFailure',
 
     'c_rettype',
     'c_inargs',
@@ -54,6 +55,7 @@ __all__ = (
     'codegen_call',
     'codegen_call_byname',
     'codegen_call_expr',
+    'codegen_call_traitmethod',
     'codegen_inline',
     'codegen_inline_byname',
 
@@ -184,6 +186,11 @@ class CatchFailure(Failure):
             self.label = gensym('throw')
         return mkThrow(site, self.label)
 
+class IgnoreFailure(Failure):
+    '''Ignore exceptions'''
+    def fail(self, site):
+        return mkNull(site)
+
 class ExitHandler(metaclass=ABCMeta):
     current = None
 
@@ -242,12 +249,8 @@ def memoized_return_failure_leave(site, mkRef, independent, failed):
     ran = mkRef('ran', TInt(8, True))
     threw = mkRef('threw', TBool())
     stmts = [mkCopyData(site, mkIntegerLiteral(site, 1), ran),
-             mkCopyData(site, mkBoolConstant(site, failed), threw)]
-    if independent:
-        stmts.append(
-            mkInline(site,
-                     'pthread_mutex_unlock(&_independent_memoized_mutex);'))
-    stmts.append(mkReturn(site, mkBoolConstant(site, failed)))
+             mkCopyData(site, mkBoolConstant(site, failed), threw),
+             mkReturn(site, mkBoolConstant(site, failed))]
     return stmts
 
 class MemoizedReturnFailure(Failure):
@@ -290,11 +293,6 @@ class MemoizedReturnExit(ExitHandler):
             target = self.mkRef(f'p_{name}', typ)
             stmts.append(mkCopyData(site, val, target))
             targets.append(target)
-        if self.independent:
-            stmts.append(
-                mkInline(
-                    site,
-                    'pthread_mutex_unlock(&_independent_memoized_mutex);'))
         stmts.append(codegen_return(site, self.outp, self.throws, targets))
         return mkCompound(site, stmts)
 
@@ -306,37 +304,6 @@ class Memoization:
     def fail_handler(self):
         pass
 
-class Memoized(Memoization):
-    def __init__(self, func, location):
-        assert not func.method.independent
-        self.func = func
-        self.method = func.method
-        self.static_dict = {}
-        with crep.DeviceInstanceContext():
-            for (name, typ) in ([(f'p_{name}', typ)
-                                 for (name, typ) in func.outp]
-                                + [('ran', TInt(8, True))]
-                                + ([('threw', TBool())] if func.throws
-                                   else [])):
-                self.static_dict[name] = make_static_var(
-                    self.method.site, location, typ,
-                    f'_{self.method.name}__{name}')
-    def mkRef(self, ref, typ):
-        expr = self.static_dict[ref]
-        assert safe_realtype(expr.ctype()).cmp(safe_realtype(typ)) == 0
-        return expr
-    def prelude(self):
-        return memoization_common_prelude(
-            self.method.logname_anonymized(), self.method.site, self.func.outp,
-            self.func.throws, self.mkRef)
-    def exit_handler(self):
-        return MemoizedReturnExit(self.method.site, self.func.outp,
-                                  self.func.throws, False, self.mkRef)
-    def fail_handler(self):
-        return (MemoizedReturnFailure(self.method.rbrace_site, False,
-                                      self.mkRef)
-                if self.func.throws else NoFailure(self.method.site))
-
 class IndependentMemoized(Memoization):
     def __init__(self, func):
         assert func.method.independent
@@ -344,23 +311,22 @@ class IndependentMemoized(Memoization):
         self.method = func.method
 
     def mkRef(self, ref, typ):
-        return mkLit(self.method.site, f'_memo__{ref}', typ)
+        indexing = ''.join([f'[_idx{i}]'
+                            for i in range(self.method.dimensions)])
+        return mkLit(self.method.site, f'_memo{indexing}.{ref}', typ)
 
     def prelude(self):
-        stmts = [
-            mkInline(
-                self.method.site,
-                f'static {typ.declaration(f"_memo__{name}")};')
+        struct_body = ''.join(
+            f'{typ.declaration(name)}; '
             for (name, typ) in (
-                [('ran', TInt(8, True))]
-                + ([('threw', TBool())] if self.func.throws else [])
-                + [(f'p_{name}', typ)
-                   for (name, typ) in self.func.outp])]
-        lock = mkInline(self.method.site,
-                        ('_independent_memoized_lock('
-                         + '&_independent_memoized_mutex, '
-                         + f'&{self.mkRef("ran", TInt(8, True)).read()});'))
-        return stmts + [lock] + memoization_common_prelude(
+                    [('ran', TInt(8, True))]
+                    + ([('threw', TBool())] if self.func.throws else [])
+                    + [(f'p_{name}', typ) for (name, typ) in self.func.outp]))
+        array_defs = ''.join([f'[{i}]' for i in self.method.dimsizes])
+        struct_var_def = mkInline(
+            self.method.site,
+            f'static struct {{{struct_body}}} _memo{array_defs};')
+        return [struct_var_def] + memoization_common_prelude(
             self.method.logname_anonymized(), self.method.site, self.func.outp,
             self.func.throws, self.mkRef)
     def exit_handler(self):
@@ -370,41 +336,6 @@ class IndependentMemoized(Memoization):
         return (MemoizedReturnFailure(self.method.rbrace_site, True,
                                       self.mkRef)
                 if self.func.throws else NoFailure(self.method.site))
-
-class SharedMemoized(Memoization):
-    count = 0
-    def __init__(self, method):
-        assert not method.independent
-        self.method = method
-        self.id = SharedMemoized.count
-        SharedMemoized.count += 1
-
-    def mkRef(self, ref, typ):
-        return mkLit(self.method.site, f'_memo_outs->{ref}', typ)
-    def prelude(self):
-        memo_outs_ptr = TPtr(self.method.memo_outs_struct)
-        site = self.method.site
-        fetch_outs_call = mkLit(
-            site,
-            '_get_shared_memoized_outs(&_dev->_shared_memo_ht,'
-            + f' _identity_to_key(_{cident(self.method.trait.name)}.id), '
-            + f'{self.id}, sizeof(*_memo_outs))',
-            memo_outs_ptr)
-        outs_decl = mkDeclaration(
-            site, '_memo_outs',
-            TPtr(self.method.memo_outs_struct),
-            init=ExpressionInitializer(fetch_outs_call), unused=True)
-
-        return [outs_decl] + memoization_common_prelude(
-            self.method.name, site, self.method.outp, self.method.throws,
-            self.mkRef)
-    def exit_handler(self):
-        return MemoizedReturnExit(self.method.site, self.method.outp,
-                                  self.method.throws, False, self.mkRef)
-    def fail_handler(self):
-        return (MemoizedReturnFailure(self.method.rbrace_site, False,
-                                      self.mkRef)
-                if self.method.throws else NoFailure(self.method.site))
 
 class SharedIndependentMemoized(Memoization):
     def __init__(self, method):
@@ -416,11 +347,7 @@ class SharedIndependentMemoized(Memoization):
                      f'((struct _{traitname} *) _{traitname}.trait)'
                      + f'->_{self.method.name}_outs.{ref}', typ)
     def prelude(self):
-        lock = mkInline(self.method.site,
-                        ('_independent_memoized_lock('
-                         + '&_independent_memoized_mutex, '
-                         + f'&{self.mkRef("ran", TInt(8, True)).read()});'))
-        return [lock] + memoization_common_prelude(
+        return memoization_common_prelude(
             self.method.name, self.method.site, self.method.outp,
             self.method.throws, self.mkRef)
     def exit_handler(self):
@@ -796,8 +723,16 @@ def expr_slice(tree, location, scope):
 @expression_dispatcher
 def expr_list(tree, location, scope):
     [elts] = tree.args
-    values = [codegen_expression_maybe_nonvalue(elt, location, scope)
-              for elt in elts]
+    values = []
+    for elt in elts:
+        e = codegen_expression_maybe_nonvalue(elt, location, scope)
+        if e.constant or isinstance(e, (NodeRef, AbstractList, NodeArrayRef,
+                                        SessionVariableRef)):
+            values.append(e)
+        elif isinstance(e, NonValue):
+            raise e.exc()
+        else:
+            raise ECLST(e)
     return mkList(tree.site, values)
 
 @expression_dispatcher
@@ -2839,6 +2774,7 @@ def c_inargs(inp, outp, throws):
     else:
         return list(inp)
 
+# TODO is startup a necessary member?
 class MethodFunc(object):
     '''A concrete method instance, where all parameters are fully
     typed. One MethodFunc corresponds to one generated C function. A
@@ -2849,11 +2785,11 @@ class MethodFunc(object):
     will result in a separate MethodFunc instance with the constant
     parameter removed from the signature, and the constant propagated
     into the method body.'''
-    __slots__ = ('method', 'inp', 'outp', 'throws', 'independent',
+    __slots__ = ('method', 'inp', 'outp', 'throws', 'independent', 'startup',
                  'memoized', 'cparams', 'rettype', 'suffix')
 
-    def __init__(self, method, inp, outp, throws, independent, memoized,
-                 cparams, suffix):
+    def __init__(self, method, inp, outp, throws, independent, startup,
+                 memoized, cparams, suffix):
         '''(inp, outp, throws) describe the method's signature; cparams
         describe the generated C function parameters corresponding to
         inp. If some method parameters are constant propagated, then
@@ -2867,6 +2803,7 @@ class MethodFunc(object):
         self.outp = tuple(outp)
         self.throws = throws
         self.independent = independent
+        self.startup = startup
         self.memoized = memoized
         self.suffix = suffix
 
@@ -2932,7 +2869,8 @@ def untyped_method_instance(method, signature):
     cparams = [(n, t) for (n, t) in inp if isinstance(t, DMLType)]
 
     func = MethodFunc(method, inp, outp, method.throws, method.independent,
-                      method.memoized, cparams, "__"+str(len(method.funcs)))
+                      method.startup, method.memoized, cparams,
+                      "__"+str(len(method.funcs)))
 
     method.funcs[canon_signature] = func
     return func
@@ -2944,7 +2882,8 @@ def method_instance(method):
         return method.funcs[None]
 
     func = MethodFunc(method, method.inp, method.outp, method.throws,
-                      method.independent, method.memoized, method.inp, "")
+                      method.independent, method.startup, method.memoized,
+                      method.inp, "")
 
     method.funcs[None] = func
     return func
@@ -2980,8 +2919,8 @@ def codegen_method_func(func):
     with ErrorContext(method):
         location = Location(method, indices)
         if func.memoized:
-            memoization = (IndependentMemoized(func) if func.independent
-                           else Memoized(func, location))
+            assert func.independent and func.startup
+            memoization = IndependentMemoized(func)
         else:
             memoization = None
         code = codegen_method(

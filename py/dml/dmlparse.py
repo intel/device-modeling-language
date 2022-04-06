@@ -3,7 +3,7 @@
 
 # Parser for DML 1.2
 
-import os, sys, re
+import os, sys, re, itertools
 from ply import lex, yacc
 
 from .logging import *
@@ -484,8 +484,6 @@ def object_method_noinparams(t):
     '''method : METHOD maybe_extern objident method_outparams maybe_default compound_statement'''
     name = t[3]
     (inp, outp, throws) = ([], t[4], True)
-    independent = False
-    memoized = False
     if logging.show_porting:
         i = min([4, 5, 6], key=lambda i: t.lexpos(i))
         report(PINPARAMLIST(site(t, i)))
@@ -503,24 +501,42 @@ def object_method_noinparams(t):
 
     body = t[6]
     t[0] = ast.method(site(t), name,
-                      (inp, outp, throws, independent, memoized, body),
+                      (inp, outp, throws, [], body),
                       t[5], t[2], lex_end_site(t, -1))
+
+def method_qualifiers_check(site, qualifiers, inp, outp, throws, default):
+    startup = 'startup' in qualifiers
+    memoized = 'memoized' in qualifiers
+    if startup:
+        if inp:
+            report(ESYNTAX(site, None,
+                           'startup methods may not have input parameters'))
+            inp = []
+        if (outp or throws) and not memoized:
+            report(ESYNTAX(site, None,
+                           'non-memoized startup methods may not have return'
+                           + 'values or be throwing'))
+            outp = []
+        elif not (outp or throws) and memoized:
+            report(ESYNTAX(site, None,
+                           'memoized methods must have return values and/or '
+                           'be throwing'))
+        if default:
+            report(ESYNTAX(site, None,
+                           "startup methods may not be declared 'default'"))
+    return (inp, outp)
+
 
 @prod_dml14
 def object_method(t):
-    '''method : method_qualifier_list METHOD objident method_params_typed maybe_default compound_statement'''
+    '''method : method_qualifiers METHOD objident method_params_typed maybe_default compound_statement'''
     name = t[3]
     (inp, outp, throws) = t[4]
-    independent = 'independent' in t[1]
-    memoized = 'memoized' in t[1]
     body = t[6]
-    if memoized and inp:
-        report(ESYNTAX(site(t, 4), None,
-                       'memoized methods may not have input parameters'))
-        inp = []
-
+    (inp, outp) = method_qualifiers_check(site(t), t[1], inp, outp, throws,
+                                          t[5])
     t[0] = ast.method(site(t), name,
-                      (inp, outp, throws, independent, memoized, body),
+                      (inp, outp, throws, t[1], body),
                       t[5], False, lex_end_site(t, -1))
 
 @prod_dml14
@@ -528,8 +544,6 @@ def object_inline_method(t):
     '''method : INLINE METHOD objident method_params_maybe_untyped maybe_default compound_statement'''
     name = t[3]
     (inp, outp, throws) = t[4]
-    independent = False
-    memoized = False
     if all(typ for (_, asite, name, typ) in inp):
         # inline annotation would have no effect for fully typed methods.
         # We forbid it as a way to strongly discourage unneeded use of inline.
@@ -537,7 +551,7 @@ def object_inline_method(t):
                        'only use inline if there are untyped arguments'))
     body = t[6]
     t[0] = ast.method(site(t), name,
-                      (inp, outp, throws, independent, memoized, body),
+                      (inp, outp, throws, [], body),
                       t[5], False, lex_end_site(t, -1))
 
 @prod_dml12
@@ -547,8 +561,6 @@ def object_method(t):
     inp = t[5]
     outp = t[7]
     throws = t[8]
-    independent = False
-    memoized = False
     if logging.show_porting and any(not typ for (_, _, name, typ) in inp):
         # some standard methods are assigned a type later on
         if name not in ['set', 'write']:
@@ -570,7 +582,7 @@ def object_method(t):
 
     body = t[10]
     t[0] = ast.method(site(t), name,
-                      (inp, outp, throws, independent, memoized, body),
+                      (inp, outp, throws, [], body),
                       t[9], t[2], lex_end_site(t, -1))
 
 @prod_dml12
@@ -669,16 +681,13 @@ def template_statement_obj(t):
 
 @prod_dml14
 def template_statement_shared_method(t):
-    '''template_stmt : SHARED method_qualifier_list METHOD shared_method'''
+    '''template_stmt : SHARED method_qualifiers METHOD shared_method'''
     (name, (inp, outp, throws), overridable, body, rbrace_site) = t[4]
-    independent = 'independent' in t[2]
-    memoized = 'memoized' in t[2]
-    if memoized and inp:
-        report(ESYNTAX(site(t), None,
-                       'memoized methods may not have input parameters'))
-        inp = []
-    t[0] = [ast.sharedmethod(site(t), name, inp, outp, throws, independent,
-                             memoized, overridable, body, rbrace_site)]
+    default = overridable and body is not None
+    (inp, outp) = method_qualifiers_check(site(t), t[2], inp, outp, throws,
+                                          default)
+    t[0] = [ast.sharedmethod(site(t), name, inp, outp, throws, t[2],
+                             overridable, body, rbrace_site)]
 
 @prod_dml12
 def trait_template(t):
@@ -692,31 +701,19 @@ def trait_template(t):
     t[0] = t[3]
 
 @prod_dml14
-def method_qualifier(t):
-    '''method_qualifier : INDEPENDENT
-                        | MEMOIZED'''
-    t[0] = t[1]
-
-@prod_dml14
-def method_qualifier_list_none(t):
-    '''method_qualifier_list : '''
-    t[0] = set()
-
-@prod_dml14
-def method_qualifier_list_some(t):
-    '''method_qualifier_list : method_qualifier_list method_qualifier'''
-    if t[2] in t[1]:
-        report(ESYNTAX(site(t, 1), t[2], "duplicate method qualifier"))
-    t[0] = t[1].union({t[2]})
+def method_qualifiers(t):
+    '''method_qualifiers :
+                         | INDEPENDENT
+                         | INDEPENDENT STARTUP
+                         | INDEPENDENT STARTUP MEMOIZED'''
+    t[0] = list(itertools.islice(t, 1, None))
 
 @prod_dml12
 def trait_method(t):
     '''trait_method : METHOD shared_method'''
     (name, (inp, outp, throws), overridable, body, rbrace_site) = t[2]
-    independent = False
-    memoized = False
-    t[0] = ast.sharedmethod(site(t), name, inp, outp, throws, independent,
-                            memoized, overridable, body, rbrace_site)
+    t[0] = ast.sharedmethod(site(t), name, inp, outp, throws, [], overridable,
+                            body, rbrace_site)
 
 @prod
 def shared_method_abstract(t):
@@ -884,7 +881,7 @@ def object_statement_bad_shared_method(t):
 
 @prod_dml14
 def bad_shared_method(t):
-    '''bad_shared_method : SHARED method_qualifier_list METHOD shared_method'''
+    '''bad_shared_method : SHARED method_qualifiers METHOD shared_method'''
     report(ESYNTAX(site(t), 'shared',
                    'shared method declaration only permitted'
                    + ' in top level template block'))

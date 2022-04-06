@@ -339,29 +339,6 @@ template limitations {
 }
 
 /**
-### model\_init
-
-Provides an abstract independent method `model_init`, which is called when the
-model (corresponding to the Simics device module) is loaded, *before* any
-device is created.
-
-The method `model_init` is automatically called on all objects that implement
-the `model_init` template.
-*/
-template model_init {
-    param _each_model_init : sequence(model_init);
-    param _each_model_init = each model_init in (this);
-
-    shared independent method _rec_model_init() {
-        foreach obj in (this._each_model_init)
-            obj._rec_model_init();
-        this.model_init();
-    }
-    // Perform local initialization (allocation etc.)
-    shared independent method model_init();
-}
-
-/**
 ### init
 
 Provides an abstract method `init`, which is called when the
@@ -520,8 +497,6 @@ The `device` template contains the following parameters:
 */
 template device {
     is object;
-    // _model_init is automatically called on model load
-    is model_init;
     // _init and _post_init are called automatically on object instantiation
     is init;
     is post_init;
@@ -549,10 +524,8 @@ template device {
     // this carried semantics in DML 1.2; deprecated in 1.4
     param _confidentiality          = undefined;
 
-    independent method _model_init() { _rec_model_init(); }
     method _init() { _rec_init(); }
     method _post_init() { _rec_post_init(); }
-    independent method model_init() default {}
     method init() default {}
     method post_init() default {}
 
@@ -588,8 +561,6 @@ session bool _issuing_state_callbacks = false;
 session bool _has_state_callbacks = false;
 // Used by "X then Y" log level feature
 session ht_int_table_t _subsequent_log_ht;
-// Used by shared memoized methods
-session ht_int_table_t _shared_memo_ht;
 
 // Shared parameters for attributes, registers and connects, which all produce
 // attributes. Methods get_attribute and set_attribute are abstract.

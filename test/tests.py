@@ -648,7 +648,7 @@ class CTestCase(DMLFileTestCase):
                 self.cfilename + ".o",
                 module_id_base + ".o",
                 "-L"+join(host_path(), "bin", "py3")] + ldflags + \
-                ["-lsimics-common", "-lvtutils", "-lpthread"]
+                ["-lsimics-common", "-lvtutils"]
         args.append("-Wl,--no-undefined")
 
         status = subprocess.call(args,
@@ -662,7 +662,7 @@ class CTestCase(DMLFileTestCase):
         self.pr("Signing module")
         args = [join(host_path(), "bin", "py3", "simics-common"), "-core",
                 "-sign-module", os.path.abspath(modfile)]
-        return subprocess.call(args, 
+        return subprocess.call(args,
                                stdout = open(self.ld_stdout, "a"),
                                stderr = open(self.ld_stderr, "a"),
                                env = env)

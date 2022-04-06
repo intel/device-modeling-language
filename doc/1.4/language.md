@@ -1638,16 +1638,8 @@ and inline methods remain mainly for compatibility reasons.
 In DML 1.4, methods can be `exported` using the
 [`export` declaration](#export-declarations).
 
-### Method Qualifiers
-There are a number of qualifiers that can be applied to method declarations.
-These are specified through a space delimited list immediately before the
-`method` keyword in a declaration, and any method declaration overriding another
-must share the same qualifiers as the overridden method declaration. Method
-qualifiers can be used for both regular methods as well as
-[`shared` methods](#shared-methods). They can't be used for
-[`inline` methods](#inline-methods).
+### Independent Methods
 
-#### Independent Methods
 Methods that do not rely on the particular instance of the device model may
 be declared `independent`:
 ```
@@ -1660,35 +1652,48 @@ statements or expressions that rely on the device instance in any way; for
 example, `session` or `saved` variables may not be referenced, `after` and `log`
 statements may not be used, and non-`independent` may not be called.
 
-Within a template, `shared independent method`s may be declared. An example of
-this is the `model_init()` method of the
-[`model_init`](dml-builtins.html#model_init) template.
+Within a template, `shared` independent methods may be declared.
 
-#### Memoized Methods
+#### Independent Startup Methods
 
-Methods can be declared `memoized` as a means of memoization: after the
-first call of an memoized method, all subsequent calls for the simulation
-session return the results of the first call without executing the body of the
-method. Memoized methods are declared as follows:
-```
-memoized method m() -> (...) {...}
-```
-Memoized methods have the restriction that they may not take any input
-parameters. If a memoized method call throws, then subsequent calls will throw
-without executing the body.
+Independent methods may also be declared `startup`, which causes them to be
+called when the model is loaded into the simulation, *before* any device is
+created. In order for this to be possible, `independent startup methods` may not
+have any return values nor be declared `throw`s. In addition, independent
+startup methods may not be declared with an overridable definition due to
+technical limitations &mdash; this restriction can be worked around by having an
+independent startup method call an overridable independent method. Note that
+abstract `shared` independent startup methods are allowed.
 
-Results for a memoized method is cached per device instance, except for memoized
-methods that are also declared independent, in which case result caching is
-shared across all device instances. This mechanism can be used to compute
-device-independent data which is then shared across all device instances of the
-model.
+The order in which independent startup methods are implicitly called at model
+load is not defined, with the exception that independent startup methods not
+declared memoized are called before any independent startup methods that are.
 
-The results of `shared` memoized methods are cached per template instance,
-and are not shared across all objects instantiating the template.
+#### Independent Startup Memoized Methods
+Independent startup methods may also be declared `memoized`. Unlike regular
+`independent startup` methods, `independent startup memoized` methods may
+&mdash; indeed, are required to &mdash; have return values and/or be
+declared `throws`.
+
+After the first call of a memoized method, all subsequent calls for the
+simulation session return the results of the first call without executing the
+body of the method. If a memoized method call throws, then subsequent calls will
+throw without executing the body.
+
+The first call to an independent startup memoized method will typically be the
+one implicitly performed at model load, but it is may also occur beforehand
+(for example, if the method is called as part of another independent startup
+method).
+
+Result caching is shared across all instances of the device model. This
+mechanism can be used to compute device-independent data which is then shared
+across all instances of the device model.
+
+The results of `shared` memoized methods are cached per template instance, and
+are not shared across all objects instantiating the template.
 
 (Indirectly) recursive memoized method calls are not allowed; the result of
-such a call is undefined. Performing such a method call will result in a
-run-time critical error.
+such a call will result in a run-time critical error.
 
 ## Session variables
 
