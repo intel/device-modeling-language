@@ -29,6 +29,7 @@ template use_get_val is (get, set) {
 }
 
 bank b {
+    param byte_order = "big-endian";
     register r1 size 4 @ 0 is use_val;
     register r2 size 4 @ 4 {
         field f @ [31:0] is use_val;
@@ -38,3 +39,24 @@ bank b {
         field f @ [31:0] is use_get_val;
     }
 }
+
+template field_order is bank {
+    register r size 4 @ 0 {
+        saved uint64 write_order;
+        saved uint64 read_order;
+        field a[i < 4] @ [((i + 1) % 4) * 8 + 7 : ((i + 1) % 4) * 8]
+            is (read, write) {
+            method write(uint64 val) {
+                write_order <<= 8;
+                write_order[7:0] = i;
+            }
+            method read() -> (uint64) {
+	    	read_order <<= 8;
+		read_order[7:0] = i;
+		return 0;
+            }
+        }
+    }
+}
+bank le is field_order { param byte_order = "little-endian"; }
+bank be is field_order { param byte_order = "big-endian"; }

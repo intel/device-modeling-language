@@ -3052,7 +3052,7 @@ significance only if the corresponding byte in `enabled_bytes` is
 Register objects provide a default implementation of
 `read_register`. The implementation invokes the `read_field` method of
 all sub-fields at least partially covered by `enabled_bytes`, in order
-from most to least significant bit. Bits not covered by fields are
+from least to most significant bit. Bits not covered by fields are
 retrieved by calling the `read_unmapped_bits`, with
 `unmapped_enabled_bits` set as the `enabled_bytes` not covered by
 fields. If a register implements no fields, then the
@@ -3087,9 +3087,8 @@ The default behaviour depends on whether the register has fields:
 * If the register has fields, then the default behavior is to
   invoke the `write_fields` method of all sub-fields covered at
   least partially by `enabled_bytes`, in order from
-  most to least significant bit. Then `write_unmapped_bits`
+  least to most significant bit. Then `write_unmapped_bits`
   is called with the enabled bits that were not covered by fields.
-
 
   If a register inherits the `write` or
   `write_field` template, then that template takes precedence
