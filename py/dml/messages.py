@@ -530,12 +530,6 @@ class EAVAR(DMLError):
     """
     fmt = "cannot use variable index in a constant list"
 
-class ECLST(DMLError):
-    """
-    Lists may only contain constants.
-    """
-    fmt = "non-constant element in list"
-
 class ENLST(DMLError):
     """
     A list was expected.
