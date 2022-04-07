@@ -1301,16 +1301,8 @@ def expr_slice(tree, location, scope):
 @expression_dispatcher
 def expr_list(tree, location, scope):
     [elts] = tree.args
-    values = []
-    for elt in elts:
-        e = codegen_expression_maybe_nonvalue(elt, location, scope)
-        if e.constant or isinstance(e, (NodeRef, AbstractList, NodeArrayRef,
-                                        SessionVariableRef)):
-            values.append(e)
-        elif isinstance(e, NonValue):
-            raise e.exc()
-        else:
-            raise ECLST(e)
+    values = [codegen_expression_maybe_nonvalue(elt, location, scope)
+              for elt in elts]
     return mkList(tree.site, values)
 
 @expression_dispatcher
