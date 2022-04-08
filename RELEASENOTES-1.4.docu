@@ -315,11 +315,11 @@
       Simics object names when the `init_as_subobj` template is
       instantiated on a `connect` object inside a `bank` or `port`
       object.</add-note></build-id>
-  <build-id value="next"><add-note> Multiple variables may now be declared
+  <build-id value="6150"><add-note> Multiple variables may now be declared
       simultaneously using tuple syntax (parentheses), and tuple syntax can now
       be used for multiple simultaneous assignment or initialization
       <bug number="SIMICS-7027"/>.</add-note></build-id>
-  <build-id value="next"><add-note> Calls to throwing methods or methods with
+  <build-id value="6150"><add-note> Calls to throwing methods or methods with
       multiple return values may now be used as the argument to a return
       statement. Compound initializer syntax can now be used to return
       values of <tt>struct</tt>-like types, e.g.:
