@@ -354,14 +354,6 @@ def main(argv):
     optpar.add_option(
         '-u', "--udi", dest = 'udi_enabled', action = 'store_true',
         help = 'generate static unrolled device info')
-    # <dt>-g</dt>
-    # <dd>Specify a template that is of interest to the unrolled device info.
-    # Implies --udi.</dd>
-    optpar.add_option(
-        "--udi-template", dest = 'udi_extra_templates', action = 'append',
-        metavar = 'TEMPLATE',
-        default = [],
-        help = 'specify tracked templates for unrolled device info')
 
     # <dt>--warn=<i>tag</i></dt>
     # <dd>Enable selected warnings. The tags can be found using
@@ -658,23 +650,19 @@ def main(argv):
             dml.info_backend.generate(dev, outputbase + '.xml')
             logtime("info")
 
-
-        if output_c or options.output_udi:
+        if output_c:
             dml.c_backend.generate(dev, headers, footers, outputbase,
                                    [inputfilename] + list(imported.keys()),
                                    options.full_module)
             logtime("c")
             structure.check_unused_and_warn(dev)
-
-        if output_c:
             if dml.globals.debuggable:
                 dml.g_backend.generate(expr_util.param_str(dev, 'classname'),
                                        dev, dml_version, outputbase + '.g')
                 logtime("g")
 
-        if options.udi_enabled or options.udi_extra_templates:
+        if options.udi_enabled:
             dml.udi_backend.generate(expr_util.param_str(dev, 'classname'),
-                                     options.udi_extra_templates,
                                      dev, dml_version, outputbase + '.udi')
             logtime("udi")
 
