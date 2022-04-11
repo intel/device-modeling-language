@@ -1154,7 +1154,8 @@ named parameter:
 
   Examples of expressions that may *not* be used include method calls and
   references to `session`/`saved` variables.
-* The parameter definition must not contain calls to independent methods.
+* The parameter definition must not contain calls to
+  [independent methods](#independent-methods).
 
 Typed parameters are most often used to allow a shared method defined within
 the template to access parameters of the template. For example:

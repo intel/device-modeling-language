@@ -196,7 +196,7 @@ class ExpressionSymbol(symtab.Symbol):
         expr.incref()
         return expr
 
-# HACK should not exist
+# HACK this exists to make a hack in traits.Trait.scope possible
 class InvalidExpressionSymbol(symtab.Symbol):
     """A symbol that corresponds to an invalid expression"""
     def __init__(self, name, mkError, site):

@@ -245,7 +245,7 @@ class ReturnExit(ExitHandler):
         assert retvals is not None, 'dml 1.2/1.4 mixup'
         return codegen_return(site, self.outp, self.throws, retvals)
 
-def memoized_return_failure_leave(site, mkRef, independent, failed):
+def memoized_return_failure_leave(site, mkRef, failed):
     ran = mkRef('ran', TInt(8, True))
     threw = mkRef('threw', TBool())
     stmts = [mkCopyData(site, mkIntegerLiteral(site, 1), ran),
@@ -257,29 +257,25 @@ class MemoizedReturnFailure(Failure):
     '''Generate boolean return statements to signal success. False
     means success.'''
 
-    def __init__(self, site, independent, mkRef):
+    def __init__(self, site, mkRef):
         self.site = site
-        self.independent = independent
         self.mkRef = mkRef
 
     def fail(self, site):
         return mkCompound(
             site,
-            memoized_return_failure_leave(site, self.mkRef, self.independent,
-                                          True))
+            memoized_return_failure_leave(site, self.mkRef, True))
     def nofail(self):
         '''Return code that is used to leave the method successfully'''
         return mkCompound(
             self.site,
-            memoized_return_failure_leave(self.site, self.mkRef,
-                                          self.independent, False))
+            memoized_return_failure_leave(self.site, self.mkRef, False))
 
 class MemoizedReturnExit(ExitHandler):
-    def __init__(self, site, outp, throws, independent, mkRef):
+    def __init__(self, site, outp, throws, mkRef):
         self.site = site
         self.outp = outp
         self.throws = throws
-        self.independent = independent
         self.mkRef = mkRef
 
     def codegen_exit(self, site, retvals):
@@ -331,10 +327,9 @@ class IndependentMemoized(Memoization):
             self.func.throws, self.mkRef)
     def exit_handler(self):
         return MemoizedReturnExit(self.method.site, self.func.outp,
-                                  self.func.throws, True, self.mkRef)
+                                  self.func.throws, self.mkRef)
     def fail_handler(self):
-        return (MemoizedReturnFailure(self.method.rbrace_site, True,
-                                      self.mkRef)
+        return (MemoizedReturnFailure(self.method.rbrace_site, self.mkRef)
                 if self.func.throws else NoFailure(self.method.site))
 
 class SharedIndependentMemoized(Memoization):
@@ -352,10 +347,9 @@ class SharedIndependentMemoized(Memoization):
             self.method.throws, self.mkRef)
     def exit_handler(self):
         return MemoizedReturnExit(self.method.site, self.method.outp,
-                                  self.method.throws, True, self.mkRef)
+                                  self.method.throws, self.mkRef)
     def fail_handler(self):
-        return (MemoizedReturnFailure(self.method.rbrace_site, True,
-                                      self.mkRef)
+        return (MemoizedReturnFailure(self.method.rbrace_site, self.mkRef)
                 if self.method.throws else NoFailure(self.method.site))
 
 def memoization_common_prelude(name, site, outp, throws, mkRef):

@@ -653,7 +653,9 @@ class Trait(SubTrait):
         s = Symtab(global_scope)
         selfref = mkLit(self.site, '_' + cident(self.name), self.type())
         for name in self.members():
-            # HACK this should REALLY not be necessary
+            # HACK the dumbness of this speaks for itself.
+            # One way to address this hack is to add a symbol class with a
+            # deferred-calculated expression.
             try:
                 s.add(ExpressionSymbol(
                     name, mkSubRef(self.site, selfref, name, '.'), self.site))
