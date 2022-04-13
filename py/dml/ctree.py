@@ -3998,13 +3998,38 @@ def mkCast(site, expr, new_type):
         old_type = safe_realtype(expr.ctype())
         if real.cmp(old_type) == 0:
             return expr
-        else:
+        elif old_type.is_arith or isinstance(old_type, TPtr):
             return mkApply(
                 expr.site,
                 mkLit(expr.site, *real.get_store_fun()),
                 (mkCast(expr.site, expr, TInt(64, False)),))
+        else:
+            raise ECAST(site, expr, new_type)
+    if ((real.is_arith or isinstance(real, TBool))
+         and (old_type.is_arith or isinstance(old_type, TBool))):
+        assert (not (real.is_int and real.is_endian)
+                and not (old_type.is_int and old_type.is_endian))
+        return Cast(site, expr, new_type)
+    if ((isinstance(real, TPtr) or real.is_int or isinstance(real, TBool))
+        and (isinstance(old_type, (TPtr, TArray, TFunction))
+             or old_type.is_int or isinstance(old_type, TBool))):
+        assert (not (real.is_int and real.is_endian)
+                and not (old_type.is_int and old_type.is_endian))
+        return Cast(site, expr, new_type)
 
-    return Cast(site, expr, new_type)
+    # Allow unsafe casts from method references to function pointers in DML 1.2
+    # for compatibility reasons
+    if (dml.globals.dml_version == (1, 2) and isinstance(expr, NodeRef)
+        and expr.get_ref()[0].objtype == 'method'
+        and isinstance(real, TPtr) and isinstance(real.base, TFunction)):
+        return Cast(site, expr, new_type)
+    # Allow casts from dev to pointer types in DML 1.2 for compatibility
+    # reasons
+    if (dml.globals.dml_version == (1, 2) and isinstance(expr, NodeRef)
+        and expr.get_ref()[0].objtype == 'device' and isinstance(real, TPtr)):
+        return Cast(site, expr, new_type)
+
+    raise ECAST(site, expr, new_type)
 
 class RValue(Expression):
     '''Wraps an lvalue to prohibit write. Useful when a composite
