@@ -3959,7 +3959,7 @@ def mkCast(site, expr, new_type):
                 mkLit(expr.site, *real.get_store_fun()),
                 (mkCast(expr.site, expr, TInt(64, False)),))
 
-    return Cast(site, expr, new_type)
+    raise ECAST(site, expr, new_type)
 
 class RValue(Expression):
     '''Wraps an lvalue to prohibit write. Useful when a composite
