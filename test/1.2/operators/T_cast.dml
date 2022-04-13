@@ -12,7 +12,9 @@ method test() -> (bool ok) {
     local int b = cast(127, int8);
     local int c = cast(128, int8);
     local int d = cast(-1, uint8);
-    log info: "%d %d %d %d", a, b, c, d;
+    local bool e = cast(d, bool);
+    local void *f = cast($dev, void *);
+    log info: "%d %d %d %d %s %p", a, b, c, d, e ? "true" : "false", f;
 
-    ok = a == -24 && b == 127 && c == -128 && d == 255;
+    ok = a == -24 && b == 127 && c == -128 && d == 255 && e && f == $dev.obj;
 }

@@ -45,6 +45,7 @@ method init() {
     cast(l, uint32);
     // no error!
     cast(a, uint32);
+    /// ERROR ECAST
     cast(a, double);
     /// ERROR ECAST
     cast(i, a_t);
