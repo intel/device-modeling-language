@@ -1300,7 +1300,7 @@ template map_target is (connect, _qname) {
          Reads `size` bytes into `bytes`, starting at `addr` in the connected
          object. Throws an exception if the read fails.
     */
-    shared method read_bytes(uint64 addr, uint64 size, uint8 *bytes) throws {
+    shared method read_bytes(uint64 addr, uint64 size, uint8 *bytes) throws default {
         local atom_t atoms[4] = {
             ATOM_data(bytes),
             ATOM_size(size),
@@ -1348,7 +1348,7 @@ template map_target is (connect, _qname) {
          object. Throws an exception if the write fails.
     */
     shared method write_bytes(uint64 addr, uint64 size,
-                              const uint8 *bytes) throws {
+                              const uint8 *bytes) throws default {
         local atom_t atoms[5] = {
             ATOM_flags(Sim_Transaction_Write),
             ATOM_data(cast(bytes, uint8 *)),  // we trust Simics not to touch it

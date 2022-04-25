@@ -328,4 +328,7 @@
           return { .len = siz, .data = new uint8[siz] };
       }
       </pre></add-note></build-id>
+  <build-id value="next"><add-note>The <tt>read_bytes</tt>and <tt>write_bytes</tt>
+      methods in the <tt>map_target</tt> template can now be
+      overridden.</add-note></build-id>
 </rn>
