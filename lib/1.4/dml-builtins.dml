@@ -1439,39 +1439,36 @@ template bank is (object, shown_desc, _qname) {
     // this carried semantics in DML 1.2; deprecated in 1.4
     param _confidentiality          = undefined;
 
-    session register *_reginfo_cache;
-    session uint64 _reginfo_cache_size = 0;
-
-    shared method _build_register_cache() {
-        if (_reginfo_cache == NULL) {
-            foreach r in (this._each_register) {
-                if (r.offset != unmapped_offset) {
-                    _reginfo_cache_size++;
-                }
-            }
-            _reginfo_cache = new register[_reginfo_cache_size];
-            local uint64 num = 0;
-            foreach r in (this._each_register) {
-                if (r.offset != unmapped_offset) {
-                    _reginfo_cache[num] = r;
-                    num++;
-                }
+    shared independent startup memoized method _reginfo_table()
+        -> (const register *, uint64) /* table, table_size */ {
+        local uint64 size = 0;
+        foreach r in (this._each_register) {
+            if (r.offset != unmapped_offset) {
+                size++;
             }
         }
+        local register *table = new register[size];
+        local uint64 num = 0;
+        foreach r in (this._each_register) {
+            if (r.offset != unmapped_offset) {
+                table[num] = r;
+                num++;
+            }
+        }
+        return (table, size);
     }
 
-    // would be great if we could index a sequence
     shared method _get_register(uint32 reg) -> (register) throws default {
-        _build_register_cache();
-        if (reg >= _reginfo_cache_size) {
+        local (const register *table, uint64 table_size) = _reginfo_table();
+        if (reg >= table_size) {
             throw;
         }
-        return _reginfo_cache[reg];
+        return table[reg];
     }
 
     shared method _num_registers() -> (uint32) {
-        _build_register_cache();
-        return _reginfo_cache_size;
+        local (const register *_, uint64 table_size) = _reginfo_table();
+        return table_size;
     }
 
     // Given two address intervals, return the location of their intersection,
@@ -1493,10 +1490,8 @@ template bank is (object, shown_desc, _qname) {
             return (size - end, size - start);
     }
 
-    session register *_sorted_regs;
-    session int _num_mapped_regs;
-
-    shared method _sort_regs() -> (register *, int) {
+    shared independent startup memoized method _sorted_regs()
+        -> (const register *, int) /* regs, num_mapped_regs */ {
         local int num = 0;
         foreach r in (this._each_register) {
             if (r.offset != unmapped_offset)
@@ -1557,21 +1552,19 @@ template bank is (object, shown_desc, _qname) {
     // register list is ordered by offset.
     shared method _dispatch(uint64 offset, uint64 size, register *hits, bool inquiry)
         -> (int, uint64) /* nhits, unmapped_bytes */ {
-        if (_num_mapped_regs == 0) {
-            (_sorted_regs, _num_mapped_regs) = _sort_regs();
-        }
+        local (const register *regs, int num_mapped_regs) = _sorted_regs();
         local uint64 unmapped_bytes = cast(-1, uint64)[size * 8 - 1 : 0];
-        if (_num_mapped_regs == 0) {
+        if (num_mapped_regs == 0) {
             return (0, unmapped_bytes);
         }
         // find the register with largest offset such that reg.offset <= offset
         // Binary search, maintaining the invariant first <= answer <= last
         local int first = 0;
-        local int last = _num_mapped_regs - 1;
+        local int last = num_mapped_regs - 1;
         while (first < last) {
             // we pick a middle point such that last >= middle >= first + 1 ...
             local int middle = (first + last + 1) / 2;
-            if (_sorted_regs[middle].offset > offset) {
+            if (regs[middle].offset > offset) {
                 // ... which guarantees last >= first here
                 last = middle - 1;
             } else {
@@ -1582,9 +1575,9 @@ template bank is (object, shown_desc, _qname) {
         assert first == last;
         assert last >= 0;
         for (local int i = last;
-             i < _num_mapped_regs && _sorted_regs[i].offset < offset + size;
+             i < num_mapped_regs && regs[i].offset < offset + size;
              ++i) {
-            local register r = _sorted_regs[i];
+            local register r = regs[i];
             if (offset < r.offset + r._size()
                 && ((this.partial || inquiry)
                     || (offset <= r.offset
