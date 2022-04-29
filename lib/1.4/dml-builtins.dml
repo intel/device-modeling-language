@@ -1291,7 +1291,7 @@ unconditionally throw an exception.
 </dt><dd>
 
 A read operation at the given offset. The access is decomposed
-in the same way as in `write_register`. If there are
+in the same way as in `write`. If there are
 unmapped portions of the access, `unmapped_read` is
 invoked, possibly aborting the operation. The return value is
 composed by the results from calling `read_register` in
@@ -1300,8 +1300,7 @@ of `unmapped_read` if the access is not fully
 mapped.
 </dd><dt>
 
-<small>unmapped\_read(uint64 offset, uint64 value,
-uint64 bits, void \*aux) throws</small>
+<small>unmapped\_read(uint64 offset, uint64 bits, void \*aux) throws</small>
 </dt><dd>
 
 Like `unmapped_write` but for reads. The default
