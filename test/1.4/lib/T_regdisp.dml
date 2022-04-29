@@ -75,18 +75,16 @@ template testbank {
     register x2 size 1 @ 0x0506 is (testreg);
 }
 
-// unit test of the _sort_regs() method
+// unit test of the _sorted_regs() method
 bank sort_test {
     register r[i < 129] size 1 @ (i * 37) % 129;
     is init;
     method init() {
-        local int n;
-        local register *r;
-        (r, n) = _sort_regs();
+        local (const register *r, int n) = _sorted_regs();
+        assert n == 129;
         for (local int i = 0; i < 129; i++) {
             assert r[i].offset == i;
         }
-        delete r;
     }
 }
 bank par_over is (testbank) {
