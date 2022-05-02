@@ -2127,10 +2127,11 @@ template bank is (object, shown_desc, _qname) {
                 r._num_fields());
 
             local uint32 idx = 0;
+            local int regname_len = strlen(r._qname()) + 1;
             foreach f in (r.fields) {
                 local attr_value_t elem = SIM_make_attr_list(
                     4,
-                    SIM_make_attr_string(f.name),
+                    SIM_make_attr_string(f._qname() + regname_len),
                     // TODO: NULL should give a nil value
                     SIM_make_attr_string(f.shown_desc == NULL ? ""
                                          : f.shown_desc),
@@ -2885,7 +2886,8 @@ also used by the default implementations of hard reset, soft reset and
 power-on reset. Defaults to 0.
 </dd></dl>
 */
-template field is (object, _bitsize, _lsb, init_val, shown_desc, _get, _set) {
+template field is (object, init_val, shown_desc,
+                   _bitsize, _lsb, _get, _set, _qname) {
     param reg : register;
 
     shared method get_val() -> (uint64) {

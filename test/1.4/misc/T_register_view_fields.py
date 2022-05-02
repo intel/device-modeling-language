@@ -8,11 +8,11 @@ def test(obj):
     b = SIM_get_port_interface(obj, 'register_view', 'b')
 
     expect_equal(b.register_info(0)[4], [['all', '', 0, 31]])
-    expect_equal(b.register_info(1)[4], [['g', '7', 7, 7],
-                                          ['d[1]', '4', 5, 5],
-                                          ['d[0]', '4', 4, 4],
-                                          ['c', '3', 3, 3],
-                                          ['ab', '12', 0, 2]])
+    expect_equal(b.register_info(1)[4], [['ab', '12', 0, 2],
+                                         ['c', '3', 3, 3],
+                                         ['d[0]', '4', 4, 4],
+                                         ['d[1]', '4', 5, 5],
+                                         ['g', '7', 7, 7]])
     expect_equal(b.register_info(2)[4], [])
 
 test(obj)
