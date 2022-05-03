@@ -675,6 +675,10 @@ class EIDENT(DMLError):
     """
     fmt = "unknown identifier: '%s'"
 
+    def __init__(self, site, name):
+        DMLError.__init__(self, site, name)
+        self.identifier = name
+
 class ENAMEID(DMLError):
     """
     The name parameter does not follow identifier syntax.
@@ -1510,6 +1514,19 @@ class EVLACONST(DMLError):
     """
     fmt = ("variable length array declared with (partially) const-qualified "
            + "type")
+
+class EIDENTSIZEOF(DMLError):
+    """
+    A variant of the EIDENT message exclusive to usages of `sizeof`: it is
+    emitted when the operand of `sizeof` makes use of an identifier which is
+    not present in value scope, but *is* present in type scope.
+    This likely means `sizeof` was used when `sizeoftype` was intended.
+    """
+    fmt = ("unknown value identifier in the operand of 'sizeof': '%s'\n"
+           + "'%s' is a valid type identifier. Did you mean to use "
+           + "'sizeoftype'?")
+    def __init__(self, site, identifier):
+        DMLError.__init__(self, site, identifier, identifier)
 
 #
 # WARNINGS (keep these as few as possible)

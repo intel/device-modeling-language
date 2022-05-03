@@ -543,7 +543,15 @@ def expr_unop(tree, location, scope):
             report(WSIZEOFTYPE(tree.site))
             return codegen_sizeof(
                 tree.site, mkLit(tree.site, cident(var), None))
-    rh = codegen_expression_maybe_nonvalue(rh_ast, location, scope)
+    try:
+        rh = codegen_expression_maybe_nonvalue(rh_ast, location, scope)
+    except EIDENT as e:
+        if op == 'sizeof':
+            is_primitive_type = not isinstance(parse_type(e.identifier),
+                                               TNamed)
+            if is_primitive_type or e.identifier in typedefs:
+                raise EIDENTSIZEOF(e.site, e.identifier)
+        raise
 
     if isinstance(rh, NonValue):
         if op == 'defined':

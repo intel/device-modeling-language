@@ -1,0 +1,31 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+template t { }
+
+method init() {
+    /// ERROR EIDENT
+    !uint32;
+    /// ERROR EIDENTSIZEOF
+    sizeof uint32;
+    /// ERROR EIDENTSIZEOF
+    sizeof uint32[10];
+
+    /// ERROR EIDENT
+    !t;
+    /// ERROR EIDENTSIZEOF
+    sizeof t;
+    /// ERROR EIDENTSIZEOF
+    sizeof t[10];
+
+    /// ERROR EIDENT
+    !u;
+    /// ERROR EIDENT
+    sizeof u;
+    /// ERROR EIDENT
+    sizeof u[10];
+}
