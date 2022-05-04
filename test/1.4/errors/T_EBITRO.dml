@@ -1,0 +1,37 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+/// COMPILE-ONLY
+
+import "utility.dml";
+
+
+bank b {
+    param register_size = 4;
+    in each register { is unmapped; }
+
+    register r1 {
+        /// ERROR EBITRO
+        field f1 @ [3:0];
+        /// ERROR EBITRO
+        field f2 @ [3];
+    }
+    register r2 {
+        // no error
+        field f[i < 2] @ [2*i+1:2*i];
+    }
+    register r3 {
+        /// ERROR EBITRO
+        field f[i < 2] @ [i+1:i];
+    }
+    register r3 {
+        /// ERROR EBITRO
+        field f1[i < 2] @ [2*i+1:2*i];
+        /// ERROR EBITRO
+        field f2 @ [3];
+    }
+}

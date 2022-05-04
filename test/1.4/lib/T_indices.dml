@@ -15,7 +15,7 @@ import "testing.dml";
 bank b[i < 2][j < 2] {
     param register_size = 4;
     register r[k < 2][l < 2] is (unmapped) {
-        field f[m < 2][n < 2] @ [31:0];
+        field f[m < 2][n < 2] @ [m*2 + n];
     }
     group g[k < 2][l < 2] {
         register r is (unmapped);

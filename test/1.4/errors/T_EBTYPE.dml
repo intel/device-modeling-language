@@ -22,3 +22,10 @@ method init() {
     /// ERROR EBTYPE
     after NULL cycles: m();
 }
+
+bank b {
+    register r size 4 @ unmapped_offset {
+        /// ERROR EBTYPE
+        field f @ [4.3:0];
+    }
+}

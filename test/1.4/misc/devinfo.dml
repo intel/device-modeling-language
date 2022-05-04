@@ -16,8 +16,8 @@ bank b[j < 4][k < 2] "bank desc" {
     register r0 size 2 is (unmapped) "reg0 desc";
     register r1[i < 2] size 4 @ 18 + i * 4 {
         param documentation = "reg1 doc";
-        field f0 @ [7:3] is (read, write) "f0 desc";
-        field f1[j < 2] @ [2:1] is (read, write);
+        field f0 @ [9:5] is (read, write) "f0 desc";
+        field f1[j < 2] @ [2*j+2:2*j+1] is (read, write);
     }
     register ru[i < 3] size 4 @ i == 1 ? cast(-1, uint64) : 26 + i * 4;
     register rma[i < 3][j < 3]

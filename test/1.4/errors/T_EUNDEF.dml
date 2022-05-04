@@ -14,3 +14,11 @@ method init() {
     /// ERROR EUNDEF
     false && undefined;
 }
+
+bank b {
+    param mappable = false;
+    register r size 4 @ unmapped_offset is (read, write) {
+        /// ERROR EUNDEF
+        field f @ [undefined:undefined];
+    }
+}

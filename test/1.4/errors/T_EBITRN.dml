@@ -1,0 +1,15 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+import "utility.dml";
+
+bank b {
+    register r size 4 is unmapped {
+        /// ERROR EBITRN
+        field f @ [2:3];
+    }
+}

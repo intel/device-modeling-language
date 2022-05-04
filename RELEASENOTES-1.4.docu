@@ -344,4 +344,7 @@
       methods that that may also be exported using the <tt>export</tt>
       statement <bug number="SIMICS-14921"/>.
   </add-note></build-id>
+  <build-id value="next"><add-note> Overlapping field ranges within registers
+      are no longer allowed <bug number="SIMICS-19194"/>.
+  </add-note></build-id>
 </rn>

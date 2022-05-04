@@ -1361,8 +1361,8 @@ class DevInfoCompare(BaseTestCase):
 <device name="test" bitorder="le">
   <bank name="b" vsize="4 2" desc="bank desc" documentation="bank doc" byte_order="little-endian" function="3 4 5 6 7 8 9 10">
     <register name="r1" vsize="2" documentation="reg1 doc" offset="18 22 18 22 18 22 18 22 18 22 18 22 18 22 18 22" size="4">
-      <field name="f0" desc="f0 desc" msb="7" lsb="3" />
-      <field name="f1" msb="2" lsb="1" />
+      <field name="f0" desc="f0 desc" msb="9" lsb="5" />
+      <field name="f1" msb="4" lsb="1" />
     </register>
     <register name="rma" vsize="3 3" offset="38 42 46 50 -1 58 62 66 70 38 42 46 50 -1 58 62 66 70 38 42 46 50 -1 58 62 66 70 38 42 46 50 -1 58 62 66 70 38 42 46 50 -1 58 62 66 70 38 42 46 50 -1 58 62 66 70 38 42 46 50 -1 58 62 66 70 38 42 46 50 -1 58 62 66 70" size="4">
     </register>

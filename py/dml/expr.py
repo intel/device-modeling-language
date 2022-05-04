@@ -277,7 +277,7 @@ class StaticIndex(NonValue):
     @auto_init
     def __init__(self, site, var):
         pass
-    def str(self):
+    def __str__(self):
         return dollar(self.site) + self.var
     def exc(self):
         return EIDXVAR(self.site, dollar(self.site) + self.var)
