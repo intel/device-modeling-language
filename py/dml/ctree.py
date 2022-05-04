@@ -2513,7 +2513,7 @@ class MethodPresent(Expression):
     @auto_init
     def __init__(self, site, expr):
         assert isinstance(expr, InterfaceMethodRef)
-    def str(self):
+    def __str__(self):
         return '(%s != NULL)' % (self.expr,)
     def read(self):
         return '((%s)->%s != NULL)' % (

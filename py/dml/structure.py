@@ -1920,6 +1920,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                 obj.writable = False
             if not param_bool(obj, 'readable'):
                 obj.readable = False
+            check_register_fields(obj)
         if not obj.writable or not obj.readable:
             confparam = param_str(obj, 'configuration')
             if not obj.writable and not obj.readable and confparam != "none":
@@ -2198,6 +2199,47 @@ def sort_registers(bank):
         for (a, b) in zip(all_offsets, all_offsets[1:]):
             if a[1] > b[0]:
                 report(EREGOL(a[2], b[2], a[3], b[3]))
+
+def check_register_fields(reg):
+    assert dml.globals.dml_version != (1, 2)
+    bitsize = param_int(reg, 'bitsize')
+    def explode_ranges(field):
+        param = field.get_component('lsb')
+        assert param.objtype == 'parameter'
+        ranges = []
+        for field_indices in itertools.product(
+                *([mkIntegerLiteral(field.site, i) for i in range(dimsize)]
+                  for dimsize in field.dimsizes[reg.dimensions:])):
+            reg_indices = tuple(StaticIndex(field.site, var)
+                                for var in reg.idxvars())
+            indices = reg_indices + field_indices
+            lsb_expr = param_expr(field, 'lsb', indices)
+            msb_expr = param_expr(field, 'msb', indices)
+            for expr in (lsb_expr, msb_expr):
+                if isinstance(expr, NonValue):
+                    raise expr.exc()
+                if expr.constant and not isinstance(expr.value, int):
+                    raise EBTYPE(expr.site, expr.ctype(), "integer")
+
+            if lsb_expr.constant and msb_expr.constant:
+                lsb = lsb_expr.value
+                msb = msb_expr.value
+                if lsb < 0 or bitsize <= msb:
+                    raise EBITRR(field)
+                if msb < lsb:
+                    raise EBITRN(field, msb, lsb)
+                ranges.append((lsb, msb, indices))
+        return ranges
+
+    # list of quadruples (lsb, msb, DMLObject, indices)
+    all_ranges = []
+    for field in reg.get_recursive_components('field'):
+        all_ranges.extend((lsb, msb, field, indices)
+                          for (lsb, msb, indices) in explode_ranges(field))
+    all_ranges.sort(key=lambda t: t[0])
+    for (a, b) in zip(all_ranges, all_ranges[1:]):
+        if a[1] >= b[0]:
+            report(EBITRO(a[2], a[3], b[2],  b[3]))
 
 class ParentParamExpr(objects.ParamExpr):
     def __init__(self, obj):
