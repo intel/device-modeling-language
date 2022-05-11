@@ -347,4 +347,8 @@
   <build-id value="next"><add-note> Overlapping field ranges within registers
       are no longer allowed <bug number="SIMICS-19194"/>.
   </add-note></build-id>
+  <build-id value="next"><add-note> Fixed regression introduced in Simics
+      6.0.133, where methods or variable named <tt>independent</tt>,
+      <tt>startup</tt> or <tt>memoized</tt> would give a parse
+      error.</add-note></build-id>
 </rn>
