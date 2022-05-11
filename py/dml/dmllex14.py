@@ -24,7 +24,8 @@ for kw in ['param', 'saved', 'async', 'await', 'with', 'shared', 'stringify',
     keywords_dml14[kw] = kw.upper()
     tokens += (kw.upper(),)
 
-reserved_idents = reserved_idents_common + ('PARAM', 'SAVED')
+reserved_idents = reserved_idents_common + (
+    'PARAM', 'SAVED', 'INDEPENDENT', 'STARTUP', 'MEMOIZED')
 
 def t_ID(t):
     r'[A-Za-z_][\w_]*'

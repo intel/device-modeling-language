@@ -26,6 +26,10 @@ independent startup memoized method m8(int i) -> (int) { return 1; }
 /// ERROR ESYNTAX
 independent startup memoized method m9() -> (int) default { return 1; }
 
+// no error
+method independent() {}
+method startup() {}
+method memoized() {}
 
 template t {
     // no error
