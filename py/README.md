@@ -5,11 +5,8 @@
 
 # A short hacking guide to dmlc
 
-The DML compiler (`dmlc`) is a prototype that has expanded far beyond
-its comfort zone. It works (kind of), but it suffers from lack of
-clear design and lots of historical baggage. This text is an attempt to
-make it easier for you to find your way around the sources and
-understand what is going on inside the compiler.
+This text is an attempt to make it easier for you to find your way around the
+sources and understand what is going on inside the the DML compiler (`dmlc`).
 
 ## dml/dmlc.py
 
