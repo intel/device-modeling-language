@@ -1656,7 +1656,7 @@ parameter corresponding to the device instance, allowing them to be called
 in greater number of contexts. The body of independent methods may not contain
 statements or expressions that rely on the device instance in any way; for
 example, `session` or `saved` variables may not be referenced, `after` and `log`
-statements may not be used, and non-`independent` may not be called.
+statements may not be used, and non-`independent` methods may not be called.
 
 Within a template, `shared` independent methods may be declared.
 
@@ -1696,9 +1696,8 @@ body of the method. If a memoized method call throws, then subsequent calls will
 throw without executing the body.
 
 The first call to an independent startup memoized method will typically be the
-one implicitly performed at model load, but it is may also occur beforehand
-(for example, if the method is called as part of another independent startup
-method).
+one implicitly performed at model load, but it may also occur beforehand (for
+example, if the method is called as part of another independent startup method).
 
 Result caching is shared across all instances of the device model. This
 mechanism can be used to compute device-independent data which is then shared
@@ -1708,7 +1707,7 @@ The results of `shared` memoized methods are cached per template instance, and
 are not shared across all objects instantiating the template.
 
 (Indirectly) recursive memoized method calls are not allowed; the result of
-such a call will result in a run-time critical error.
+such a call is a run-time critical error.
 
 ## Session variables
 
