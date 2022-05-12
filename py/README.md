@@ -6,7 +6,7 @@
 # A short hacking guide to dmlc
 
 This text is an attempt to make it easier for you to find your way around the
-sources and understand what is going on inside the the DML compiler (`dmlc`).
+sources and understand what is going on inside the DML compiler (`dmlc`).
 
 ## dml/dmlc.py
 
