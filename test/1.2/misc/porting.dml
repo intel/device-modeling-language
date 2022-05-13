@@ -141,6 +141,15 @@ port pp {
     }
 }
 
+// not converted (homogeneous)
+parameter list1 = [];
+parameter list2 = [1, 2, 3];
+parameter list3 = ["a", "b", "c"];
+// converted (heterogeneous)
+parameter list4 = [1, "a"];
+// converted (not proven to be homogeneous)
+parameter list5 = [0, $sixteen];
+
 connect c {
     method before_set() {
         log info: "before set conn";

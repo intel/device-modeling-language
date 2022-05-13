@@ -1260,6 +1260,7 @@ all_tests.append(PortingConvert(
         'PWUNUSED',
         'PNO_WUNUSED',
         'PRENAME_TEMPLATE',
+        'PHASHLBRACKET',
     ]]
     + [('dml-builtins.dml', None, 'PRETURNARGS'),
        ('porting-import.dml', None, 'PSHA1',),

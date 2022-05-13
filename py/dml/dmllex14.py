@@ -12,11 +12,12 @@ hashids = {'#' + kw: 'HASH' + kw.upper()
            ]}
 
 tokens = (common_tokens
-          + ('HASHCONDOP', 'HASHCOLON')
+          + ('HASHCONDOP', 'HASHCOLON', 'HASHLBRACKET')
           + tuple(hashids.values()))
 
 t_HASHCONDOP = r'\#\?'
 t_HASHCOLON = r'\#:'
+t_HASHLBRACKET = r'\#\['
 
 keywords_dml14 = dict(keywords_common)
 for kw in ['param', 'saved', 'async', 'await', 'with', 'shared', 'stringify',

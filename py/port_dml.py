@@ -959,6 +959,7 @@ tags = {
     'PWUNUSED': PWUNUSED,
     'PNO_WUNUSED': PNO_WUNUSED,
     'PRENAME_TEMPLATE': Replace,
+    'PHASHLBRACKET': replace_const('[', '#['),
 }
 
 def is_device_file(path):
