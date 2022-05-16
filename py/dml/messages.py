@@ -2204,3 +2204,9 @@ class PRENAME_TEMPLATE(PortingMessage):
     `unimpl`.
     """
     fmt = ""
+
+class PUNDEFOFFS(PortingMessage):
+    """`undefined` is no longer a valid offset for registers; `unmapped_offset`
+    should be used instead.
+    """
+    fmt = "Use 'unmapped_offset' instead of 'undefined'"

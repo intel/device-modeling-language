@@ -1260,6 +1260,7 @@ all_tests.append(PortingConvert(
         'PWUNUSED',
         'PNO_WUNUSED',
         'PRENAME_TEMPLATE',
+        'PUNDEFOFFS',
     ]]
     + [('dml-builtins.dml', None, 'PRETURNARGS'),
        ('porting-import.dml', None, 'PSHA1',),
@@ -1292,6 +1293,7 @@ all_tests.append(PortingConvert(
        ('utility.dml', None, 'PIFAND'),
        ('utility.dml', None, 'PANDOR'),
        ('utility.dml', None, 'PCHANGE_INARGS'),
+       ('utility.dml', None, 'PUNDEFOFFS'),
     ]))
 
 all_tests.append(PortingConvertFail(
