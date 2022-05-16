@@ -959,6 +959,7 @@ tags = {
     'PWUNUSED': PWUNUSED,
     'PNO_WUNUSED': PNO_WUNUSED,
     'PRENAME_TEMPLATE': Replace,
+    'PUNDEFOFFS': replace_const('undefined', 'unmapped_offset'),
 }
 
 def is_device_file(path):

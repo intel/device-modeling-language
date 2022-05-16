@@ -110,6 +110,10 @@ bank b {
               : $i == 27 ? 27
               : $i == 28 ? 28
               : $i == 29 ? 29 : 0);
+    register r9 size 1 @ undefined;
+    register r10 size 1 is unmapped;
+    register r11 size 1 is unmapped_copy;
+    register r12 size 1 is unmapped_copy;
     method soft_reset() {
         log info: "hard reset %d", $r8[2 + 3];
         default();
@@ -118,6 +122,10 @@ bank b {
         log info: "soft reset";
         default();
     }
+}
+
+template unmapped_copy {
+    parameter offset = undefined;
 }
 
 bank arri[16];

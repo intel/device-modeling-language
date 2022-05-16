@@ -123,6 +123,10 @@ bank b {
               : i == 27 ? 27
               : i == 28 ? 28
               : i == 29 ? 29 : 0);
+    register r9 size 1 @ unmapped_offset;
+    register r10 size 1 is unmapped;
+    register r11 size 1 is unmapped_copy;
+    register r12 size 1 is unmapped_copy;
     is soft_reset;
     method soft_reset() {
         log info: "hard reset %d", r8[2 + 3].val;
@@ -133,6 +137,10 @@ bank b {
         log info: "soft reset";
         default();
     }
+}
+
+template unmapped_copy {
+    param offset = unmapped_offset;
 }
 
 bank arri[i < 16];

@@ -6,6 +6,7 @@ import operator
 import itertools
 from functools import reduce
 import dml.globals
+from . import logging
 from .ctree import *
 from .logging import *
 from .messages import *
@@ -114,6 +115,14 @@ def explode_register(node):
     assert n.objtype == 'bank'
     assert len(dimsizes) == node.dimensions - n.dimensions
 
+    if logging.show_porting:
+        try:
+            indices = static_indices(node, param_expr_site(node, 'offset'))
+            offset = param_expr(node, 'offset', indices)
+            if offset.undefined:
+                report(PUNDEFOFFS(offset.site))
+        except EIDXVAR:
+            pass
     for indices in itertools.product(*(
             (mkIntegerLiteral(node.site, idx) for idx in range(dimsize))
             for dimsize in dimsizes)):
