@@ -742,7 +742,8 @@ floating-point-valued attribute, `val` has type
 `double`
 </dd></dl>
 
-In addition, three templates can be used to define a pseudo attribute:
+In addition, three templates can be used to define a pseudo attribute,
+and cannot be used with the above templates:
 
 <dl><dt>
 

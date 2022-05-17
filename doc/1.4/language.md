@@ -987,6 +987,12 @@ Templates are imported into an object declaration body using
 <pre>
 is <em>name</em>;
 </pre>
+for example:
+```
+field F {
+    is A;
+}
+```
 
 It is also possible to use templates when declaring an object, as in
 
@@ -994,15 +1000,30 @@ It is also possible to use templates when declaring an object, as in
 field F is (<em>name1</em>, <em>name2</em>);
 </pre>
 
-These can be used in any context where an object declaration may be
-written, and has the effect of expanding the body of the template at
-the point of the `is`. If two templates define methods or
-parameters with the same name, then the template instantiation
-hierarchy is used to deduce which method overrides the other: If one
-template *B* instantiates another template *A*, directly or indirectly,
-then methods from *B* override methods from *A*. Note, however, that
-overrides can only happen on methods and parameters that are
-declared `default`. Example:
+These can be used in any context where an object declaration may be written, and
+has the effect of expanding the body of the template at the point of the `is`.
+Using `is` together with object declarations is typically more idiomatic than
+the standalone `is` object statement; however, the latter is useful in order
+to instantiate templates in the top-level device object, and also for use in
+conjunction with [`in each` declarations](#in-each-declarations); for example:
+
+```
+register r {
+    in each field {
+        is A;
+    }
+
+    field F1 @ [7:6];
+    ...
+}
+```
+
+If two templates define methods or parameters with the same name, then the
+template instantiation hierarchy is used to deduce which method overrides the
+other: If one template *B* instantiates another template *A*, directly or
+indirectly, then methods from *B* override methods from *A*. Note, however, that
+overrides can only happen on methods and parameters that are declared `default`.
+Example:
 
 ```
 template A {
@@ -1435,6 +1456,19 @@ local uint32 v = bf;
 
 </dd></dl>
 
+### Serializable types
+_Serializable types_ are types that the DML compiler knows how to serialize and
+deserialize for the purposes of checkpointing. This is important for the use of
+[`saved` variables](#saved-variables) and the [`after`
+statement](#after-statements).
+
+All primitive non-pointer data types (integers, floating-point types, booleans,
+etc.) are considered serializable, as is any struct, layout, or array type
+consisting entirely of serializable types. Any pointer type is not considered
+serializable, nor is any [`extern`](#typedef-declarations) struct type; the
+latter is because it's impossible for the compiler to ensure it's aware of all
+members of the struct type.
+
 ## Methods
 <a id="methods-detailed"/>
 
@@ -1799,7 +1833,7 @@ arrays are not supported.
 In addition, the types of saved declaration variables are currently
 restricted to primitive data types, or structs or arrays containing
 only data types that could be saved. Such types are called
-*serializable*.
+[*serializable*](#serializable-types).
 
 <div class="note">
 
@@ -2821,30 +2855,115 @@ used in expression-statements.
 
 DML adds the following statements:
 
+### Assignment Statements
+<pre>
+<em>target1</em> [= <em>target2</em> = <em>...</em>] = <em>initializer</em>;
+(<em>target1</em>, <em>target2</em>, ...) = <em>initializer</em>;
+</pre>
+
+Assign values to targets according to an initializer. Unlike C, assignments are
+not expressions, and the right-hand side can be any initializer -- such as
+compound initializers (<tt>{<em>...</em>}</tt>) for struct-like types.
+
+The first form is chaining assignments. The initializer is executed once and
+the value it evaluates to is assigned to each target.
+
+The second form is multiple simultaneous assignment. The initializer describes
+multiple values -- one for each target. This can be done either through:
+* Providing an initializer for each target through tuple syntax, e.g.:
+```
+(a, i) = (false, 4);
+```
+* Performing a method call where each target is a return value recipient, e.g.:
+```
+method m() -> (bool, int) {
+    ...
+}
+```
+```
+(a, i) = m();
+```
+
+Targets are updated simultaneously, meaning it's possible to e.g. swap the
+contents of variables through the following:
+```
+(a, b) = (b, a)
+```
+
 ### Local Statements
 <pre>
 local <em>type</em> <em>identifier</em> [= <em>initializer</em>];
+local (<em>type1</em> <em>identifier1</em>, <em>type2</em> <em>identifier2</em>, <em>...</em>) [= <em>initializer</em>];
 </pre>
 
-Declares a local variable in the current scope.
+Declares one or multiple local variables in the current scope. The right-hand
+side is an initializer, meaning, for example, that compound initializers
+(<tt>{<em>...</em>}</tt>) can be used.
+
+The initializer must provide the exact number of values needed to initialize
+the variables, and they must be of compatible type. Multiple values can be
+provided either through:
+* Providing an initializer for each variable through tuple syntax, e.g.:
+```
+local (bool a, int i) = (false, 4);
+```
+* Performing a method call where each return value initializes a variable, e.g.:
+```
+method m() -> (bool, int) {
+    ...
+}
+```
+```
+local (bool a, int i) = m();
+```
 
 ### Session Statements
 <pre>
 session <em>type</em> <em>identifier</em> [= <em>initializer</em>];
+session (<em>type1</em> <em>identifier1</em>, <em>type2</em> <em>identifier2</em>, <em>...</em>) [= (<em>initializer1</em>, </em>initializer2</em>, <em>...</em>)];
 </pre>
 
-Declares a [session variable](#session-variables) in the current scope.
+Declares one or multiple [session variables](#session-variables) in the current
+scope.
 Note that initializers of such variables are evaluated *once* when
 initializing the device, and thus must be a compile-time constant.
 
 ### Saved Statements
 <pre>
 saved <em>type</em> <em>identifier</em> [= <em>initializer</em>];
+sabed (<em>type1</em> <em>identifier1</em>, <em>type2</em> <em>identifier2</em>, <em>...</em>) [= (<em>initializer1</em>, </em>initializer2</em>, <em>...</em>)];
 </pre>
 
-Declares a [saved variable](#saved-variables) in the current scope.
+Declares one or multiple [saved variables](#saved-variables) in the current
+scope.
 Note that initializers of such variables are evaluated *once* when
 initializing the device, and thus must be a compile-time constant.
+
+
+### Return Statements
+<pre>
+return [<em>initializer</em>];
+</pre>
+
+Returns from method with the value(s) specified by the argument.
+Unlike C, the argument is an *initializer*, meaning, for example, return
+values of struct-like type can be constructed using <tt>{<em>...</em>}</tt>.
+
+The initializer must provide the exact number of values corresponding as the
+return values of the method, and they must be of compatible type. Multiple
+values can be provided either through:
+* Providing an initializer for each return value through tuple syntax, e.g.:
+```
+method m() -> (bool, int) {
+    return (false, 4);
+}
+```
+* Performing a method call and propagating the return values:
+```
+method n() -> (bool, int) {
+    return m();
+}
+```
 
 ### Delete Statements
 
@@ -2886,7 +3005,7 @@ If an exception is not caught inside a method body, then the method
 must be declared as `throws`, and the exception is propagated
 over the method call boundary.
 
-### Method Call Statements
+### Method Calls
 
 <pre>
 (<em>d1</em>, ... <em>dM</em>) = <em>method</em>(<em>e1</em>, ... <em>eN</em>);
@@ -2905,7 +3024,7 @@ If the method has no return value, the call is simply expressed as:
 p(...);
 ```
 
-A method with exactly one return value can also be called in an
+A method with exactly one return value can also be called in any
 expression, unless it is an inline method, or a method that can throw
 exceptions. For example:
 
@@ -2915,12 +3034,18 @@ method m() -> (int) { ... }
 if (m() + i == 13) { ... }
 ```
 
-Method calls can be used to initialize multiple simultaneously declared
-variables, e.g.:
+A method call (even if it is throwing or has multiple return values) can be used
+as an initializer in any context that accepts non-constant initializers; i.e.,
+in [assignment statements](#assignment-statements) (as shown above), [local
+variable declarations](#local-statements), and [return
+statements](#return-statements). For example:
 ```
-// declare multiple variables, and
-// initialize them from one method call
+// declare multiple variables, and initialize them from one method call
 local (int i, uint8 j) = m(e1);
+
+// Propagate all return values from a method call as the return values of the
+// caller.
+return m(e1)
 ```
 
 ### After Statements
@@ -2951,7 +3076,7 @@ Each argument to the called method is evaluated at the time the
 
 To allow the posted event to be checkpointed, `after` statements
 may only be performed with methods that have no return values, and
-where each input parameter is of [*serializable type*](#saved-variables).
+where each input parameter is of [*serializable type*](#serializable-types).
 
 This means that `after` statements cannot be used with methods
 that e.g. have pointer parameters.
