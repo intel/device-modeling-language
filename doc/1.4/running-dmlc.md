@@ -17,8 +17,9 @@ The DML compiler and its libraries are available as part of the
 The `dmlc` compiler can be build locally. This requires an
 installation of the Simics 6 base package.
 
-In order to build the compiler, you can copy source directory `dmlc`
-into the `modules` subdirectory of your Simics project. The compiler
+In order to build the compiler, checkout [the DML repository
+](https://github.com/intel/device-modeling-language) into the
+into the `modules/dmlc` subdirectory of your Simics project. The compiler
 can be built using the `make dmlc` command. The build result ends up
 in <code><em>host</em>/bin/dml</code> (where *`host`* is `linux64` or
 `win64`), and consists of three parts:

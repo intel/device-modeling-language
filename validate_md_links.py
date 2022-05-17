@@ -64,6 +64,8 @@ def validate_link(link, path, dirs, md_files):
         (f, anchor) = (link, '')
     elif link.count('#') == 1:
         (f, anchor) = link.split('#')
+    elif link.startswith('https://'):
+        return
     else:
         raise Error(f"malformed link, expected '#': {link}")
     if f:

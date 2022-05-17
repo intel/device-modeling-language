@@ -87,6 +87,8 @@ version = pkgs['Simics-Base-linux64']['version']
 with tarfile.open(outfile, "w:gz") as tgz:
     for (path, body) in bodies:
         for match in reversed(list(link_re.finditer(body))):
+            if match[1].startswith('https://'):
+                continue
             start = match.start(1)
             end = match.end(1)
             if end > start:
