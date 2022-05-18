@@ -150,7 +150,7 @@
       <bug number="SIMICS-19009"/>. The new object type `subobject` is not
       directly accessible in DML 1.2, but it is permitted to import DML 1.4
       code that declares `subobject` objects.</add-note></build-id>
-  <build-id value="next"><add-note> Add porting rule for uses of
+  <build-id value="6158"><add-note> Add porting rule for uses of
       <tt>undefined</tt> as register offsets; replaces such uses with
       <tt>unmapped_offset</tt> <bug number="SIMINT-1486"/>.</add-note>
   </build-id>
