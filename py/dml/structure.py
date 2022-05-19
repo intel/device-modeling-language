@@ -1768,15 +1768,16 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             # top-level parameters defined in 1.4 files can be accessed
             # without $. This allows 'constant' declarations in 1.2 files
             # to be converted compatibly to 'param' in unified 1.2+1.4 files.
-            for p in params:
-                if (p.site.dml_version() == (1, 4)
-                    and global_scope.lookup(p.name) is None):
-                    try:
-                        global_scope.add(
-                            ExpressionSymbol(p.name, p.get_expr(()), p.site))
-                    except DMLError:
-                        # handled later
-                        pass
+            with crep.DeviceInstanceContext():
+                for p in params:
+                    if (p.site.dml_version() == (1, 4)
+                        and global_scope.lookup(p.name) is None):
+                        try:
+                            global_scope.add(
+                                ExpressionSymbol(p.name, p.get_expr(()), p.site))
+                        except DMLError:
+                            # handled later
+                            pass
 
         # Evaluate all parameters once, to early smoke out non-existing
         # identifiers. TODO: perhaps this should not be done?
