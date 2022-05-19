@@ -164,4 +164,5 @@ method test() -> (bool ok) {
     call $len_test();
     /// GREP .*Once logging
     call $log_once();
+    ok = ok && s_param == 4;
 }

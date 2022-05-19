@@ -480,3 +480,8 @@ method test_bank_obj_get() {
 method log_once() {
     log info, 1 then 4: "Once logging";
 }
+
+session int s = 4;
+
+// References device instance
+param s_param = s;
