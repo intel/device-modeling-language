@@ -154,7 +154,7 @@
       <tt>undefined</tt> as register offsets; replaces such uses with
       <tt>unmapped_offset</tt> <bug number="SIMINT-1486"/>.</add-note>
   </build-id>
-  <build-id value="next"><add-note> Fixed issue where certain parameters defined
+  <build-id value="6160"><add-note> Fixed issue where certain parameters defined
       in DML 1.4 modules couldn't be referenced within DML 1.2 modules without
       the use of <tt>$</tt>.</add-note></build-id>
 </rn>
