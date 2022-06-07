@@ -9,6 +9,6 @@ device test;
 /// WARNING WEXPERIMENTAL T_saved_failure.dml
 
 group g[i < 2] {
-    saved _identity_t saved_ids[2] =
-        { cast(dev, _identity_t), cast(g[i], _identity_t) };
+    saved _obj_identity saved_ids[2] =
+        { cast(dev, _obj_identity), cast(g[i], _obj_identity) };
 }

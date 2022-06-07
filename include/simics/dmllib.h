@@ -2427,4 +2427,66 @@ UNUSED static void _memoized_recursion(const char *name) {
     VT_critical_error(msg, msg);
 }
 
+typedef struct {
+    const char *name;
+    const char *type;
+    const char *doc;
+    attr_attr_t flags;
+    bool readable;
+    bool writable;
+    bool generated;
+} _dml_attr_conf_info_t;
+
+typedef struct {
+    const _id_info_t *id_info;
+    uintptr_t vtable;
+    uint32 offset;
+} _dml_attr_getset_info_t;
+
+UNUSED static void _DML_register_attributes(
+    conf_class_t *class, const _id_info_t *id_info_array, _each_in_t sequence,
+    _dml_attr_conf_info_t (*get_attribute_info)(_traitref_t),
+    attr_value_t (*get_attr)(void *, conf_object_t *, attr_value_t *),
+    set_error_t (*set_attr)(void *, conf_object_t *, attr_value_t *,
+                            attr_value_t *)) {
+    for (uint32 i = sequence.starti; i < sequence.endi; ++i) {
+        _vtable_list_t list = sequence.base[i];
+        uint64 num = list.num / sequence.array_size;
+        if (num > 1) {
+            continue;
+        }
+        uint64 start = num * sequence.array_idx;
+        _traitref_t traitref = {
+            (void *) (*list.base + list.base_offset + start * list.offset),
+            { .id = list.id, .encoded_index = start }
+        };
+        _dml_attr_conf_info_t attr_info = get_attribute_info(traitref);
+        if (!attr_info.generated) {
+            continue;
+        }
+
+        _dml_attr_getset_info_t attr_getset_info = {
+            &id_info_array[list.id],
+            (uintptr_t) traitref.trait,
+            list.offset
+        };
+        _dml_attr_getset_info_t *attr_get_info = NULL;
+        if (attr_info.readable) {
+            attr_get_info = MM_MALLOC(1, _dml_attr_getset_info_t);
+            *attr_get_info = attr_getset_info;
+        }
+        _dml_attr_getset_info_t *attr_set_info = NULL;
+        if (attr_info.writable) {
+            attr_set_info = MM_MALLOC(1, _dml_attr_getset_info_t);
+            *attr_set_info = attr_getset_info;
+        }
+
+        SIM_register_typed_attribute(
+            class, attr_info.name,
+            attr_info.readable ? get_attr : NULL, attr_get_info,
+            attr_info.writable ? set_attr : NULL, attr_set_info,
+            attr_info.flags, attr_info.type, NULL, attr_info.doc);
+    }
+}
+
 #endif

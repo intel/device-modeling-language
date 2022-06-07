@@ -3930,7 +3930,7 @@ def mkCast(site, expr, new_type):
         if converted:
             return converted
         else:
-            raise ICE(site, "invalid cast to '_identity_t'")
+            raise ICE(site, "invalid cast to '_obj_identity'")
     old_type = safe_realtype(expr.ctype())
     if (dml.globals.compat_dml12_int(site)
         and (isinstance(old_type, (TStruct, TVector, TLayout))

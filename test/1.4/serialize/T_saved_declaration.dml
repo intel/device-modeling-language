@@ -122,12 +122,12 @@ group initial is mass_groups;
 
 is mass_groups;
 
-saved _identity_t saved_identity_g1 = cast(initial.g1, _identity_t);
-saved _identity_t saved_identity_g2_2 = cast(initial.g2[2], _identity_t);
-saved _identity_t saved_identity_g2_0_child =
-    cast(initial.g2[0].child, _identity_t);
-saved _identity_t saved_identity_g2_1_children_2_4 =
-    cast(initial.g2[1].children[2][4], _identity_t);
+saved _obj_identity saved_identity_g1 = cast(initial.g1, _obj_identity);
+saved _obj_identity saved_identity_g2_2 = cast(initial.g2[2], _obj_identity);
+saved _obj_identity saved_identity_g2_0_child =
+    cast(initial.g2[0].child, _obj_identity);
+saved _obj_identity saved_identity_g2_1_children_2_4 =
+    cast(initial.g2[1].children[2][4], _obj_identity);
 
 attribute test_initial is write_only_attr {
     param type = "n";
@@ -151,12 +151,12 @@ attribute test_initial is write_only_attr {
         assert p_saved1.v == 0;
         assert p_saved2.v == 4;
 
-        assert saved_identity_g1 == cast(initial.g1, _identity_t);
-        assert saved_identity_g2_2 == cast(initial.g2[2], _identity_t);
+        assert saved_identity_g1 == cast(initial.g1, _obj_identity);
+        assert saved_identity_g2_2 == cast(initial.g2[2], _obj_identity);
         assert saved_identity_g2_0_child
-            == cast(initial.g2[0].child, _identity_t);
+            == cast(initial.g2[0].child, _obj_identity);
         assert saved_identity_g2_1_children_2_4
-            == cast(initial.g2[1].children[2][4], _identity_t);
+            == cast(initial.g2[1].children[2][4], _obj_identity);
     }
 }
 
@@ -222,11 +222,11 @@ attribute test_later is write_only_attr {
         assert p_saved1.v == -5;
         assert p_saved2.v == 5;
 
-        assert saved_identity_g1 == cast(g1, _identity_t);
-        assert saved_identity_g2_2 == cast(g2[2], _identity_t);
+        assert saved_identity_g1 == cast(g1, _obj_identity);
+        assert saved_identity_g2_2 == cast(g2[2], _obj_identity);
         assert saved_identity_g2_0_child
-            == cast(g2[0].child, _identity_t);
+            == cast(g2[0].child, _obj_identity);
         assert saved_identity_g2_1_children_2_4
-            == cast(g2[1].children[2][4], _identity_t);
+            == cast(g2[1].children[2][4], _obj_identity);
     }
 }

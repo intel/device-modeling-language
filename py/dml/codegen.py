@@ -998,7 +998,7 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
         etype = parse_type(asttype[0])
         if (isinstance(etype, TObjIdentity)
             and os.path.basename(site.filename()) != 'dml-builtins.dml'):
-            report(WEXPERIMENTAL(site, '_identity_t'))
+            report(WEXPERIMENTAL(site, '_obj_identity'))
     else:
         raise ICE(site, "Stranger type")
 

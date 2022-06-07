@@ -1131,7 +1131,7 @@ def parse_type(typename):
         return TInt(64, True)
     elif typename == 'uinteger_t':
         return TInt(64, False)
-    elif typename == '_identity_t':
+    elif typename == '_obj_identity':
         return TObjIdentity()
     else:
         return TNamed(typename)

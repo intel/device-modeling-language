@@ -23,6 +23,7 @@ import "simics/model-iface/transaction.dml";
 import "simics/util/hashtab.dml";
 
 import "simics/simulator/python.dml";
+import "simics/simulator/sim-get-class.dml";
 
 constant false = (1 == 0);
 constant true = (0 == 0);
@@ -53,7 +54,13 @@ extern typedef struct {
 extern typedef _callback_entry_t * vect _callback_vect_t;
 extern typedef _connection_entry_t * vect _connection_vect_t;
 
-extern typedef struct {} _id_info_t;
+extern typedef struct {
+    const char *logname;
+    const uint32 *dimsizes;
+    uint32 dimensions;
+    uint32 id;
+} _id_info_t;
+extern const _id_info_t *_id_infos;
 
 extern bank_callback_handle_t _register_before_read(
     conf_object_t *bank,
@@ -141,7 +148,8 @@ extern void _callback_after_write(conf_object_t *bank,
                                   _connection_vect_t *connections,
                                   _callback_vect_t *anonymous_callbacks);
 
-extern void _cancel_simple_events(conf_object_t *obj, _identity_t id);
+extern void _cancel_simple_events(conf_object_t *obj, _obj_identity id);
+extern void _register_attributes(conf_object_t *obj, _obj_identity id);
 
 /**
 # Libraries and Built-ins
@@ -445,7 +453,7 @@ template object is (name, desc, documentation, limitations) {
     param dev                       = defined parent #? parent.dev #: this;
 
     shared method cancel_after() {
-        _cancel_simple_events(dev.obj, cast(this, _identity_t));
+        _cancel_simple_events(dev.obj, cast(this, _obj_identity));
     }
 }
 
@@ -568,14 +576,39 @@ template _conf_attribute {
     is object;
 
     param configuration             default "optional";
+    #if (configuration != "required" && configuration != "optional"
+         && configuration != "pseudo" && configuration != "none") {
+        error "'configuration' parameter must be 'required', 'optional', "
+            + "'pseudo', or 'none'";
+    }
+    param _documentation            : const char *;
+    param _documentation            = defined(this.documentation)
+                                    #? documentation
+                                    #: "Undocumented";
+    param _flags                    : attr_attr_t;
+    param _flags                    = (   configuration == "required"
+                                       #? Sim_Attr_Required
+                                       #: configuration == "optional"
+                                       #? Sim_Attr_Optional
+                                       #: configuration == "pseudo"
+                                       #? Sim_Attr_Pseudo
+                                       #: 0)
+                                     | (persistent #? Sim_Attr_Persistent #: 0)
+                                     | (internal #? Sim_Attr_Internal #: 0);
+    param _generated                : bool;
+    param _generated                = configuration != "none"
+                                      && parent.objtype == "device";
     param persistent                default false;
     param internal                  default (!defined documentation
                                              && !defined desc);
 
+    param readable : bool;
     param readable default this.configuration != "none";
+    param writable : bool;
     param writable default this.configuration != "none";
 
     // required parameter
+    param _attr_type : const char *;
     param _attr_type;
 }
 
@@ -702,6 +735,105 @@ template attribute is _conf_attribute {
             error;
         return get();
     }
+}
+
+extern typedef struct {
+    const char *name;
+    const char *type;
+    const char *doc;
+    attr_attr_t flags;
+    bool readable;
+    bool writable;
+    bool generated;
+} _dml_attr_conf_info_t;
+
+// extern typedef struct {} FILE;
+// extern FILE *stderr;
+// extern int fprintf(FILE *stream, const char *format, ...);
+independent method _get_attribute_info(attribute attr)
+    -> (_dml_attr_conf_info_t) {
+    // fprintf(stderr, "%s, %s, %s, %d, %d, %d, %d\n",
+    //         attr.name, attr._attr_type, attr._documentation,
+    //         attr._flags, cast(attr.readable, uint1),
+    //         cast(attr.writable, uint1), cast(attr._generated, uint1));
+    return {
+        attr.name, attr._attr_type, attr._documentation,
+        attr._flags, attr.readable, attr.writable, attr._generated
+    };
+}
+
+extern typedef struct {
+    const _id_info_t *id_info;
+    uintptr_t vtable;
+    uint32 offset;
+} _dml_attr_getset_info_t;
+
+extern typedef struct {
+    uint32 id;
+    uint32 encoded_index;
+} _identity_t;
+
+extern typedef struct {
+    void *trait;
+    _identity_t id;
+} _traitref_t;
+
+independent method _get_attribute_attr_trampoline(
+    void *info, conf_object_t *obj, attr_value_t *_idx)
+    -> (attr_value_t) {
+    return (&_get_attribute_attr)(obj, info);
+}
+
+method _get_attribute_attr(const _dml_attr_getset_info_t *info)
+    -> (attr_value_t) {
+    // TODO -- handle attribute arrays
+    local _traitref_t traitref = {
+        cast(info->vtable, void *),
+        {info->id_info->id, 0}
+    };
+    local attribute *attr = cast(&traitref, attribute *);
+    return attr->get();
+}
+
+independent method _set_attribute_attr_trampoline(
+    void *info, conf_object_t *obj, attr_value_t *val, attr_value_t *_idx)
+    -> (set_error_t) {
+    return (&_set_attribute_attr)(obj, info, val);
+}
+
+method _set_attribute_attr(const _dml_attr_getset_info_t *info,
+                           attr_value_t *val) -> (set_error_t) {
+    // TODO -- handle attribute arrays
+    local _traitref_t traitref = {
+        cast(info->vtable, void *),
+        {info->id_info->id, 0}
+    };
+    local attribute *attr = cast(&traitref, attribute *);
+    try {
+        attr->set(*val);
+        return Sim_Set_Ok;
+    } catch {
+        return Sim_Set_Illegal_Value;
+    }
+}
+
+extern void *_DML_register_attributes(conf_class_t *,
+                                      const _id_info_t *,
+                                      sequence(attribute),
+                                      _dml_attr_conf_info_t (*)(attribute),
+                                      attr_value_t (*)(void *, conf_object_t *,
+                                                       attr_value_t *),
+                                      set_error_t (*)(void *, conf_object_t *,
+                                                      attr_value_t *,
+                                                      attr_value_t *));
+
+independent startup method _register_all_attributes() {
+    _DML_register_attributes(SIM_get_class(dev.classname),
+                             _id_infos,
+                             each attribute in (dev),
+                             &_get_attribute_info,
+                             &_get_attribute_attr_trampoline,
+                             &_set_attribute_attr_trampoline);
 }
 
 /**
@@ -1011,7 +1143,7 @@ The `init_as_subobj` inherits the [`init`](#init) and
 [`connect`](#connect-objects) templates.
 */
 template init_as_subobj is (connect, init, _qname) {
-    param classname;
+    param classname : const char *;
     param configuration default "none";
     method init() default {
         local int portname_len = this._nongroup_parent.objtype == "device"
