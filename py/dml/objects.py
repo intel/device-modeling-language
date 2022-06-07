@@ -28,11 +28,19 @@ __all__ = (
     )
 
 class DMLObject(object):
-    __slots__ = ('ident', 'site', 'parent', 'dimensions')
+    __slots__ = ('ident', 'site', 'parent', 'nongroup_parent', 'object_parent',
+                 'dimensions')
     def __init__(self, ident, site, parent):
         self.ident = ident
         self.site = site
         self.parent = parent
+        self.nongroup_parent = (parent
+                                and (parent if parent.objtype != 'group'
+                                     else parent.nongroup_parent))
+        self.object_parent = (parent
+                              and (parent if parent.objtype in
+                                   {'device', 'bank', 'subdevice', 'port'}
+                                   else parent.object_parent))
         self.dimensions = parent.dimensions if parent else 0
 
     _component_dict = None

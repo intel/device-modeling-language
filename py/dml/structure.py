@@ -1033,17 +1033,40 @@ def make_autoparams(obj, index_vars, index_var_sites):
         if dml.globals.dml_version == (1, 2):
             autoparams['interfaces'] = UninitializedParamExpr(
                 site, 'interfaces')
-
+        else:
+            autoparams['_interfaces_doc'] = InterfacesDocParamExpr(site, obj)
     elif obj.objtype == 'event':
         autoparams['evclass'] = EventClassParamExpr(obj)
 
+    if (obj.objtype in ('attribute', 'register', 'connect')
+          and dml.globals.dml_version != (1, 2)):
+        autoparams['_attr_name'] = ConfAttrNameParamExpr(site, obj)
+        autoparams['_parent_obj_class'] = \
+            ConfAttrParentObjectClassParamExpr(site, obj)
+        autoparams['_parent_obj_proxy_info'] = \
+            ConfAttrParentObjectProxyInfoParamExpr(site, obj)
+
     # Add common automatic parameters
     autoparams['qname'] = QNameParamExpr(obj, 'device')
+    autoparams['_static_qname'] = StaticQNameParamExpr(obj, 'device')
 
     if obj.parent:
         autoparams['parent'] = ParentParamExpr(obj)
     else:
         autoparams['parent'] = SimpleParamExpr(mkUndefined(obj.site))
+    if dml.globals.dml_version != (1, 2):
+        if obj.object_parent:
+            autoparams['_object_parent'] = ObjectParentParamExpr(obj.site,
+                                                                 obj)
+        else:
+            autoparams['_object_parent'] = SimpleParamExpr(
+                mkUndefined(obj.site))
+        if obj.nongroup_parent:
+            autoparams['_nongroup_parent'] = NongroupParentParamExpr(obj.site,
+                                                                     obj)
+        else:
+            autoparams['_nongroup_parent'] = SimpleParamExpr(
+                mkUndefined(obj.site))
 
     return autoparams
 
@@ -2303,6 +2326,24 @@ class ObjectListParamExpr(objects.ParamExpr):
             [(node, indices + parent_relative_indices, dimsizes)
              for (node, parent_relative_indices, dimsizes) in self.instances])
 
+class StaticQNameParamExpr(objects.ParamExpr):
+    '''The _static_qname parameter of any object, i.e. qname with placeholder
+       indices. Is always anonymized.'''
+    def __init__(self, node, relative):
+        assert node
+        self.node = node
+        self.relative = relative
+        self.cached = None
+    @property
+    def site(self): return self.node.site
+    def mkexpr(self, indices):
+        if self.cached is not None:
+            return self.cached
+        self.cached = mkStringConstant(
+            self.node.site,
+            self.node.logname_anonymized(relative=self.relative))
+        return self.cached
+
 class ASTParamExpr(objects.ParamExpr):
     '''Expression AST, codegen:ed on lookup'''
     __slots__ = ('ast', 'parent', 'cached')
@@ -2407,6 +2448,180 @@ class NullParamExpr(objects.ParamExpr):
 
     def mkexpr(self, indices):
         return mkNullConstant(self.site)
+
+class ObjectParentParamExpr(objects.ParamExpr):
+    '''The _object_parent parameter of any object but the device'''
+    __slots__ = ('site', 'node',)
+
+    def __init__(self, site, node):
+        assert node.objtype != "device"
+        self.site = site
+        self.node = node
+
+    def mkexpr(self, indices):
+        return mkNodeRef(self.site, self.node.object_parent,
+                         indices[:self.node.object_parent.dimensions])
+
+class NongroupParentParamExpr(objects.ParamExpr):
+    '''The _nongroup_parent parameter of any object but the device'''
+    __slots__ = ('site', 'node',)
+
+    def __init__(self, site, node):
+        assert node.objtype != "device"
+        self.site = site
+        self.node = node
+
+    def mkexpr(self, indices):
+        return mkNodeRef(self.site, self.node.nongroup_parent,
+                         indices[:self.node.nongroup_parent.dimensions])
+
+def port_class_ident(port):
+    '''The C identifier used for a port class within the device class
+    initialization function'''
+    return ('class' if port.objtype == 'device'
+            else '_port_class_' + port.attrname())
+
+def get_attr_name(prefix, node):
+    if node.objtype == 'register' and node.is_confidential():
+        return ctree.get_anonymized_name(node)
+    else:
+        return prefix + node.name
+
+# NOTE: on caching the result of mkexpr
+# In general, this is not safe as the context in which mkexpr is called or the
+# environmental data it may rely on do not have to be constant or consistent
+# throughout DMLC's execution.
+#
+# There are a number of factors involved for the below ParamExpr:s that make
+# their use of caching more-than-certain to be safe:
+#   - mkexpr's result is (at least) quasi-constant; in particular, mkexpr is
+#     indices-independent and device-independent.
+#   - mkexpr leverages either only static properties of objects or parameters
+#     fetched through param_const
+#   - The parameter each ParamExpr is used for is internal, making it simpler
+#     to predict under what conditions mkexpr is called
+#
+# Any future ParamExpr leveraging caching should be similarly careful to ensure
+# it *can't go wrong*. In particular, any ParamExpr where a cached result
+# would need to be invalidated shouldn't employ caching at all.
+
+class ConfAttrNameParamExpr(objects.ParamExpr):
+    '''The _attr_name parameter of an _conf_attribute object'''
+    __slots__ = ('site', 'node', 'cached',)
+
+    def __init__(self, site, node):
+        self.site = site
+        self.node = node
+        self.cached = None
+
+    def mkexpr(self, indices):
+        if self.cached is not None:
+            return self.cached
+        parent = self.node.parent
+        prefix = ""
+
+        while parent.objtype not in {'device', 'bank', 'port', 'subdevice'}:
+            prefix = parent.name + "_" + prefix
+            parent = parent.parent
+
+        self.cached = mkStringConstant(self.site,
+                                       get_attr_name(prefix, self.node))
+        return self.cached
+
+class ConfAttrParentObjectClassParamExpr(objects.ParamExpr):
+    '''The _parent_obj_class parameter of an a _conf_attribute object.
+       Non-NULL if the attribute belongs to an object other than the device.'''
+    __slots__ = ('site', 'node', 'cached',)
+
+    def __init__(self, site, node):
+        self.site = site
+        self.node = node
+        self.cached = None
+
+    def mkexpr(self, indices):
+        if self.cached is not None:
+            return self.cached
+
+        object_parent = self.node.object_parent
+
+        if object_parent and object_parent is not dml.globals.device:
+            lit = f'&{port_class_ident(object_parent)}'
+        else:
+            lit = 'NULL'
+        self.cached = mkLit(self.site, lit, TPtr(TPtr(TNamed('conf_class_t'))))
+        return self.cached
+
+def port_should_get_proxies(port):
+    assert port.objtype in {'port', 'bank', 'subdevice'}
+    return (port.objtype in {'port', 'bank'}
+            and port.dimensions <= 1
+            and port.parent is dml.globals.device)
+
+class ConfAttrParentObjectProxyInfoParamExpr(objects.ParamExpr):
+    '''The _parent_obj_proxy_info parameter of a attribute, register, or
+        connect object.
+       Holds data necessary to create proxy attributes for attributes within
+       ports/banks.'''
+    __slots__ = ('site', 'node', 'cached',)
+
+    def __init__(self, site, node):
+        assert node.objtype in {'attribute', 'register', 'connect'}
+        self.site = site
+        self.node = node
+        self.cached = None
+
+    def mkexpr(self, indices):
+        if self.cached is not None:
+            return self.cached
+        object_parent = self.node.object_parent
+        if (object_parent is not dml.globals.device
+            and port_should_get_proxies(object_parent)):
+            is_bank = 'true' if object_parent.objtype == 'bank' else 'false'
+            is_array = 'true' if object_parent.dimensions == 1 else 'false'
+            indices = ((mkLit(self.site, '0', TInt(32, False)),)
+                       if object_parent.dimensions else ())
+            port_obj_offset = (
+                f'offsetof({crep.structtype(dml.globals.device)}, '
+                + f'{crep.cref_portobj(object_parent, indices)})')
+
+            self.cached = ctree.mkLit(
+                self.site,
+                '(_dml_attr_parent_obj_proxy_info_t) { .valid = true,'
+                + f'.is_bank = {is_bank}, .is_array = {is_array}, '
+                + f'.port_obj_offset = {port_obj_offset}'
+                + f', .portname = "{object_parent.name}" }}',
+                TNamed('_dml_attr_parent_obj_proxy_info_t'))
+        else:
+            self.cached = mkLit(
+                self.site,
+                '(_dml_attr_parent_obj_proxy_info_t) { .valid = false }',
+                TNamed('_dml_attr_parent_obj_proxy_info_t'))
+        return self.cached
+
+class InterfacesDocParamExpr(objects.ParamExpr):
+    '''The _interfaces_doc parameter of a connect object'''
+    __slots__ = ('site', 'node', 'cached',)
+
+    def __init__(self, site, node):
+        assert node.objtype == 'connect'
+        self.site = site
+        self.node = node
+        self.cached = None
+
+    def mkexpr(self, indices):
+        if self.cached is not None:
+            return self.cached
+        ifaces = [i for i in self.node.get_components('interface')
+                  if param_bool(i, 'required')]
+        if ifaces:
+            self.cached = mkStringConstant(
+                self.site,
+                '\n\nRequired interfaces: '
+                + ', '.join('<iface>' + i.name + '</iface>' for i in ifaces)
+                + '.')
+        else:
+            self.cached = mkUndefined(self.site)
+        return self.cached
 
 def mkparam(obj, autoparams, param):
     _, site, name, (value, default, auto) = param

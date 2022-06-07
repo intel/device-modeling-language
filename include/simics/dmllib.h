@@ -1333,18 +1333,19 @@ typedef struct {
         const char *attrname;
         get_attr_t get;
         set_attr_t set;
+        void *getset_data;
 } _port_attr_t;
 static attr_value_t
-_getattr_from_portobj(lang_void *ptr, conf_object_t *obj, attr_value_t *idx)
+_get_legacy_proxy_attr(lang_void *ptr, conf_object_t *obj, attr_value_t *idx)
 {
         ASSERT(SIM_attr_is_nil(*idx));
         _port_attr_t *port = (_port_attr_t *)ptr;
         conf_object_t *portobj = *(conf_object_t **)(
                 (uintptr_t)obj + port->port_obj_offset);
-        return port->get(NULL, portobj, NULL);
+        return port->get(port->getset_data, portobj, NULL);
 }
 static set_error_t
-_setattr_from_portobj(lang_void *ptr, conf_object_t *obj, attr_value_t *val,
+_set_legacy_proxy_attr(lang_void *ptr, conf_object_t *obj, attr_value_t *val,
                       attr_value_t *idx)
 {
         ASSERT(SIM_attr_is_nil(*idx));
@@ -1352,7 +1353,7 @@ _setattr_from_portobj(lang_void *ptr, conf_object_t *obj, attr_value_t *val,
         conf_object_t *portobj = *(conf_object_t **)(
                 (uintptr_t)obj + port->port_obj_offset);
         if (port->attrname == NULL || SIM_object_is_configured(portobj)) {
-                return port->set(NULL, portobj, val, NULL);
+                return port->set(port->getset_data, portobj, val, NULL);
         } else {
                 // port attribute is registered as required; need to propagate
                 // value through API call to fulfil requirement
@@ -1373,14 +1374,13 @@ _register_port_attr_no_aux(conf_class_t *portcls, const char *attrname,
 // port_obj_offset is the offset within the device struct of a pointer to the
 // port object.
 UNUSED static void
-_register_port_attr(conf_class_t *devcls, conf_class_t *portcls,
-                    ptrdiff_t port_obj_offset, bool is_bank,
-                    const char *portname, const char *attrname,
-                    get_attr_t getter, set_attr_t setter,
-                    attr_attr_t attr, const char *type, const char *desc)
+_register_port_legacy_proxy_attr(conf_class_t *devcls, conf_class_t *portcls,
+                                 ptrdiff_t port_obj_offset, bool is_bank,
+                                 const char *portname, const char *attrname,
+                                 get_attr_t getter, set_attr_t setter,
+                                 attr_attr_t attr, const char *type,
+                                 const char *desc, void *getset_data)
 {
-        _register_port_attr_no_aux(portcls, attrname,
-                getter, setter, attr, type, desc);
         _port_attr_t *data = MM_MALLOC(1, _port_attr_t);
         data->port_obj_offset = port_obj_offset;
         if ((attr & Sim_Attr_Flag_Mask) == Sim_Attr_Required) {
@@ -1391,6 +1391,7 @@ _register_port_attr(conf_class_t *devcls, conf_class_t *portcls,
         }
         data->get = getter;
         data->set = setter;
+        data->getset_data = getset_data;
         char name[strlen(portname) + strlen(attrname) + 2];
         sprintf(name, "%s_%s", portname, attrname);
         strbuf_t proxy_desc = sb_newf(
@@ -1398,22 +1399,36 @@ _register_port_attr(conf_class_t *devcls, conf_class_t *portcls,
                 is_bank ? "bank" : "port", portname, attrname);
         SIM_register_typed_attribute(
                 devcls, name,
-                getter ? _getattr_from_portobj : NULL, data,
-                setter ? _setattr_from_portobj : NULL, data,
+                getter ? _get_legacy_proxy_attr : NULL, data,
+                setter ? _set_legacy_proxy_attr : NULL, data,
                 (attr_attr_t)(Sim_Attr_Pseudo | Sim_Attr_Internal),
                 type, NULL, sb_str(&proxy_desc));
         sb_free(&proxy_desc);
+}
+
+UNUSED static void
+_register_port_attr(conf_class_t *devcls, conf_class_t *portcls,
+                    ptrdiff_t port_obj_offset, bool is_bank,
+                    const char *portname, const char *attrname,
+                    get_attr_t getter, set_attr_t setter,
+                    attr_attr_t attr, const char *type, const char *desc) {
+    _register_port_attr_no_aux(portcls, attrname, getter, setter, attr, type,
+                               desc);
+    _register_port_legacy_proxy_attr(devcls, portcls, port_obj_offset, is_bank,
+                                     portname, attrname, getter, setter, attr,
+                                     type, desc, NULL);
 }
 
 typedef struct {
         ptrdiff_t port_obj_base_offset;
         get_attr_t get;
         set_attr_t set;
+        void *getset_data;
         uint32 array_size;
 } _port_array_attr_t;
 static attr_value_t
-_getattr_from_portobj_array(lang_void *ptr, conf_object_t *obj,
-                            attr_value_t *idx)
+_get_legacy_proxy_array_attr(lang_void *ptr, conf_object_t *obj,
+                             attr_value_t *idx)
 {
         ASSERT(SIM_attr_is_nil(*idx));
         _port_array_attr_t *port = (_port_array_attr_t *)ptr;
@@ -1422,7 +1437,8 @@ _getattr_from_portobj_array(lang_void *ptr, conf_object_t *obj,
         attr_value_t vals = SIM_alloc_attr_list(port->array_size);
         for (uint32 i = 0; i < port->array_size; i++) {
                 conf_object_t *port_obj = port_obj_ptr_base[i];
-                attr_value_t val = port->get(NULL, port_obj, NULL);
+                attr_value_t val = port->get(port->getset_data, port_obj,
+                                             NULL);
                 if (SIM_attr_is_invalid(val)) {
                         SIM_attr_free(&vals);
                         return val;
@@ -1432,8 +1448,8 @@ _getattr_from_portobj_array(lang_void *ptr, conf_object_t *obj,
         return vals;
 }
 static set_error_t
-_setattr_from_portobj_array(lang_void *ptr, conf_object_t *obj,
-                            attr_value_t *vals, attr_value_t *idx)
+_set_legacy_proxy_array_attr(lang_void *ptr, conf_object_t *obj,
+                             attr_value_t *vals, attr_value_t *idx)
 {
         ASSERT(SIM_attr_is_nil(*idx));
         _port_array_attr_t *port = (_port_array_attr_t *)ptr;
@@ -1442,7 +1458,8 @@ _setattr_from_portobj_array(lang_void *ptr, conf_object_t *obj,
         for (uint32 i = 0; i < port->array_size; i++) {
                 conf_object_t *port_obj = port_obj_ptr_base[i];
                 attr_value_t val = SIM_attr_list_item(*vals, i);
-                set_error_t err = port->set(NULL, port_obj, &val, NULL);
+                set_error_t err = port->set(port->getset_data, port_obj, &val,
+                                            NULL);
                 if (err != Sim_Set_Ok) {
                         return err;
                 }
@@ -1452,20 +1469,17 @@ _setattr_from_portobj_array(lang_void *ptr, conf_object_t *obj,
 // port_obj_offset is the offset within the device struct of the first pointer
 // to a port object. Remaining port objects are stored consecutively in memory.
 UNUSED static void
-_register_port_array_attr(conf_class_t *devcls, conf_class_t *portcls,
-                          ptrdiff_t port_obj_offset,
-                          uint32 array_size, bool is_bank,
-                          const char *portname, const char *attrname,
-                          get_attr_t getter, set_attr_t setter,
-                          attr_attr_t attr, const char *type, const char *desc)
-{
-        _register_port_attr_no_aux(portcls, attrname,
-                getter, setter, attr, type, desc);
+_register_port_array_legacy_proxy_attr(
+    conf_class_t *devcls, conf_class_t *portcls, ptrdiff_t port_obj_offset,
+    uint32 array_size, bool is_bank, const char *portname,
+    const char *attrname, get_attr_t getter, set_attr_t setter,
+    attr_attr_t attr, const char *type, const char *desc, void *getset_data) {
         _port_array_attr_t *data = MM_MALLOC(1, _port_array_attr_t);
         data->port_obj_base_offset = port_obj_offset;
         data->get = getter;
         data->set = setter;
         data->array_size = array_size;
+        data->getset_data = getset_data;
         char name[strlen(portname) + strlen(attrname) + 2];
         sprintf(name, "%s_%s", portname, attrname);
         strbuf_t proxy_desc = sb_newf("Proxy attribute for %s.%s[].%s",
@@ -1474,13 +1488,29 @@ _register_port_array_attr(conf_class_t *devcls, conf_class_t *portcls,
         strbuf_t proxy_type = sb_newf("[%s{%d}]", type, array_size);
         SIM_register_typed_attribute(
                 devcls, name,
-                getter ? _getattr_from_portobj_array : NULL, data,
-                setter ? _setattr_from_portobj_array : NULL, data,
+                getter ? _get_legacy_proxy_array_attr : NULL, data,
+                setter ? _set_legacy_proxy_array_attr : NULL, data,
                 (attr_attr_t)(Sim_Attr_Pseudo | Sim_Attr_Internal),
                 sb_str(&proxy_type), NULL, sb_str(&proxy_desc));
         sb_free(&proxy_type);
         sb_free(&proxy_desc);
 }
+
+UNUSED static void
+_register_port_array_attr(conf_class_t *devcls, conf_class_t *portcls,
+                          ptrdiff_t port_obj_offset, uint32 array_size,
+                          bool is_bank, const char *portname,
+                          const char *attrname, get_attr_t getter,
+                          set_attr_t setter, attr_attr_t attr,
+                          const char *type, const char *desc) {
+    _register_port_attr_no_aux(portcls, attrname, getter, setter, attr, type,
+                               desc);
+    _register_port_array_legacy_proxy_attr(devcls, portcls, port_obj_offset,
+                                           array_size, is_bank, portname,
+                                           attrname, getter, setter, attr,
+                                           type, desc, NULL);
+}
+
 
 typedef struct {
         char *bufs[4];
@@ -2593,12 +2623,129 @@ UNUSED static void _free_table(ht_int_table_t *table) {
         ht_clear_int_table(table, true);
 }
 
-UNUSED static void _memoized_recursion(const char *name) {
+UNUSED static void _signal_critical_error(const char *restrict format, ...) {
+    va_list va;
+    va_start(va, format);
     char msg[512];
-    snprintf(msg, 512,
-             "Recursive call to memoized method %s. "
-             "This is considered undefined behavior.", name);
+    vsnprintf(msg, 512, format, va);
+    va_end(va);
     VT_critical_error(msg, msg);
+}
+
+UNUSED static void _memoized_recursion(const char *name) {
+    _signal_critical_error("Recursive call to memoized method %s. "
+                           "This is considered undefined behavior.", name);
+}
+
+typedef struct {
+    bool valid;
+    bool is_bank;
+    bool is_array;
+    ptrdiff_t port_obj_offset;
+    const char *portname;
+} _dml_attr_parent_obj_proxy_info_t;
+
+typedef struct {
+    const char *name;
+    const char *type;
+    const char *doc;
+    conf_class_t *parent_obj_class;
+    _dml_attr_parent_obj_proxy_info_t proxy_info;
+    attr_attr_t flags;
+    uint32 start_dim;
+    bool readable;
+    bool writable;
+    bool should_be_registered;
+    bool allow_cutoff;
+} _dml_attr_conf_info_t;
+
+typedef struct {
+    const _id_info_t *id_info;
+    void *vtable;
+    uint32 num;
+    bool allow_cutoff;
+} _dml_attr_getset_info_t;
+
+UNUSED static void _DML_register_attributes(
+    conf_class_t *dev_class, const _id_info_t *id_info_array,
+    const _vtable_list_t *attribute_vtables, _each_in_t sequence,
+    _dml_attr_conf_info_t (*get_attribute_info)(_traitref_t),
+    attr_value_t (*get_attr)(void *, conf_object_t *, attr_value_t *),
+    set_error_t (*set_attr)(void *, conf_object_t *, attr_value_t *,
+                            attr_value_t *),
+    attr_value_t (*get_portobj_attr)(void *, conf_object_t *, attr_value_t *),
+    set_error_t (*set_portobj_attr)(void *, conf_object_t *, attr_value_t *,
+                            attr_value_t *)) {
+    for (uint32 i = 0; i < sequence.num; ++i) {
+        _vtable_list_t list = attribute_vtables[i];
+        uint64 num = list.num / sequence.array_size;
+        uint64 start = num * sequence.array_idx;
+        _traitref_t traitref = { list.vtable,
+                                 { .id = list.id, .encoded_index = start }};
+        _dml_attr_conf_info_t attr_info = get_attribute_info(traitref);
+        if (!attr_info.should_be_registered) {
+            continue;
+        }
+
+        _dml_attr_getset_info_t attr_getset_info = {
+            &id_info_array[list.id],
+            traitref.trait,
+            num,
+            attr_info.allow_cutoff
+        };
+        _dml_attr_getset_info_t *attr_get_info = NULL;
+        if (attr_info.readable) {
+            attr_get_info = MM_MALLOC(1, _dml_attr_getset_info_t);
+            *attr_get_info = attr_getset_info;
+        }
+        _dml_attr_getset_info_t *attr_set_info = NULL;
+        if (attr_info.writable) {
+            attr_set_info = MM_MALLOC(1, _dml_attr_getset_info_t);
+            *attr_set_info = attr_getset_info;
+        }
+
+        strbuf_t type = sb_newf("%s", attr_info.type);
+        _id_info_t id_info = id_info_array[list.id];
+        for (int64 i = (int64)id_info.dimensions - 1; i >= attr_info.start_dim;
+             --i) {
+            char *tmp_type = sb_detach(&type);
+            sb_addfmt(&type,
+                      attr_info.allow_cutoff ? "[%s{0:%d}]" : "[%s{%d}]",
+                      tmp_type, id_info.dimsizes[i]);
+            MM_FREE(tmp_type);
+        }
+        conf_class_t *parent_obj_class = attr_info.parent_obj_class;
+        SIM_register_typed_attribute(
+            parent_obj_class ? parent_obj_class : dev_class,
+            attr_info.name,
+            attr_info.readable ? parent_obj_class ? get_portobj_attr : get_attr
+            : NULL, attr_get_info,
+            attr_info.writable ? parent_obj_class ? set_portobj_attr : set_attr
+            : NULL, attr_set_info,
+            attr_info.flags, sb_str(&type), NULL, attr_info.doc);
+
+        _dml_attr_parent_obj_proxy_info_t proxy_info = attr_info.proxy_info;
+        if (proxy_info.valid) {
+            if (proxy_info.is_array) {
+                ASSERT(id_info.dimensions >= 1);
+                _register_port_array_legacy_proxy_attr(
+                    dev_class, parent_obj_class, proxy_info.port_obj_offset,
+                    id_info.dimsizes[0], proxy_info.is_bank,
+                    proxy_info.portname, attr_info.name, get_portobj_attr,
+                    set_portobj_attr, attr_info.flags, sb_str(&type),
+                    attr_info.doc,
+                    attr_get_info ? attr_get_info : attr_set_info);
+            } else {
+                _register_port_legacy_proxy_attr(
+                    dev_class, parent_obj_class, proxy_info.port_obj_offset,
+                    proxy_info.is_bank, proxy_info.portname, attr_info.name,
+                    get_portobj_attr, set_portobj_attr, attr_info.flags,
+                    sb_str(&type), attr_info.doc,
+                    attr_get_info ? attr_get_info : attr_set_info);
+            }
+        }
+        sb_free(&type);
+    }
 }
 
 #endif

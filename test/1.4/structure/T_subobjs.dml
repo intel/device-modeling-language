@@ -33,6 +33,7 @@ bank b[i < 2] {
             log unimpl: "BB";
         }
     }
+    attribute bb[j < 3][k < 5] is uint64_attr;
     saved int bs;
 }
 
@@ -51,6 +52,10 @@ method test() throws {
     assert SIM_attr_integer(SIM_get_attribute(b[1].obj, "ba")) == 8;
     b[1].bs = 9;
     assert SIM_attr_integer(SIM_get_attribute(b[1].obj, "bs")) == 9;
+    b[1].bb[2][3].val = 8;
+    assert SIM_attr_integer(
+        SIM_attr_list_item(
+            SIM_attr_list_item(SIM_get_attribute(b[1].obj, "bb"), 2), 3)) == 8;
 
     // legacy trampoline attributes
     assert SIM_class_has_attribute(SIM_object_class(dev.obj), "p_pa");

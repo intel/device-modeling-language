@@ -7,7 +7,7 @@ dml 1.4;
 saved object saved_object;
 
 method check_object_logname(object obj, const char *expected_name,
-                              const char *obj_name) {
+                            const char *obj_name) {
     saved_object = obj;
     local const char *logname = SIM_attr_string(
         SIM_attr_list_item(SIM_get_attribute(dev.obj, "saved_object"), 0));

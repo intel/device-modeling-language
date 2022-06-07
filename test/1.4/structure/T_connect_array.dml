@@ -1,0 +1,20 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+// Test that connect arrays work
+device test;
+
+import "simics/devs/signal.dml";
+
+connect c[i < 2][j < 3] { interface signal; }
+
+implement signal {
+    method signal_raise() {
+        c[i.val][j.val].signal.signal_raise();
+    }
+}
+
+attribute i is uint64_attr;
+attribute j is uint64_attr;

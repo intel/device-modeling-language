@@ -23,6 +23,7 @@ import "simics/model-iface/transaction.dml";
 import "simics/util/hashtab.dml";
 
 import "simics/simulator/python.dml";
+import "simics/simulator/sim-get-class.dml";
 
 constant false = (1 == 0);
 constant true = (0 == 0);
@@ -53,7 +54,15 @@ extern typedef struct {
 extern typedef _callback_entry_t * vect _callback_vect_t;
 extern typedef _connection_entry_t * vect _connection_vect_t;
 
-extern typedef struct {} _id_info_t;
+extern typedef struct {
+    const char *logname;
+    const uint32 *dimsizes;
+    uint32 dimensions;
+    uint32 id;
+} _id_info_t;
+
+extern const _id_info_t *_id_infos;
+
 extern typedef struct {
     uint32 id;
     uint32 encoded_index;
@@ -150,6 +159,7 @@ extern void _callback_after_write(conf_object_t *bank,
                                   _callback_vect_t *anonymous_callbacks);
 
 extern void _cancel_simple_events(conf_object_t *obj, _identity_t id);
+extern void _register_attributes(conf_object_t *obj, _identity_t id);
 
 /**
 # Libraries and Built-ins
@@ -441,14 +451,29 @@ template object is (name, _qname, desc, documentation, limitations) {
 
     param objtype;
     param parent                    auto;
-    // the closest ancestor that is not a group
-    param _nongroup_parent = defined(parent)
-        #? parent.objtype == "group" #? parent._nongroup_parent #: parent
-        #: undefined;
+
+    // the closest ancestor that is not a group.
+    // Can be softcoded, but that would have too much of a performance impact
+    //
+    // param _nongroup_parent = defined(parent)
+    //     #? parent.objtype == "group" #? parent._nongroup_parent #: parent
+    //     #: undefined;
+    param _nongroup_parent auto;
+
+    // the closest ancestor that has a corresponding a Simics object.
+    // Can be softcoded, but that would have too much of a performance impact
+    //
+    // param _object_parent = defined(parent)
+    //     #? (parent.objtype != "device" && parent.objtype != "bank"
+    //         && parent.objtype == "port" && parent.objtype == "subdevice")
+    //         #? parent._object_parent #: parent
+    //     #: undefined;
+    param _object_parent auto;
 
     param indices                   auto;
 
     param qname                     auto;
+    param _static_qname             auto;
 
     param dev                       = defined parent #? parent.dev #: this;
 
@@ -577,20 +602,97 @@ session dml_qname_cache_t _qname_cache;
 
 // Shared parameters for attributes, registers and connects, which all produce
 // attributes. Methods get_attribute and set_attribute are abstract.
-template _conf_attribute {
-    is object;
+template _conf_attribute is object {
+    shared method set_attribute(attr_value_t value) -> (set_error_t);
+    shared method get_attribute() -> (attr_value_t);
 
-    param configuration             default "optional";
-    param persistent                default false;
-    param internal                  default (!defined documentation
-                                             && !defined desc);
+    param configuration     default "optional";
+    #if (configuration != "required" && configuration != "optional"
+         && configuration != "pseudo" && configuration != "none") {
+        error "'configuration' parameter must be 'required', 'optional', "
+            + "'pseudo', or 'none'";
+    }
 
-    param readable default this.configuration != "none";
-    param writable default this.configuration != "none";
+    param persistent default false;
+    param internal   default (!defined documentation && !defined desc);
 
-    // required parameter
-    param _attr_type;
+    param readable : bool;
+    param readable default configuration != "none";
+    param writable : bool;
+    param writable default configuration != "none";
+
+
+    // All of below internal parameters are for use during attribute
+    // registration
+
+    // The base type of the Simics attribute. Required parameter
+    param _attr_type : const char *;
+
+    // The name of the attribute in Simics
+    param _attr_name : const char *;
+    param _attr_name auto;
+
+    // '*_parent_obj_class' is the class of the parent Simics object containing
+    // the attribute
+    param _parent_obj_class : conf_class_t **;
+    param _parent_obj_class auto;
+
+    // All information needed for the creation of proxy attribute for this
+    // attribute, leveraged when the parent object is a bank or port.
+    param _parent_obj_proxy_info : _dml_attr_parent_obj_proxy_info_t;
+    param _parent_obj_proxy_info auto;
+
+    // Indicates the first dimension to be used when calculating the complete
+    // array-wrapped type of the attribute
+    param _attr_start_dim : uint32;
+    param _attr_start_dim = _object_parent.indices.len;
+
+    // If the attribute is an array, indicates whether it should be allowed
+    // to set only part of the array.
+    param _attr_allow_cutoff : bool;
+    param _attr_allow_cutoff = (objtype == "connect"
+                                && configuration == "optional");
+
+    // The documentation for the Simics attribute.
+    param _documentation : const char *;
+    param _documentation = (   defined(documentation)
+                            #? documentation
+                            #: shown_desc != NULL
+                            #? shown_desc
+                            #: objtype == "register"
+                            #? "register " + _static_qname
+                            #: "Undocumented")
+                         + (   objtype == "connect"
+                            #? defined(_interfaces_doc)
+                            #? _interfaces_doc
+                            #: "" #: "");
+
+    // The flags for the Simics attribute.
+    param _flags : attr_attr_t;
+    param _flags = (   configuration == "required"
+                    #? Sim_Attr_Required
+                    #: configuration == "optional"
+                    #? Sim_Attr_Optional
+                    #: configuration == "pseudo"
+                    #? Sim_Attr_Pseudo
+                    #: 0)
+                 | (persistent #? Sim_Attr_Persistent #: 0)
+                 | (internal #? Sim_Attr_Internal #: 0);
+
+    // Whether the attribute should be registered
+    param _should_be_registered : bool;
+    param _should_be_registered = configuration != "none";
 }
+
+extern typedef size_t ptrdiff_t;
+
+extern typedef struct {
+    bool valid;
+    bool is_bank;
+    bool is_array;
+    ptrdiff_t port_obj_offset;
+    const char *portname;
+} _dml_attr_parent_obj_proxy_info_t;
 
 /**
 ## Attribute objects
@@ -699,9 +801,7 @@ template attribute is _conf_attribute {
     // limitations for attributes are not recognized
     param limitations = undefined;
 
-    method set_attribute(attr_value_t value) -> (set_error_t) default {
-        #if (!this.writable)
-            error;
+    shared method set_attribute(attr_value_t value) -> (set_error_t) default {
         try {
             set(value);
             return Sim_Set_Ok;
@@ -710,11 +810,226 @@ template attribute is _conf_attribute {
         }
     }
 
-    method get_attribute() -> (attr_value_t) {
-        #if (!this.readable)
-            error;
+    shared method get_attribute() -> (attr_value_t) {
         return get();
     }
+}
+
+extern typedef struct {
+    const char *name;
+    const char *type;
+    const char *doc;
+    conf_class_t *parent_obj_class;
+    _dml_attr_parent_obj_proxy_info_t proxy_info;
+    attr_attr_t flags;
+    uint32 start_dim;
+    bool readable;
+    bool writable;
+    bool should_be_registered;
+    bool allow_cutoff;
+} _dml_attr_conf_info_t;
+
+independent method _get_attribute_info(_conf_attribute attr)
+    -> (_dml_attr_conf_info_t) {
+    return {
+        attr._attr_name, attr._attr_type, attr._documentation,
+        attr._parent_obj_class ? *attr._parent_obj_class : NULL,
+        attr._parent_obj_proxy_info, attr._flags, attr._attr_start_dim,
+        attr.readable, attr.writable, attr._should_be_registered,
+        attr._attr_allow_cutoff
+    };
+}
+
+extern typedef struct {
+    const _id_info_t *id_info;
+    void *vtable;
+    uint32 num;
+    bool allow_cutoff;
+} _dml_attr_getset_info_t;
+
+extern typedef struct {
+        conf_object_t obj;
+        conf_object_t *dev;
+        int ndims;
+        const uint32 *indices;
+} _port_object_t;
+
+independent method _get_attribute_attr_trampoline(
+    void *info, conf_object_t *obj, attr_value_t *_idx)
+    -> (attr_value_t) {
+    return (&_get_attribute_attr)(obj, info, 0, 0);
+}
+
+independent method _get_attribute_attr_portobj_trampoline(
+    void *_info, conf_object_t *_portobj, attr_value_t *_idx)
+    -> (attr_value_t) {
+    local _port_object_t *portobj = cast(_portobj, _port_object_t*);
+    local _dml_attr_getset_info_t *info =
+        cast(_info, _dml_attr_getset_info_t *);
+    local uint32 flat_index_offset = 0;
+    local uint32 offset_coefficient = info->num;
+    for (local uint32 i = 0; i < portobj->ndims; ++i) {
+        offset_coefficient /= info->id_info->dimsizes[i];
+        flat_index_offset += portobj->indices[i] * offset_coefficient;
+    }
+
+    return (&_get_attribute_attr)(portobj->dev, _info, portobj->ndims,
+                                  flat_index_offset);
+}
+
+method _get_attribute_attr(const _dml_attr_getset_info_t *_conf_info,
+                           uint32 start_dim, uint32 flat_index_offset)
+    -> (attr_value_t) {
+    local _dml_attr_getset_info_t conf_info = *_conf_info;
+    local _id_info_t id_info = *conf_info.id_info;
+    assert start_dim <= id_info.dimensions;
+
+    if (id_info.dimensions - start_dim == 0) {
+        local _traitref_t traitref = {conf_info.vtable,
+                                      {id_info.id, flat_index_offset}};
+        return cast(&traitref, _conf_attribute *)->get_attribute();
+    }
+
+    local size_t no_items = conf_info.num;
+    for (local uint32 i = 0; i < start_dim; ++i) {
+        no_items /= id_info.dimsizes[i];
+    }
+    local attr_value_t *items = new attr_value_t[no_items];
+    for (local int i = 0; i < no_items; ++i) {
+        local _traitref_t traitref = {conf_info.vtable,
+                                      {id_info.id, i + flat_index_offset}};
+        items[i] = cast(&traitref, _conf_attribute *)->get_attribute();
+    }
+    for (local int i = cast(id_info.dimensions, int) - 1; i >= start_dim;
+         --i) {
+        local uint32 new_frag_size = id_info.dimsizes[i];
+        local size_t new_no_items = no_items / new_frag_size;
+        local attr_value_t *new_items = new attr_value_t[new_no_items];
+        for (local int j = 0; j < new_no_items; ++j) {
+            new_items[j] = SIM_alloc_attr_list(new_frag_size);
+            local attr_value_t *new_frag = SIM_attr_list(new_items[j]);
+            for (local int k = 0; k < new_frag_size; ++k) {
+                new_frag[k] = items[j * new_frag_size + k];
+            }
+        }
+        delete items;
+        items = new_items;
+        no_items = new_no_items;
+    }
+    local attr_value_t to_ret = *items;
+    delete items;
+    return to_ret;
+}
+
+independent method _set_attribute_attr_trampoline(
+    void *info, conf_object_t *obj, attr_value_t *val, attr_value_t *_idx)
+    -> (set_error_t) {
+    return (&_set_attribute_attr)(obj, info, 0, 0, val);
+}
+
+independent method _set_attribute_attr_portobj_trampoline(
+    void *_info, conf_object_t *_portobj, attr_value_t *val,
+    attr_value_t *_idx) -> (set_error_t) {
+    local _port_object_t *portobj = cast(_portobj, _port_object_t*);
+    local _dml_attr_getset_info_t *info = cast(_info,
+                                               _dml_attr_getset_info_t *);
+    local uint32 flat_index_offset = 0;
+    local uint32 offset_coefficient = info->num;
+    for (local uint32 i = 0; i < portobj->ndims; ++i) {
+        offset_coefficient /= info->id_info->dimsizes[i];
+        flat_index_offset += portobj->indices[i] * offset_coefficient;
+    }
+
+    return (&_set_attribute_attr)(portobj->dev, _info, portobj->ndims,
+                                  flat_index_offset, val);
+}
+
+method _set_attribute_attr(const _dml_attr_getset_info_t *_conf_info,
+                           uint32 start_dim, uint32 flat_index_offset,
+                           attr_value_t *val) -> (set_error_t) {
+    local _dml_attr_getset_info_t conf_info = *_conf_info;
+    local _id_info_t id_info = *conf_info.id_info;
+    assert start_dim <= id_info.dimensions;
+    if (id_info.dimensions - start_dim == 0) {
+        local _traitref_t traitref = {conf_info.vtable,
+                                      {id_info.id, flat_index_offset}};
+        return cast(&traitref, _conf_attribute *)->set_attribute(*val);
+    }
+
+    local attr_value_t *items = new attr_value_t;
+    *items = *val;
+    local size_t no_items = 1;
+    local bool allow_cutoff = conf_info.allow_cutoff;
+
+    for (local int i = start_dim; i < cast(id_info.dimensions, int); ++i) {
+        local uint32 frag_size = id_info.dimsizes[i];
+        local size_t new_no_items = no_items * frag_size;
+        local attr_value_t *new_items = new attr_value_t[new_no_items];
+        if (allow_cutoff) {
+            for (local int j = 0; j < no_items; ++j) {
+                local uint32 subfrag_size = SIM_attr_is_list(items[j])
+                                          ? SIM_attr_list_size(items[j])
+                                          : 0;
+                local attr_value_t *subfrags = subfrag_size > 0
+                                             ? SIM_attr_list(items[j])
+                                             : NULL;
+                for (local int k = 0; k < subfrag_size; ++k) {
+                    new_items[j * frag_size + k] = subfrags[k];
+                }
+                for (local int k = subfrag_size; k < frag_size; ++k) {
+                    new_items[j * frag_size + k] = SIM_make_attr_nil();
+                }
+            }
+        } else {
+            for (local int j = 0; j < no_items; ++j) {
+                local attr_value_t *subfrags = SIM_attr_list(items[j]);
+                for (local int k = 0; k < frag_size; ++k) {
+                    new_items[j * frag_size + k] = subfrags[k];
+                }
+            }
+        }
+        delete items;
+        items = new_items;
+        no_items = new_no_items;
+    }
+    for (local int i = 0; i < no_items; ++i) {
+        local _traitref_t traitref = {conf_info.vtable,
+                                      {id_info.id, i + flat_index_offset}};
+        local set_error_t status = cast(&traitref, _conf_attribute *)
+                                   ->set_attribute(items[i]);
+        if (status != Sim_Set_Ok) {
+            delete items;
+            return status;
+        }
+    }
+    delete items;
+    return Sim_Set_Ok;
+}
+
+extern typedef struct {} _vtable_list_t;
+
+extern void *_DML_register_attributes(
+    conf_class_t *, const _id_info_t *, const _vtable_list_t *,
+    sequence(_conf_attribute), _dml_attr_conf_info_t (*)(_conf_attribute),
+    attr_value_t (*get)(void *, conf_object_t *, attr_value_t *),
+    set_error_t (*set)(void *, conf_object_t *, attr_value_t *,
+                       attr_value_t *),
+    attr_value_t (*port_get)(void *, conf_object_t *, attr_value_t *),
+    set_error_t (*port_set)(void *, conf_object_t *, attr_value_t *,
+                            attr_value_t *));
+
+extern const _vtable_list_t *_each___conf_attribute;
+
+independent startup method _register_all_attributes() {
+    _DML_register_attributes(SIM_get_class(dev.classname),
+                             _id_infos,
+                             _each___conf_attribute,
+                             each _conf_attribute in (dev),
+                             &_get_attribute_info,
+                             &_get_attribute_attr_trampoline,
+                             &_set_attribute_attr_trampoline,
+                             &_get_attribute_attr_portobj_trampoline,
+                             &_set_attribute_attr_portobj_trampoline);
 }
 
 /**
@@ -953,7 +1268,12 @@ template connect is _conf_attribute {
     // a connect is configuration, not state
     param persistent = false;
 
-    method set_attribute(attr_value_t value) -> (set_error_t) {
+    param _each_interface : sequence(interface);
+    param _each_interface = each interface in (this);
+
+    param _interfaces_doc auto;
+
+    shared method set_attribute(attr_value_t value) -> (set_error_t) {
         local conf_object_t *obj = NULL;
         local const char *port = NULL;
 
@@ -974,7 +1294,7 @@ template connect is _conf_attribute {
         // Check if the new setting is valid
         if (obj) {
             local bool valid = true;
-            foreach iface in (each interface in (this)) {
+            foreach iface in (this._each_interface) {
                 if (iface._required) {
                     if (SIM_c_get_port_interface(obj, iface.name, port)
                         == NULL) {
@@ -1011,15 +1331,15 @@ template connect is _conf_attribute {
         return Sim_Set_Ok;
     }
 
-    method set(conf_object_t *obj) default {
+    shared method set(conf_object_t *obj) default {
         this.obj = obj;
-        foreach iface in (each interface in (this)) {
+        foreach iface in (this._each_interface) {
             iface.val = obj == NULL ? NULL
                 : SIM_c_get_port_interface(obj, iface.name, this.port);
         }
     }
 
-    method get_attribute() -> (attr_value_t) {
+    shared method get_attribute() -> (attr_value_t) {
         if (port) {
             return SIM_make_attr_list(2, SIM_make_attr_object(obj),
                                       SIM_make_attr_string(port));
@@ -1046,7 +1366,7 @@ The `init_as_subobj` inherits the [`init`](#init) and
 [`connect`](#connect-objects) templates.
 */
 template init_as_subobj is (connect, init) {
-    param classname;
+    param classname : const char *;
     param configuration default "none";
     method init() default {
         local int portname_len = this._nongroup_parent.objtype == "device"
@@ -2463,16 +2783,12 @@ template register is (_conf_attribute, get, set, shown_desc,
 
     param _is_read_only default false;
 
-    method set_attribute(attr_value_t value) -> (set_error_t) {
-        #if (!this.writable)
-            error;
+    shared method set_attribute(attr_value_t value) -> (set_error_t) {
         this.set(SIM_attr_integer(value));
         return Sim_Set_Ok;
     }
 
-    method get_attribute() -> (attr_value_t) {
-        #if (!this.readable)
-            error;
+    shared method get_attribute() -> (attr_value_t) {
         return SIM_make_attr_uint64(this.get());
     }
 
@@ -3295,7 +3611,6 @@ template init_val is init {
     param _default_init_val default 0;
 }
 
-extern const _id_info_t *_id_infos;
 extern const char *_DML_get_qname(_identity_t, const _id_info_t *,
                                   dml_qname_cache_t *, const char *);
 template _qname {
