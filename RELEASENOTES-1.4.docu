@@ -351,4 +351,6 @@
       6.0.133, where methods or variable named <tt>independent</tt>,
       <tt>startup</tt> or <tt>memoized</tt> would give a parse
       error.</add-note></build-id>
+  <build-id value="next"><add-note> Fixed a bug where independent
+      methods were exported incorrectly.</add-note></build-id>
 </rn>
