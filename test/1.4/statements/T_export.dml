@@ -17,7 +17,7 @@ extern uint64 call_bm(conf_object_t *);
 extern uint64 call_brm(conf_object_t *);
 extern uint64 call_brfm(conf_object_t *);
 extern uint64 call_m(conf_object_t *);
-extern uint64 call_indie(uint64);
+extern uint64 call_indie(uint64, uint64);
 
 session int s;
 
@@ -47,9 +47,9 @@ header %{
     uint64 call_m(conf_object_t *obj) {
         return m(obj);
     }
-    extern uint64 indie(uint64);
-    uint64 call_indie(uint64 i) {
-        return indie(i);
+    extern uint64 indie(uint64, uint64);
+    uint64 call_indie(uint64 i, uint64 j) {
+        return indie(i, j);
     }
 %}
 
@@ -88,8 +88,8 @@ template m_holder {
 is m_holder;
 export m as "m";
 
-independent method indie(uint64 i) -> (uint64) {
-    return i + 7;
+independent method indie(uint64 i, uint64 j) -> (uint64) {
+    return i + j;
 }
 
 export indie as "indie";
@@ -111,6 +111,6 @@ method test() throws {
        expect(call_m(this.obj) == 3,
               "method accessing template parameters");
        assert s == 5;
-       expect(call_indie(1) == 8,
+       expect(call_indie(1, 7) == 8,
               "independent method with argument and return");
 }

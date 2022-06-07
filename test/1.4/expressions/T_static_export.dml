@@ -42,8 +42,8 @@ template m_holder {
 
 is m_holder;
 
-independent method indie(uint64 i) -> (uint64) {
-    return i + 7;
+independent method indie(uint64 i, uint64 j) -> (uint64) {
+    return i + j;
 }
 
 method test() throws {
@@ -63,6 +63,6 @@ method test() throws {
        expect((&m)(dev.obj) == 3,
               "method accessing template parameters");
        assert s == 5;
-       expect((&indie)(1) == 8,
-              "independent method with argument and return");
+       expect((&indie)(1, 7) == 8,
+              "independent method with arguments and return");
 }

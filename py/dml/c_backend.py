@@ -247,7 +247,10 @@ def generate_structfile(device, filename, outprefix):
                                 ", ".join((["conf_object_t *_obj"]
                                            * (not func.independent))
                                           + [t.declaration(n)
-                                             for (n, t) in func.cparams[1:]]))))
+                                             for (n, t) in (
+                                                func.cparams
+                                                if func.independent
+                                                else func.cparams[1:])]))))
     emit_guard_end(filename)
 
 def generate_hfile(device, headers, filename):
