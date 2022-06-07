@@ -46,7 +46,13 @@ extern typedef struct {
 extern typedef _callback_entry_t * vect _callback_vect_t;
 extern typedef _connection_entry_t * vect _connection_vect_t;
 
-extern typedef struct {} _id_info_t;
+extern typedef struct {
+    const char *logname;
+    const uint32 *dimsizes;
+    uint32 dimensions;
+    uint32 id;
+} _id_info_t;
+
 extern typedef struct {
     uint32 id;
     uint32 encoded_index;

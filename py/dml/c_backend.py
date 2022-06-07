@@ -13,6 +13,7 @@ import dataclasses
 from . import objects, logging, crep, output, ctree, serialize, structure
 from . import traits
 import dml.globals
+from .structure import get_attr_name, port_class_ident, port_should_get_proxies
 from .logging import *
 from .messages import *
 from .output import *
@@ -53,12 +54,6 @@ def get_attr_flags(obj):
         flags += "|Sim_Attr_Internal"
 
     return flags
-
-def get_attr_name(prefix, node):
-    if node.objtype == 'register' and node.is_confidential():
-        return get_anonymized_name(node)
-    else:
-        return prefix + node.name
 
 def get_short_doc(node):
     if dml.globals.dml_version == (1, 2):
@@ -492,8 +487,25 @@ def generate_attr_getter(fname, node, port, dimsizes, cprefix, loopvars):
     splitting_point()
 
 # dimsizes, loopvars, prefix are relative to port.
+def check_attribute(node, port, prefix):
+    config_param = param_str(node, 'configuration', fallback='none')
+    if config_param == 'none':
+        return
+    if not get_long_doc(node):
+        if (node.objtype in ['attribute', 'connect']
+            and config_param == 'required'):
+            report(WNDOCRA(node, node.logname()))
+        elif node.objtype != 'register':
+            report(WNDOC(node, node.logname()))
+    attrname = get_attr_name(prefix, node)
+    register_attribute(node.site, port, attrname)
+    if port and port_should_get_proxies(port):
+        register_attribute(node.site, None, "%s_%s" % (port.name, attrname))
+
+# dimsizes, loopvars, prefix are relative to port.
 def generate_attribute_common(initcode, node, port, dimsizes, prefix,
                               loopvars):
+    assert dml.globals.dml_version == (1, 2)
     attrname = get_attr_name(prefix, node)
 
     config_param = param_str(node, 'configuration', fallback='none')
@@ -547,9 +559,7 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
         getter = '0'
 
     attr_flag = get_attr_flags(node)
-    attr_type = param_str(
-        node, 'attr_type' if dml.globals.dml_version == (1, 2)
-        else '_attr_type')
+    attr_type = param_str(node, 'attr_type')
 
     for dim in reversed(dimsizes):
         if allow_cutoff:
@@ -609,8 +619,11 @@ def generate_attributes(initcode, node, port=None,
                         dimsizes=(), prefix='', loopvars=()):
     if node.objtype in {'connect', 'attribute', 'register'}:
         try:
-            generate_attribute_common(
-                initcode, node, port, dimsizes, prefix, loopvars)
+            if dml.globals.dml_version == (1, 2):
+                generate_attribute_common(
+                    initcode, node, port, dimsizes, prefix, loopvars)
+            else:
+                check_attribute(node, port, prefix)
         except DMLError as e:
             report(e)
         return
@@ -890,12 +903,6 @@ def generate_implement(code, device, impl):
             code.out('VFREE(iface_vect);\n')
     code.out("}\n", preindent = -1)
 
-def port_class_ident(port):
-    '''The C identifier used for a port class within the device class
-    initialization function'''
-    return ('class' if port.objtype == 'device'
-            else '_port_class_' + port.attrname())
-
 def port_prefix(port):
     return {'bank': 'bank.', 'port': 'port.', 'subdevice': ''}[port.objtype]
 
@@ -942,7 +949,7 @@ def generate_port_class(code, device, port):
     portclass_name = '.'.join(reversed(portclass_name_comps))
     desc = string_literal(get_short_doc(port))
     doc = string_literal(get_long_doc(port))
-    code.out(f'conf_class_t *{port_class_ident(port)} = _register_port_class('
+    code.out(f'{port_class_ident(port)} = _register_port_class('
              f'"{portclass_name}", {desc}, {doc});\n')
     port_parent_class = ('class' if port_parent.objtype == 'device'
                          else port_class_ident(port_parent))
@@ -968,6 +975,8 @@ def generate_port_classes(code, device):
             assert dml.globals.dml_version == (1, 2)
             continue
         generate_port_class(code, device, port)
+        add_variable_declaration(f'conf_class_t *{port_class_ident(port)}')
+
 
 def generate_implements(code, device):
     for impl in device.get_recursive_components('implement'):
@@ -1725,7 +1734,6 @@ def generate_init(device, initcode, outprefix):
     out('_initialize_identity_ht();\n')
     out('_initialize_vtable_hts();\n')
     out('_register_events(class);\n')
-    out('_startup_calls();\n')
     # initcode is independently indented
     out(initcode.buf, preindent = -1, postindent = 1)
     out('\n')
@@ -1744,6 +1752,7 @@ def generate_init(device, initcode, outprefix):
                 out('SIM_log_register_groups(%s, log_groups);\n'
                     % (port_class_ident(port),))
     out('\n')
+    out('_startup_calls();\n')
     out('return class;\n')
     out('}\n\n', preindent = -1)
     splitting_point()

@@ -6,6 +6,6 @@ dml 1.4;
 
 device test;
 
-/// ERROR ENPARAM
+/// ERROR EABSTEMPLATE
 connect con is init_as_subobj {
 }
