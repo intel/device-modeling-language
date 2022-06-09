@@ -2419,12 +2419,21 @@ UNUSED static void _free_table(ht_int_table_t *table) {
         ht_clear_int_table(table, true);
 }
 
-UNUSED static void _memoized_recursion(const char *name) {
+UNUSED static void _signal_critical_error(const char *restrict format, ...) {
+
+    va_list va;
+    va_start(va, format);
     char msg[512];
-    snprintf(msg, 512,
-             "Recursive call to memoized method %s. "
-             "This is considered undefined behavior.", name);
+    vsnprintf(msg, 512,
+              "Recursive call to memoized method %s. "
+              "This is considered undefined behavior.", va);
+    va_end(va);
     VT_critical_error(msg, msg);
+}
+
+UNUSED static void _memoized_recursion(const char *name) {
+    _signal_critical_error("Recursive call to memoized method %s. "
+                           "This is considered undefined behavior.", name);
 }
 
 typedef struct {
@@ -2441,6 +2450,7 @@ typedef struct {
     const _id_info_t *id_info;
     uintptr_t vtable;
     uint32 offset;
+    uint32 num;
 } _dml_attr_getset_info_t;
 
 UNUSED static void _DML_register_attributes(
@@ -2452,9 +2462,6 @@ UNUSED static void _DML_register_attributes(
     for (uint32 i = sequence.starti; i < sequence.endi; ++i) {
         _vtable_list_t list = sequence.base[i];
         uint64 num = list.num / sequence.array_size;
-        if (num > 1) {
-            continue;
-        }
         uint64 start = num * sequence.array_idx;
         _traitref_t traitref = {
             (void *) (*list.base + list.base_offset + start * list.offset),
@@ -2468,7 +2475,8 @@ UNUSED static void _DML_register_attributes(
         _dml_attr_getset_info_t attr_getset_info = {
             &id_info_array[list.id],
             (uintptr_t) traitref.trait,
-            list.offset
+            list.offset,
+            num
         };
         _dml_attr_getset_info_t *attr_get_info = NULL;
         if (attr_info.readable) {
@@ -2481,11 +2489,33 @@ UNUSED static void _DML_register_attributes(
             *attr_set_info = attr_getset_info;
         }
 
+        char type[512];
+        char tmp_type[512];
+        int written = snprintf(type, 512, "%s", attr_info.type);
+        if (written >= 512) {
+            goto bad_type_string;
+        }
+        _id_info_t id_info = id_info_array[list.id];
+        for (int64 i = (int64)id_info.dimensions - 1; i >= 0; --i) {
+            written = snprintf(tmp_type, 512, "[%s{%d}]", type,
+                               id_info.dimsizes[i]);
+            if (written >= 512) {
+                goto bad_type_string;
+            }
+            memcpy(type, tmp_type, written + 1);
+        }
+        if (false) {
+            bad_type_string:
+            _signal_critical_error("Type string for attribute %s too long. "
+                                   "Attribute not registered.",
+                                   attr_info.name);
+            continue;
+        }
         SIM_register_typed_attribute(
             class, attr_info.name,
             attr_info.readable ? get_attr : NULL, attr_get_info,
             attr_info.writable ? set_attr : NULL, attr_set_info,
-            attr_info.flags, attr_info.type, NULL, attr_info.doc);
+            attr_info.flags, type, NULL, attr_info.doc);
     }
 }
 
