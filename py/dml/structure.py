@@ -2219,8 +2219,13 @@ def check_register_fields(reg):
             reg_indices = tuple(StaticIndex(field.site, var)
                                 for var in reg.idxvars())
             indices = reg_indices + field_indices
-            lsb_expr = param_expr(field, 'lsb', indices)
-            msb_expr = param_expr(field, 'msb', indices)
+            try:
+                lsb_expr = param_expr(field, 'lsb', indices)
+                msb_expr = param_expr(field, 'msb', indices)
+            except EIDXVAR:
+                # msb/lsb expression dependent on bank/register indices.
+                # Disregard this field when checking ranges.
+                return []
             for expr in (lsb_expr, msb_expr):
                 if isinstance(expr, NonValue):
                     raise expr.exc()
