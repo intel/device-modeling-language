@@ -105,9 +105,9 @@ the `--nowarn` and `--warn` options.
 -g
 </dt><dd>
 
-Generate code suitable for source-level
-debugging. This will generate C code that follows the DML code
-more closely.
+Generate artifacts that allow for easier source-level debugging.
+This generates a DML debug file leveraged by debug-simics, and
+causes generated C code to follow the DML code more closely.
 </dd><dt>
 
 --warn=*tag*
