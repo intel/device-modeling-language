@@ -328,15 +328,15 @@ def main(argv):
         help = optparse.SUPPRESS_HELP)
 
     # <dt>-g</dt>
-    # <dd>Generate code suitable for source-level
-    # debugging. This will generate C code that follows the DML code
-    # more closely.</dd>
+    # <dd>Generate artifacts that allow for easier source-level debugging.
+    # This generates a DML debug file leveraged by debug-simics, and
+    # causes generated C code to follow the DML code more closely.</dd>
     def set_debuggable(option, opt, value, parser):
         dml.globals.debuggable = True
     optpar.add_option(
         '-g', dest = 'debuggable', action = 'callback',
         callback = set_debuggable,
-        help = 'generate C code better suited for debugging')
+        help = 'generate artifacts and C code that allow for easier debugging')
 
     # <dt>--warn=<i>tag</i></dt>
     # <dd>Enable selected warnings. The tags can be found using

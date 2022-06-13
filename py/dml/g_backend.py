@@ -45,9 +45,10 @@ def en_parameter(node):
             return (str(expr),)
 
     try:
-        expr = node.get_expr(tuple(
-            mkLit(node.site, dollar(node.site) + idxvar, types.TInt(32, False))
-            for idxvar in node.parent.idxvars()))
+        with crep.DeviceInstanceContext():
+            expr = node.get_expr(tuple(
+                mkLit(node.site, dollar(node.site) + idxvar, types.TInt(32, False))
+                for idxvar in node.parent.idxvars()))
     except logging.DMLError:
         import os, sys, traceback
         if os.getenv('DMLC_DEBUG'):
@@ -63,6 +64,7 @@ def en_method(node):
     fs = []
     for f in list(node.funcs.values()):
         fs.append((f.get_cname(),
+                   f.independent,
                    tuple((n, str(t)) for n, t in f.inp),
                    tuple((n, str(t)) for n, t in f.outp)))
     return (ID_METHOD, node.name, tuple(fs))

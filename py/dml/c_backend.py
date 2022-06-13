@@ -1285,6 +1285,12 @@ def generate_state_existence_callback(device):
     out("}\n", preindent = -1)
     out('}\n\n', preindent = -1)
 
+def generate_marker(device):
+    mangled_classname = ''.join(
+        (ch if ch in ident_chars else '_')
+        for ch in param_str(device, "classname"))
+    out(f'const int _dml_gdb_marker_{mangled_classname} UNUSED = 0;\n')
+
 def generate_identity_data_decls():
     items = ('{"%s", %s, %d, %d}' %
              (node.logname_anonymized(("%u",) * node.dimensions),
@@ -2590,6 +2596,9 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     init_code = StrOutput()
     init_code.out('', postindent=1)
 
+    # The marker must be generated before any lines annotated with #line
+    if dml.globals.debuggable:
+        generate_marker(device)
     if dml.globals.dml_version == (1, 2):
         generate_register_tables(device)
     with crep.DeviceInstanceContext():
