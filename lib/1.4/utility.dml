@@ -584,10 +584,6 @@ Software write 1's to clear bits. The new object value is
 a bitwise AND of the old object value and the bitwise
 complement of the value written by software.
 
-#### Log Output
-
-None.
-
 </section>
 */
 template write_1_clears is (write_field, _simple_write) {
@@ -605,10 +601,6 @@ template write_1_clears is (write_field, _simple_write) {
 
 Software reads return the object value. The object value is then reset to 0
 as a side-effect of the read.
-
-#### Log Output
-
-None.
 
 </section>
 */
@@ -630,10 +622,6 @@ template clear_on_read is (read_field, set_val, get_val) {
 Software can only set bits to 1.
 The new object value is the bitwise OR of the
 old object value and the value written by software.
-
-#### Log Output
-
-None.
 
 #### Related Templates
 
@@ -657,10 +645,6 @@ template write_1_only is (write_field, _simple_write) {
 Software can only set bits to 0.
 The new object value is the bitwise AND of the
 old object value and the value written by software.
-
-#### Log Output
-
-None.
 
 #### Related Templates
 
@@ -691,10 +675,6 @@ is affected by writes, but where reads disregard the stored value and return a
 constant value. The attribute for the register will reflect the stored value,
 not the value that is returned by read operations. For constant registers or
 fields that do not store a value, use the [`constant`](#constant) template instead.
-
-#### Log Output
-
-None.
 
 #### Parameters
 
@@ -786,10 +766,6 @@ The end-user can tweak the constant value; any tweaks will survive a reset.
 By convention, the object value should not be modified by the model; if that
 behaviour is wanted, use the [`ignore_write`](#ignore_write) template instead.
 
-#### Log Output
-
-None.
-
 #### Parameters
 
 init\_val: the constant value
@@ -856,10 +832,6 @@ template ones is (constant, init_val) {
 
 The object's functionality is unimportant. Reads return 0.
 Writes are ignored.
-
-#### Log Output
-
-None.
 
 </section>
 */
@@ -1116,10 +1088,6 @@ template undocumented is (read_field, write_field, _simple_write,
 
 The register is excluded from the address space of the containing bank.
 
-#### Log Output
-
-None.
-
 </section>
 */
 template unmapped is register {
@@ -1134,10 +1102,6 @@ template unmapped is register {
 #### Description
 
 Do not reset object value on soft-reset, keep current value.
-
-#### Log Output
-
-None.
 
 </section>
 */
