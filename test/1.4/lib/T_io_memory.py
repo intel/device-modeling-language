@@ -24,8 +24,7 @@ r = dev_util.Register_LE(e, 3, size=4)
 miss = dev_util.Register_LE(e, 13, size=4)
 stest.expect_equal((r.read(), e.read_offset, e.read_mask, e.read_aux),
                    (4711, 3, 0xffffffff, 1234))
-with stest.expect_log_mgr(obj, 'spec-viol'), \
-     stest.expect_exception_mgr(dev_util.MemoryError):
+with stest.expect_exception_mgr(dev_util.MemoryError):
     miss.read()
 
 r.read_transaction.inquiry = True
@@ -37,8 +36,7 @@ with stest.expect_exception_mgr(dev_util.MemoryError):
 r.write(0xdeadbeef)
 stest.expect_equal((e.write_offset, e.write_value, e.write_mask, e.write_aux),
                    (3, 0xdeadbeef, 0xffffffff, 1234))
-with stest.expect_log_mgr(obj, 'spec-viol'), \
-     stest.expect_exception_mgr(dev_util.MemoryError):
+with stest.expect_exception_mgr(dev_util.MemoryError):
     miss.write(5)
 
 r.write_transaction.inquiry = True

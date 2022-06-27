@@ -12,9 +12,8 @@ for b, endian in ((obj.bank.b, 'little'), (obj.bank.be, 'big')):
                         b.read_mask, b.read_aux),
                        (Sim_PE_No_Exception, 3, 4711, 0xffffffff, 1234),
                        trans.data)
-    with stest.expect_log_mgr(obj, 'spec-viol'):
-        stest.expect_equal(b.iface.transaction.issue(trans, 13),
-                           Sim_PE_IO_Not_Taken)
+    stest.expect_equal(b.iface.transaction.issue(trans, 13),
+                       Sim_PE_IO_Not_Taken)
 
     trans = transaction_t(read=True, inquiry=True, size=4)
     stest.expect_equal((b.iface.transaction.issue(trans, 3), b.get_offset,
@@ -29,9 +28,8 @@ for b, endian in ((obj.bank.b, 'little'), (obj.bank.be, 'big')):
                         b.write_offset, b.write_value, b.write_mask,
                         b.write_aux),
                        (Sim_PE_No_Exception, 5, 4712, 0xffffff, 1234))
-    with stest.expect_log_mgr(obj, 'spec-viol'):
-        stest.expect_equal(b.iface.transaction.issue(trans, 13),
-                           Sim_PE_IO_Not_Taken)
+    stest.expect_equal(b.iface.transaction.issue(trans, 13),
+                       Sim_PE_IO_Not_Taken)
 
     trans = transaction_t(
         write=True, inquiry=True, data=int.to_bytes(4712, 3, endian))
