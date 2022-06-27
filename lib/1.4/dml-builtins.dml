@@ -1284,7 +1284,7 @@ byte in the access. The *value* parameter contains the
 originally written value, including parts that are mapped to
 registers. Both *bits* and *value* are
 expressed in the host's endianness. The default behavior is to
-unconditionally throw an exception.
+log a `spec-viol` message on level 1, and throw an exception.
 </dd><dt>
 
 <small>read(uint64 offset, uint64 enabled\_bytes, void \*aux) ->
@@ -1603,11 +1603,20 @@ template bank is (object, shown_desc, _qname) {
 
     shared method unmapped_read(uint64 offset, uint64 bits, void *aux)
         -> (uint64) throws default {
+        log spec_viol, 1, Register_Read:
+            "%d byte read access at offset %#x in %s" +
+            " outside registers or misaligned access",
+            _enabled_bytes_to_size(bits), offset, this._qname();
         throw;
     }
 
-    shared method unmapped_write(uint64 offset, uint64 value, uint64 bits, void *aux)
+    shared method unmapped_write(uint64 offset, uint64 value, uint64 bits,
+                                 void *aux)
         throws default {
+        log spec_viol, 1, Register_Write:
+            "%d byte write access at offset %#x in %s" +
+            " outside registers or misaligned access",
+            _enabled_bytes_to_size(bits), offset, this._qname();
         throw;
     }
 
@@ -1834,19 +1843,6 @@ template bank is (object, shown_desc, _qname) {
         }
     }
 
-    shared method _log_miss(bool is_read, int size, uint64 offset) {
-        if (is_read)
-            log spec_viol, 1, Register_Read:
-                "%d byte read access at offset %#x in %s" +
-                " outside registers or misaligned access",
-                    size, offset, this._qname();
-        else
-            log spec_viol, 1, Register_Write:
-                "%d byte write access at offset %#x in %s" +
-                " outside registers or misaligned access",
-                    size, offset, this._qname();
-    }
-
     session conf_object_t *_cached_bank_obj;
     shared method _bank_obj() -> (conf_object_t *) {
         if (this._cached_bank_obj != NULL) {
@@ -1935,10 +1931,6 @@ template bank is (object, shown_desc, _qname) {
             _callback_after_write(this._bank_obj(), ini, &offset, size,
                                   &success, &_connections,
                                   &_after_write_callbacks);
-        }
-
-        if (!inquiry && !success) {
-            this._log_miss(SIM_mem_op_is_read(memop), size, offset);
         }
 
         if (inquiry_override) {
@@ -2060,9 +2052,6 @@ template bank is (object, shown_desc, _qname) {
                                   &_after_write_callbacks);
         }
 
-        if (!inquiry && !success) {
-            this._log_miss(is_read, size, offset);
-        }
         return success;
     }
 
