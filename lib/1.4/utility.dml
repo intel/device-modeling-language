@@ -690,6 +690,12 @@ Reads return a constant value.
 Writes are unaffected by this template. The read value is unaffected
 by the value of the register or field.
 
+The template is intended for registers or fields that have a stored value that
+is affected by writes, but where reads disregard the stored value and return a
+constant value. The attribute for the register will reflect the stored value,
+not the value that is returned by read operations. For constant registers or
+fields that do not store a value, use the [`constant`](#constant) template instead.
+
 #### Log Output
 
 None.
