@@ -86,20 +86,16 @@ reset.
   Usually, the effect of a reset is that all registers are restored to
   some pre-defined value.
 
-  In DML, the reset types can be enabled by instantiating the
-  templates `poreset`, `hreset`
-  and `sreset`, respectively. These will define a port with the
-  corresponding upper-case name
-  (`POWER`, `HRESET`, `SRESET`), which implements
-  the `signal` interface, triggering the corresponding
-  reset type on raising edge. This happens by invoking a corresponding
-  method (`power_on_reset`, `hard_reset`
-  and `soft_reset`, respectively), in all
-  objects implementing a given template
-  (`power_on_reset`, `hard_reset`
-  and `soft_reset`, respectively). The default is that all
-  registers and fields implement these templates, with the default
-  behavior being to restore to the value of the `init_val` parameter.
+  In DML, the reset types can be enabled by instantiating the templates
+  [`poreset`, `hreset` and `sreset`](#poreset), respectively. These will define
+  a port with the corresponding upper-case name (`POWER`, `HRESET`, `SRESET`),
+  which implements the `signal` interface, triggering the corresponding reset
+  type on raising edge. This happens by invoking a corresponding method
+  (`power_on_reset`, `hard_reset` and `soft_reset`, respectively), in all
+  objects implementing a given template ([`power_on_reset`, `hard_reset` and
+  `soft_reset`](#power_on_reset), respectively). The default is that all
+  registers and fields implement these templates, with the default behavior
+  being to restore to the value of the `init_val` parameter.
 
   The default implementation of all reset methods recursively calls
   the corresponding reset method in all sub-objects. Thus, if a reset
@@ -112,13 +108,13 @@ reset.
 * to reset to a different value. In the general case, this can
   be done with an explicit method override. In the case of soft
   reset, you can also use the standard
-  template `soft_reset_val` which allows you to configure
+  template [`soft_reset_val`](#soft_reset_val) which allows you to configure
   the reset value with a parameter `soft_reset_val`.
 
 
 * to suppress reset. This can be done with a standard
-  template: `sticky` suppresses soft reset only,
-  while `no_reset` suppresses all resets.
+  template: [`sticky`](#sticky) suppresses soft reset only,
+  while [`no_reset`](#no_reset) suppresses all resets.
 
   It is quite common that hard reset and power-on reset behave
   identically. In this case, we recommend that only a `HRESET` port is
@@ -253,7 +249,7 @@ method. The template defines the following method:
 
 #### Related Templates
 
-signal_port
+[`signal_port`](#signal_port)
 
 </section>
 */
@@ -358,6 +354,8 @@ template hreset is hard_reset {
 }
 
 /**
+<a id="power_on_reset"/>
+
 ### power\_on\_reset, hard\_reset, soft\_reset
 
 <section>
@@ -370,7 +368,7 @@ implemented by registers and fields.
 
 #### Related Templates
 
-poreset, hreset, sreset
+[`poreset`, `hreset`, `sreset`](#poreset)
 
 </section>
 */
@@ -398,6 +396,8 @@ template _init_val_soft_reset is (init_val, soft_reset) {
 }
 
 /**
+<a id="poreset"/>
+
 ### poreset, hreset, sreset
 
 <section>
@@ -409,7 +409,7 @@ for power-on reset, hard reset and soft reset, respectively.
 
 #### Related Templates
 
-power\_on\_reset, hard\_reset, soft\_reset
+[`power_on_reset`, `hard_reset`, `soft_reset`](#power_on_reset)
 
 </section>
 */
@@ -436,11 +436,11 @@ template sreset is soft_reset {
 
 The following templates can be applied to both registers and fields.  Most of
 them affect either the write or read operation; if applied on a register it
-will disregard fields. For instance, when applying the `read_unimpl` template
-on a register with fields, then the read will ignore any implementations of
-`read` or `read_field` in fields, and return the current register value
-(through `get`), ignoring any `read` overrides in fields. However, writes will
-still propagate to the fields.
+will disregard fields. For instance, when applying the
+[`read_unimpl`](#read_unimpl) template on a register with fields, then the read
+will ignore any implementations of `read` or `read_field` in fields, and return
+the current register value (through `get`), ignoring any `read` overrides in
+fields. However, writes will still propagate to the fields.
 
 ### soft\_reset\_val
 
@@ -454,7 +454,7 @@ instead of the default `init_val`.
 
 #### Related Templates
 
-soft\_reset
+[`soft_reset`](#power_on_reset)
 
 </section>
 */
@@ -476,11 +476,7 @@ template soft_reset_val is (soft_reset, set_val) {
 
 Writes are ignored. This template might also be useful for read-only
 fields inside an otherwise writable register. See the documentation for the
-`read_only` template for more information.
-
-#### Log Output
-
-None.
+[`read_only`](#read_only) template for more information.
 
 </section>
 */
@@ -499,9 +495,9 @@ template ignore_write is write_field {
 Reads return 0, regardless of register/field value. Writes are
 unaffected by this template.
 
-#### Log Output
+#### Related Templates
 
-None.
+[`read_constant`](#read_constant)
 
 </section>
 */
@@ -528,7 +524,7 @@ log-level 1, remaining writes on log-level 2. Fields will only log if the
 written value is different from the old value.
 
 If the register containing the read-only field also contains writable fields,
-it may be better to use the ignore\_write template instead, since software
+it may be better to use the [`ignore_write`](#ignore_write) template instead, since software
 often do not care about what gets written to a read-only field, causing
 unnecessary logging.
 
@@ -557,7 +553,7 @@ in each (read_only, register) { param _is_read_only = true; }
 #### Description
 
 The register value can be modified by software but can't be read back, reads
-return 0. Only for use on registers; use `read_zero` for write-only
+return 0. Only for use on registers; use [`read_zero`](#read_zero) for write-only
 fields.
 
 #### Log Output
@@ -641,7 +637,7 @@ None.
 
 #### Related Templates
 
-write\_0\_only
+[`write_0_only`](#write_0_only)
 
 </section>
 */
@@ -668,7 +664,7 @@ None.
 
 #### Related Templates
 
-write\_1\_only
+[`write_1_only`](#write_1_only)
 
 </section>
 */
@@ -702,11 +698,12 @@ None.
 
 #### Parameters
 
-read\_val: the constant value
+`read_val`: the constant value
 
 #### Related Templates
 
-constant, silent\_constant
+[`constant`](#constant), [`silent_constant`](#silent_constant),
+[`read_zero`](#read_zero)
 
 </section>
 */
@@ -738,7 +735,7 @@ attribute. Such tweaks will survive a reset.
 Using the `constant` template marks that the object is intended to
 stay constant, so the model should not update the register value, and not
 override the `read` method. Use the template
-`read_only` if that is desired.
+[`read_only`](#read_only) if that is desired.
 
 #### Log Output
 
@@ -752,8 +749,8 @@ init\_val: the constant value
 
 #### Related Templates
 
-read\_constant, silent\_constant,
-read\_only
+[`read_constant`](#read_constant), [`silent_constant`](#silent_constant),
+[`read_only`](#read_only)
 
 </section>
 */
@@ -787,7 +784,7 @@ Writes are ignored and do not update the object value.
 The end-user can tweak the constant value; any tweaks will survive a reset.
 
 By convention, the object value should not be modified by the model; if that
-behaviour is wanted, use the `ignore_write` template instead.
+behaviour is wanted, use the [`ignore_write`](#ignore_write) template instead.
 
 #### Log Output
 
@@ -799,7 +796,7 @@ init\_val: the constant value
 
 #### Related Templates
 
-constant, read\_constant
+[`constant`](#constant), [`read_constant`](#read_constant)
 
 </section>
 */
@@ -882,7 +879,7 @@ Writes update the object value. Reads return the object value.
 #### Log Output
 
 First software write to register or field (if field value is not
-equal to write value) results in a spec\_violation log-message on
+equal to write value) results in a `spec-viol` log-message on
 log-level 2. No logs on subsequent writes.
 
 </section>
@@ -949,7 +946,8 @@ log-level 3.
 
 #### Related Templates
 
-read\_unimpl, write\_unimpl, silent\_unimpl, design\_limitation
+[`read_unimpl`](#read_unimpl), [`write_unimpl`](#write_unimpl),
+[`silent_unimpl`](#silent_unimpl), [`design_limitation`](#design_limitation)
 
 </section>
 */
@@ -966,7 +964,7 @@ template unimpl is (_log_unimpl_read, _log_unimpl_write, limitations) {
 
 The object functionality associated to a read access is unimplemented. Write
 access is using default implementation and can be overridden (for instance
-by the read\_only template).
+by the [`read_only`](#read_only) template).
 
 #### Log Output
 
@@ -976,7 +974,8 @@ not result in a log-message.
 
 #### Related Templates
 
-unimpl, write\_unimpl, silent\_unimpl, design\_limitation
+[`unimpl`](#unimpl), [`write_unimpl`](#write_unimpl),
+[`silent_unimpl`](#silent_unimpl), [`design_limitation`](#design_limitation)
 
 </section>
 */
@@ -993,7 +992,7 @@ template read_unimpl is (_log_unimpl_read, limitations) {
 
 The object functionality associated to a write access is unimplemented. Read
 access is using default implementation and can be overridden (for instance
-by the write\_only template).
+by the [`write_only`](#write_only) template).
 
 #### Log Output
 
@@ -1004,7 +1003,8 @@ log-message on log-level 1, remaining writes on log-level 3.
 
 #### Related Templates
 
-unimpl, read\_unimpl, silent\_unimpl, design\_limitation
+[`unimpl`](#unimpl), [`read_unimpl`](#read_unimpl),
+[`silent_unimpl`](#silent_unimpl), [`design_limitation`](#design_limitation)
 
 </section>
 */
@@ -1044,7 +1044,7 @@ log-level 3.
 
 #### Related Templates
 
-unimpl, design\_limitation
+[`unimpl`](#unimpl), [`design_limitation`](#design_limitation)
 
 </section>
 */
@@ -1164,8 +1164,7 @@ the current model.
 
 #### Related Templates
 
-unimplemented,
-silent\_unimplemented
+[`unimpl`](#unimpl), [`silent_unimpl`](#silent_unimpl)
 
 </section>
 */
@@ -1201,9 +1200,9 @@ template no_reset is (power_on_reset, hard_reset, soft_reset) {
 
 #### Description
 
-Only valid in `bank` objects. The bank is recognized as a function mapped
-bank by the `function_io_memory` template, and is mapped to a specified
-function by whoever instantiates that template.
+Only valid in `bank` objects. The bank is recognized as a function mapped bank
+by the [`function_io_memory`](#function_io_memory) template, and is mapped to a
+specified function by whoever instantiates that template.
 
 #### Parameters
 
@@ -1211,7 +1210,7 @@ function: the function number, an integer
 
 #### Related Templates
 
-function\_io\_memory
+[`function_io_memory`](#function_io_memory)
 
 </section>
 */
@@ -1226,13 +1225,13 @@ template function_mapped_bank is bank {
 
 #### Description
 
-Only valid in `implement` objects named
-`io_memory`. Implements the `io_memory` interface by
-function mapping: An incoming memory transaction is handled by finding a
-bank that instantiates the `function_mapped_bank` template, and has a
-function number that matches the memory transaction's. If such a bank
-exists, the transaction is handled by that bank. If no such bank exists, an
-error message is logged and a miss is reported for the access.
+Only valid in `implement` objects named `io_memory`. Implements the `io_memory`
+interface by function mapping: An incoming memory transaction is handled by
+finding a bank that instantiates the
+[`function_mapped_bank`](#function_mapped_bank) template, and has a function
+number that matches the memory transaction's. If such a bank exists, the
+transaction is handled by that bank. If no such bank exists, an error message
+is logged and a miss is reported for the access.
 
 Mapping banks by function number is a deprecated practice, still used by PCI
 devices for legacy reasons. It is usually easier to
@@ -1248,7 +1247,7 @@ function: the function number, an integer
 
 #### Related Templates
 
-function\_mapped\_bank
+[`function_mapped_bank`](#function_mapped_bank)
 
 </section>
 */
