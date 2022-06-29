@@ -1858,18 +1858,7 @@ template bank is (object, shown_desc, _qname) {
         default {
         local uint64 size = SIM_get_mem_op_size(memop);
         local bool inquiry = SIM_get_mem_op_inquiry(memop);
-        local bool inquiry_override = false;
         local conf_object_t *ini = SIM_get_mem_op_initiator(memop);
-        if (SIM_mem_op_is_read(memop) && !inquiry) {
-            _callback_before_read(this._bank_obj(), ini, &inquiry_override,
-                                  &offset, size,
-                                  &_connections, &_before_read_callbacks);
-            if (inquiry_override) {
-                // restored before return
-                SIM_set_mem_op_inquiry(memop, true);
-                inquiry = true;
-            }
-        }
 
         local bool success = true;
         if (inquiry) {
@@ -1879,12 +1868,6 @@ template bank is (object, shown_desc, _qname) {
                     value = this.get(offset, size);
                 } catch {
                     success = false;
-                }
-
-                if (inquiry_override) {
-                    _callback_after_read(this._bank_obj(), ini, &offset, size,
-                                         &value, &success, &_connections,
-                                         &_after_read_callbacks);
                 }
 
                 if (success) {
@@ -1897,12 +1880,19 @@ template bank is (object, shown_desc, _qname) {
         } else {
             if (SIM_mem_op_is_read(memop)) {
                 local uint64 value = 0;
+                local bool inquiry_override = false;
+                _callback_before_read(
+                    this._bank_obj(), ini, &inquiry_override,
+                    &offset, size, &_connections, &_before_read_callbacks);
                 try {
-                    value = this.read(offset, _mask(size), aux);
+                    if (inquiry_override) {
+                        value = this.get(offset, size);
+                    } else {
+                        value = this.read(offset, _mask(size), aux);
+                    }
                 } catch {
                     success = false;
                 }
-
                 _callback_after_read(this._bank_obj(), ini, &offset, size,
                                      &value, &success, &_connections,
                                      &_after_read_callbacks);
@@ -1924,18 +1914,12 @@ template bank is (object, shown_desc, _qname) {
                         success = false;
                     }
                 }
+                _callback_after_write(this._bank_obj(), ini, &offset, size,
+                                      &success, &_connections,
+                                      &_after_write_callbacks);
             }
         }
 
-        if (!SIM_mem_op_is_read(memop) && !inquiry) {
-            _callback_after_write(this._bank_obj(), ini, &offset, size,
-                                  &success, &_connections,
-                                  &_after_write_callbacks);
-        }
-
-        if (inquiry_override) {
-            SIM_set_mem_op_inquiry(memop, false);
-        }
         return success;
     }
 
@@ -1980,15 +1964,6 @@ template bank is (object, shown_desc, _qname) {
     shared method _transaction_access(
         conf_object_t *ini, bool is_read, bool inquiry,
         uint64 offset, uint64 size, uint8 *buf, void *aux) -> (bool) {
-        local bool inquiry_override = false;
-        if (is_read && !inquiry) {
-            _callback_before_read(this._bank_obj(), ini,
-                                  &inquiry_override, &offset,
-                                  size, &_connections, &_before_read_callbacks);
-            if (inquiry_override) {
-                inquiry = true;
-            }
-        }
 
         local bool success = true;
         if (inquiry) {
@@ -2000,12 +1975,6 @@ template bank is (object, shown_desc, _qname) {
                     success = false;
                 }
 
-                if (inquiry_override) {
-                    _callback_after_read(this._bank_obj(), ini, &offset, size,
-                                         &value, &success, &_connections,
-                                         &_after_read_callbacks);
-                }
-
                 if (success) {
                     this._set_read_value(size, buf, value);
                 }
@@ -2015,9 +1984,17 @@ template bank is (object, shown_desc, _qname) {
             }
         } else {
             if (is_read) {
+                local bool inquiry_override = false;
+                _callback_before_read(this._bank_obj(), ini,
+                                      &inquiry_override, &offset,
+                                      size, &_connections, &_before_read_callbacks);
                 local uint64 value = 0;
                 try {
-                    value = this.read(offset, _mask(size), aux);
+                    if (inquiry_override) {
+                        value = this.get(offset, size);
+                    } else {
+                        value = this.read(offset, _mask(size), aux);
+                    }
                 } catch {
                     success = false;
                 }
@@ -2043,13 +2020,10 @@ template bank is (object, shown_desc, _qname) {
                         success = false;
                     }
                 }
+                _callback_after_write(this._bank_obj(), ini, &offset, size,
+                                      &success, &_connections,
+                                      &_after_write_callbacks);
             }
-        }
-
-        if (!is_read && !inquiry) {
-            _callback_after_write(this._bank_obj(), ini, &offset, size,
-                                  &success, &_connections,
-                                  &_after_write_callbacks);
         }
 
         return success;
