@@ -1175,6 +1175,14 @@ method _mask(uint64 size) -> (uint64) {
 
 // TODO(enilsson): preferably, we'd be able to remove the need for
 // these methods by iterating over enabled_bytes in other methods
+
+// An access to 0x4 with bits 0x00ffff00 enabled can either be viewed as a
+// 2-byte access to 0x5, or a N-byte access to 0x4 for some N≥3. We choose to
+// present it as a 3-byte access to 0x4 for two reasons: first, misaligned
+// bitmask is an indication that HW requires even addresses so that's probably
+// natural; second, code that wants to capture accesses to an odd-addressed reg
+// but forgets to check addr=4 would break anyway on an (addr=4,
+// bits=0xffffffff) access.
 method _enabled_bytes_to_size(uint64 enabled_bytes) -> (uint64) {
     for (local int size = 8; size > 0; --size) {
         if ((enabled_bytes & (0xff << 56)) != 0) {
