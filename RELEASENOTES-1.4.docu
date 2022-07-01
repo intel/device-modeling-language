@@ -353,4 +353,7 @@
       error.</add-note></build-id>
   <build-id value="6161"><add-note> Fixed a bug where independent
       methods were exported incorrectly.</add-note></build-id>
+  <build-id value="next"><add-note>The methods <tt>signal_raise</tt> and
+    <tt>signal_lower</tt> are now overridable in HRESET port defined in template
+    <tt>hreset</tt></add-note></build-id>
 </rn>
