@@ -1292,7 +1292,7 @@ byte in the access. The *value* parameter contains the
 originally written value, including parts that are mapped to
 registers. Both *bits* and *value* are
 expressed in the host's endianness. The default behavior is to
-log a `spec-viol` message on level 1, and throw an exception.
+log a `spec-viol` message on level 1 and throw an exception.
 </dd><dt>
 
 <small>read(uint64 offset, uint64 enabled\_bytes, void \*aux) ->
@@ -1312,9 +1312,8 @@ mapped.
 <small>unmapped\_read(uint64 offset, uint64 bits, void \*aux) throws</small>
 </dt><dd>
 
-Like `unmapped_write` but for reads. The default
-      implementation unconditionally throws an exception.
-</dd></dl>
+Like `unmapped_write` but for reads. The default implementation logs a
+`spec-viol` message on level 1 and throws an exception.  </dd></dl>
 
 The `bank` template contains the following parameters:
 
