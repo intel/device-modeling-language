@@ -326,9 +326,8 @@ def generate_hfile(device, headers, filename):
     out('\n')
 
     for t in dml.globals.traits.values():
-        for method in t.method_impls.values():
-            if method.memoized:
-                method.memo_outs_struct.print_struct_definition()
+        for memo_outs_struct in t.vtable_memoized_outs.values():
+            memo_outs_struct.print_struct_definition()
         print_vtable_struct_declaration(t)
     out('\n')
 
@@ -1890,6 +1889,7 @@ def tinit_args(trait):
         trait.vtable_methods,
         trait.vtable_params,
         trait.vtable_sessions,
+        trait.vtable_memoized_outs,
         (name for name in trait.ancestor_vtables
          if (name not in trait.method_impl_traits
              or trait.method_impl_traits[name].method_impls[
@@ -2020,10 +2020,10 @@ def print_vtable_struct_declaration(trait):
         out(f'{t.declaration(name)};\n')
         empty = False
 
-    for method in trait.method_impls.values():
-        if method.independent and method.memoized:
-            decl = method.memo_outs_struct.declaration(f'_{method.name}_outs')
-            out(f'{decl};\n')
+    for (name, memo_outs_struct) in trait.vtable_memoized_outs.items():
+        decl = TPtr(memo_outs_struct).declaration(name)
+        out(f'{decl};\n')
+        empty = False
     if empty:
         out('uint8 _dummy;\n')
     out('};\n', preindent=-1)
@@ -2060,6 +2060,8 @@ fields.
         initializers.append('.%s = %s' % (name, scramble_argname(name)))
     for name in sorted(trait.vtable_sessions):
         initializers.append('.%s = %s' % (name, scramble_argname(name)))
+    for name in sorted(trait.vtable_memoized_outs):
+        initializers.append('.%s = %s' % (name, scramble_argname(name)))
 
     tinit_calls = []
     for parent in trait.direct_parents:
@@ -2067,7 +2069,7 @@ fields.
         for name in tinit_args(parent):
             scrambled_name = scramble_argname(name)
             kind = parent.member_kind(name)
-            if kind in ('parameter', 'session'):
+            if kind in ('parameter', 'session', 'memoized_outs'):
                 args.append(scrambled_name)
             else:
                 assert kind == 'method'
@@ -2097,9 +2099,13 @@ fields.
                 out(f', _each_in_param_t {scrambled_name}')
             else:
                 out(f', {TPtr(typ).declaration(scrambled_name)}')
-        else:
-            assert member_kind == 'session'
+        elif member_kind == 'session':
             out(', uint32 %s' % (scrambled_name))
+        else:
+            assert member_kind == 'memoized_outs'
+            memo_outs_struct = vtable_trait.vtable_memoized_outs[name]
+            out(f', {TPtr(memo_outs_struct).declaration(scrambled_name)}')
+
     out(')\n{\n', postindent=1)
     if initializers:
         out('*_ret = (struct _%s){\n' % (cident(trait.name),),
@@ -2256,8 +2262,7 @@ def init_trait_vtable(node, trait, param_overrides):
                 args.append(override.tinit_arg(var))
             else:
                 args.append(override.tinit_arg())
-        else:
-            assert member_kind == 'session'
+        elif member_kind == 'session':
             session_node = node.get_component(name)
             assert session_node.objtype in ('session', 'saved')
             args.append('offsetof(%s, %s)' % (
@@ -2266,6 +2271,16 @@ def init_trait_vtable(node, trait, param_overrides):
                     session_node,
                     (mkIntegerConstant(node.site, 0, False),)
                     * node.dimensions)))
+        else:
+            assert member_kind == 'memoized_outs'
+            typ = trait.vtable_trait(name).vtable_memoized_outs[name]
+            if node.dimensions:
+                for d in reversed(node.dimsizes):
+                    typ = TArray(typ, mkIntegerLiteral(node.site, d))
+                arg = f'calloc(1, sizeof({typ.declaration("")}))'
+            else:
+                arg = f'({{static {typ.declaration("_tmp")}; &_tmp; }})'
+            args.append(arg)
     # initialize vtable instance
     vtable_arg = f'&{node.traits.vtable_cname(trait)}'
     init_call = ('_tinit_%s(%s);\n'

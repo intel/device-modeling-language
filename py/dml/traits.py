@@ -251,7 +251,7 @@ def merge_ancestor_vtables(ancestors, site):
     for ancestor in ancestors:
         for name in itertools.chain(
                 ancestor.vtable_methods, ancestor.vtable_params,
-                ancestor.vtable_sessions):
+                ancestor.vtable_sessions, ancestor.vtable_memoized_outs):
             if name in ancestor_vtables:
                 # This may mean that an abstract method or parameter is
                 # defined in two traits. We could allow this, as long
@@ -636,6 +636,10 @@ class Trait(SubTrait):
             if overridable and name not in ancestor_vtables}
         self.vtable_params = params
         self.vtable_sessions = sessions
+        self.vtable_memoized_outs = {
+            '_memo_outs_' + name: method.memo_outs_struct
+            for (name, method) in method_impls.items()
+            if method.independent and method.memoized}
         self.reserved_symbols = reserved_symbols
 
     def __repr__(self):
@@ -673,7 +677,8 @@ class Trait(SubTrait):
         for name in self.vtable_methods:
             assert name not in self.ancestor_vtables
             yield name
-        for name in self.ancestor_vtables:
+        for name in (name for name in self.ancestor_vtables
+                     if self.member_kind(name) != 'memoized_outs'):
             yield name
         for name in self.method_impl_traits:
             # avoid yielding entry twice
@@ -769,6 +774,8 @@ class Trait(SubTrait):
             return 'parameter'
         elif name in self.vtable_sessions:
             return 'session'
+        elif name in self.vtable_memoized_outs:
+            return 'memoized_outs'
         elif name in self.ancestor_vtables:
             return self.ancestor_vtables[name].member_kind(name)
         else:
@@ -778,7 +785,8 @@ class Trait(SubTrait):
         '''Return the trait that has the vtable entry for the named trait
         member'''
         if (name in self.vtable_methods or name in self.vtable_params
-            or name in self.vtable_sessions):
+            or name in self.vtable_sessions
+            or name in self.vtable_memoized_outs):
             return self
         return self.ancestor_vtables[name]
 
