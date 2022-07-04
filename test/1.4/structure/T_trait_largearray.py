@@ -4,7 +4,7 @@
 from simicsutils.host import is_windows
 if is_windows():
     # resource module only available on linux
-    SIM_create_object('test')
+    SIM_create_object('test', 'obj', [])
     exit(0)
 
 import resource
