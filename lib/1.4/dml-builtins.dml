@@ -1175,6 +1175,14 @@ method _mask(uint64 size) -> (uint64) {
 
 // TODO(enilsson): preferably, we'd be able to remove the need for
 // these methods by iterating over enabled_bytes in other methods
+
+// An access to 0x4 with bits 0x00ffff00 enabled can either be viewed as a
+// 2-byte access to 0x5, or a N-byte access to 0x4 for some N≥3. We choose to
+// present it as a 3-byte access to 0x4 for two reasons: first, misaligned
+// bitmask is an indication that HW requires even addresses so that's probably
+// natural; second, code that wants to capture accesses to an odd-addressed reg
+// but forgets to check addr=4 would break anyway on an (addr=4,
+// bits=0xffffffff) access.
 method _enabled_bytes_to_size(uint64 enabled_bytes) -> (uint64) {
     for (local int size = 8; size > 0; --size) {
         if ((enabled_bytes & (0xff << 56)) != 0) {
@@ -1284,7 +1292,7 @@ byte in the access. The *value* parameter contains the
 originally written value, including parts that are mapped to
 registers. Both *bits* and *value* are
 expressed in the host's endianness. The default behavior is to
-unconditionally throw an exception.
+log a `spec-viol` message on level 1 and throw an exception.
 </dd><dt>
 
 <small>read(uint64 offset, uint64 enabled\_bytes, void \*aux) ->
@@ -1304,9 +1312,8 @@ mapped.
 <small>unmapped\_read(uint64 offset, uint64 bits, void \*aux) throws</small>
 </dt><dd>
 
-Like `unmapped_write` but for reads. The default
-      implementation unconditionally throws an exception.
-</dd></dl>
+Like `unmapped_write` but for reads. The default implementation logs a
+`spec-viol` message on level 1 and throws an exception.  </dd></dl>
 
 The `bank` template contains the following parameters:
 
@@ -1603,11 +1610,20 @@ template bank is (object, shown_desc, _qname) {
 
     shared method unmapped_read(uint64 offset, uint64 bits, void *aux)
         -> (uint64) throws default {
+        log spec_viol, 1, Register_Read:
+            "%d byte read access at offset %#x in %s" +
+            " outside registers or misaligned access",
+            _enabled_bytes_to_size(bits), offset, this._qname();
         throw;
     }
 
-    shared method unmapped_write(uint64 offset, uint64 value, uint64 bits, void *aux)
+    shared method unmapped_write(uint64 offset, uint64 value, uint64 bits,
+                                 void *aux)
         throws default {
+        log spec_viol, 1, Register_Write:
+            "%d byte write access at offset %#x in %s" +
+            " outside registers or misaligned access",
+            _enabled_bytes_to_size(bits), offset, this._qname();
         throw;
     }
 
@@ -1834,19 +1850,6 @@ template bank is (object, shown_desc, _qname) {
         }
     }
 
-    shared method _log_miss(bool is_read, int size, uint64 offset) {
-        if (is_read)
-            log spec_viol, 1, Register_Read:
-                "%d byte read access at offset %#x in %s" +
-                " outside registers or misaligned access",
-                    size, offset, this._qname();
-        else
-            log spec_viol, 1, Register_Write:
-                "%d byte write access at offset %#x in %s" +
-                " outside registers or misaligned access",
-                    size, offset, this._qname();
-    }
-
     session conf_object_t *_cached_bank_obj;
     shared method _bank_obj() -> (conf_object_t *) {
         if (this._cached_bank_obj != NULL) {
@@ -1862,18 +1865,7 @@ template bank is (object, shown_desc, _qname) {
         default {
         local uint64 size = SIM_get_mem_op_size(memop);
         local bool inquiry = SIM_get_mem_op_inquiry(memop);
-        local bool inquiry_override = false;
         local conf_object_t *ini = SIM_get_mem_op_initiator(memop);
-        if (SIM_mem_op_is_read(memop) && !inquiry) {
-            _callback_before_read(this._bank_obj(), ini, &inquiry_override,
-                                  &offset, size,
-                                  &_connections, &_before_read_callbacks);
-            if (inquiry_override) {
-                // restored before return
-                SIM_set_mem_op_inquiry(memop, true);
-                inquiry = true;
-            }
-        }
 
         local bool success = true;
         if (inquiry) {
@@ -1883,12 +1875,6 @@ template bank is (object, shown_desc, _qname) {
                     value = this.get(offset, size);
                 } catch {
                     success = false;
-                }
-
-                if (inquiry_override) {
-                    _callback_after_read(this._bank_obj(), ini, &offset, size,
-                                         &value, &success, &_connections,
-                                         &_after_read_callbacks);
                 }
 
                 if (success) {
@@ -1901,12 +1887,19 @@ template bank is (object, shown_desc, _qname) {
         } else {
             if (SIM_mem_op_is_read(memop)) {
                 local uint64 value = 0;
+                local bool inquiry_override = false;
+                _callback_before_read(
+                    this._bank_obj(), ini, &inquiry_override,
+                    &offset, size, &_connections, &_before_read_callbacks);
                 try {
-                    value = this.read(offset, _mask(size), aux);
+                    if (inquiry_override) {
+                        value = this.get(offset, size);
+                    } else {
+                        value = this.read(offset, _mask(size), aux);
+                    }
                 } catch {
                     success = false;
                 }
-
                 _callback_after_read(this._bank_obj(), ini, &offset, size,
                                      &value, &success, &_connections,
                                      &_after_read_callbacks);
@@ -1928,22 +1921,12 @@ template bank is (object, shown_desc, _qname) {
                         success = false;
                     }
                 }
+                _callback_after_write(this._bank_obj(), ini, &offset, size,
+                                      &success, &_connections,
+                                      &_after_write_callbacks);
             }
         }
 
-        if (!SIM_mem_op_is_read(memop) && !inquiry) {
-            _callback_after_write(this._bank_obj(), ini, &offset, size,
-                                  &success, &_connections,
-                                  &_after_write_callbacks);
-        }
-
-        if (!inquiry && !success) {
-            this._log_miss(SIM_mem_op_is_read(memop), size, offset);
-        }
-
-        if (inquiry_override) {
-            SIM_set_mem_op_inquiry(memop, false);
-        }
         return success;
     }
 
@@ -1988,15 +1971,6 @@ template bank is (object, shown_desc, _qname) {
     shared method _transaction_access(
         conf_object_t *ini, bool is_read, bool inquiry,
         uint64 offset, uint64 size, uint8 *buf, void *aux) -> (bool) {
-        local bool inquiry_override = false;
-        if (is_read && !inquiry) {
-            _callback_before_read(this._bank_obj(), ini,
-                                  &inquiry_override, &offset,
-                                  size, &_connections, &_before_read_callbacks);
-            if (inquiry_override) {
-                inquiry = true;
-            }
-        }
 
         local bool success = true;
         if (inquiry) {
@@ -2008,12 +1982,6 @@ template bank is (object, shown_desc, _qname) {
                     success = false;
                 }
 
-                if (inquiry_override) {
-                    _callback_after_read(this._bank_obj(), ini, &offset, size,
-                                         &value, &success, &_connections,
-                                         &_after_read_callbacks);
-                }
-
                 if (success) {
                     this._set_read_value(size, buf, value);
                 }
@@ -2023,9 +1991,17 @@ template bank is (object, shown_desc, _qname) {
             }
         } else {
             if (is_read) {
+                local bool inquiry_override = false;
+                _callback_before_read(this._bank_obj(), ini,
+                                      &inquiry_override, &offset,
+                                      size, &_connections, &_before_read_callbacks);
                 local uint64 value = 0;
                 try {
-                    value = this.read(offset, _mask(size), aux);
+                    if (inquiry_override) {
+                        value = this.get(offset, size);
+                    } else {
+                        value = this.read(offset, _mask(size), aux);
+                    }
                 } catch {
                     success = false;
                 }
@@ -2051,18 +2027,12 @@ template bank is (object, shown_desc, _qname) {
                         success = false;
                     }
                 }
+                _callback_after_write(this._bank_obj(), ini, &offset, size,
+                                      &success, &_connections,
+                                      &_after_write_callbacks);
             }
         }
 
-        if (!is_read && !inquiry) {
-            _callback_after_write(this._bank_obj(), ini, &offset, size,
-                                  &success, &_connections,
-                                  &_after_write_callbacks);
-        }
-
-        if (!inquiry && !success) {
-            this._log_miss(is_read, size, offset);
-        }
         return success;
     }
 
