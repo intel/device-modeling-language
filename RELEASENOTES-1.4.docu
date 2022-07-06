@@ -386,4 +386,7 @@
       group g is t;
       saved t s = cast(g, t);
       </pre></add-note></build-id>
+  <build-id value="next"><add-note> Fixed a bug for ports/banks inside
+      groups, that inhibited the creation of attributes for <tt>saved</tt>
+      variables <bug number="SIMICS-19422"/></add-note></build-id>
 </rn>
