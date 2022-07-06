@@ -2555,7 +2555,7 @@ def generate_saved_userdata(node, dimensions, prefix):
 
 def register_saved_attributes(initcode, node):
     if node is dml.globals.device:
-        for port in node.get_components('bank', 'port', 'subdevice'):
+        for port in node.get_recursive_components('bank', 'port', 'subdevice'):
             register_saved_attributes(initcode, port)
         cls = 'class'
         getter = '_get_saved_variable'
