@@ -96,6 +96,9 @@ reset.
   `soft_reset`](#power_on_reset), respectively). The default is that all
   registers and fields implement these templates, with the default behavior
   being to restore to the value of the `init_val` parameter.
+  The methods `signal_raise` and `signal_lower` can be overridden to add additional
+  side effects upon device reset. One example would be to track if the reset
+  signal is asserted to prevent interaction with the device during reset.
 
   The default implementation of all reset methods recursively calls
   the corresponding reset method in all sub-objects. Thus, if a reset
@@ -300,10 +303,10 @@ template signal_connect is (connect, post_init) {
 template poreset is power_on_reset {
     port POWER {
         implement signal {
-            method signal_raise() {
+            method signal_raise() default {
                 dev.power_on_reset();
             }
-            method signal_lower() {
+            method signal_lower() default {
             }
         }
     }
@@ -340,10 +343,10 @@ template _init_val_hard_reset is (init_val, hard_reset) {
 template hreset is hard_reset {
     port HRESET {
         implement signal {
-            method signal_raise() {
+            method signal_raise() default {
                 dev.hard_reset();
             }
-            method signal_lower() {
+            method signal_lower() default {
             }
         }
     }
@@ -418,10 +421,10 @@ for power-on reset, hard reset and soft reset, respectively.
 template sreset is soft_reset {
     port SRESET {
         implement signal {
-            method signal_raise() {
+            method signal_raise() default {
                 dev.soft_reset();
             }
-            method signal_lower() {
+            method signal_lower() default {
             }
         }
     }
