@@ -18,12 +18,9 @@ static void capture_assert_error(int line, const char *file,
 
 api_function_t SIM_get_api_function(const char *name) { return NULL; }
 
-#define IS_UINT32(x) (((x) | INT_MIN) > 0               \
-                      && (((x) | 1) << 16) << 16 == 0)
-#define IS_INT64(x) (((x) | LLONG_MIN) < 0              \
-                     && (((__int128)(x) | 1) << 16) << 16 != 0)
-#define IS_UINT64(x) (((x) | LLONG_MIN) > 0                             \
-                      && (((x) | ULLONG_MAX) << 1) < ULLONG_MAX)
+#define IS_UINT32(x) (sizeof(x) == 4 && ((x) | INT_MIN) > 0)
+#define IS_INT64(x)  (sizeof(x) == 8 && ((x) | LLONG_MIN) < 0)
+#define IS_UINT64(x) (sizeof(x) == 8 && ((x) | LLONG_MIN) > 0)
 #define IS_DOUBLE(x) (sizeof(x) == 8 && ((typeof(x))0.5 == 0.5))
 
 static bool failure = false;
