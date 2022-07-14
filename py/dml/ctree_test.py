@@ -205,7 +205,8 @@ class GccTests(unittest.TestCase):
                    f'-I{here}',
                    f'-I{here.parent.parent / "include"}',
                    '-O', '-std=gnu11', '-Wall', '-Werror',
-                   '-Wno-int-in-bool-context',  '-o', exe, cfile]
+                   '-Wno-int-in-bool-context', '-Wno-shift-negative-value',
+                   '-o', exe, cfile]
         if is_windows():
             gcc_cmd += [
                 "-DUSE_MODULE_HOST_CONFIG", "-D__USE_MINGW_ANSI_STDIO=1"]
