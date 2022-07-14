@@ -258,13 +258,22 @@ class ExprTests(GccTests):
     @subtest()
     def framework_assertions(self):
         '''validate helper macros used later in test'''
-        return (['int64 i = 0;',
+        return (['int32 i32 = 0;',
+                 'ASSERT(!IS_UINT32(i32));',
+                 'ASSERT(!IS_INT64(i32));',
+                 'ASSERT(!IS_UINT64(i32));',
+                 'uint32 u32 = 0;',
+                 'ASSERT(IS_UINT32(u32));',
+                 'ASSERT(!IS_INT64(u32));',
+                 'ASSERT(!IS_UINT64(u32));',
+                 'int64 i = 0;',
                  'ASSERT(!IS_UINT32(i));',
                  'ASSERT(IS_INT64(i));',
                  'ASSERT(!IS_UINT64(i));',
                  'ASSERT(IS_INT64(0x7fffffffffffffff));',
                  'ASSERT(!IS_INT64(0x8000000000000000));',
                  'uint64 u = 0;',
+                 'ASSERT(!IS_UINT32(u));',
                  'ASSERT(!IS_INT64(u));',
                  'ASSERT(IS_UINT64(u));',
                  'ASSERT(!IS_UINT64(0x7fffffffffffffff));',
