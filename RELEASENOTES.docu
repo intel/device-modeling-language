@@ -1706,4 +1706,6 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
   <build-id value="6143"><add-note> Implicitly initialized <tt>local</tt>
       variables of (partially) const-qualified struct type no longer result in
       invalid generated C <bug number="SIMICS-10197"/>.</add-note></build-id>
+  <build-id value="next"><add-note> Elements of compile-time list expressions
+      are now allowed to be non-constant expressions.</add-note></build-id>
 </rn>
