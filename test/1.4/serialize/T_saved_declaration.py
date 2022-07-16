@@ -30,6 +30,9 @@ stest.expect_equal(obj.saved_signed_byte_array_via_data, [1, 0, -1, -2])
 obj.saved_signed_byte_array_via_list = [1, 0, -1, -2]
 stest.expect_equal(obj.saved_signed_byte_array_via_list, [1, 0, -1, -2])
 
+obj.g.s.port.p.saved_deep = 4;
+stest.expect_equal(obj.g.s.port.p.saved_deep, 4)
+
 obj.saved_struct = [[0, [-1, 2], [3], [-2]], 4]
 stest.expect_equal(obj.saved_struct, [[0, [-1, 2], [3], [-2]], 4])
 

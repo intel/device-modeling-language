@@ -78,6 +78,14 @@ bank b[i < 4] {
     }
 }
 
+group g {
+    subdevice s {
+        port p {
+            saved int saved_deep;
+        }
+    }
+}
+
 // TODO: vect
 
 saved int24_le_t saved_int24_le = -8;

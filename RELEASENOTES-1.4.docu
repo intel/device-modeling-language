@@ -356,4 +356,7 @@
   <build-id value="next"><add-note>The methods <tt>signal_raise</tt> and
     <tt>signal_lower</tt> are now overridable in HRESET port defined in template
     <tt>hreset</tt></add-note></build-id>
+  <build-id value="next"><add-note> Fixed a bug for ports/banks inside
+      groups, that inhibited the creation of attributes for <tt>saved</tt>
+      variables <bug number="19422"/></add-note></build-id>
 </rn>
