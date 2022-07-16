@@ -1033,6 +1033,9 @@ def make_autoparams(obj, index_vars, index_var_sites):
     elif obj.objtype == 'event':
         autoparams['evclass'] = EventClassParamExpr(obj)
 
+    elif obj.objtype == 'attribute' and dml.globals.dml_version != (1, 2):
+        autoparams['_attr_name'] = AttributeNameParamExpr(site, obj)
+
     # Add common automatic parameters
     autoparams['qname'] = QNameParamExpr(obj, 'device')
 
@@ -2387,6 +2390,26 @@ class IndexListParamExpr(objects.ParamExpr):
     def mkexpr(self, indices):
         return mkList(self.site,
                       [param.mkexpr(indices) for param in self.params])
+
+class AttributeNameParamExpr(objects.ParamExpr):
+    '''The _attr_name parameter of an attribute object'''
+    __slots__ = ('site', 'node',)
+
+    def __init__(self, site, node):
+        assert node.objtype == 'attribute'
+        self.site = site
+        self.node = node
+
+    def mkexpr(self, indices):
+        attr_name = self.node.name
+        parent = self.node.parent
+
+        while parent.objtype != "device":
+            attr_name = parent.name + "_" + attr_name
+            parent = parent.parent
+
+        return mkStringConstant(self.site, attr_name)
+
 
 def mkparam(obj, autoparams, param):
     _, site, name, (value, default, auto) = param

@@ -16,5 +16,5 @@ method init() {
     cast(dev, object) == cast(dev, init);
 
     /// ERROR EILLCOMP
-    cast(dev, object) == cast(dev, _identity_t);
+    cast(dev, object) == cast(dev, _obj_identity);
 }

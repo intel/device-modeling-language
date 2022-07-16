@@ -19,16 +19,16 @@ group base[i < 2] is t {
 }
 
 method test() throws {
-    #if (cast(base[0], _identity_t) == cast(base1, _identity_t)) {
+    #if (cast(base[0], _obj_identity) == cast(base1, _obj_identity)) {
         error "base[0] == base1";
     }
 
-    #if (cast(base[1], _identity_t) != cast(base1, _identity_t)) {
+    #if (cast(base[1], _obj_identity) != cast(base1, _obj_identity)) {
         error "base[1] != base1";
     }
 
-    #if (cast(base[0].child[0][0], _identity_t)
-         == cast(base[0], _identity_t)) {
+    #if (cast(base[0].child[0][0], _obj_identity)
+         == cast(base[0], _obj_identity)) {
         error "base[0].child[0][0] == base[0]";
     }
 
@@ -38,16 +38,16 @@ method test() throws {
         assert cast(base[i].child[0][0], t) != cast(base[i], t);
 
 
-        assert cast(cast(base[i], t), _identity_t)
-            == cast(base[i], _identity_t);
-        assert cast(cast(base[i], t), _identity_t)
-            == cast(cast(base[i], object), _identity_t);
+        assert cast(cast(base[i], t), _obj_identity)
+            == cast(base[i], _obj_identity);
+        assert cast(cast(base[i], t), _obj_identity)
+            == cast(cast(base[i], object), _obj_identity);
 
-        local _identity_t id_1 = cast(base[i], _identity_t);
-        local _identity_t id_2 = cast(cast(base[i], t), _identity_t);
+        local _obj_identity id_1 = cast(base[i], _obj_identity);
+        local _obj_identity id_2 = cast(cast(base[i], t), _obj_identity);
         assert id_1 == id_2;
-        assert cast(base[i], _identity_t) == id_2;
-        assert id_1 == cast(cast(base[i], t), _identity_t);
+        assert cast(base[i], _obj_identity) == id_2;
+        assert id_1 == cast(cast(base[i], t), _obj_identity);
     }
 
     local int found = 0;

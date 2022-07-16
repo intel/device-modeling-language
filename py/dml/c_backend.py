@@ -496,6 +496,14 @@ def generate_attr_getter(fname, node, port, dimsizes, cprefix, loopvars):
 # dimsizes, loopvars, prefix are relative to port.
 def generate_attribute_common(initcode, node, port, dimsizes, prefix,
                               loopvars):
+    if (node.objtype == 'attribute' and dml.globals.dml_version != (1, 2)):
+        parent = node.parent
+        while parent.objtype not in ("device", "bank", "port", "subdevice"):
+            parent = parent.parent
+
+        if parent.objtype == "device":
+            return
+
     attrname = get_attr_name(prefix, node)
 
     config_param = param_str(node, 'configuration', fallback='none')
