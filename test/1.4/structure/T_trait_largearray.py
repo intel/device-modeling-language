@@ -14,4 +14,4 @@ before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 SIM_create_object('test', 'obj', [])
 after = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 print(after - before)
-stest.expect_true(after - before < 100)
+stest.expect_true(after - before < 1024)
