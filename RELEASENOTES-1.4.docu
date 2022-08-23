@@ -356,7 +356,7 @@
   <build-id value="6171"><add-note>The methods <tt>signal_raise</tt> and
     <tt>signal_lower</tt> are now overridable in HRESET port defined in template
     <tt>hreset</tt></add-note></build-id>
-  <build-id value="next"><add-note> When a transaction misses in a
+  <build-id value="6173"><add-note> When a transaction misses in a
       bank, the error message is now logged by the <tt>unmapped_read</tt> and
       <tt>unmapped_write</tt> methods of the bank, instead of
       <tt>io_memory_access</tt> or <tt>transaction_access</tt>. This
