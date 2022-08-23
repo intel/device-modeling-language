@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 # Various convenience functions for common operations on expressions
+import dml.globals
 from .logging import report, ICE
 from .messages import *
 from .types import *
@@ -117,11 +118,11 @@ def param_str(node, name, fallback=_RAISE):
 
 def param_str_or_null(node, name):
     expr = param_expr(node, name)
-    # TODO: we should consider NULL to be a constant
-    if isinstance(expr, Lit) and expr.cexpr == 'NULL':
-        return None
+    if dml.globals.dml_version == (1, 2):
+        is_null = isinstance(expr, Lit) and expr.cexpr == 'NULL'
     else:
-        return expr_strval(expr, fallback=None)
+        is_null = isinstance(expr, NullConstant)
+    return None if is_null else expr_strval(expr, fallback=None)
 
 def param_int(node, name, fallback=_RAISE, indices=None):
     "Return the parameter value as a python integer."

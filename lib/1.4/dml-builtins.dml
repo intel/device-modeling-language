@@ -32,7 +32,7 @@ param dml_1_4 = true;
 
 constant unmapped_offset = 0xffff_ffff_ffff_ffff;
 
-extern void *const NULL;
+param NULL auto;
 
 // Handy macros
 extern char *MM_STRDUP(const char *s);
