@@ -16,6 +16,7 @@ __all__ = (
     'NonValue',
     'mkLit', 'Lit',
     'mkApply', 'Apply',
+    'mkNullConstant', 'NullConstant',
     'StaticIndex',
     'typecheck_inargs',
 )
@@ -189,6 +190,23 @@ class Lit(Expression):
         return self.type is not None
 
 mkLit = Lit
+
+class NullConstant(Expression):
+    """The NULL expression in DML 1.4.
+    This class must be used for any pointer-typed expression of value NULL
+    considered constant by DMLC."""
+    constant = True
+    value = None
+    priority = 1000
+    type = TPtr(void, const=True)
+    def __str__(self):
+        return 'NULL'
+    def read(self):
+        return 'NULL'
+    def copy(self, site):
+        return NullConstant(site)
+
+mkNullConstant = NullConstant
 
 def typecheck_inargs(site, args, inp, kind="function", known_arglen=None):
     arglen = len(args) if known_arglen is None else known_arglen

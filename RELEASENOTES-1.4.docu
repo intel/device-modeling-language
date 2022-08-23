@@ -412,4 +412,8 @@
       that leverages <tt>init_val</tt> in order to initialize the <tt>val</tt>
       variable provided by the template <bug number="SIMICS-20108"/>.
   </add-note></build-id>
+  <build-id value="next"><add-note><tt>NULL</tt> is now considered a constant
+      expression, and equalities between <tt>NULL</tt> and other constant
+      expressions of pointer type (in particular, string literals) are now also
+      considered constant.</add-note></build-id>
 </rn>

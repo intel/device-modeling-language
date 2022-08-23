@@ -1337,6 +1337,29 @@ class ExprTests(GccTests):
                    lit(types.TPtr(types.TVoid())))
 
     @subtest()
+    def null_pointers(self):
+        null = ctree.mkNullConstant(site)
+        for expr in (lit(types.TPtr(types.TInt(8, True))),
+                     ctree.mkCast(site, null,
+                                  types.TPtr(types.TInt(8, True)))):
+            for op in [ctree.mkEquals, ctree.mkNotEquals]:
+                # NULL can be compared to any pointer...
+                res = op(site, null, expr)
+                # .. but equality comparisons are never constant unless both
+                # sides are constant
+                self.assertFalse(res.constant)
+        for (invert, op) in ((False, ctree.mkEquals),
+                             (True, ctree.mkNotEquals)):
+            res = op(site, null, ctree.mkNullConstant(site));
+            self.assertTrue(res.constant)
+            self.assertEqual(res.value, True != invert)
+            res = op(site, null, ctree.mkStringConstant(site, "non-null"))
+            self.assertTrue(res.constant)
+            self.assertEqual(res.value, False != invert)
+
+        return [f'EXPECT({null.read()} == NULL);']
+
+    @subtest()
     def assign_trunc(self):
         target_type = types.TInt(5, True)
         stmt = ctree.mkAssignStatement(

@@ -1269,12 +1269,22 @@ class Equals(BinOp):
                 rh_indices = [idx.value for idx in rh.indices]
                 return mkBoolConstant(site, (lh.node is rh.node
                                              and lh_indices == rh_indices))
+            if isinstance(lh, NullConstant) or isinstance(rh, NullConstant):
+                if isinstance(lh, NullConstant) and isinstance(rh, NullConstant):
+                    return mkBoolConstant(site, True)
+                elif (isinstance(lhtype, (TPtr, TArray))
+                      and isinstance(rhtype, (TPtr, TArray))):
+                    for expr in (lh, rh):
+                        assert isinstance(expr, (NullConstant, StringConstant,
+                                                 AddressOfMethod))
+                    return mkBoolConstant(site, False)
         if lhtype.is_int:
             lh = as_int(lh)
             lhtype = realtype(lh.ctype())
         if rhtype.is_int:
             rh = as_int(rh)
             rhtype = realtype(rh.ctype())
+
         if (isinstance(lhtype, TInt) and isinstance(rhtype, TInt)
             and lhtype.signed != rhtype.signed):
             # There is no primitive for signed/unsigned compare in C,

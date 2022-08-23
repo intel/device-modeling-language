@@ -998,6 +998,8 @@ def make_autoparams(obj, index_vars, index_var_sites):
             autoparams['obj'] = SimpleParamExpr(mkDeviceObject(site))
         if dml.globals.dml_version == (1, 2):
             autoparams['banks'] = UninitializedParamExpr(site, 'banks')
+        else:
+            autoparams['NULL'] = NullParamExpr(site)
         autoparams['simics_api_version'] = SimpleParamExpr(
             mkStringConstant(site, dml.globals.api_version))
 
@@ -2395,6 +2397,16 @@ class IndexListParamExpr(objects.ParamExpr):
     def mkexpr(self, indices):
         return mkList(self.site,
                       [param.mkexpr(indices) for param in self.params])
+
+class NullParamExpr(objects.ParamExpr):
+    '''The NULL parameter'''
+    __slots__ = ('site', )
+
+    def __init__(self, site):
+        self.site = site
+
+    def mkexpr(self, indices):
+        return mkNullConstant(self.site)
 
 def mkparam(obj, autoparams, param):
     _, site, name, (value, default, auto) = param
