@@ -855,7 +855,7 @@ def fix_printf(fmt, args, argsites, site):
             argi += 1
 
         arg = args[argi]
-        if conversion in "boudixX":
+        if conversion in "oudixX":
             # GCC emits warnings about ll vs l mismatches, even
             # though ll and l are both 64-bit
             # integers. Unfortunately, DMLC does not know the
@@ -890,6 +890,14 @@ def fix_printf(fmt, args, argsites, site):
                                               TPtr(TNamed('char',
                                                           const=True)))),
                               [mkAddressOf(site, arg)])
+        elif conversion == 'b':
+            argtype = safe_realtype(arg.ctype())
+            if not isinstance(argtype, TBool):
+                raise EFMTARGT(argsites[argi], arg,
+                                argi+1, "boolean")
+            conversion = 's'
+            arg = mkIfExpr(site, arg, mkStringConstant(site, "true"),
+                           mkStringConstant(site, "false"))
 
         filtered_fmt += "%" + flags + width + precision + length + conversion
         filtered_args.append(arg)
