@@ -356,9 +356,8 @@ the two banks are represented in Simics by configuration objects named
 A *register* is an object that contains an integer value. Normally, a register
 corresponds to a segment of consecutive locations in the address space of the
 bank; however, it is also possible (and often useful) to have registers that are
-not mapped to any address within the bank. In some cases, registers are mapped
-to individual register numbers rather than to address ranges. All registers must
-be part of a register bank.
+not mapped to any address within the bank. All registers must be part of a
+register bank.
 
 Every register has a fixed *size*, which is
 an integral, nonzero number of 8-bit bytes. A single register cannot
@@ -454,14 +453,12 @@ corresponds to the most significant byte in the register.
 
 #### Not Mapping Addresses To Registers
 
-An important thing to note is that registers do not have to be mapped
-at all, neither at an address offset nor with an index number.  This
-may be useful for internal registers that are not directly
-accessible from software.  By using an unmapped register,
-you can get the advantages of using register, such as automatic
-checkpointing and register fields. This internal register can then be
-used from the implementations of other registers, or other parts of
-the model.
+An important thing to note is that registers do not have to be mapped at all.
+This may be useful for internal registers that are not directly accessible from
+software. By using an unmapped register, you can get the advantages of using
+register, such as automatic checkpointing and register fields. This internal
+register can then be used from the implementations of other registers, or other
+parts of the model.
 
 Historically, unmapped registers were commonly used to store simple device
 state, but this usage is no longer recommended &mdash;
