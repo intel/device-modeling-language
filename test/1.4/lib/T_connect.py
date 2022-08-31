@@ -14,8 +14,11 @@ signal_stub.register()
 # port object
 conf.sim.fail_on_warnings = False
 with stest.expect_log_mgr(None, 'critical'):
-    bad = simics.SIM_create_object('test', 'bad', [])
-stest.expect_equal(bad.sub_renamed, [None, None])
+    try:
+        simics.SIM_create_object('test', 'bad', [])
+    except simics.CriticalErrors:
+        pass
+stest.expect_equal(conf.bad.sub_renamed, [None, None])
 conf.sim.fail_on_warnings = True
 
 SIM_register_interface('signal_stub', 'signal', signal_interface_t(
