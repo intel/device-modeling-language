@@ -1690,7 +1690,7 @@ class WOLDAST(DMLWarning):
     """
     fmt = "Outdated AST file: %s"
     def __init__(self, dmlfile):
-        DMLWarning.__init__(self, SimpleSite(dmlfile + ":0"),
+        DMLWarning.__init__(self, SimpleSite(dmlfile, 0),
                             dmlfile + "ast")
 
 class WWRNSTMT(DMLWarning):

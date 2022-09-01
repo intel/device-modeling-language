@@ -70,7 +70,7 @@ def determine_version(filestr, filename):
         column = ver_start - filestr.rfind('\n', 0, ver_start)
         m = check_version.match(filestr, pos=ver_start)
         if not m:
-            raise ESYNTAX(SimpleSite("%s:%d:%d" % (filename, lineno, column)),
+            raise ESYNTAX(SimpleSite(filename, lineno, column),
                           None, "malformed DML version tag")
         version = (int(m.group('major')), int(m.group('minor')))
         # Remove the language version tag, but preserve newlines.
@@ -80,24 +80,24 @@ def determine_version(filestr, filename):
         filestr = ' ' * ver_end + filestr[ver_end:]
     else:
         # TODO: make this an error
-        report(WNOVER(SimpleSite("%s:1" % (filename,))))
+        report(WNOVER(SimpleSite(filename, 1)))
         version = (1, 2)
         lineno = 1
         column = 1
 
     if version not in supported_versions:
-        raise ESYNTAX(SimpleSite("%s:%d:%d" % (filename, lineno, column)), None,
+        raise ESYNTAX(SimpleSite(filename, lineno, column), None,
                       "DML version %s not supported; allowed: %s"
                       % (fmt_version(version),
                          ", ".join(map(fmt_version, supported_versions))))
     if version == (1, 3):
         report(WDEPRECATED(
-            SimpleSite("%s:%d:%d" % (filename, lineno, column)),
+            SimpleSite(filename, lineno, column),
             "'dml 1.3' is a deprecated alias of dml 1.4"))
         version = (1, 4)
 
     if logging.show_porting and version == (1, 2):
-        report(PVERSION(SimpleSite("%s:%d:%d" % (filename, lineno, column))))
+        report(PVERSION(SimpleSite(filename, lineno, column)))
 
     return version, filestr
 
@@ -183,7 +183,7 @@ def parse_file(dml_filename):
         with open(dml_filename, 'r') as f:
             filestr = f.read()
     except IOError as msg:
-        raise EIMPORT(SimpleSite("%s:0" % (dml_filename,)),
+        raise EIMPORT(SimpleSite(dml_filename, 0),
                       "%s: %s" % (dml_filename, msg))
     except UnicodeDecodeError:
         with open(dml_filename, 'rb') as f:
@@ -192,8 +192,7 @@ def parse_file(dml_filename):
                     line.decode('utf-8')
                 except UnicodeDecodeError as e:
                     raise ESYNTAX(
-                        SimpleSite("%s:%d:%d"
-                                   % (dml_filename, lineno + 1, e.start + 1)),
+                        SimpleSite(dml_filename, lineno + 1, e.start + 1),
                         repr(line[e.start:e.end]),
                         'utf-8 decoding error: ' + e.reason)
         # should not happen
@@ -202,7 +201,7 @@ def parse_file(dml_filename):
     for m in bidi_re.finditer(filestr):
         lineno = filestr[:m.start()].count('\n') + 1
         col = m.start() - filestr.rfind('\n', 0, m.start())
-        report(ESYNTAX(SimpleSite(f"{dml_filename}:{lineno}:{col}"),
+        report(ESYNTAX(SimpleSite(dml_filename, lineno, col),
                        repr(m.group())[1:-1],
                        "Unicode BiDi character not allowed"))
     version, contents = determine_version(filestr, dml_filename)
@@ -210,7 +209,7 @@ def parse_file(dml_filename):
     if version == (1, 2) and logging.show_porting:
         with open(dml_filename, 'rb') as f:
             sha1 = hashlib.sha1(f.read()).hexdigest()  # nosec
-        report(PSHA1(SimpleSite('%s:1:0' % (dml_filename,)), sha1))
+        report(PSHA1(SimpleSite(dml_filename, 1, 0), sha1))
     ast = parse(contents, file_info, dml_filename, version)
     return ast
 
@@ -270,7 +269,7 @@ def import_file(importsite, path):
     version = site.dml_version()
     if (version != dml.globals.dml_version
         and (version, dml.globals.dml_version) != ((1, 4), (1, 2))):
-        raise EVERS(SimpleSite("%s:0" % (path,)),
+        raise EVERS(SimpleSite(path, 0),
                      importsite,
                      fmt_version(version),
                      fmt_version(importsite.dml_version()))
@@ -291,7 +290,7 @@ def exists(filename):
 
 def parse_main_file(inputfilename, explicit_import_path, strict):
     if not exists(inputfilename):
-        raise ENOFILE(SimpleSite("%s:0" % (inputfilename,)))
+        raise ENOFILE(SimpleSite(inputfilename, 0))
     (kind, site, name, stmts) = parse_dmlast_or_dml(inputfilename)
     # guaranteed by grammar
     assert kind == 'dml'
