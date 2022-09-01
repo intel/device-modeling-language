@@ -73,7 +73,7 @@ class FileOutput(Output):
 
     def commit(self):
         if self.indent:
-            raise ICE(SimpleSite("%s:0" % self.filename), 'Unbalanced indent')
+            raise ICE(SimpleSite(self.filename, 0), 'Unbalanced indent')
         try:
             os.remove(self.filename)
         except OSError:

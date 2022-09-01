@@ -128,7 +128,7 @@ def end_site(site):
         # We still produce a well-formed site, to avoid confusing
         # port-dml's tag parser
         if os.path.isfile(site.filename() + 'ast'):
-            return SimpleSite(site.filename() + ':1:1')
+            return SimpleSite(site.filename(), 1, 1)
         # unknown...
         return None
     (_, end) = lexspan_map[site]
