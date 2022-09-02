@@ -71,7 +71,7 @@ python = os.environ.get('DMLC_PYTHON')
 if python:
     python = json.loads(python)
 else:
-    python = [join(simics_root_path(), host_type(), "bin", "py3",
+    python = [join(simics_root_path(), host_type(), "bin",
                    "mini-python" + exe_sfx)]
 
 line_directives = bool(os.environ.get('DMLC_LINE_DIRECTIVES'))
@@ -88,7 +88,7 @@ dmlc_timeout_multipliers = {"1.2/registers/largearray": 3,
                             }
 dmlc_default_timeout = 80
 def dmlc_reaper_args(exitcode_file, timeout_multiplier = 1):
-    return [join(host_path(), "bin", "py3", "reaper"),
+    return [join(host_path(), "bin", "reaper"),
             "-t", str(dmlc_default_timeout * timeout_multiplier),
             "-r", "-e", exitcode_file]
 
@@ -651,7 +651,7 @@ class CTestCase(DMLFileTestCase):
                ["-o", modfile,
                 self.cfilename + ".o",
                 module_id_base + ".o",
-                "-L"+join(host_path(), "bin", "py3")] + ldflags + \
+                "-L"+join(host_path(), "bin")] + ldflags + \
                 ["-lsimics-common", "-lvtutils"]
         args.append("-Wl,--no-undefined")
 
@@ -664,7 +664,7 @@ class CTestCase(DMLFileTestCase):
             return status
 
         self.pr("Signing module")
-        args = [join(host_path(), "bin", "py3", "simics-common"), "-core",
+        args = [join(host_path(), "bin", "simics-common"), "-core",
                 "-sign-module", os.path.abspath(modfile)]
         return subprocess.call(args,
                                stdout = open(self.ld_stdout, "a"),
