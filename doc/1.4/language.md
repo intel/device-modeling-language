@@ -3518,7 +3518,7 @@ demonstrates how this can be done.
 </pre>
 
 A list is a *compile-time only* value, and is an ordered sequence
-of zero or more compile-time constant values. Lists are in particular
+of zero or more expressions. Lists are in particular
 used in combination with `foreach` and `select`
 statements.
 
