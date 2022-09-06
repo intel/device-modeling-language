@@ -61,6 +61,9 @@ method post_init {
 }
 
 method destroy {
+    // test for SIMICS-19598
+    default();
+
     // Notifier is triggered after pre-delete but before deinit.
     // Hence the condition must be negated with API 7 or higher.
     if ($notified) {
