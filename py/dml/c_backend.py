@@ -2782,6 +2782,7 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     generate_alloc(device)
     generate_initialize(device)
     generate_finalize(device)
+    generate_deinit(device)
     generate_dealloc(device)
     generate_events(device)
     generate_identity_data_decls()
@@ -2856,7 +2857,6 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     generate_init_port_objs(device)
     generate_init_static_vars(device)
     generate_init_data_objs(device)
-    generate_deinit(device)
     # generate_serialize must take place after register_saved_attributes
     # and generate_simple_events
     generate_serialize(device)
