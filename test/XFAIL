@@ -1,7 +1,3 @@
-# SIMICS-11098, old unclassified failures 
-1.2/errors/EASSIGN_34
-1.2/methods/inline_smallint
-
 # bug 5980
 1.2/errors/EVARPARAM_2
 1.2/errors/EVARPARAM_3
