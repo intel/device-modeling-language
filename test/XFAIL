@@ -33,8 +33,9 @@
 # SIMICS-9224
 1.2/errors/EASSIGN_target_type
 
-# Not migrated
+# SIMICS-19603
 1.2/structure/object_naming
+1.4/structure/object_naming
 
 # SIMICS-8930
 1.2/operators/assign_1

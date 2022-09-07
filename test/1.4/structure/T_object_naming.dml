@@ -1,0 +1,23 @@
+/*
+  © 2021-2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+// SIMICS-19603: Register names appear as identifiers in generated C code,
+// causing problems if the identifier is defined by a macro in C
+
+header %{
+    #define foobar 18
+%}
+
+/// COMPILE-ONLY
+bank b {
+    param register_size = 2;
+    register T_OBJECT_NAMING_STRUCT_H @ 0;
+    register MM_MALLOC @ 2;
+    register ERROR @ 4;
+    register OUT @ 6;
+    register foobar @ 8;
+}
