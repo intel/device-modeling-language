@@ -6,16 +6,16 @@
 1.2/misc/array_set_8
 1.2/structure/array_size_param
 
-# bug 5980
+# SIMICS-5980
 1.2/errors/EVARPARAM_2
 1.2/errors/EVARPARAM_3
 1.2/errors/EVARPARAM_5
 1.2/errors/EVARPARAM_6
 
-# bug 22466
+# SIMICS-9572
 1.2/errors/EVARPARAM_bug22466
 
-# bug 5090
+# SIMICS-8783
 1.2/errors/EASSIGN_06
 1.2/errors/EASSIGN_09
 1.2/errors/EASSIGN_12
@@ -30,40 +30,40 @@
 1.2/errors/EASSIGN_24
 1.2/errors/EASSIGN_25
 
-# Bug 19496
+# SIMICS-9224
 1.2/errors/EASSIGN_target_type
 
-# Bug 4582
+# Not migrated
 1.2/structure/object_naming
 
-# Bug 13814
+# SIMICS-8930
 1.2/operators/assign_1
 
-# bug 21074
+# SIMICS-9387
 1.2/errors/ENVAL_param_site
 
-# bug 21862
+# SIMICS-9499
 1.2/methods/inline_params_index
 
-# bug 21873
+# SIMICS-9502
 1.2/internal/vect_select
 
-# bug 25200
+# SIMICS-10184
 1.2/errors/ENCONST_array_type
 
-# bug 25244
+# SIMICS-10196
 1.2/errors/ETREC_layout
 
-# bug 7099
+# SIMICS-8806
 1.2/methods/inline_array
 
-# bug 10671
+# SIMICS-8857
 1.2/operators/bitfields_member_sign
 
-# bug 17847
+# SIMICS-9125
 1.2/methods/inline_untyped_extern
 
-# bug 23542
+# SIMICS-9783
 1.2/structure/parameter_if
 
 # SIMICS-11346
