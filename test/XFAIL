@@ -1,9 +1,6 @@
 # SIMICS-11098, old unclassified failures 
-1.2/errors/EAPPLY_4
 1.2/errors/EASSIGN_34
-1.2/errors/EASZVAR_3
 1.2/methods/inline_smallint
-1.2/misc/array_set_8
 1.2/structure/array_size_param
 
 # bug 5980
