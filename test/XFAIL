@@ -1,7 +1,6 @@
 # SIMICS-11098, old unclassified failures 
 1.2/errors/EASSIGN_34
 1.2/methods/inline_smallint
-1.2/structure/array_size_param
 
 # bug 5980
 1.2/errors/EVARPARAM_2
@@ -83,3 +82,6 @@
 
 # SIMICS-18244
 1.4/misc/register_view_fields
+
+# SIMICS-11957
+1.4/structure/array_size_param

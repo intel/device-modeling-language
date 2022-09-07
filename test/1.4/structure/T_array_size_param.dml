@@ -2,16 +2,15 @@
   © 2021-2022 Intel Corporation
   SPDX-License-Identifier: MPL-2.0
 */
-dml 1.2;
+dml 1.4;
 device test;
 /// COMPILE-ONLY
 
-parameter s = 4;
+param s = 4;
 
-struct ss {
-    int x[$s];
-}
+typedef struct {
+    // SIMICS-11957
+    int x[s];
+} x_t;
 
-connect c[$s];
-
-event e[$s];
+group g[i<s];
