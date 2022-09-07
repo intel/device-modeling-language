@@ -842,9 +842,12 @@ class DumpInputFilesTestCase(CTestCase):
             # This does not work on Windows, for unknown reasons.
             # Seems related to symlink semantics somehow, but no
             # need to explore deeper until we have a use case for it.
-            subprocess.run(dmlc + ['_/' + os.path.basename(self.filename),
-                                   self.shortname],
-                           cwd=dir, check=True)
+            cmd = dmlc + ['_/' + os.path.basename(self.filename),
+                          self.shortname]
+            self.pr(f"Running: {' '.join(cmd)}")
+            out = subprocess.check_output(cmd, cwd=dir,
+                                          stderr=subprocess.STDOUT)
+            self.pr(out)
             assert (dir / (self.shortname + '.c')).is_file()
 
 all_tests = []
