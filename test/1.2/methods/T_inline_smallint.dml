@@ -6,41 +6,18 @@ dml 1.2;
 device test;
 import "testing.dml";
 
-// This was discovered in bug 5262
-
-method m(x) -> (y) {
-    log "info": "x is %d (%d bits)", x, sizeof(x)*8;
+method m(x) -> (int y) {
     y = x;
 }
 
 method test -> (bool ok)
 {
-    local int i = 4;
-    local uint8 i8;
+    local uint8 i8 = 255;
     local int r;
-
-    inline $m(i) -> (r);
-    assert r == i;
-
-    inline $m(4) -> (r);
-    assert r == 4;
-
-    for (i = 0; i < 4; i++) {
-        inline $m(i) -> (r);
-        assert r == i;
-    }
-
-    for (i = 0; i < 4; i++) {
-        inline $m(i*128) -> (r);
-        assert r == i*128;
-    }
-
-    i8 = 255;
-    i = i8 * 2;
-    assert i == 510;
-
+    // One of the weird inconsistencies of DML 1.2: DMLC considers uint8 * 2 to
+    // have type uint8. This works better in DML 1.4.
     inline $m(i8 * 2) -> (r);
-    assert r == 510;
+    assert r == 510 % 256;
 
     ok = true;
 }
