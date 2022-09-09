@@ -1,4 +1,4 @@
-# SIMICS-5980
+# SIMICS-8793
 1.2/errors/EVARPARAM_2
 1.2/errors/EVARPARAM_3
 1.2/errors/EVARPARAM_5
@@ -26,7 +26,6 @@
 1.2/errors/EASSIGN_target_type
 
 # SIMICS-19603
-1.2/structure/object_naming
 1.4/structure/object_naming
 
 # SIMICS-8930
