@@ -1428,6 +1428,37 @@ __qname(dml_qname_cache_t *cache, const char *fmt, ...)
         return (const char *)s;
 }
 
+UNUSED static const char *
+_DML_get_qname(_identity_t id, const _id_info_t *id_infos,
+               dml_qname_cache_t *cache) {
+    _id_info_t info = id_infos[id.id];
+
+    if (info.dimensions == 0) {
+        return info.logname;
+    }
+
+    uint32 indices[info.dimensions];
+    uint32 index = id.encoded_index;
+    for (int32 i = info.dimensions - 1; i >= 0; --i) {
+        indices[i] = index % info.dimsizes[i];
+        index /= info.dimsizes[i];
+    }
+
+    const char *logname = info.logname;
+    strbuf_t qname_buf = SB_INIT;
+    for (uint32 i = 0; i < info.dimensions; ++i) {
+        const char *next_index = strchr(logname, '%');
+        ASSERT(next_index && next_index[1] == 'u');
+        sb_addfmt(&qname_buf, "%.*s%u", (int)(next_index - logname),
+                  logname, indices[i]);
+        logname = next_index + 2;
+    }
+    ASSERT(!strchr(logname, '%'));
+    const char *qname = __qname(cache, "%s%s", sb_str(&qname_buf), logname);
+    sb_free(&qname_buf);
+    return qname;
+}
+
 static inline int
 DML_pointer_eq(lang_void *data, lang_void *match_data)
 { return data == match_data; }

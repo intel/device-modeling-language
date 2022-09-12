@@ -283,7 +283,7 @@ class CompositeObject(DMLObject):
         self.traits = traits
 
 class Device(CompositeObject):
-    __slots__ = ('staticvars', 'initdata', 'use_qname_cache', 'static_idx')
+    __slots__ = ('staticvars', 'initdata', 'static_idx')
     objtype = 'device'
     allowed_components = [ 'parameter', 'method', 'saved', 'session', 'bank',
                            'connect', 'attribute', 'event', 'port', 'implement',
@@ -293,7 +293,6 @@ class Device(CompositeObject):
         self.static_idx = 0
         self.staticvars = []
         self.initdata = []
-        self.use_qname_cache = False
 
     def attrname(self):
         return None
