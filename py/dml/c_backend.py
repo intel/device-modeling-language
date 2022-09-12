@@ -142,8 +142,6 @@ def print_device_substruct(node):
         members = [("obj", conf_object_t)]
         for v in node.staticvars:
             members.append((v.value, v.type))
-        if node.use_qname_cache:
-            members.append(("_qname_cache", TNamed("dml_qname_cache_t")))
         return composite_ctype(node,
                                members + [(crep.cname(sub), print_device_substruct(sub))
                                           for sub in node.get_components()],

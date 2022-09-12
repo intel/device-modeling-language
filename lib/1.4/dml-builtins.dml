@@ -427,7 +427,7 @@ and `post_init` are automatically called on all objects that implement
 the [`init`](#init) and [`post_init`](#post_init) template, respectively.
 
 */
-template object is (name, desc, documentation, limitations) {
+template object is (name, _qname, desc, documentation, limitations) {
     // identifier used in DML code
     param _ident auto;
 
@@ -561,6 +561,10 @@ session bool _issuing_state_callbacks = false;
 session bool _has_state_callbacks = false;
 // Used by "X then Y" log level feature
 session ht_int_table_t _subsequent_log_ht;
+
+extern typedef struct { } dml_qname_cache_t;
+// Used by qname
+session dml_qname_cache_t _qname_cache;
 
 // Shared parameters for attributes, registers and connects, which all produce
 // attributes. Methods get_attribute and set_attribute are abstract.
@@ -1010,7 +1014,7 @@ The template also overrides the `configuration` parameter to
 The `init_as_subobj` inherits the [`init`](#init) and
 [`connect`](#connect-objects) templates.
 */
-template init_as_subobj is (connect, init, _qname) {
+template init_as_subobj is (connect, init) {
     param classname;
     param configuration default "none";
     method init() default {
@@ -1073,7 +1077,7 @@ When compiling with Simics API 5 or earlier, evaluates to dev.obj.
 When compiling with Simics API 6 or newer, evaluates to the
 `conf_object_t *` of the port's port object.
 */
-template port is (object, _qname) {
+template port is object {
     param objtype = "port";
     // limitations for ports are not recognized
     param limitations = undefined;
@@ -1099,7 +1103,7 @@ The `subdevice` template exposes one parameter, `obj`, which evaluates to the
 `conf_object_t *` of the Simics object that represents the subdevice.
 */
 
-template subdevice is (object, _qname) {
+template subdevice is object {
     param objtype = "subdevice";
     // limitations for subdevices are not recognized
     param limitations = undefined;
@@ -1404,7 +1408,7 @@ When compiling with Simics API 6 or newer, evaluates to the bank's port object.
 
 </dd></dl>
 */
-template bank is (object, shown_desc, _qname) {
+template bank is (object, shown_desc) {
     // compatibility: referencing 'obj' in a bank method must evaluate to
     // dev.obj in code that can compile on both 5 and 6
     // TODO: we should probably make obj an immutable session variable
@@ -2389,7 +2393,7 @@ that does not match, but `val` is not modified.
 */
 template register is (_conf_attribute, get, set, shown_desc,
                       _bitsize, read_register, write_register,
-                      init_val, _qname) {
+                      init_val) {
     session uint64 val;
 
     param objtype = "register";
@@ -3259,11 +3263,14 @@ template init_val is init {
     param _default_init_val default 0;
 }
 
+extern const _id_info_t *_id_infos;
+extern const char *_DML_get_qname(_identity_t, const _id_info_t *,
+                                  dml_qname_cache_t *);
 template _qname {
-    method _qname() -> (const char *) {
-        return qname;
+    shared method _qname() -> (const char *) {
+        return _DML_get_qname(cast(this, _identity_t), _id_infos,
+                              &_qname_cache);
     }
-    shared method _qname() -> (const char *);
 }
 
 template _read_field is (read_field, _lsb, _bitsize) {}
@@ -3290,7 +3297,7 @@ methods `event` and `post`, and possibly others.
 In addition to the [`object`](#object) template, the `event` template inherits
 the [`shown_desc`](#shown_desc) template.
 */
-template event is (object, shown_desc, _qname) {
+template event is (object, shown_desc) {
     // hack: using double pointer here, since the automatic initialization of
     // the evclass pointer happens after vtables are initialized
     param _pevclass : event_class_t **;
@@ -3584,7 +3591,7 @@ template custom_cycle_event is (_custom_event, _cycle_event) {
     }
 }
 
-template _uint64_event is (_qname, _event) {
+template _uint64_event is _event {
     param _ok = true;
     shared method _callback(void *user) {
         event(cast(user, uintptr_t));
