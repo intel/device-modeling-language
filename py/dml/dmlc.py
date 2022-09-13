@@ -73,9 +73,9 @@ def process(devname, global_defs, top_tpl, extra_params):
         # inheriting the main file, thereby overriding any default
         # declarations from there
         param_tpl = '@<command-line>'
-        param_site = SimpleSite("<command-line>", 0,
+        param_site = SimpleSite("<command-line>:0",
                                 dml_version=dml.globals.dml_version)
-        top_site = SimpleSite(top_tpl[1:], 1,
+        top_site = SimpleSite(top_tpl[1:] + ':1',
                               dml_version=dml.globals.dml_version)
         global_defs.append(ast.template_dml12(
             top_site, param_tpl, [
@@ -112,7 +112,7 @@ def mytrace(frame, event, arg):
 
 def parse_define(arg):
     "Parse a parameter assignment given as a -D option"
-    define_site = SimpleSite('<command-line>', 0,
+    define_site = SimpleSite('<command-line>:0',
                              dml_version=dml.globals.dml_version)
     (lexer, _) = toplevel.get_parser((1, 4))
     lexer.filename = filename = "<command-line>"
