@@ -31,7 +31,7 @@ class Code(object, metaclass=SlotsMeta):
                                     for name in self.init_args[2:]))
 
     def linemark(self):
-        if dml.globals.linemarks and self.site:
+        if dml.globals.linemarks and not isinstance(self.site, SimpleSite):
             # out("/* %s */\n" % repr(self))
             out('#line %d "%s"\n' % (self.site.lineno,
                                      quote_filename(self.site.filename())))
