@@ -4114,7 +4114,6 @@ class QName(Expression):
             report(WCONFIDENTIAL(self.site))
 
         if self.indices and not all(x.constant for x in self.indices):
-            dml.globals.device.use_qname_cache = True
             idx_args = [", (int)" + idx.read() for idx in self.indices]
             return '__qname(&_dev->_qname_cache, "%s"%s)' \
                    % (self.node.logname(("%u",) * len(idx_args),

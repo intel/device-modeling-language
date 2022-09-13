@@ -5,7 +5,9 @@
 dml 1.2;
 device eassign;
 
-method init {
-    /// ERROR EASSIGN
+/// COMPILE-ONLY
+
+method init() {
+    // allowed in DML 1.2, which is weird. Covered by ENVAL in 1.4.
     $dev = $dev;
 }

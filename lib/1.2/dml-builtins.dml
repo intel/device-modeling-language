@@ -233,6 +233,10 @@ data bool _has_state_callbacks = false;
 // Used by "X then Y" log level feature
 data ht_int_table_t _subsequent_log_ht;
 
+extern typedef struct { } dml_qname_cache_t;
+// Used by qname
+data dml_qname_cache_t _qname_cache;
+
 template conf_attribute {
     parameter configuration             default "optional";
     parameter persistent                default false;
