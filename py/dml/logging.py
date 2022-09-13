@@ -276,17 +276,14 @@ class Site(metaclass=abc.ABCMeta):
 class SimpleSite(Site):
     '''A variant of Site without line information. Useful for code
     that doesn't come from a real DML file'''
-    __slots__ = ('_name', '_line', '_dml_version')
-    def __init__(self, name, line=None, column=None, dml_version=(1, 4)):
+    __slots__ = ('_name', '_dml_version')
+    def __init__(self, name, dml_version=(1, 4)):
         self._name = name
         self._dml_version = dml_version
-        self._line = '' if line is None else f':{line}'
-        if column is not None:
-            self._line += f':{column}'
     def __repr__(self):
-        return f'<site {self.loc()}>'
+        return '<site %s>' % (self._name,)
     def loc(self):
-        return f'{self._name}{self._line}'
+        return self._name
     def filename(self):
         return self._name
     def dml_version(self):
