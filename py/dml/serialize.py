@@ -315,7 +315,7 @@ def type_signature(dmltype):
 
 def generate_serialize(real_type):
     site = logging.SimpleSite(
-        "generated serialization function for %s" % real_type)
+        f"<generated serialization function for {real_type}>")
     function_name = "DML_serialize_%s" % type_signature(real_type)
 
     in_arg_ty = TPtr(real_type)
@@ -374,7 +374,7 @@ def generate_serialize(real_type):
 
 def generate_deserialize(real_type):
     site = logging.SimpleSite(
-        "generated deserialization function for %s" % (real_type,))
+        "<generated deserialization function for {real_type}>")
     function_name = "DML_deserialize_%s" % type_signature(real_type)
 
     in_arg_ty = TPtr(attr_value_t)
