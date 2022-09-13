@@ -2147,8 +2147,9 @@ class SingleParamValue(ParamValue):
     ptype: DMLType
     def tinit_arg(self):
         if deep_const(self.ptype):
-            k = (TArray(self.ptype, mkIntegerLiteral(logging.SimpleSite(""), 1))
-                 .declaration(""))
+            k = TArray(self.ptype,
+                       mkIntegerLiteral(logging.SimpleSite(
+                           "<SingleParamValue>"), 1)).declaration("")
             size = f'sizeof({self.ptype.declaration("")})'
             return f'memcpy(malloc({size}), ({k}) {{ {self.value} }}, {size})'
         else:
