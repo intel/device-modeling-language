@@ -1225,10 +1225,10 @@ parameter is declared to exist (and *must* be given a value, or the model will
 not compile). This is sometimes useful in templates, as in:
 
 ```
-template constant {
+template constant is register {
     param value;
-    method get() -> (v) {
-        v = value;
+    method get() -> (uint64) {
+        return value;
     }
 }
 ```
