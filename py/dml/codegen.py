@@ -2080,7 +2080,7 @@ def stmt_log(stmt, location, scope):
                                         ExpressionInitializer(level_expr))]
         level = mkLocalVariable(site, LocalSymbol("_calculated_level",
                                                   "_calculated_level",
-                                                  TInt(64, False)))
+                                                  TInt(64, False), site=site))
 
     else:
         pre_statements = []
@@ -2231,14 +2231,14 @@ def foreach_each_in(site, itername, trait, each_in,
     scope = Symtab(scope)
     each_in_sym = scope.add_variable(
         '_each_in_expr', type=TTraitList(trait.name),
-        init=ExpressionInitializer(each_in), stmt = True)
+        init=ExpressionInitializer(each_in), stmt=True, site=site)
     ident = each_in_sym.value
     inner_scope = Symtab(scope)
     trait_type = TTrait(trait)
     trait_ptr = (f'(struct _{cident(trait.name)} *) _list.vtable')
     obj_ref = '(_identity_t) { .id = _list.id, .encoded_index = _inner_idx}'
     inner_scope.add_variable(
-        itername, type=trait_type,
+        itername, type=trait_type, site=site,
         init=ExpressionInitializer(
             mkLit(site,
                   ('((%s) {%s, %s})' % (trait_type.declaration(''),
@@ -3027,7 +3027,8 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
                 code = []
                 for ((varname, parmtype), init) in zip(outp, initializers):
                     sym = fnscope.add_variable(
-                        varname, type=parmtype, init=init, make_unique=True)
+                        varname, type=parmtype, init=init, make_unique=True,
+                        site=ast.site)
                     sym.incref()
                     code.append(sym_declaration(sym))
             else:

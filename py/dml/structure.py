@@ -1297,7 +1297,7 @@ def process_method_implementations(obj, name, implementations,
             continue
         defaults = default_map[impl]
         if len(defaults) == 0:
-            default = InvalidDefault(traits.NoDefaultSymbol())
+            default = InvalidDefault(traits.NoDefaultSymbol(impl.site))
         elif len(defaults) == 1:
             if defaults[0].shared:
                 [trait] = shared_impl_traits

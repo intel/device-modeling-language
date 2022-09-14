@@ -46,9 +46,9 @@ def unmapped_access(site, bank, idx, scope, isread, overlapping, bigendian,
     scope = Symtab(scope)
     code = []
     success = mkLocalVariable(site, scope.add_variable(
-        'success', type = TBool(),
-        init = ExpressionInitializer(mkBoolConstant(site, 0)),
-        make_unique = True))
+        'success', type=TBool(), site=site,
+        init=ExpressionInitializer(mkBoolConstant(site, 0)),
+        make_unique=True))
 
     if isread:
         code.append(codegen_call_byname(

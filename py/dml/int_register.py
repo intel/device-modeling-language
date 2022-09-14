@@ -88,9 +88,10 @@ def codegen_get_number(impl, indices, inargs, outargs, site):
     scope = Symtab(global_scope)
     regvar = mkLocalVariable(site, scope.add_variable(
         'reg',
-        type = regmap_table_type,
-        init = reg,
-        make_unique = True))
+        type=regmap_table_type,
+        init=reg,
+        make_unique=True,
+        site=site))
 
     return mkCompound(
         site,
@@ -129,11 +130,12 @@ def codegen_read(impl, indices, inargs, outargs, site):
     scope = Symtab(global_scope)
     regvar = mkLocalVariable(site, scope.add_variable(
         'reg',
-        type = regmap_table_type,
-        init = ExpressionInitializer(
+        type=regmap_table_type,
+        init=ExpressionInitializer(
             mkApply(site, find_regnum,
                     [regmap_table, regmap_table_len, num])),
-        make_unique = True))
+        make_unique=True,
+        site=site))
 
     devtype = node_storage_type(globals.device)
     read_reg = mkLit(None, '_DML_read_reg',
@@ -175,11 +177,12 @@ def codegen_write(impl, indices, inargs, outargs, site):
     scope = Symtab(global_scope)
     regvar = mkLocalVariable(site, scope.add_variable(
         'reg',
-        type = regmap_table_type,
-        init = ExpressionInitializer(
+        site=site,
+        type=regmap_table_type,
+        init=ExpressionInitializer(
             mkApply(site, find_regnum,
                     [regmap_table, regmap_table_len, num])),
-        make_unique = True))
+        make_unique=True))
 
     devtype = node_storage_type(globals.device)
     write_reg = mkLit(None, '_DML_write_reg',

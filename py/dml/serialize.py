@@ -66,7 +66,8 @@ def declare_variable(site, name, type, init_expr = None):
     else:
         init = None
     return (ctree.mkDeclaration(site, name, type, init = init),
-            ctree.mkLocalVariable(site, symtab.LocalSymbol(name, name, type)))
+            ctree.mkLocalVariable(
+                site, symtab.LocalSymbol(name, name, type, site=site)))
 
 def prepare_array_de_serialization(site, t):
     assert(isinstance(t, TArray))
