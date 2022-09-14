@@ -893,10 +893,10 @@ configuration [`"required"` | `"optional"` | `"pseudo"` | `"none"`]
 
 Specifies how Simics treats the automatically created
 [attribute](#attribute-objects)
-corresponding to the connect object. Note that for array objects,
-setting this parameter to `"optional"` has the effect that each
-instance of the connect can be individually set to a nil value.
-</dd><dt>
+corresponding to the connect object. The default value is `"optional"`.
+
+The attribute can be set to a nil value only if this parameter is `"optional"`
+or `"pseudo"`. In an array of connects, this applies element-wise.</dd><dt>
 
 internal [bool]
 </dt><dd>
@@ -2334,7 +2334,8 @@ configuration [`"required"` | `"optional"` | `"pseudo"` | `"none"`]
 </dt><dd>
 
 Specifies how Simics treats the automatically created [attribute]
-(#attribute-objects) corresponding to the register.
+(#attribute-objects) corresponding to the register. The default value is
+`"optional"`.
 </dd><dt>
 
 persistent [bool]
