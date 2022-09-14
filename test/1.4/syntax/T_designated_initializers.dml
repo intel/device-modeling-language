@@ -71,4 +71,17 @@ method test() throws {
     assert c.y.j == 3;
     assert d.x   == 1;
     assert d.y   == ((2 << 16) | 3);
+
+    local struct_t e = { .y = { .i = 2, ... }, ... };
+    local ext_struct_t f = { .y = { .i = 2, ... }, ... };
+    local layout_t g = { .y = { .i = 2, ... }, ... };
+    local bitfields_t h = { .y = { .i = 2, ... }, ... };
+    assert e.x == 0 && e.y.j == 0;
+    assert e.y.i == 2;
+    assert f.x   == 0 && f.y.j == 0;
+    assert f.y.i == 2;
+    assert g.x   == 0 && g.y.j == 0;
+    assert g.y.i == 2;
+    assert h.x   == 0;
+    assert h.y   == 2 << 16;
 }

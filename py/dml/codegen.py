@@ -1146,7 +1146,7 @@ class SimpleEvents(object):
 
 simple_events = SimpleEvents()
 
-def check_designated_initializers(site, etype, init_asts):
+def check_designated_initializers(site, etype, init_asts, allow_partial):
     shallow_real_etype = safe_realtype_shallow(etype)
     duplicates = set()
     bad_fields = set()
@@ -1158,7 +1158,7 @@ def check_designated_initializers(site, etype, init_asts):
             duplicates.add(field)
         else:
             remaining.remove(field)
-    if (duplicates or bad_fields or remaining):
+    if (duplicates or bad_fields or (not allow_partial and remaining)):
         raise EDATAINIT(site,
                         ''.join("\nduplicate initializer for "
                                 + f"member '{field}'"
@@ -1166,10 +1166,12 @@ def check_designated_initializers(site, etype, init_asts):
                         + ''.join(f"\n'{field}' is not a member of "
                                   + f"{etype}"
                                   for field in bad_fields)
-                        + ("\nmissing initializer(s) for field(s) "
+                        + ("\nmissing initializer(s) for member(s) "
                            + ", ".join(f"'{field}'"
                                        for field in remaining)
-                           if remaining else '')
+                           + "\n(partial initialization must be explicit "
+                           + "through trailing '...', e.g. '{.a = a, ...}')"
+                           if not allow_partial and remaining else '')
                         )
 
 def loss_on_truncation(v, bits, signed):
@@ -1233,7 +1235,7 @@ def mk_bitfield_compound_initializer_expr(site, etype, inits, location, scope,
                             init_asts)
             else:
                 assert e.kind == 'initializer_designated_struct'
-                check_designated_initializers(e.site, ft, init_asts)
+                check_designated_initializers(e.site, ft, init_asts, e.args[1])
                 inits = ((real_ft.get_member_qualified(field), init)
                          for (field, init) in init_asts)
 
@@ -1275,16 +1277,18 @@ def eval_initializer(site, etype, astinit, location, scope, static):
             return ExpressionInitializer(
                 source_for_assignment(astinit.site, etype, expr))
         elif astinit.kind == 'initializer_designated_struct':
-            init_asts = astinit.args[0]
+            (init_asts, allow_partial) = astinit.args
             if isinstance(shallow_real_etype, StructType):
-                check_designated_initializers(astinit.site, etype, init_asts)
+                check_designated_initializers(astinit.site, etype, init_asts,
+                                              allow_partial)
                 inits = {field: do_eval(shallow_real_etype
                                         .get_member_qualified(field),
                                         init)
                          for (field, init) in init_asts}
                 return DesignatedStructInitializer(site, inits)
             elif shallow_real_etype.is_int and shallow_real_etype.is_bitfields:
-                check_designated_initializers(astinit.site, etype, init_asts)
+                check_designated_initializers(astinit.site, etype, init_asts,
+                                              allow_partial)
                 return ExpressionInitializer(
                     mk_bitfield_compound_initializer_expr(
                         astinit.site, etype,

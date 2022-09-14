@@ -1883,7 +1883,12 @@ def single_initializer_list_many(t):
 def initializer_designated_struct(t):
     '''single_initializer : LBRACE designated_struct_initializer_list RBRACE
                           | LBRACE designated_struct_initializer_list COMMA RBRACE'''
-    t[0] = ast.initializer_designated_struct(site(t), t[2])
+    t[0] = ast.initializer_designated_struct(site(t), t[2], False)
+
+@prod_dml14
+def initializer_partial_designated_struct(t):
+    '''single_initializer : LBRACE designated_struct_initializer_list COMMA ELLIPSIS RBRACE'''
+    t[0] = ast.initializer_designated_struct(site(t), t[2], True)
 
 @prod_dml14
 def designated_struct_initializer(t):

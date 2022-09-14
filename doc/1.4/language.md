@@ -1781,8 +1781,16 @@ C99-style designated initializers are supported for `struct`, `layout`, and
 typedef struct { int x; struct { int i; int j; } y; } struct_t;
 session struct_t s = { .x = 1, .y = { .i = 2, .j = 3 } }
 ```
-Unlike C, designator lists are not supported, and designated initializers for
-arrays are not supported.
+Unlike C, partial initialization is not allowed implicitly; a designated
+initializer for each member must be specified.
+However, partial initialization can be done explicitly through the use of
+trailing `...` syntax:
+```
+session struct_t s = { .y = { .i = 2, ... }, ... }
+```
+
+Also unlike C, designator lists are not supported, and designated initializers
+for arrays are not supported.
 
 <div class="note">
 
@@ -1827,8 +1835,16 @@ C99-style designated initializers are supported for `struct`, `layout`, and
 typedef struct { int x; struct { int i; int j; } y; } struct_t;
 saved struct_t s = { .x = 1, .y = { .i = 2, .j = 3 } }
 ```
-Unlike C, designator lists are not supported, and designated initializers for
-arrays are not supported.
+Unlike C, partial initialization is not allowed implicitly; a designated
+initializer for each member must be specified.
+However, partial initialization can be done explicitly through the use of
+trailing `...` syntax:
+```
+session struct_t s = { .y = { .i = 2, ... }, ... }
+```
+
+Also unlike C, designator lists are not supported, and designated initializers
+for arrays are not supported.
 
 In addition, the types of saved declaration variables are currently
 restricted to primitive data types, or structs or arrays containing

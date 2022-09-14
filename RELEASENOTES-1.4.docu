@@ -366,4 +366,11 @@
       implementation still calls <tt>unmapped_read</tt>
       or <tt>unmapped_write</tt>, then that model will no longer
       suppress logging.</add-note></build-id>
+  <build-id value="next"><add-note>When using designated initializers, partial
+      initialization is now possible through trailing <tt>...</tt> syntax
+      <bug number="SIMICS-18705"/>. Members not explicitly initialized are
+      zero-initialized. For example, the following is now supported:
+      <pre>
+      local struct { int value; bool valid; } x = {.valid = false, ...}
+      </pre></add-note></build-id>
 </rn>
