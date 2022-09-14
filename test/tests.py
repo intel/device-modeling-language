@@ -849,9 +849,14 @@ class DumpInputFilesTestCase(CTestCase):
             cmd = dmlc + ['_/' + os.path.basename(self.filename),
                           self.shortname]
             self.pr(f"Running: {' '.join(cmd)}")
-            out = subprocess.check_output(cmd, cwd=dir,
+            output = Path(self.scratchdir) / 'recompile.out'
+            try:
+                with open(output, 'w') as f:
+                    subprocess.check_call(cmd, cwd=dir,
+                                          stdout=f,
                                           stderr=subprocess.STDOUT)
-            self.pr(out)
+            finally:
+                self.pr(output.read_text())
             assert (dir / (self.shortname + '.c')).is_file()
 
 all_tests = []
