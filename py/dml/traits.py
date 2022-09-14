@@ -99,8 +99,8 @@ class NoDefaultSymbol(Symbol):
     method. This is represented as an explicit symbol in order to
     report ENDEFAULT instead of the slightly less informative
     EIDENT."""
-    def __init__(self):
-        super(NoDefaultSymbol, self).__init__('default')
+    def __init__(self, site):
+        super(NoDefaultSymbol, self).__init__('default', site=site)
     def expr(self, site):
         raise ENDEFAULT(site)
 
@@ -110,7 +110,8 @@ class AmbiguousDefaultSymbol(Symbol):
     symbol in order to report EAMBDEFAULT instead of the slightly
     less informative EIDENT."""
     def __init__(self, default_method_sites):
-        super(AmbiguousDefaultSymbol, self).__init__('default')
+        super(AmbiguousDefaultSymbol, self).__init__(
+            'default', site=default_method_sites[0])
         self.default_method_sites = default_method_sites
     def expr(self, site):
         raise EAMBDEFAULT(site, self.default_method_sites)
@@ -214,7 +215,7 @@ class TraitMethod(TraitVTableItem):
                         default_method),
                     site)
             else:
-                default = NoDefaultSymbol()
+                default = NoDefaultSymbol(self.site)
                 # TODO: we should also have a clause for AmbiguousDefault here
 
             for (n, t) in self.outp:

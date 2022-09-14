@@ -20,6 +20,7 @@ class Symbol(object):
     pseudo = True
     __slots__ = ('name', 'value', 'site', '_refcount')
     def __init__(self, name, value = None, site = None):
+        assert site
         self.name = name
         self.value = value
         self.site = site

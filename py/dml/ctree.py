@@ -4391,6 +4391,7 @@ class Declaration(Statement):
     "A variable declaration"
     is_declaration = True
     def __init__(self, site, name, type, init = None, unused = False):
+        assert site
         self.site = site
         self.name = name
         self.type = type

@@ -764,9 +764,9 @@ class ExprTests(GccTests):
         with endian_var_decl:
             var_declaration.toc()
         operation = op(site, ctree.mkLocalVariable(
-            site, symtab.LocalSymbol('x', 'x', endian_type)))
+            site, symtab.LocalSymbol('x', 'x', endian_type, site=site)))
         var_read = ctree.as_int(ctree.mkLocalVariable(
-            site, symtab.LocalSymbol('x', 'x', endian_type)))
+            site, symtab.LocalSymbol('x', 'x', endian_type, site=site)))
         expect_int64 = size != 8 or signed
         self.expect_int_type(operation.ctype(), expect_int64)
         return [
