@@ -74,6 +74,8 @@ else:
     python = [join(simics_root_path(), host_type(), "bin", "py3",
                    "mini-python" + exe_sfx)]
 
+line_directives = bool(os.environ.get('DMLC_LINE_DIRECTIVES'))
+
 dmlc = python + [join(project_host_path(), "bin", "dml", "python")]
 
 if not is_windows():
@@ -256,7 +258,9 @@ class DMLFileTestCase(BaseTestCase):
         args =[]
         args += dmlc_reaper_args(exitcode_file,
                                  dmlc_timeout_multipliers.get(self.fullname, 1))
-        args += dmlc + ["-T", "--noline"]
+        args += dmlc + ["-T"]
+        if not line_directives:
+            args += ["--noline"]
         args += dmlc_extraargs
         if self.api_version:
             args += ["--simics-api=" + self.api_version]
