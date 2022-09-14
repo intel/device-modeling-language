@@ -590,7 +590,7 @@ The `attribute` template contains the following methods:
 
 <dl><dt>
 
-<small>get() -&gt; (attr\_value\_t value)</small>
+<small>get() -&gt; (attr\_value\_t)</small>
 </dt><dd>
 
 Abstract method. Returns the value of the attribute.
@@ -603,7 +603,7 @@ Abstract method. Sets the value of the attribute. If the provided value is
 not allowed, use a `throw` statement to signal the error.
 </dd><dt>
 
-<small>get\_attribute -&gt; (attr\_value\_t value), set\_attribute(attr\_value\_t value) -&gt; (set\_error\_t err)</small>
+<small>get\_attribute -&gt; (attr\_value\_t), set\_attribute(attr\_value\_t value) -&gt; (set\_error\_t)</small>
 </dt><dd>
 
 Not intended to be used directly. Called by Simics for reading and
@@ -855,7 +855,7 @@ The `connect` template contains the following methods:
 
 <dl><dt>
 
-<small>validate(conf\_object\_t \*obj) -&gt; (bool valid)</small>
+<small>validate(conf\_object\_t \*obj) -&gt; (bool)</small>
 </dt><dd>
 
 Called when Simics attempts to assign a new target object. If the return value
@@ -876,8 +876,8 @@ Called after validation, to assign a new target object. Can be
 overridden to add side-effects before or after the assignment
 </dd><dt>
 
-<small>get\_attribute -&gt; (attr\_value\_t value),
-set\_attribute(attr\_value\_t value) -&gt; (set\_error\_t err)</small>
+<small>get\_attribute -&gt; (attr\_value\_t),
+set\_attribute(attr\_value\_t value) -&gt; (set\_error\_t)</small>
 </dt><dd>
 
 Internal, not intended to be used directly. Called by Simics for accessing
@@ -3428,7 +3428,7 @@ and `custom_cycle_event` templates:
 
 <dl><dt>
 
-<small>get\_event\_info(void \*data) -&gt; (attr\_value\_t info)</small>
+<small>get\_event\_info(void \*data) -&gt; (attr\_value\_t)</small>
 </dt><dd>
 
 This method is called once for each pending event instance when
@@ -3438,7 +3438,7 @@ user data provided in the `post` call.  The default
 implementation always returns a nil value.
 </dd><dt>
 
-<small>set\_event\_info(attr\_value\_t info) -&gt; (void \*data)</small>
+<small>set\_event\_info(attr\_value\_t info) -&gt; (void \*)</small>
 </dt><dd>
 
 This method is used to restore event information when loading a
