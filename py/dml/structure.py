@@ -138,6 +138,9 @@ def mkglobals(stmts):
                         template_body.append(tstmt)
                         if stmt.kind == 'template':
                             trait_body.append(tstmt)
+                    elif tstmt.kind == 'sharedhook':
+                        template_body.append(tstmt.args[0])
+                        trait_body.append(tstmt.args[0])
                     else:
                         template_body.append(tstmt)
                 if stmt.kind == 'template_dml12' and name != 'object':
@@ -245,6 +248,9 @@ def check_named_types(t):
     elif isinstance(t, TTraitList):
         if t.traitname not in dml.globals.traits:
             raise ETYPE(t.declaration_site, t)
+    elif isinstance(t, THook):
+        for msg_t in t.msg_types:
+            check_named_types(msg_t)
     elif isinstance(t, (TVoid, IntegerType, TBool, TFloat, TTrait)):
         pass
     else:
@@ -457,6 +463,11 @@ def wrap_sites(obj_spec, issite, tname):
                 shallow_wrapped.append(
                     ast.saved(TemplateSite(site, issite, tname),
                               decls, inits))
+            elif asttype == 'hook':
+                (_, site, *rest) = stmt
+                shallow_wrapped.append(
+                    ast.hook(TemplateSite(site, issite, tname),
+                             *rest))
             else:
                 raise ICE(issite, 'unknown node type %r %r' % (asttype, stmt))
         composite_wrapped = [
@@ -521,17 +532,6 @@ def add_templates(obj_specs, each_stmts):
         PWUNUSED.used_templates.update(used_templates)
 
     return obj_specs
-
-def eval_arraylen(size_ast, parent_scope):
-    size = codegen_expression(size_ast, parent_scope, global_scope)
-    if not size.constant:
-        raise EASZVAR(size.site, size)
-    if not isinstance(size.value, int):
-        report(EBTYPE(size.site, size, "integer"))
-        return 2  # arbitrary nonzero integer
-    if size.value < 1:
-        raise EASZR(size.site)
-    return size.value
 
 def merge_parameters(defs, obj_specs):
     '''Given a list of parameters along with the templates they are
@@ -816,6 +816,27 @@ def mksaved(spec, parent):
     serialize.mark_for_serialization(site, typ)
 
     return obj
+
+def mkhook(spec, parent):
+    (_, site, name, arraylen_asts, type_asts) = spec
+    parent_scope = Location(parent, static_indices(parent))
+    types = []
+    for type_ast in type_asts:
+        (struct_defs, dtype) = eval_type(type_ast, site, parent_scope,
+                                         global_scope)
+        add_late_global_struct_defs(struct_defs)
+        typ = dtype.resolve()
+        try:
+            safe_realtype(typ).key()
+        except DMLUnkeyableType as e:
+            report(EHOOKTYPE(typ.declaration_site or site, typ,
+                             e.clarification))
+        types.append(typ)
+
+    array_lens = tuple(eval_arraylen(len_ast, parent_scope)
+                       for len_ast in arraylen_asts)
+
+    return objects.Hook(name, site, parent, types, array_lens)
 
 def register_fields(reg):
     '''Return a generator returning all field instances of a
@@ -1483,6 +1504,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
     method_asts = {}
     sessions = {}
     saved = {}
+    hooks = {}
     # list of export stmnts
     exports = []
     for (stmts, rank) in shallow_subobjs:
@@ -1537,6 +1559,9 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                             saved[name] = (s.site, name, typ_ast, init_ast)
             elif s.kind == 'export':
                 exports.append(s)
+            elif s.kind == 'hook':
+                (name, _, _) = s.args
+                hooks[name] = s
             else:
                 raise ICE(s.site, 'UNKNOWN %r' % (s,))
 
@@ -1579,7 +1604,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                     t.name for t in direct_parents)),
                 # traitset is a frozenset, with undefined iteration order;
                 # must sort it to keep compilation deterministic
-                Set(sorted(traitset)), {}, {}, {}, {})
+                Set(sorted(traitset)), {}, {}, {}, {}, {})
             implicit_traits[traitset] = new_trait
             if new_trait.name in dml.globals.traits:
                 raise ICE(
@@ -1674,6 +1699,13 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             report(e)
         else:
             subobjs.append(subobj)
+    for name in sorted(hooks):
+        try:
+            subobj = mkhook(hooks[name], obj)
+        except DMLError as e:
+            report(e)
+        else:
+            subobjs.append(subobj)
 
     # map logical subobj name to whatever set the name (ident or name param)
     subobj_name_defs = {}
@@ -1730,6 +1762,11 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             if member_kind == 'session':
                 # an implicit data object has been added earlier on
                 assert override and override.objtype in ('session', 'saved')
+                # handled as a special case in vtable initialization
+                continue
+            elif member_kind == 'hook':
+                # an implicit hook has been added earlier on
+                assert override and override.objtype == 'hook'
                 # handled as a special case in vtable initialization
                 continue
             if not override:

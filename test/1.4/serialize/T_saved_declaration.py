@@ -118,5 +118,29 @@ stest.expect_equal(obj.saved_traitref_invalid, ['', []])
 obj.saved_traitref_invalid = ['', []]
 stest.expect_equal(obj.saved_traitref_invalid, ['', []])
 
+def test_hookref_attr(identity, prefix, hookname, hook_indices=[]):
+    [logname, indices] = identity
+    hook_logname = (logname + '.' + hookname
+                    + ''.join('[%u]' for _ in hook_indices))
+    hook_identity = [hook_logname, indices + hook_indices]
+    saved_hook_attr_name = (prefix + '_' + hookname +
+                            ''.join(f'_{i}' for i in hook_indices))
+    setattr(obj, saved_hook_attr_name, hook_identity)
+    stest.expect_equal(getattr(obj, saved_hook_attr_name), hook_identity)
+
+for (hookname, hook_indices) in (('h1', []), ('h2', []), ('h3', [2, 1])):
+    test_hookref_attr(g1_id, 'saved_hookref_g1', hookname, hook_indices)
+    test_hookref_attr(g2_2_id, 'saved_hookref_g2_2', hookname, hook_indices)
+    test_hookref_attr(g2_0_child_id, 'saved_hookref_g2_0_child', hookname,
+                      hook_indices)
+    test_hookref_attr(g2_1_children_2_4_id, 'saved_hookref_g2_1_children_2_4',
+                      hookname, hook_indices)
+
+for i in range(1, 4):
+    hookref_attr = f'saved_hookref_invalid_{i}'
+    stest.expect_equal(getattr(obj, hookref_attr), ['', []])
+    setattr(obj, hookref_attr, ['', []])
+    stest.expect_equal(getattr(obj, hookref_attr), ['', []])
+
 # Test set values within dml
 obj.test_later = None

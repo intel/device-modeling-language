@@ -36,6 +36,7 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
     methods = {}
     params = {}
     sessions = {}
+    hooks = {}
     def check_namecoll(name, site):
         if name in methods:
             (othersite, _, _, _, _, _, _, _, _, _) = methods[name]
@@ -45,6 +46,9 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
             raise ENAMECOLL(site, othersite, name)
         if name in sessions:
             (othersite, _) = sessions[name]
+            raise ENAMECOLL(site, othersite, name)
+        if name in hooks:
+            (othersite, _, _) = hooks[name]
             raise ENAMECOLL(site, othersite, name)
 
     for ast in subasts:
@@ -87,11 +91,25 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                     report(EANONSTRUCT(err_site, "parameter type"))
                 check_namecoll(pname, ast.site)
                 params[pname] = (ast.site, ptype)
+            elif ast.kind == 'hook':
+                (hname, arraylen_asts, type_asts) = ast.args
+
+                msg_types = []
+                for type_ast in type_asts:
+                    (struct_defs, dtype) = eval_type(type_ast, site, None,
+                                                     global_scope)
+                    add_late_global_struct_defs(struct_defs)
+                    # TODO maybe realtype?
+                    msg_types.append(dtype)
+                array_lens = tuple(eval_arraylen(len_ast, global_scope)
+                                   for len_ast in arraylen_asts)
+                check_namecoll(hname, ast.site)
+                hooks[hname] = (ast.site, array_lens, msg_types)
             else:
                 raise ICE(ast.site, 'unknown ast')
         except DMLError as e:
             report(e)
-    return mktrait(site, name, ancestors, methods, params, sessions,
+    return mktrait(site, name, ancestors, methods, params, sessions, hooks,
                    template_symbols)
 
 class NoDefaultSymbol(Symbol):
@@ -252,7 +270,8 @@ def merge_ancestor_vtables(ancestors, site):
     for ancestor in ancestors:
         for name in itertools.chain(
                 ancestor.vtable_methods, ancestor.vtable_params,
-                ancestor.vtable_sessions, ancestor.vtable_memoized_outs):
+                ancestor.vtable_sessions, ancestor.vtable_hooks,
+                ancestor.vtable_memoized_outs):
             if name in ancestor_vtables:
                 # This may mean that an abstract method or parameter is
                 # defined in two traits. We could allow this, as long
@@ -263,7 +282,7 @@ def merge_ancestor_vtables(ancestors, site):
                 ancestor_vtables[name] = ancestor
     return ancestor_vtables
 
-def mktrait(site, tname, ancestors, methods, params, sessions,
+def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
             template_symbols):
     '''Produce a trait, possibly reporting errors'''
     direct_parents = [a for a in ancestors
@@ -339,17 +358,30 @@ def mktrait(site, tname, ancestors, methods, params, sessions,
     for name in bad_methods:
         del methods[name]
 
+    bad_hooks =  []
+    for name in hooks:
+        for ancestor in direct_parents:
+            coll = ancestor.member_declaration(name)
+            if coll:
+                (orig_site, _) = coll
+                (session_site, _, _) = hooks[name]
+                report(ENAMECOLL(session_site, orig_site, name))
+                bad_hooks.append(name)
+    for name in bad_hooks:
+        del hooks[name]
+
     reserved_symbols = {sym: template_symbols[sym]
                          for sym in template_symbols
                          if (sym not in methods
                              and sym not in params
                              and sym not in sessions
+                             and sym not in hooks
                              and sym not in ancestor_vtables
                              and sym not in ancestor_method_impls)}
     # referencing 'dev.xyz' from a shared method is always OK, even if
     # it's technically an untyped object parameter
     reserved_symbols.pop('dev', None)
-    return Trait(site, tname, ancestors, methods, params, sessions,
+    return Trait(site, tname, ancestors, methods, params, sessions, hooks,
                  ancestor_vtables, ancestor_method_impls, reserved_symbols)
 
 def typecheck_method_override(left, right):
@@ -592,6 +624,10 @@ class ReservedSymbol(NonValue):
                # template type, but not if declared inside #if
                'session': 'conditional session variable %s',
                'saved': 'conditional saved variable %s',
+               # hooks are only part of the template type if declared
+               # shared
+               'hook': 'hook %s',
+               # template type, but not if declared inside #if
                'subobj': 'subobject %s',
                }[self.kind] % (self.name,)
         return ENSHARED(self.site, fmt, self.template, self.decl_site)
@@ -603,7 +639,7 @@ class Trait(SubTrait):
     # all its subtraits.
     referenced = Set()
 
-    def __init__(self, site, name, ancestors, methods, params, sessions,
+    def __init__(self, site, name, ancestors, methods, params, sessions, hooks,
                  ancestor_vtables, ancestor_method_impls, reserved_symbols):
         method_impls = {
             name: TraitMethod(
@@ -639,6 +675,8 @@ class Trait(SubTrait):
             if overridable and name not in ancestor_vtables}
         self.vtable_params = params
         self.vtable_sessions = sessions
+        self.vtable_hooks = {name: (hooks[name], THook(hooks[name][2]))
+                             for name in hooks}
         self.vtable_memoized_outs = {
             '_memo_outs_' + name: method.memo_outs_struct
             for (name, method) in method_impls.items()
@@ -677,8 +715,8 @@ class Trait(SubTrait):
 
     def empty(self):
         return not (self.direct_parents or self.vtable_params
-                    or self.vtable_sessions or self.vtable_methods
-                    or self.vtable_memoized_outs)
+                    or self.vtable_sessions or self.vtable_hooks
+                    or self.vtable_methods or self.vtable_memoized_outs)
 
     def members(self):
         '''Return a generator yielding the names of all members of this
@@ -686,6 +724,8 @@ class Trait(SubTrait):
         for name in self.vtable_params:
             yield name
         for name in self.vtable_sessions:
+            yield name
+        for name in self.vtable_hooks:
             yield name
         for name in self.vtable_methods:
             assert name not in self.ancestor_vtables
@@ -717,6 +757,9 @@ class Trait(SubTrait):
             return (site, self)
         elif name in self.vtable_sessions:
             (site, _) = self.vtable_sessions[name]
+            return (site, self)
+        elif name in self.vtable_hooks:
+            ((site, _, _), _) = self.vtable_hooks[name]
             return (site, self)
         elif name in self.ancestor_vtables:
             return self.ancestor_vtables[name].member_declaration(name)
@@ -750,6 +793,13 @@ class Trait(SubTrait):
         if name in self.vtable_sessions:
             (_, ptype) = self.vtable_sessions[name]
             return mkDereference(site, TraitSessionRef(site, expr, name, ptype))
+        if name in self.vtable_hooks:
+            ((_, dimsizes, _), hooktyp) = self.vtable_hooks[name]
+            if dimsizes:
+                return TraitHookArrayRef(site, dimsizes, hooktyp, expr, name,
+                                         ())
+            else:
+                return TraitHookRef(site, (), hooktyp, expr, name, ())
         vtable_trait = self.ancestor_vtables.get(name, None)
         if vtable_trait:
             return vtable_trait.lookup(
@@ -787,6 +837,8 @@ class Trait(SubTrait):
             return 'parameter'
         elif name in self.vtable_sessions:
             return 'session'
+        elif name in self.vtable_hooks:
+            return 'hook'
         elif name in self.vtable_memoized_outs:
             return 'memoized_outs'
         elif name in self.ancestor_vtables:
@@ -798,7 +850,7 @@ class Trait(SubTrait):
         '''Return the trait that has the vtable entry for the named trait
         member'''
         if (name in self.vtable_methods or name in self.vtable_params
-            or name in self.vtable_sessions
+            or name in self.vtable_sessions or name in self.vtable_hooks
             or name in self.vtable_memoized_outs):
             return self
         return self.ancestor_vtables[name]

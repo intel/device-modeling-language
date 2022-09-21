@@ -21,6 +21,15 @@ method init() {
     after true cycles: m();
     /// ERROR EBTYPE
     after NULL cycles: m();
+
+    local struct { hook() h; } str;
+    // The precedence rules gives usages of "->" as binds precedence before
+    // pointer subreferences
+    /// ERROR EBTYPE
+    after (&str)->h: m();
+    // no error
+    after ((&str)->h): m();
+    after (&str)->h -> (): m();
 }
 
 bank b {

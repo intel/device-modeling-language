@@ -31,6 +31,7 @@ class AST(object):
 
 astkinds = {
     'after',
+    'afteronhook',
     'apply',
     'assert',
     'assign',
@@ -71,6 +72,7 @@ astkinds = {
     'hashif',
     'hashselect',
     'header',
+    'hook',
     'if',
     'import',
     'initializer_compound',
@@ -107,6 +109,7 @@ astkinds = {
     'template_dml12',
     'throw',
     'toplevel_if',
+    'sharedhook',
     'sharedmethod',
     'typedparam',
     'try',

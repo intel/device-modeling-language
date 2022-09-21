@@ -1,0 +1,64 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+hook() h;
+
+method m(domain d) {
+    d.post_after_on_hook_shared();
+    d.post_after_on_hook();
+    cast(d, object).cancel_after();
+    d.post_after_on_hook_shared();
+    d.post_after_on_hook();
+    ++d.count;
+}
+
+template domain {
+    session int count;
+    shared method post_after_on_hook_shared() {
+        after h: m(this);
+    }
+
+    shared method post_after_on_hook();
+    method post_after_on_hook() {
+        after h: m(cast(this, domain));
+    }
+}
+
+in each group {
+    is domain;
+}
+
+group g1;
+
+group g2[i < 2][j < 3] {
+    group child;
+}
+
+method init() {
+    local sequence(domain) domains = each domain in (this);
+    foreach domain in (domains) {
+        after h: m(domain);
+        domain.post_after_on_hook_shared();
+        domain.post_after_on_hook();
+    }
+    // Three `after h: m(domain)` are done per domain...
+    assert h.suspended == domains.len * 3;
+    // ... but even in spite of this, and that each m(domain) performs four
+    // additional `after h: m(domain)`, the cancellation performed in `m`
+    // causes the domain's pending second and third after of the send_now in
+    // progress to be cancelled, and also cancels two of the afters that it
+    // enqueues.
+    local uint64 resumed = h.send_now();
+    assert resumed == domains.len && h.suspended == domains.len * 2;
+    // There are two elements in the hook queue per domain
+    foreach domain in (domains) {
+        local uint64 before = h.suspended;
+        cast(domain, object).cancel_after();
+        assert h.suspended == before - 2;
+    }
+    assert h.suspended == 0;
+}

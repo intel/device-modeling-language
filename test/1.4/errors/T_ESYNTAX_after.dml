@@ -1,0 +1,16 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+hook() h;
+
+method init() {
+    /// ERROR ESYNTAX
+    after 1 s: m;
+    /// ERROR ESYNTAX
+    after h: m;
+}

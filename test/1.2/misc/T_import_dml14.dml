@@ -167,4 +167,8 @@ method test() -> (bool ok) {
     /// GREP .*Once logging
     call $log_once();
     ok = ok && s_param == 4;
+
+    call $after_on_hook($h);
+    $h.send_now();
+    ok = ok && $s == 5;
 }

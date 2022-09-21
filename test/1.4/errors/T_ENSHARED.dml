@@ -18,6 +18,8 @@ template x {
         session int d;
         /// ERROR ENSHARED
         saved int e;
+        /// ERROR ENSHARED
+        hook(int) f;
     }
 }
 template y is x {
@@ -32,6 +34,8 @@ template y is x {
         d;
         /// ERROR ENSHARED
         e;
+        /// ERROR ENSHARED
+        f;
     }
 }
 

@@ -73,6 +73,7 @@ def precedence(dml_version):
      'unary_prefix') + (('HASH',) if dml_version == (1, 2) else ()),
     ('left', 'CALL', 'INLINE', ),
     ('left', 'PERIOD', 'ARROW', 'LBRACKET', 'LPAREN', 'unary_postfix')
+    + (() if dml_version == (1, 2) else ('bind',)),
     )
 
 # This stores the location of the current AST node
@@ -238,6 +239,7 @@ allowed_in_hashif = {
     'saved',
     'session',
     'method',
+    'hook',
     'hashif',
     'error',
 }
@@ -708,6 +710,12 @@ def template_statement_shared_method(t):
     t[0] = [ast.sharedmethod(site(t), name, inp, outp, throws, t[2],
                              overridable, body, rbrace_site)]
 
+@prod_dml14
+def template_statement_shared_hook(t):
+    '''template_stmt : SHARED hook_decl'''
+    t[0] = [ast.sharedhook(site(t), t[2])]
+
+
 @prod_dml12
 def trait_template(t):
     '''trait_stmt : TEMPLATE LBRACE object_statements RBRACE'''
@@ -1074,6 +1082,12 @@ def method_params_maybe_untyped(t):
     t[0] = (t[2], t[4], t[5])
 
 
+def cdecl_list_enforce_unnamed(decls):
+    for (kind, psite, name, _) in decls:
+        assert kind == 'cdecl'
+        if name:
+            report(ESYNTAX(psite, name, ''))
+
 def cdecl_list_enforce_named(decls):
     for (i, (kind, psite, name, typ)) in enumerate(decls):
         assert kind == 'cdecl'
@@ -1248,6 +1262,12 @@ def basetype(t):
 def basetype_each(t):
     '''basetype : SEQUENCE LPAREN typeident RPAREN'''
     t[0] = ('sequence', t[3])
+
+@prod_dml14
+def basetype_hook(t):
+    '''basetype : HOOK LPAREN cdecl_list RPAREN'''
+    cdecl_list_enforce_unnamed(t[3])
+    t[0] = ('hook', t[3])
 
 @prod
 def cdecl2(t):
@@ -2174,6 +2194,42 @@ def statement_delay(t):
                       f"expected time unit ({suggestions})")
     t[0] = ast.after(site(t), unit, t[2], t[5])
 
+@prod_dml14
+def ident_list_empty(t):
+    'ident_list : '
+    t[0] = []
+
+@prod_dml14
+def ident_list_nonempty(t):
+    'ident_list : nonempty_ident_list'
+    t[0] = t[1]
+
+@prod_dml14
+def ident_list_one(t):
+    'nonempty_ident_list : ident'
+    t[0] = [(site(t, 1), t[1])]
+
+@prod_dml14
+def ident_list_many(t):
+    'nonempty_ident_list : nonempty_ident_list COMMA ident'
+    t[0] = t[1] + [(site(t, 3), t[3])]
+
+@prod_dml14
+def statement_delay_hook(t):
+    'statement_except_hashif : AFTER expression ARROW LPAREN ident_list RPAREN COLON expression SEMI'
+    t[0] = ast.afteronhook(site(t), t[2], t[5], t[8])
+
+@prod_dml14
+def statement_delay_hook_one_msg_param(t):
+    'statement_except_hashif : AFTER expression ARROW ident COLON expression SEMI %prec bind'
+    t[0] = ast.afteronhook(site(t), t[2], [(site(t, 4), t[4])], t[6])
+
+
+@prod_dml14
+def statement_delay_hook_no_msg_params(t):
+    'statement_except_hashif : AFTER expression COLON expression SEMI'
+    t[0] = ast.afteronhook(site(t), t[2], [], t[4])
+
 @prod_dml12
 def call(t):
     '''statement_except_hashif : CALL expression returnargs SEMI
@@ -2494,6 +2550,36 @@ def local_one_multiple_init(t):
              | SAVED LPAREN cdecl_list_nonempty RPAREN EQUALS initializer'''
     cdecl_list_enforce_named(t[3])
     t[0] = ast.get(t[1])(site(t), t[3], t[6])
+
+@prod_dml14
+def simple_array_list_empty(t):
+    'simple_array_list : '
+    t[0] = []
+
+@prod_dml14
+def simple_array_list(t):
+    'simple_array_list : simple_array_list LBRACKET expression RBRACKET'
+    t[0] = t[1] + [t[3]]
+
+@prod_dml14
+def hook_decl(t):
+    '''hook_decl : HOOK LPAREN cdecl_list RPAREN ident simple_array_list SEMI'''
+    cdecl_list_enforce_unnamed(t[3])
+    if t[6]:
+        # Hook arrays are an internal feature, as their design depends on if we
+        # are able to make hooks compound objects in the future
+        if dml.globals.enable_testing_features:
+            report(WEXPERIMENTAL(
+                site(t),
+                "***FEATURE FOR INTERNAL TESTING***: hook arrays"))
+        else:
+            report(ESYNTAX(site(t, 6), '[', ''))
+    t[0] = ast.hook(site(t), t[5], t[6], [typ for (_, _, _, typ) in t[3]])
+
+@prod_dml14
+def object_hook(t):
+    '''object : hook_decl'''
+    t[0] = t[1]
 
 @prod
 def objident_list_one(t):

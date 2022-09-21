@@ -247,6 +247,10 @@ extern typedef struct { } dml_qname_cache_t;
 // Used by qname
 data dml_qname_cache_t _qname_cache;
 
+extern typedef struct { } _dml_detached_hook_queue_t;
+// Used by hooks
+data _dml_detached_hook_queue_t *_detached_hook_queue_stack;
+
 template conf_attribute {
     parameter configuration             default "optional";
     parameter persistent                default false;

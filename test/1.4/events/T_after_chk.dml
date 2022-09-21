@@ -6,18 +6,30 @@ dml 1.4;
 device test;
 
 template t {
-    attribute flag is bool_attr;
+    attribute flag[i < 2] is bool_attr;
+    attribute storage[i < 2] is uint64_attr;
 
-    attribute storage is uint64_attr;
+    hook() h1;
+    hook(uint64) h2;
 
     method m1() {
         log info: "running m1";
-        flag.val = true;
+        flag[0].val = true;
     }
 
     method m2(uint64 v) {
         log info: "running m2 with v = %d", v;
-        storage.val = v;
+        storage[0].val = v;
+    }
+
+    method m1_h() {
+        log info: "running m1_h";
+        flag[1].val = true;
+    }
+
+    method m2_h(uint64 v) {
+        log info: "running m2_h with v = %d", v;
+        storage[1].val = v;
     }
 
     method post_m1() {
@@ -27,6 +39,13 @@ template t {
     method post_m2(uint64 v) {
         after 0.1 s: m2(v);
     }
+    method post_h1_send_now() {
+        after 0.1 s: h1.send_now();
+    }
+
+    method post_h2_send_now(uint64 v) {
+        after 0.1 s: h2.send_now(v);
+    }
 }
 
 is t;
@@ -35,18 +54,39 @@ group g is t;
 
 port p[i < 2][j < 2] is t;
 
+in each t {
+    is post_init;
+    method post_init() {
+        if (!SIM_is_restoring_state(dev.obj)) {
+            after h1: m1_h();
+            after h2 -> x: m2_h(x);
+        }
+    }
+}
+
+method post_init() {
+    if (!SIM_is_restoring_state(dev.obj)) {
+        after h1: m1_h();
+        after h2 -> x: m2_h(x);
+    }
+}
+
 attribute exec_afters is write_only_attr {
     param type = "n";
     method set(attr_value_t val) throws {
         log info: "running exec_afters";
-        dev.post_m1();
-        g.post_m1();
-        p[0][1].post_m1();
-        p[1][1].post_m1();
-        post_m2(1);
-        g.post_m2(1);
-        p[0][1].post_m2(4);
-        p[1][1].post_m2(4);
+        #foreach obj in ([dev, g, p[0][1], p[1][1]]) {
+            obj.post_m1();
+            obj.post_h1_send_now();
+        }
+        #foreach obj in ([dev, g]) {
+            obj.post_m2(1);
+            obj.post_h2_send_now(1);
+        }
+        #foreach obj in ([p[0][1], p[1][1]]) {
+            obj.post_m2(4);
+            obj.post_h2_send_now(4);
+        }
     }
 }
 

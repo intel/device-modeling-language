@@ -1,0 +1,43 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+extern int nonconstant_int;
+
+template t {
+    /// ERROR EHOOKTYPE
+    hook(struct { int x; }) h1;
+    /// ERROR EHOOKTYPE
+    hook(int (*)[nonconstant_int]) h2;
+    /// ERROR EHOOKTYPE
+    hook(layout "little-endian" { int32 x; }) h3;
+}
+
+is t;
+
+/// ERROR EHOOKTYPE
+saved hook(struct { int x; }) saved_h;
+
+method init() {
+    local int i = 0;
+    /// ERROR EHOOKTYPE
+    local hook(struct { int x; }) h1;
+    /// ERROR EHOOKTYPE
+    local hook(int (*)[i]) h2;
+    /// ERROR EHOOKTYPE
+    local hook(layout "little-endian" { int32 x; }) h3;
+
+    // no error. Hook reference never used for any hook-related operation, so
+    // its type is never validated.
+    // This is an unfortunate effect of it being impossible to validate hook
+    // reference types early and eagerly.
+    local hook(int (*)[i]) h4;
+
+    after h1 -> x: init();
+    h2.send_now;
+    h3.suspended;
+}

@@ -52,6 +52,7 @@ __all__ = (
     'mkDelete',
     'mkExpressionStatement',
     'mkAfter',
+    'mkAfterOnHook',
     'mkIf',
     'mkWhile',
     'mkDoWhile',
@@ -107,6 +108,8 @@ __all__ = (
     'mkMethodPresent',
     'mkBitSlice',
     'InterfaceMethodRef',
+    'mkHookSendNowRef', 'HookSendNowRef',
+    'mkHookSendNowApply', 'HookSendNowApply',
     'mkNew',
     #'Constant',
     'mkIntegerConstant', 'IntegerConstant',
@@ -122,6 +125,8 @@ __all__ = (
     'mkUndefined', 'Undefined',
     'TraitParameter',
     'TraitSessionRef',
+    'TraitHookRef',
+    'TraitHookArrayRef',
     'TraitMethodRef',
     'TraitMethodIndirect',
     'TraitMethodDirect',
@@ -549,18 +554,17 @@ def toc_constsafe_pointer_assignment(site, source, target, typ):
 
 class After(Statement):
     @auto_init
-    def __init__(self, site, unit, delay, domains, method, eventinfo, indices,
-                 inargs):
+    def __init__(self, site, unit, delay, domains, info, indices,
+                 args_init):
         crep.require_dev(site)
     def toc(self):
         self.linemark()
         objarg = '&_dev->obj'
         out(f'if (SIM_object_clock({objarg}) == NULL)\n', postindent=1)
         out(f'''SIM_log_error({objarg}, 0, "Attribute 'queue' is '''
-            + '''not set, ignoring delayed call to method '''
-            + f''''{self.method.logname_anonymized([])}'");\n''')
+            + '''not set, ignoring delayed call");\n''')
         out('else {\n', preindent=-1, postindent=1)
-        if self.indices or self.inargs or self.domains:
+        if self.indices or self.info.args_type or self.domains:
             out('_simple_event_data_t *_data = MM_ZALLOC(1, '
                 + '_simple_event_data_t);\n')
 
@@ -571,17 +575,16 @@ class After(Statement):
                     out(f'_event_indices[{i}] = {index_expr.read()};\n')
                 out('_data->indices = _event_indices;\n')
 
-            if self.inargs:
-                args_struct = self.eventinfo['args_type'].label + "_t"
-                out('%s _event_args = {%s};\n'
-                    % (args_struct,
-                       ', '.join(arg.read() for arg in self.inargs)))
-                out('_data->args = MM_MALLOC(1, '
-                    + f'{args_struct});\n')
-                toc_constsafe_pointer_assignment(self.site,
-                                                 '_event_args',
-                                                 '_data->args',
-                                                 self.eventinfo['args_type'])
+            args_type = self.info.args_type
+            if args_type:
+                out('%s = %s;\n'
+                    % (args_type.declaration('_event_args'),
+                       self.args_init.args_init()))
+                out('_data->args = MM_MALLOC(1, %s);\n'
+                    % (args_type.declaration(''),))
+
+                toc_constsafe_pointer_assignment(self.site, '_event_args',
+                                                 '_data->args', args_type)
 
             if self.domains:
                 out('_identity_t *_event_domains = '
@@ -595,11 +598,43 @@ class After(Statement):
         else:
             data = 'NULL'
         out(f'SIM_event_post_{self.unit}(SIM_object_clock({objarg}), '
-            + f'{crep.get_evclass(self.method)}, {objarg}, '
+            + f'{crep.get_evclass(self.info.key)}, {objarg}, '
             + f'{self.delay.read()}, {data});\n')
         out("}\n", preindent = -1)
 
 mkAfter = After
+
+def resolve_hookref(hookref):
+    return ('&_dev->' + crep.cref_hook(hookref.hook, hookref.indices)
+            if isinstance(hookref, HookRef) else
+            f'_DML_resolve_hookref(_dev, _hook_aux_infos, {hookref.read()})')
+
+class AfterOnHook(Statement):
+    slots = ('info',)
+    @auto_init
+    def __init__(self, site, domains, hookref_expr, info, indices,
+                 args_init):
+        crep.require_dev(site)
+    def toc(self):
+        self.linemark()
+        hookref = resolve_hookref(self.hookref_expr)
+        indices = ('(const uint32 []) {%s}'
+                   % (', '.join(i.read() for i in self.indices),)
+                   if self.indices else 'NULL')
+        args = ('(%s){%s}'
+                % (TArray(self.info.args_type,
+                          mkIntegerLiteral(self.site, 1)).declaration(''),
+                   self.args_init.args_init())
+                if self.info.args_type else 'NULL')
+        domains = ('(const _identity_t []) {%s}'
+                   % (', '.join(domain.read() for domain in self.domains),)
+                   if self.domains else 'NULL')
+        out(f'_DML_attach_callback_to_hook({hookref}, '
+            + f'&_after_on_hook_infos[{self.info.uniq}], {indices}, '
+            + f'{len(self.indices)}, {args}, {domains}, '
+            + f'{len(self.domains)});\n')
+
+mkAfterOnHook = AfterOnHook
 
 class If(Statement):
     @auto_init
@@ -1359,6 +1394,12 @@ class Equals(BinOp):
                 rhc_indices = [idx.value for idx in rhc.indices]
                 return mkBoolConstant(site, (lhc.node is rhc.node
                                              and lhc_indices == rhc_indices))
+            if (isinstance(lhc, HookRef) and isinstance(rhc, HookRef)
+                and lhtype.cmp(rhtype) == 0):
+                lh_indices = [idx.value for idx in lhc.indices]
+                rh_indices = [idx.value for idx in rhc.indices]
+                return mkBoolConstant(site, (lhc.hook is rhc.hook
+                                             and lh_indices == rh_indices))
             if isinstance(lhc, NullConstant) or isinstance(rhc, NullConstant):
                 if (isinstance(lhc, NullConstant)
                     and isinstance(rhc, NullConstant)):
@@ -1409,6 +1450,12 @@ class Equals(BinOp):
                                            TBool())),
                            [TraitObjIdentity(lh.site, lh),
                             TraitObjIdentity(rh.site, rh)])
+        if (isinstance(lhtype, THook) and isinstance(rhtype, THook)
+            and lhtype.cmp(rhtype) == 0):
+            return mkApply(site,
+                           mkLit(site, '_identity_eq',
+                                 TFunction([lhtype, rhtype], TBool())),
+                           [lh, rh])
 
         raise EILLCOMP(site, lh, lhtype, rh, rhtype)
 
@@ -3578,6 +3625,51 @@ class TraitMethodIndirect(TraitMethodRef):
                                         self.methname, self.independent,
                                         inargs, rettype)
 
+class TraitHookArrayRef(NonValueArrayRef):
+    @auto_init
+    def __init__(self, site, dimsizes, hooktyp, traitref, name, indices):
+        assert len(indices) < len(dimsizes)
+
+    @property
+    def local_indices(self):
+        return self.indices
+
+    @property
+    def local_dimsizes(self):
+        return self.dimsizes
+
+    def __str__(self):
+        return "%s.%s%s" % (self.traitref, self.name,
+                          ''.join(f'[{expr}]' for expr in self.indices))
+
+class TraitHookRef(Expression):
+    priority = 1000
+    @auto_init
+    def __init__(self, site, dimsizes, hooktyp, traitref, name, indices):
+        assert len(dimsizes) == len(self.indices)
+
+    def __str__(self):
+        return "%s.%s%s" % (self.traitref, self.name,
+                          ''.join(f'[{expr}]' for expr in self.indices))
+
+    def ctype(self):
+        return self.hooktyp
+
+    def read(self):
+        t = realtype(self.traitref.ctype())
+        assert isinstance(t, TTrait)
+        vtable_type = f'struct _{cident(t.trait.name)}'
+
+        coeff = math.prod(self.dimsizes)
+        if all(idx.constant for idx in self.indices):
+            index_offset = encode_indices_constant(
+                (idx.value for idx in self.indices), self.dimsizes)
+        else:
+            index_offset = encode_indices(self.indices, self.dimsizes)
+        return (f'VTABLE_HOOK({self.traitref.read()}, {vtable_type}, '
+                + f'{self.name}, {coeff}, {index_offset})')
+
+
 def lookup_component(site, base, indices, name, only_local):
     '''Lookup a name in object scope 'base' and return an
     Expression, or None.'''
@@ -3724,6 +3816,38 @@ class SessionVariableRef(LValue):
     def read(self):
         return '_dev->' + crep.cref_session(self.node, self.indices)
 
+class HookRef(Expression):
+    "A reference to a hook"
+    slots = ('type', 'value', 'constant', 'constant_indices')
+    explicit_type = True
+    @auto_init
+    def __init__(self, site, hook, indices):
+        assert isinstance(hook, objects.DMLObject)
+        assert isinstance(indices, tuple)
+        assert hook.objtype == 'hook'
+        self.type = THook(hook.msg_types, validated=True)
+
+        if all(idx.constant for idx in indices):
+            self.constant = True
+            self.constant_indices = tuple(idx.value for idx in indices)
+            self.value = (hook, self.constant_indices)
+        else:
+            self.constant = False
+            self.constant_indices = None
+            self.value = None
+    def __str__(self):
+        name = self.hook.logname(self.indices)
+        assert name
+        return name
+    def read(self):
+        if self.constant:
+            encoded_index = encode_indices_constant(self.constant_indices,
+                                                    self.hook.dimsizes)
+        else:
+            encoded_index = encode_indices(self.indices, self.hook.dimsizes)
+        return ('((_hookref_t) {.id = %d, .encoded_index = %s})'
+                % (self.hook.uniq, encoded_index))
+
 class PlainNodeRef(NodeRef, NonValue):
     pass
 
@@ -3771,6 +3895,11 @@ def mkNodeRef(site, node, indices):
             if isinstance(i, NonValue):
                 raise i.copy(site).exc()
         return SessionVariableRef(site, node, indices)
+    elif node.objtype == 'hook':
+        for i in indices:
+            if isinstance(i, NonValue):
+                raise i.copy(site).exc()
+        return HookRef(site, node, indices)
     t = node_type(node, site)
     if not t:
         return PlainNodeRef(site, node, indices)
@@ -3806,7 +3935,7 @@ def mkNodeRef(site, node, indices):
             return IncompleteNodeRefWithStorage(site, node, indices, t, i)
     return NodeRefWithStorage(site, node, indices)
 
-class NodeArrayRef(NonValue):
+class NodeArrayRef(NonValueArrayRef):
     '''Reference to an array node before it's indexed. Indexing is the
     only supported operation.'''
     @auto_init
@@ -3821,11 +3950,91 @@ class NodeArrayRef(NonValue):
             raise ICE(site,
                       "Too few indices in reference to incomplete node: %r"
                       % (node,))
+
+    @property
+    def local_indices(self):
+        return self.indices[self.node.nonlocal_dimensions():]
+
+    @property
+    def local_dimsizes(self):
+        return self.node.dimsizes[self.node.nonlocal_dimensions():]
+
     def __str__(self):
         name = self.node.logname(self.indices)
         return dollar(self.site) + name
+
     def exc(self):
-        return EARRAY(self.site, self.node)
+        return EARRAY(self.site, self.node.identity())
+
+class HookSuspended(Expression):
+    '''Reference to the suspended member of a hook'''
+    priority = 160
+    type = TInt(64, False)
+
+    @auto_init
+    def __init__(self, site, hookref_expr): pass
+
+    def __str__(self):
+        return "%s.suspended" % (self.hookref_expr,)
+
+    def read(self):
+        hookref = resolve_hookref(self.hookref_expr)
+        return f'(uint64)VLEN(({hookref})->queue)'
+
+mkHookSuspended = HookSuspended
+
+class HookSendNowRef(NonValue):
+    '''Reference to the send_now pseudomethod of a hook'''
+    @auto_init
+    def __init__(self, site, hookref_expr): pass
+
+    def __str__(self):
+        return "%s.send_now" % (self.hookref_expr,)
+    def apply(self, inits, location, scope):
+        msg_types = safe_realtype_shallow(self.hookref_expr.ctype()).msg_types
+        args = typecheck_inarg_inits(
+            self.site, inits,
+            [(str(i + 1), t)
+             for (i, t) in enumerate(msg_types)],
+            location, scope, 'send_now')
+        return mkHookSendNowApply(self.site, self.hookref_expr, args)
+
+mkHookSendNowRef = HookSendNowRef
+
+class HookSendNowApply(Expression):
+    '''Application of the send_now pseudomethod with valid arguments'''
+    slots = ('msg_struct',)
+    type = TInt(64, False)
+    @auto_init
+    def __init__(self, site, hookref_expr, args):
+        crep.require_dev(site)
+        msg_types = safe_realtype(hookref_expr.ctype()).msg_types
+        from .codegen import get_type_sequence_info
+        self.msg_struct = get_type_sequence_info(msg_types,
+                                                 create_new=True).struct
+
+    def __str__(self):
+        return '%s.send_now(%s)' % (self.hookref_expr,
+                                    ', '.join(str(e) for e in self.args))
+    def read(self):
+        msg = (('&(%s_t) {%s}'
+                % (self.msg_struct.label,
+                   ', '.join(arg.read() for arg in self.args)))
+               if self.args else 'NULL')
+        hookref = resolve_hookref(self.hookref_expr)
+
+        return ('_DML_send_hook(&_dev->obj, '
+                + f'&_dev->_detached_hook_queue_stack, {hookref}, {msg})')
+
+def mkHookSendNowApply(site, hookref_expr, args):
+    msg_types = safe_realtype_shallow(hookref_expr.ctype()).msg_types
+    typecheck_inargs(
+        site, args,
+        [(f'comp{i}', t) for (i, t) in enumerate(msg_types)],
+        'send_now')
+    args = [source_for_assignment(site, msg_type, arg)
+            for (msg_type, arg) in zip(msg_types, args)]
+    return HookSendNowApply(site, hookref_expr, args)
 
 class Variable(LValue):
     "Variable storage"
@@ -3909,28 +4118,30 @@ def mkSubRef(site, expr, sub, op):
         op = '->'
 
     etype = expr.ctype()
-    etype = safe_realtype(etype)
+    real_etype = safe_realtype_shallow(etype)
 
-    if isinstance(etype, TPtr):
+    if isinstance(real_etype, TPtr):
         if op == '.':
             raise ENOSTRUCT(site, expr)
-        basetype = realtype(etype.base)
+        basetype = real_etype.base
+        real_basetype = safe_realtype(basetype)
         baseexpr = mkDereference(site, expr)
     else:
         if op == '->':
             raise ENOPTR(site, expr)
         basetype = etype
+        real_basetype = safe_realtype(etype)
         baseexpr = expr
 
-    basetype = basetype.resolve()
+    real_basetype = real_basetype.resolve()
 
-    if isinstance(basetype, StructType):
-        typ = basetype.get_member_qualified(sub)
+    if isinstance(real_basetype, StructType):
+        typ = real_basetype.get_member_qualified(sub)
         if not typ:
             raise EMEMBER(site, baseexpr, sub)
         return StructMember(site, expr, sub, typ, op)
-    elif basetype.is_int and basetype.is_bitfields:
-        member = basetype.members.get(sub)
+    elif real_basetype.is_int and real_basetype.is_bitfields:
+        member = real_basetype.members.get(sub)
         if member is None:
             raise EMEMBER(site, expr, sub)
         (_, msb, lsb) = member
@@ -3939,24 +4150,30 @@ def mkSubRef(site, expr, sub, op):
                           mkIntegerLiteral(site, msb),
                           mkIntegerLiteral(site, lsb),
                           'le')
-    elif isinstance(basetype, TTrait):
-        m = basetype.trait.lookup(sub, baseexpr, site)
+    elif isinstance(real_basetype, TTrait):
+        m = real_basetype.trait.lookup(sub, baseexpr, site)
         if not m:
             raise EMEMBER(site, expr, sub)
         return m
-    elif isinstance(basetype, TArray) and sub == 'len':
-        if basetype.size.constant:
-            return mkIntegerConstant(site, basetype.size.value, False)
+    elif isinstance(real_basetype, TArray) and sub == 'len':
+        if real_basetype.size.constant:
+            return mkIntegerConstant(site, real_basetype.size.value, False)
         else:
             raise EVLALEN(site)
-    elif isinstance(basetype, TTraitList) and sub == 'len':
+    elif isinstance(real_basetype, TTraitList) and sub == 'len':
         try:
-            trait = dml.globals.traits[basetype.traitname]
+            trait = dml.globals.traits[real_basetype.traitname]
         except KeyError:
             raise ETYPE(basetype.declaration_site or site, basetype)
         return mkSequenceLength(site, baseexpr, trait)
-    else:
-        raise ENOSTRUCT(site, expr)
+    elif isinstance(real_basetype, THook):
+        real_basetype.validate(basetype.declaration_site or site)
+        if sub == 'send_now':
+            return mkHookSendNowRef(site, baseexpr)
+        elif sub == 'suspended':
+            return mkHookSuspended(site, baseexpr)
+
+    raise ENOSTRUCT(site, expr)
 
 class ArrayRef(LValue):
     slots = ('type',)
@@ -3987,27 +4204,35 @@ class VectorRef(LValue):
 def mkIndex(site, expr, idx):
     if isinstance(idx, NonValue):
         if isinstance(idx, StaticIndex) and isinstance(expr, NodeArrayRef):
-            # handled by NodeArrayRef case below
+            # handled by NonValueArrayRef case below
             pass
         else:
             raise idx.exc()
     else:
         idx = as_int(idx)
     if isinstance(expr, NonValue):
-        if isinstance(expr, NodeArrayRef):
-            node = expr.node
-            indices = expr.indices
+        if isinstance(expr, NonValueArrayRef):
+            local_indices = expr.local_indices
             if not isinstance(idx, StaticIndex):
                 if idx.constant:
                     if (idx.value < 0 or
-                        idx.value >= node.arraylens()[
-                            len(indices) - node.nonlocal_dimensions()]):
+                        idx.value >= expr.local_dimsizes[len(local_indices)]):
                         raise EOOB(idx)
-            indices += (idx,)
-            if node.dimensions > len(indices):
-                return NodeArrayRef(site, node, indices)
+            if len(expr.local_dimsizes) > len(local_indices) + 1:
+                if isinstance(expr, NodeArrayRef):
+                    return NodeArrayRef(site, expr.node, expr.indices + (idx,))
+                else:
+                    assert isinstance(expr, TraitHookArrayRef)
+                    return TraitHookArrayRef(site, expr.dimsizes,
+                                             expr.hooktyp, expr.traitref,
+                                             expr.name, expr.indices + (idx, ))
             else:
-                return mkNodeRef(site, node, indices)
+                if isinstance(expr, NodeArrayRef):
+                    return mkNodeRef(site, expr.node, expr.indices + (idx,))
+                else:
+                    return TraitHookRef(
+                        site, expr.dimsizes, expr.hooktyp, expr.traitref,
+                        expr.name, expr.indices + (idx,))
         if isinstance(expr, AbstractList):
             if idx.constant:
                 if idx.value < 0 or idx.value >= len(expr.value):
@@ -4489,7 +4714,8 @@ class MemsetInitializer(Initializer):
     def assign_to(self, dest, typ):
         '''output C statements to assign an lvalue'''
         assert isinstance(safe_realtype(typ),
-                          (TExternStruct, TStruct, TArray, TEndianInt, TTrait))
+                          (TExternStruct, TStruct, TArray, TEndianInt, TTrait,
+                           THook))
         # (void *) cast to avoid GCC erroring if the target type is
         # (partially) const-qualified. See ExpressionInitializer.assign_to
         out('memset((void *)&%s, 0, sizeof(%s));\n'
@@ -4514,7 +4740,7 @@ class StructDefinition(Statement):
     @auto_init
     def __init__(self, site, structtype): pass
     def toc(self):
-        self.structtype.print_struct_definition()
+        self.structtype.resolve().print_struct_definition()
 mkStructDefinition = StructDefinition
 
 class Declaration(Statement):

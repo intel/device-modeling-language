@@ -1070,6 +1070,9 @@ A template type has the following members:
   `shared method fun() { ... }`
   gives a type member `fun`, which can be called.
 
+* Every `shared` [hook](#hook-declarations) declared within the template.
+  E.g. the declaration `shared hook(int, bool) h;` gives a type member `h`.
+
 * All type members of inherited templates. E.g., the declaration
   `is simple_time_event;`
   adds two type members `post` and `next`, since
@@ -1480,7 +1483,7 @@ statement](#after-statements).
 All primitive non-pointer data types (integers, floating-point types, booleans,
 etc.) are considered serializable, as is any struct, layout, or array type
 consisting entirely of serializable types. [Template types](#templates-as-types)
-are also considered serializable.
+and [hook reference types](#hook-declarations) are also considered serializable.
 
 Any type not fitting the above criteria is not considered serializable:
 in particular, any pointer type is not considered serializable, nor is any
@@ -1900,6 +1903,113 @@ state easier. For configuration, `attribute` objects should
 be used instead. Additional data types for saved declarations are planned to
 be supported.
 
+</div>
+
+## Hook Declarations
+<pre>
+hook(<em>msgtype1</em>, ... <em>msgtypeN</em>) <em>name</em>;
+</pre>
+A *hook* declaration defines a named object member to which *suspended
+computations* may be attached for execution at a later point. By sending a
+*message* through the hook, every computation suspended on the hook will become
+detached from the hook, and then executed &mdash; receiving the message as data.
+Computations suspended on a hook are executed in order of least recently
+attached.
+
+Currently, the only computations that can be suspended and attached to hooks are
+single method calls, which is done through the use of the [`after`
+statement](#after-statements). This will later be expanded upon: hooks will play
+a central role in the future introduction of *coroutines*, as hooks will serve
+as the primitive mechanism through which coroutines suspend themselves and
+become resumed.
+
+Every hook has an associated list of *message component types*, specified during
+declaration through the <tt>(<em>msgtype1</em>, ... <em>msgtypeN</em>)</tt>
+syntax. This specifies what form of data is sent and received via the hook. Any
+number of message component types can be given, including zero, in which case a
+message sent via the hook has no associated data.
+
+Example declarations:
+```
+// Hook with no associated message component types
+hook() h1;
+// Hook with a single message component type
+hook(int) h2;
+// Hook with two message component types
+hook(int *, bool) h3;
+```
+
+Beyond suspending computations on it, a hook <tt><em>h</em></tt> has two
+associated operations:
+
+* <pre><em>h</em>.send_now(<em>msg1</em>, ... <em>msgN</em>)</pre>
+  Sends a message through the hook, with message components
+  <tt><em>msg1</em></tt> through <tt><em>msgN</em></tt>. The number of message
+  components must match the number of message component types of the hook,
+  and each message component must be compatible with the corresponding message
+  component type of the hook.
+
+  `send_now` is *synchronous*: every computation suspended on the hook will
+  execute before `send_now` completes.
+  `send_now` returns the number of suspended computations that were successfully
+  resumed from the message being sent. Currently, every suspended computation is
+  guaranteed to successfully be resumed unless cancelled by a preceding
+  computation resumed by the `send_now`. This will not remain true in the
+  future: coroutines are planned to be able to reject a message and reattach
+  themselves to the hook.
+
+  <div class="note">
+  <b>Note:</b> Hooks are planned to be extended with an asynchronous variant of
+  <tt>send_now</tt>, to be simply called <tt>send</tt>. A call to <tt>send</tt>
+  will delay the message from being sent until the current line of execution
+  within the device is completed, and control would otherwise be returned to
+  the simulation engine. <tt>send</tt> is expected to often be preferable to
+  <tt>send_now</tt>, as it prevents subtle ordering bugs from occurring &mdash;
+  i.e. a message being sent through a hook before the computation meant to react
+  to that message is suspended on the hook. Ordering bugs are especially
+  difficult to resolve with the planned design of coroutines, making
+  <tt>send</tt> important for their use.
+  </div>
+* <pre><em>h</em>.suspended</pre>
+  Evaluates to the number of computations currently suspended on the hook.
+
+References to hooks are valid run-time values: a reference to a hook with
+message component types <tt><em>msgtype1</em></tt> through
+<tt><em>msgtypeN</em></tt> will have the hook reference type
+<tt>hook(<em>msgtype1</em>, ... <em>msgtypeN</em>)</tt>. This means hook
+references can be stored in variables, and can be passed around as method
+arguments or return values. In fact, hook references are even
+[serializable](#serializable-types). Note, however, that references to
+hook arrays are *not* valid run-time values unless fully indexed in order to
+reference a single hook.
+
+Two hook references of the same hook reference type can be compared for
+equality, and are considered equal when they both reference the same hook.
+
+<div class="note">
+<b>Note:</b> Hooks have a notable shortcoming in their lack of configurability;
+for example, there is no way to configure a hook to log an error when a message
+is sent through the hook and there is no computation suspended on the hook to
+act upon the message. Proper hook configurability is planned to be added by the
+time or together with coroutines being introduced to DML. Until then, the
+suggested approach is to create wrappers around usages of <tt>send_now()</tt>.
+Hook reference types can be leveraged to cut down on the needed number of such
+wrappers, for example:
+<pre>
+method send_now_checked_no_data(hook() h) {
+    local uint64 resumed = h.send_now();
+    if (resumed == 0) {
+        log error: "Unhandled message to hook";
+    }
+}
+
+method send_now_checked_int(hook(int) h, int x) {
+    local uint64 resumed = h.send_now(x);
+    if (resumed == 0) {
+        log error: "Unhandled message to hook";
+    }
+}
+</pre>
 </div>
 
 ## Object Declarations
@@ -3110,13 +3220,27 @@ return m(e1)
 
 <pre>
 after <em>scalar</em> <em>unit</em>: <em>method</em>(<em>e1</em>, ... <em>eN</em>);
+after <em>hookref</em>[-> (<em>msg1</em>, ... <em>msgN</em>)]: <em>method</em>(<em>e1</em>, ... <em>eM</em>);
 </pre>
 
-The `after` construct sets up an asynchronous event which will perform the
-specified method call with the provided arguments at the given time into the
-future (in simulated time, measured in the specified time unit) relative to the
-time when the `after` statement is executed. The currently supported time units
-are `s` for seconds and `cycles` for cycles.
+The `after` statement sets up the given method call such that it will be
+performed with the provided arguments at a specified point in the future.
+A method call suspended using an `after` statement will be performed at most
+once per execution of the `after` statement; it will not recur. If it's
+desirable to have a suspended method call recur, then the called method must
+itself make use of `after` to set up a method call to itself.
+
+The referenced method must be a true, normal method: it may not be a C
+function, or a [`shared` method](#shared-methods). The only exception to this is
+that the [`send_now` operation of hooks](#hook-declarations) is also supported
+as the callback.
+
+In the first form shown above, the specified point in the future is given
+through a time delay (in simulated time, measured in the specified time unit)
+relative to the time when the `after` statement is executed. The currently
+supported time units are `s` for seconds and `cycles` for cycles. Every argument
+to the called method is evaluated at the time the `after` statement is executed,
+and stored so that they may be used when the method call is to be performed.
 
 For example:
 
@@ -3129,25 +3253,76 @@ an event-method that performs the specified call, and posting
 that event at the given time, with associated data corresponding to the
 provided arguments.
 
-Each argument to the called method is evaluated at the time the
-`after` statement is executed and the event is posted.
+In the second form shown above, the suspended method call is bound to the
+[hook](#hook-declarations) specified by <tt><em>hookref</em></tt>. The point in
+the future when the method call is executed is thus the next time a message is
+sent through the specified hook. The *binding syntax* <tt>-> (<em>msg1</em>, ...
+<em>msgN</em>)</tt> is used to bind each component of the message received to a
+corresponding identifier, called a *message component parameter*. These message
+component parameters can be used as arguments of the called method, thus
+propagating the contents of the message to the method call. Every argument to
+the called method which isn't a message component parameter is evaluated at the
+time the `after` statement is executed, and stored so that they may be used when
+the method call is to be performed.
 
-To allow the posted event to be checkpointed, `after` statements
-may only be performed with methods that have no return values, and
-where each input parameter is of [*serializable type*](#serializable-types).
+For example:
+```
+hook(int, float) h;
 
-This means that `after` statements cannot be used with methods
-that e.g. have pointer parameters.
+method my_callback(int i, float f, bool b) {
+    ...
+}
 
-Any events posted via an `after` statement are *associated* with the object that
-contain the method containing the statement. It is possible to cancel all
-`after` events associated with an object through that object's `cancel_after()`
-method, as provided by the [`object` template](dml-builtins.html#object).
+method m() {
+    after h -> (x, y): my_callback(x, y, false);
+}
+
+method send_message() {
+    // Assuming m() has been called once before, this 'send_now' will result in
+    // `my_callback(1, 3.7, false)` to be called.
+    h.send_now(1, 3.7);
+}
+```
+
+If the hook has only one message component, the syntax <tt>-> <em>msg</em></tt>
+can be used instead, and if the hook has no message components, then the binding
+syntax can be entirely omitted. Any message component parameter can be used for
+any number of arguments, but cannot be used as anything *but* a direct argument.
+For example, using the definitions of `h` and `my_callback` as above, the
+following use of `after` is valid:
+```
+after h -> (x, y): my_callback(x, x, false)
+```
+Note that the first message component is used multiple times, and the second
+is not used at all.
+
+In contrast, the following use of `after` is invalid:
+```
+after h -> (x, y): my_callback(i, y + 1.5, false)
+```
+as the message component parameter `y` is used, but not as a direct argument.
+
+For both forms of `after`, to allow the suspended method call to be represented
+in a checkpoint, `after` statements may only be performed with methods that have
+no return values, and where each input parameter of the method must be of
+[*serializable type*](#serializable-types), unless that input parameter receives
+a message component.
+
+This means that `after` statements cannot be used with methods that e.g. have
+pointer input parameters, unless the arguments for those input parameters are
+message component parameters of the `after`.
+
+All method calls suspended via an `after` statement are *associated* with the
+object that contain the method containing the statement. It is possible to
+cancel all suspended method calls associated with an object through that
+object's `cancel_after()` method, as provided by the [`object`
+template](dml-builtins.html#object).
 
 <div class="note">
 
 **Note:** We plan to extend the `after` statement to allow for users to
-explicitly state what objects the posted events are to be associated with.
+explicitly state what objects the suspended method calls are to be associated
+with.
 
 </div>
 
