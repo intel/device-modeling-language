@@ -2512,15 +2512,15 @@ def reserved(t):
 # Error handling
 @prod
 def error(t):
-    if t and t.value:
-        value = str(t.value)
-        raise ESYNTAX(DumpableSite(t.lexer.file_info, t.lexpos), value, None)
-    else:
+    if t is None:
         # raise ESYNTAX(...) would have made sense here, but there
         # is no clean way to retrieve the file (because t is
         # None). Therefore, push the error reporting responsibility to
         # whoever invokes the parser.
         raise UnexpectedEOF()
+    else:
+        value = str(t.value)
+        raise ESYNTAX(DumpableSite(t.lexer.file_info, t.lexpos), value, None)
 
 # Specific grammars to be passed to ply
 class Grammar(object):
