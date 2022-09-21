@@ -698,6 +698,51 @@ _deserialize_identity(ht_str_table_t *id_info_ht, attr_value_t val,
     return Sim_Set_Illegal_Type;
 }
 
+UNUSED static attr_value_t
+_serialize_trait_reference(const _id_info_t *id_info_array,
+                           _traitref_t traitref) {
+    if (likely(traitref.trait != NULL)) {
+        return _serialize_identity(id_info_array, traitref.id);
+    } else {
+        // Template types are unique in that they are serializable types
+        // for which a zero-initialized value is invalid.
+        // This must be handled to avoid creating unrestorable checkpoints.
+        // A zero-initialized trait reference is signaled through an empty
+        // logname.
+        return SIM_make_attr_list(2, SIM_make_attr_string(""),
+                                  SIM_make_attr_list(0));
+    }
+}
+
+UNUSED static set_error_t
+_deserialize_trait_reference(ht_str_table_t *id_info_ht,
+                             ht_int_table_t *vtable_ht,
+                             const char *template_name,
+                             attr_value_t val,
+                             _traitref_t *out) {
+    if (unlikely(SIM_attr_string(SIM_attr_list_item(val, 0))[0] == '\0')) {
+        // The logname being empty indicates the original serialized traitref
+        // was zero-initialized.
+        *out = (_traitref_t) { 0 };
+        return Sim_Set_Ok;
+    }
+    _identity_t id;
+    set_error_t error = _deserialize_identity(id_info_ht, val, &id);
+    if (unlikely(error != Sim_Set_Ok)) {
+        return error;
+    }
+    void *trait = ht_lookup_int(vtable_ht, id.id);
+    if (unlikely(!trait)) {
+        const char *name = SIM_attr_string(SIM_attr_list_item(val, 0));
+        SIM_c_attribute_error("Failed to deserialize value of template type: "
+                              "object node '%s' doesn't instantiate %s",
+                              name, template_name);
+        return Sim_Set_Illegal_Value;
+    }
+    *out = (_traitref_t) { trait, id };
+    return Sim_Set_Ok;
+}
+
 UNUSED __attribute__((const)) static inline bool
 _identity_eq(const _identity_t a, const _identity_t b) {
     return a.id == b.id && a.encoded_index == b.encoded_index;

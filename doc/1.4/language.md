@@ -1464,10 +1464,14 @@ statement](#after-statements).
 
 All primitive non-pointer data types (integers, floating-point types, booleans,
 etc.) are considered serializable, as is any struct, layout, or array type
-consisting entirely of serializable types. Any pointer type is not considered
-serializable, nor is any [`extern`](#typedef-declarations) struct type; the
-latter is because it's impossible for the compiler to ensure it's aware of all
-members of the struct type.
+consisting entirely of serializable types. [Template types](#templates-as-types)
+are also considered serializable.
+
+Any type not fitting the above criteria is not considered serializable:
+in particular, any pointer type is not considered serializable, nor is any
+[`extern`](#typedef-declarations) struct type; the latter is because it's
+impossible for the compiler to ensure it's aware of all members of the struct
+type.
 
 ## Methods
 <a id="methods-detailed"/>

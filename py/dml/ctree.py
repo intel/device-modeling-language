@@ -1262,7 +1262,10 @@ class Equals(BinOp):
             if (isinstance(lh, StringConstant)
                 and isinstance(rh, StringConstant)):
                 return mkBoolConstant(site, lh.value == rh.value)
-            if isinstance(lh, ObjIdentity) and isinstance(rh, ObjIdentity):
+            if ((isinstance(lh, ObjIdentity) and isinstance(rh, ObjIdentity))
+                or (isinstance(lh, ObjTraitRef)
+                    and isinstance(rh, ObjTraitRef)
+                    and lh.trait is rh.trait)):
                 lh_indices = [idx.value for idx in lh.indices]
                 rh_indices = [idx.value for idx in rh.indices]
                 return mkBoolConstant(site, (lh.node is rh.node
@@ -3190,6 +3193,7 @@ def endian_convert_expr(site, idx, endian, size):
 
 class ObjTraitRef(Expression):
     '''Reference to a specific trait of a specific object'''
+    slots = ('node', 'trait', 'indices', 'ancestry_path', 'constant', 'value')
     def __init__(self, site, node, trait, indices,
                  ancestry_path=None):
         Expression.__init__(self, site)
@@ -3210,6 +3214,13 @@ class ObjTraitRef(Expression):
             self.node.traits.ancestry_paths[trait][0]
             if ancestry_path is None else ancestry_path)
 
+        if all(idx.constant for idx in indices):
+            self.constant = True
+            self.value = (node, tuple(idx.value for idx in indices))
+        else:
+            self.constant = False
+            self.value = None
+
     def __str__(self):
         return "%s.%s" % (self.node.logname(self.indices), self.trait.name)
 
@@ -3218,7 +3229,7 @@ class ObjTraitRef(Expression):
 
     def read(self):
         self.node.traits.mark_referenced(self.trait)
-        if all(idx.constant for idx in self.indices):
+        if self.constant:
             indices_decl = None
             indices = self.indices
         else:

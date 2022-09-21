@@ -109,18 +109,28 @@ port p_saved2 is saved_template {
     param initial_value = 4;
 }
 
+template t {
+    param p : int64;
+}
 // identity
 template mass_groups {
-    group g1;
-    group g2[i < 3] {
-        group child;
-        group children[j < 5][l < 7];
+    param coeff;
+    group g1 is t { param p = coeff * 1; }
+    group g2[i < 3] is t {
+        param p = coeff * (2 + i);
+        group child is t { param p = coeff * (5 + i); }
+        group children[j < 5][l < 7] is t {
+            param p = coeff * (8 + 5*7*i + 7*j + l);
+        }
     }
 }
 
-group initial is mass_groups;
+group initial is mass_groups {
+    param coeff = 1;
+}
 
 is mass_groups;
+param coeff = -1;
 
 saved _identity_t saved_identity_g1 = cast(initial.g1, _identity_t);
 saved _identity_t saved_identity_g2_2 = cast(initial.g2[2], _identity_t);
@@ -135,6 +145,18 @@ group test;
 
 saved _identity_t saved_identity_device = cast(dev, _identity_t);
 saved _identity_t saved_identity_test = cast(test, _identity_t);
+
+// template types
+saved t saved_traitref_g1 = cast(initial.g1, t);
+saved t saved_traitref_g2_2 = cast(initial.g2[2], t);
+saved t saved_traitref_g2_0_child =
+    cast(initial.g2[0].child, t);
+saved t saved_traitref_g2_1_children_2_4 =
+    cast(initial.g2[1].children[2][4], t);
+
+// Check that zero-initialized trait references don't result in unrestorable
+// checkpoints.
+saved t saved_traitref_invalid;
 
 attribute test_initial is write_only_attr {
     param type = "n";
@@ -167,6 +189,16 @@ attribute test_initial is write_only_attr {
 
         assert saved_identity_device == cast(dev, _identity_t);
         assert saved_identity_test == cast(test, _identity_t);
+
+        assert saved_traitref_g1 == cast(initial.g1, t);
+        assert saved_traitref_g2_2 == cast(initial.g2[2], t);
+        assert saved_traitref_g2_0_child == cast(initial.g2[0].child, t);
+        assert saved_traitref_g2_1_children_2_4
+            == cast(initial.g2[1].children[2][4], t);
+        assert saved_traitref_g1.p == 1;
+        assert saved_traitref_g2_2.p == 4;
+        assert saved_traitref_g2_0_child.p == 5;
+        assert saved_traitref_g2_1_children_2_4.p == 61;
     }
 }
 
@@ -241,5 +273,17 @@ attribute test_later is write_only_attr {
 
         assert saved_identity_device == cast(dev, _identity_t);
         assert saved_identity_test == cast(test, _identity_t);
+
+        assert saved_traitref_g1 == cast(g1, t);
+        assert saved_traitref_g2_2 == cast(g2[2], t);
+        assert saved_traitref_g2_0_child
+            == cast(g2[0].child, t);
+        assert saved_traitref_g2_1_children_2_4
+            == cast(g2[1].children[2][4], t);
+
+        assert saved_traitref_g1.p == -1;
+        assert saved_traitref_g2_2.p == -4;
+        assert saved_traitref_g2_0_child.p == -5;
+        assert saved_traitref_g2_1_children_2_4.p == -61;
     }
 }

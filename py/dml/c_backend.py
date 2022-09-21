@@ -1725,6 +1725,7 @@ def generate_init(device, initcode, outprefix):
 
     out('_initialize_traits();\n')
     out('_initialize_identity_ht();\n')
+    out('_initialize_vtable_hts();\n')
     out('_register_events(class);\n')
     out('_startup_calls();\n')
     # initcode is independently indented
@@ -1847,6 +1848,36 @@ def generate_each_in_tables():
         # the base array.
         add_variable_declaration(
             f'const _vtable_list_t *const {EachIn.array_ident(t)}', 'NULL')
+
+def generate_trait_deserialization_hashtables(device):
+    by_trait = {}
+    if serialize.serialized_traits:
+        for node in flatten_object_subtree(device):
+            traits = node.traits.ancestors.intersection(
+                serialize.serialized_traits)
+            for trait in traits:
+                by_trait.setdefault(trait, []).append(node)
+
+    inserts = []
+    for (trait, nodes) in by_trait.items():
+        add_variable_declaration('ht_int_table_t '
+                                 + f'_{cident(trait.name)}_vtable_ht',
+                                 'HT_INT_NULL()')
+        for node in nodes:
+            node.traits.mark_referenced(trait)
+            ancestry_path = node.traits.ancestry_paths[trait][0]
+            structref = node.traits.vtable_cname(ancestry_path[0])
+            pointer = '(&%s)' % ('.'.join([structref] + [
+                cident(t.name) for t in ancestry_path[1:]]))
+            inserts.append(f'ht_insert_int(&_{cident(trait.name)}_vtable_ht, '
+                           + f'{node.uniq}, {pointer});\n')
+
+    start_function_definition('void _initialize_vtable_hts(void)')
+    out('{\n', postindent=1)
+    for line in inserts:
+        out(line)
+    out('}\n', preindent=-1)
+
 
 def generate_trait_method(m):
     code = m.codegen_body()
@@ -2853,6 +2884,7 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
         register_saved_attributes(init_code, device)
         generate_init(device, init_code, filename_prefix)
 
+    generate_trait_deserialization_hashtables(device)
     generate_init_trait_vtables(device, trait_param_values)
     generate_each_in_tables()
     generate_simple_events(device)
