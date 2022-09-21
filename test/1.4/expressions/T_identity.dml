@@ -32,6 +32,10 @@ method test() throws {
         error "base[0].child[0][0] == base[0]";
     }
 
+    #if (cast(base[0].child[0][0], t) == cast(base[0], t)) {
+        error "base[0].child[0][0] == base[0]";
+    }
+
     for (local int i = 0; i < 2; ++i) {
         assert cast(base[i], t) == cast(base[i], t);
         assert cast(base[i], t) != cast(base[i ^ 1], t);

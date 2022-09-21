@@ -99,5 +99,21 @@ stest.expect_equal(obj.saved_identity_test, ['test', []])
 obj.saved_identity_device = ['dev', []]
 obj.saved_identity_test = ['test', []]
 
+obj.saved_traitref_g1 = g1_id
+stest.expect_equal(obj.saved_traitref_g1, g1_id)
+
+obj.saved_traitref_g2_2 = g2_2_id
+stest.expect_equal(obj.saved_traitref_g2_2, g2_2_id)
+
+obj.saved_traitref_g2_0_child = g2_0_child_id
+stest.expect_equal(obj.saved_traitref_g2_0_child, g2_0_child_id)
+
+obj.saved_traitref_g2_1_children_2_4 = g2_1_children_2_4_id
+stest.expect_equal(obj.saved_traitref_g2_1_children_2_4, g2_1_children_2_4_id)
+
+stest.expect_equal(obj.saved_traitref_invalid, ['', []])
+obj.saved_traitref_invalid = ['', []]
+stest.expect_equal(obj.saved_traitref_invalid, ['', []])
+
 # Test set values within dml
 obj.test_later = None

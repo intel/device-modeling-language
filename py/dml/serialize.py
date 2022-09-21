@@ -30,12 +30,15 @@ deserializer_t = TFunction([TPtr(attr_value_t), TPtr(void)], set_error_t)
 serialize_prototypes = []
 serialize_function_code = []
 
+# Set of template types which get serialized
+serialized_traits = set()
+
 # list of tuples (dml_descriptor, mapping fun)
 # used to convert dmltype to attr_value_t
 serialize_function_list = []
 def lookup_serialize(lookup_t):
     lookup_t = safe_realtype(lookup_t)
-    descriptor = type_signature(lookup_t)
+    descriptor = type_signature(lookup_t, True)
     for (t, f) in serialize_function_list:
         # we will consider two types equal if they would get the same
         # description signature
@@ -49,7 +52,7 @@ def lookup_serialize(lookup_t):
 deserialize_function_list = []
 def lookup_deserialize(lookup_t):
     lookup_t = safe_realtype(lookup_t)
-    descriptor = type_signature(lookup_t)
+    descriptor = type_signature(lookup_t, False)
     for (t, f) in deserialize_function_list:
         # we will consider two types equal if they would get the same
         # description signature
@@ -166,6 +169,13 @@ def serialize(real_type, current_expr, target_expr):
                                  [id_infos, current_expr], attr_value_t)
         return ctree.mkAssignStatement(current_site, target_expr,
                                        ctree.ExpressionInitializer(apply_expr))
+    elif isinstance(real_type, TTrait):
+        id_infos = expr.mkLit(current_site, '_id_infos',
+                              TPtr(TNamed('_id_info_t', const = True)))
+        apply_expr = apply_c_fun(current_site, "_serialize_trait_reference",
+                                 [id_infos, current_expr], attr_value_t)
+        return ctree.mkAssignStatement(current_site, target_expr,
+                                       ctree.ExpressionInitializer(apply_expr))
     else:
         # Callers are responsible for checking that the type is serializeable
         # usually done with the map_dmltype_to_attrtype function
@@ -247,6 +257,20 @@ def deserialize(real_type, current_expr, target_expr, error_out):
              ctree.mkAddressOf(current_site, target_expr)],
             set_error_t)
         return construct_subcall(apply_expr)
+    elif isinstance(real_type, TTrait):
+        vtable_name = real_type.trait.name
+        id_info_ht = expr.mkLit(current_site, '&_id_info_ht',
+                                TPtr(TNamed('ht_str_table_t')))
+        vtable_ht = expr.mkLit(current_site,
+                               f'&_{cident(vtable_name)}_vtable_ht',
+                               TPtr(TNamed('ht_int_table_t')))
+        apply_expr = apply_c_fun(
+            current_site, '_deserialize_trait_reference',
+            [id_info_ht, vtable_ht,
+             ctree.mkStringConstant(current_site, vtable_name), current_expr,
+             ctree.mkAddressOf(current_site, target_expr)],
+            set_error_t)
+        return construct_subcall(apply_expr)
     else:
         raise ICE(current_site, "Unexpectedly asked to deserialize %s" % (
             real_type))
@@ -277,6 +301,11 @@ def map_dmltype_to_attrtype(site, dmltype):
         return '[%s{%s}]' % (arr_attr_type, arr_length) + or_data
     if isinstance(real_type, TObjIdentity):
         return '[s[i*]]'
+    if isinstance(real_type, TTrait):
+        serialized_traits.add(real_type.trait)
+        # TODO Is this redundant?
+        real_type.trait.mark_referenced()
+        return '[s[i*]]'
     # TODO should be implemented
     #if isinstance(real_type, TVector):
         # return '[%s*]' % (map_dmltype_to_attrtype(site, real_type.base))
@@ -291,7 +320,16 @@ def map_dmltype_to_attrtype(site, dmltype):
 # * One valid type string can never be a prefix of another valid type string
 # * Compound types can be parameterized by at most one type, and the parameter
 #   type's signature is a suffix of the compound type's signature.
-def type_signature(dmltype):
+#
+# The is_for_serialization parameter is to determine whether the type signature
+# will be used for the name of a serialization function or a deserialization
+# function. The distinction matters for types where the serialization function
+# can be shared across multiple variants of the same type, but the
+# deserialization function can't; so in the serialization case the signatures
+# should be the same across all variants of the type, but in the
+# deserialization case the signatures should be separate.
+# Trait references are an example of such a type.
+def type_signature(dmltype, is_for_serialization):
     dmltype = realtype(dmltype)
     if isinstance(dmltype, IntegerType):
         return 'I%d%s%s' % (dmltype.bits,
@@ -305,19 +343,22 @@ def type_signature(dmltype):
         return 'S' + dmltype.label
     if isinstance(dmltype, TArray):
         assert dmltype.size.constant
-        arr_attr_type = type_signature(dmltype.base)
+        arr_attr_type = type_signature(dmltype.base, is_for_serialization)
         arr_length = expr_intval(dmltype.size)
         return 'A%d%s' % (arr_length, arr_attr_type)
     if isinstance(dmltype, TVector):
-        return 'V%s' % type_signature(dmltype.base)
+        return 'V%s' % type_signature(dmltype.base, is_for_serialization)
     if isinstance(dmltype, TObjIdentity):
         return 'Id'
+    if isinstance(dmltype, TTrait):
+        return 'T' + (cident(dmltype.trait.name)
+                      if not is_for_serialization else '')
     assert False
 
 def generate_serialize(real_type):
     site = logging.SimpleSite(
         f"<generated serialization function for {real_type}>")
-    function_name = "DML_serialize_%s" % type_signature(real_type)
+    function_name = "DML_serialize_%s" % type_signature(real_type, True)
 
     in_arg_ty = TPtr(real_type)
     out_arg_ty = TPtr(attr_value_t)
@@ -363,7 +404,7 @@ def generate_serialize(real_type):
         elif isinstance(real_type, TVector):
             raise ICE(site, "TODO: serialize vector")
         elif isinstance(real_type, (IntegerType, TBool, TFloat, TObjIdentity,
-                                    TArray)):
+                                    TTrait, TArray)):
             serialize(real_type,
                       ctree.mkDereference(site, in_arg),
                       ctree.mkDereference(site, out_arg)).toc()
@@ -376,7 +417,7 @@ def generate_serialize(real_type):
 def generate_deserialize(real_type):
     site = logging.SimpleSite(
         "<generated deserialization function for {real_type}>")
-    function_name = "DML_deserialize_%s" % type_signature(real_type)
+    function_name = "DML_deserialize_%s" % type_signature(real_type, False)
 
     in_arg_ty = TPtr(attr_value_t)
     out_arg_ty = TPtr(real_type)
@@ -447,7 +488,7 @@ def generate_deserialize(real_type):
         elif isinstance(real_type, TVector):
             raise ICE(site, "TODO: serialize vector")
         elif isinstance(real_type, (IntegerType, TBool, TFloat, TObjIdentity,
-                                    TArray)):
+                                    TTrait, TArray)):
             deserialize(real_type,
                         ctree.mkDereference(site, in_arg),
                         ctree.mkDereference(site, out_arg),
