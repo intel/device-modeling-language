@@ -1292,7 +1292,8 @@ def generate_marker(device):
 
 def generate_identity_data_decls():
     items = ('{"%s", %s, %d, %d}' %
-             (node.logname_anonymized(("%u",) * node.dimensions),
+             ('dev' if node is dml.globals.device
+              else node.logname_anonymized(("%u",) * node.dimensions),
               ('(const uint32 []) {%s}' % (', '.join(map(str, node.dimsizes)),)
                if node.dimensions else 'NULL'),
               node.dimensions,
@@ -1312,6 +1313,12 @@ def generate_class_var_decl():
 def generate_init_identity_hashtable():
     start_function_definition('void _initialize_identity_ht(void)')
     out('{\n', postindent=1)
+    # We add an entry to alias the device name to the device object
+    # for backwards checkpoint compatibility (SIMICS-19681).
+    # This gets overridden if there's a top-level object that shares its name
+    # with the device.
+    out(f'ht_insert_str(&_id_info_ht, "{dml.globals.device.name}", '
+        + f'&_id_infos[{dml.globals.device.uniq}]);\n')
     out('for (uint64 i = 0; i < %d; ++i) {\n' % (len(dml.globals.objects),),
         postindent=1)
     out('ht_insert_str(&_id_info_ht, _id_infos[i].logname, &_id_infos[i]);\n')

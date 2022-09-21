@@ -3266,11 +3266,11 @@ template init_val is init {
 
 extern const _id_info_t *_id_infos;
 extern const char *_DML_get_qname(_identity_t, const _id_info_t *,
-                                  dml_qname_cache_t *);
+                                  dml_qname_cache_t *, const char *);
 template _qname {
     shared method _qname() -> (const char *) {
         return _DML_get_qname(cast(this, _identity_t), _id_infos,
-                              &_qname_cache);
+                              &_qname_cache, dev.name);
     }
 }
 
