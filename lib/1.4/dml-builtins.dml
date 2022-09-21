@@ -3452,8 +3452,16 @@ nil.
 <small>destroy(void \*data)</small>
 </dt><dd>
 
-This method is called when an event is removed from the event
-queue
+This method is called on any posted events when the device object is deleted.
+<!-- (and also on `SIM_event_cancel_*`, but that function is not exposed for
+custom events so no need to mention) -->
+
+If memory was allocated for the `data` argument to `post`, then `destroy`
+should free this memory.
+
+The `destroy` method is *not* called automatically when an event is triggered;
+therefore, the method should typically also be called explicitly from the
+`event` method.
 </dd></dl>
 */
 template _event is event {
