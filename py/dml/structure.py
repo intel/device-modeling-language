@@ -1664,6 +1664,12 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                                      subobj_name_defs[subobj.name],
                                      subobj.name))
                     continue
+                # Prevent malicious users from having a top-level object
+                # be named "dev", as the device object's serialized identity
+                # logname is "dev", and must be unique
+                elif subobj.name == 'dev' and obj.objtype == 'device':
+                    report(ENAMECOLL(subobj.name_site, obj.site, 'dev'))
+                    continue
                 subobj_name_defs[subobj.name] = (
                     subobj.name_site if
                     isinstance(subobj, objects.CompositeObject) else

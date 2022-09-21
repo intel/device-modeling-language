@@ -81,3 +81,6 @@
 
 # SIMICS-11957
 1.4/structure/array_size_param
+
+# SIMICS-19681
+1.4/serialize/identity_compat

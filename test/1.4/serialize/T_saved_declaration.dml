@@ -129,6 +129,13 @@ saved _identity_t saved_identity_g2_0_child =
 saved _identity_t saved_identity_g2_1_children_2_4 =
     cast(initial.g2[1].children[2][4], _identity_t);
 
+// test serialization of the device object and a top-level object of the same
+// name
+group test;
+
+saved _identity_t saved_identity_device = cast(dev, _identity_t);
+saved _identity_t saved_identity_test = cast(test, _identity_t);
+
 attribute test_initial is write_only_attr {
     param type = "n";
 
@@ -157,6 +164,9 @@ attribute test_initial is write_only_attr {
             == cast(initial.g2[0].child, _identity_t);
         assert saved_identity_g2_1_children_2_4
             == cast(initial.g2[1].children[2][4], _identity_t);
+
+        assert saved_identity_device == cast(dev, _identity_t);
+        assert saved_identity_test == cast(test, _identity_t);
     }
 }
 
@@ -228,5 +238,8 @@ attribute test_later is write_only_attr {
             == cast(g2[0].child, _identity_t);
         assert saved_identity_g2_1_children_2_4
             == cast(g2[1].children[2][4], _identity_t);
+
+        assert saved_identity_device == cast(dev, _identity_t);
+        assert saved_identity_test == cast(test, _identity_t);
     }
 }

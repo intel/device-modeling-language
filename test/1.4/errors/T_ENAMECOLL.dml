@@ -11,6 +11,11 @@ extern int x;
 /// ERROR ENAMECOLL
 bank x;
 
+group g {
+    /// ERROR ENAMECOLL
+    param name = "dev";
+}
+
 bank b2 {
     /// ERROR ENAMECOLL
     register r1 size 1 @ 0 {}

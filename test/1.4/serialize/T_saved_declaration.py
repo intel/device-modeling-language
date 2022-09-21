@@ -93,5 +93,11 @@ g2_1_children_2_4_id = ['g2[%u].children[%u][%u]', [1, 2, 4]]
 obj.saved_identity_g2_1_children_2_4 = g2_1_children_2_4_id
 stest.expect_equal(obj.saved_identity_g2_1_children_2_4, g2_1_children_2_4_id)
 
+stest.expect_equal(obj.saved_identity_device, ['dev', []])
+stest.expect_equal(obj.saved_identity_test, ['test', []])
+
+obj.saved_identity_device = ['dev', []]
+obj.saved_identity_test = ['test', []]
+
 # Test set values within dml
 obj.test_later = None

@@ -5,7 +5,7 @@ import stest
 import simics
 
 with stest.expect_exception_mgr(simics.SimExc_IllegalValue):
-    obj.g_saved_ids = [[['g[%u]', [1]], ['test', []]],
+    obj.g_saved_ids = [[['g[%u]', [1]], ['dev', []]],
                        [['g[%u]', [0]], ['nonsensical', []]]]
 
 # Checkpoint restoration of individual saved variables inside object arrays
@@ -15,5 +15,5 @@ with stest.expect_exception_mgr(simics.SimExc_IllegalValue):
 # This is in contrast to how deserialization of array types work, where one
 # element failing to deserialize fails deserialization of the entire array.
 stest.expect_equal(obj.g_saved_ids,
-                   [[['g[%u]', [1]], ['test', []]],
-                    [['test', []], ['g[%u]', [1]]]])
+                   [[['g[%u]', [1]], ['dev', []]],
+                    [['dev', []], ['g[%u]', [1]]]])

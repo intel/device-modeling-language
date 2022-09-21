@@ -1430,11 +1430,19 @@ __qname(dml_qname_cache_t *cache, const char *fmt, ...)
 
 UNUSED static const char *
 _DML_get_qname(_identity_t id, const _id_info_t *id_infos,
-               dml_qname_cache_t *cache) {
+               dml_qname_cache_t *cache, const char *dev_name) {
     _id_info_t info = id_infos[id.id];
 
+    const char *logname = info.logname;
+
+    // In order to distinguish the device object from any other, its id_info
+    // logname is always "dev", but we want its name when it comes to qname.
+    if (strcmp(logname, "dev") == 0) {
+        return dev_name;
+    }
+
     if (info.dimensions == 0) {
-        return info.logname;
+        return logname;
     }
 
     uint32 indices[info.dimensions];
@@ -1444,7 +1452,6 @@ _DML_get_qname(_identity_t id, const _id_info_t *id_infos,
         index /= info.dimsizes[i];
     }
 
-    const char *logname = info.logname;
     strbuf_t qname_buf = SB_INIT;
     for (uint32 i = 0; i < info.dimensions; ++i) {
         const char *next_index = strchr(logname, '%');
