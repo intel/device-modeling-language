@@ -1,0 +1,42 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+
+hook() h0;
+hook(int) h1;
+hook(int, bool) h2;
+
+method m() { }
+
+method init() {
+    // no error
+    after h0: m();
+    after h0 -> (): m();
+    after h1 -> x: m();
+    after h1 -> (x): m();
+    after h2 -> (x, y): m();
+
+    /// ERROR EAFTERHOOK
+    after h0 -> (x): m();
+    /// ERROR EAFTERHOOK
+    after h0 -> (x, y): m();
+    /// ERROR EAFTERHOOK
+    after h1: m();
+    /// ERROR EAFTERHOOK
+    after h1 -> (): m();
+    /// ERROR EAFTERHOOK
+    after h1 -> (x, y): m();
+    /// ERROR EAFTERHOOK
+    after h2: m();
+    /// ERROR EAFTERHOOK
+    after h2 -> (): m();
+    /// ERROR EAFTERHOOK
+    after h2 -> (x): m();
+    /// ERROR EAFTERHOOK
+    after h2 -> x: m();
+}

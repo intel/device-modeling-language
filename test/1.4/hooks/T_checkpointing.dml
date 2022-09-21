@@ -1,0 +1,147 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// DMLC-FLAG --enable-features-for-internal-testing-dont-use-this
+/// WARNING WEXPERIMENTAL common.dml
+
+import "common.dml";
+
+attribute setup_state is write_only_attr {
+    param type = "n";
+    method set(attr_value_t val) throws {
+    #foreach obj in ([dev, g[2], b1, b1.g[3], b2[1], b2[2].g[3]]) {
+            after obj.h0: no_params();
+            after obj.h0: one_serializable_param(7);
+            after obj.h0: indexed[3][5].no_params();
+            after obj.h0: indexed[3][5].one_serializable_param(10);
+
+            after obj.h1 -> p: one_param(p);
+            after obj.h1 -> p: one_serializable_param(9);
+
+            after obj.h2 -> (p, i): two_params(p, i);
+
+            after obj.h3[3][4]: no_params();
+
+            after obj.h4[3][4] -> p: indexed[3][5].one_param(p);
+            after obj.h4[3][4] -> p: indexed[3][5].one_serializable_param(9);
+
+            after obj.h5[0][1] -> (p, i): two_params(p, 3);
+            after obj.h5[2][3] -> (p, i): indexed[3][5].two_params(p, i);
+            after obj.h5[4][5] -> (p, i): indexed[3][5].two_params(p, 3);
+
+            after obj.h3[0][0]: obj.h3[2][3].send_now();
+
+            after obj.h4[0][0] -> p: obj.h0.send_now();
+            after obj.h4[1][1] -> p: obj.h1.send_now(p);
+            after obj.h4[2][2] -> p: obj.h2.send_now(p, 4);
+            after obj.h4[3][3] -> p: obj.h6.send_now(7);
+
+            after obj.h5[0][0] -> (p, i): obj.h2.send_now(p, i);
+            after obj.h5[1][1] -> (p, i): obj.h2.send_now(p, 4);
+            after obj.h5[2][2] -> (p, i): obj.h6.send_now(i);
+            after obj.h5[3][3] -> (p, i): obj.h6.send_now(6);
+        }
+    }
+}
+
+attribute test_state is write_only_attr {
+    param type = "n";
+    method set(attr_value_t val) throws {
+        #foreach obj in ([dev, g[2], b1, b1.g[3], b2[1], b2[2].g[3]]) {
+            count = storage = storage_indexed = 0;
+            last_i_indexed = last_j_indexed = -1;
+
+            local uint64 resumed = obj.h0.send_now();
+            assert resumed == 4 && count == 1 && storage == 7
+                && last_i_indexed == 3 && last_j_indexed == 5
+                && storage_indexed == 10 * (7 * 3 + 5);
+            count = storage = storage_indexed = 0;
+            last_i_indexed = last_j_indexed = -1;
+
+            local int x = 4;
+            resumed = obj.h1.send_now(&x);
+            assert resumed == 2 && x == 5 && storage == 9;
+            storage = 0;
+
+            resumed = obj.h2.send_now(&x, 7);
+            assert resumed == 1 && x == 7;
+
+            resumed = obj.h3[3][4].send_now();
+            assert resumed == 1 && count == 1;
+            count = 0;
+
+            x = 7;
+            assert obj.h4[3][4].suspended == 2;
+            resumed = obj.h4[3][4].send_now(&x);
+            assert resumed == 2 && x == 3 * 7 + 5
+                && storage_indexed == 9 * (3 * 7 + 5);
+            x = storage_indexed = 0;
+
+            x = 0;
+            assert obj.h5[0][1].suspended == 1;
+            resumed = obj.h5[0][1].send_now(&x, 5);
+            assert resumed == 1 && x == 3;
+            x = 0;
+            assert obj.h5[2][3].suspended == 1;
+            resumed = obj.h5[2][3].send_now(&x, 5);
+            assert resumed == 1 && x == 5 * (7*3 + 5);
+            x = 0;
+            assert obj.h5[4][5].suspended == 1;
+            resumed = obj.h5[4][5].send_now(&x, 5);
+            assert resumed == 1 && x == 3 * (7*3 + 5);
+
+            after obj.h3[2][3]: no_params();
+            resumed = obj.h3[0][0].send_now();
+            assert resumed == 1 && obj.h3[2][3].suspended == 0 && count == 1;
+            count = 0;
+
+            x = 7;
+            after obj.h0: no_params();
+            resumed = obj.h4[0][0].send_now(&x);
+            assert resumed == 1 && obj.h0.suspended == 0 && count == 1
+                && x == 7;
+            count = 0;
+
+            after obj.h1 -> p: one_param(p);
+            resumed = obj.h4[1][1].send_now(&x);
+            assert resumed == 1 && obj.h1.suspended == 0 && x == 8;
+
+            after obj.h2 -> (p, i): two_params(p, i);
+            resumed = obj.h4[2][2].send_now(&x);
+            assert resumed == 1 && obj.h2.suspended == 0 && x == 4;
+
+            after obj.h6 -> i: one_serializable_param(i);
+            resumed = obj.h4[3][3].send_now(&x);
+            assert resumed == 1 && obj.h6.suspended == 0 && x == 4
+                && storage == 7;
+            storage = 0;
+
+            x = 7;
+            after obj.h2 -> (p, i): two_params(p, i);
+            resumed = obj.h5[0][0].send_now(&x, 9);
+            assert resumed == 1 && obj.h2.suspended == 0 && x == 9;
+
+            x = 7;
+            after obj.h2 -> (p, i): two_params(p, i);
+            resumed = obj.h5[1][1].send_now(&x, 9);
+            assert resumed == 1 && obj.h2.suspended == 0 && x == 4;
+
+            x = 7;
+            after obj.h6 -> i: one_serializable_param(i);
+            resumed = obj.h5[2][2].send_now(&x, 9);
+            assert resumed == 1 && obj.h6.suspended == 0 && x == 7
+                && storage == 9;
+
+            after obj.h6 -> i: one_serializable_param(i);
+            resumed = obj.h5[3][3].send_now(&x, 9);
+            assert resumed == 1 && obj.h6.suspended == 0 && x == 7
+                && storage == 6;
+            storage = 0;
+        }
+    }
+}

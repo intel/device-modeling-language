@@ -1,0 +1,20 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+hook(int *) h;
+
+method m(int *i) { }
+
+method init() {
+    local int v = 0;
+
+    /// ERROR EAFTER
+    after h -> p: m(&v);
+    // no error
+    after h -> p: m(p);
+}

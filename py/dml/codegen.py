@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import re
-from abc import ABCMeta, abstractmethod
+from abc import ABC, abstractmethod, abstractproperty
 import operator
 import contextlib
 from functools import reduce
@@ -21,6 +21,7 @@ from .messages import *
 from .output import out
 from .types import *
 from .set import Set
+from .slotsmeta import auto_init
 import dml.globals
 
 __all__ = (
@@ -30,8 +31,9 @@ __all__ = (
     'statically_exported_methods',
     'method_queue',
     'saved_method_variables',
-    'simple_events',
+    'get_type_sequence_info',
 
+    'eval_arraylen',
     'eval_type',
     'eval_method_inp',
     'eval_method_outp',
@@ -128,7 +130,7 @@ class GotoLoopContext(LoopContext):
         self.used = True
         return [mkGotoBreak(site, self.label)]
 
-class Failure(metaclass=ABCMeta):
+class Failure(ABC):
     '''Handle exceptions failure handling is supposed to handle the various kind of
     functions that are generated, with different ways of signaling
     success/failure.'''
@@ -194,7 +196,7 @@ class IgnoreFailure(Failure):
     def fail(self, site):
         return mkNull(site)
 
-class ExitHandler(metaclass=ABCMeta):
+class ExitHandler(ABC):
     current = None
 
     def __enter__(self):
@@ -295,7 +297,7 @@ class MemoizedReturnExit(ExitHandler):
         stmts.append(codegen_return(site, self.outp, self.throws, targets))
         return mkCompound(site, stmts)
 
-class Memoization(metaclass=ABCMeta):
+class Memoization(ABC):
     @abstractmethod
     def prelude(self):
         pass
@@ -395,6 +397,462 @@ def memoization_common_prelude(name, site, outp, throws, make_ref):
                      make_ref('ran', TInt(8, True)),
                      mkCompound(site, unrun + has_run + running))]
 
+class TypeSequenceInfo:
+    """Bookkeeping surrounding a realtyped unique type sequence"""
+    def __init__(self, types, uniq):
+        self.types = types
+        self.uniq = uniq
+        self.after_on_hooks = {}
+        self.struct = (TStruct({f'comp{i}': typ
+                                 for (i, typ) in enumerate(types)},
+                                label=f'_typeseq_{self.uniq}')
+                       if types else None)
+        type_keys = ', '.join(f"'{typ.key()}'" for typ in types)
+        self.string_key = f'({type_keys})'
+
+    def get_after_on_hook(self, aoh_prim_key, param_to_msg_comp, no_params,
+                          create_new=False):
+        param_to_msg_comp_key = tuple(param_to_msg_comp.get(i)
+                                      for i in range(no_params))
+        try:
+            return self.after_on_hooks[(aoh_prim_key, param_to_msg_comp_key)]
+        except KeyError:
+            if not create_new:
+                raise
+            info = after_on_hook_info_constructors[type(aoh_prim_key)](
+                self, aoh_prim_key, param_to_msg_comp)
+            self.after_on_hooks[(aoh_prim_key, param_to_msg_comp_key)] = info
+            return info
+
+def get_type_sequence_info(index, create_new=False):
+    typeseq = TypeSequence(index)
+    try:
+        return dml.globals.type_sequence_infos[typeseq]
+    except KeyError:
+        if create_new:
+            info = TypeSequenceInfo(typeseq.types,
+                                    len(dml.globals.type_sequence_infos))
+            dml.globals.type_sequence_infos[typeseq] = info
+            return info
+        else:
+            return None
+
+class AfterInfo(ABC):
+    '''Information used to generate artifact corresponding to a unique usage of
+    the after statement. After statements are considered unique in respect to
+    the artifacts they need: two after statements that can share the same
+    generated artifacts -- thus the same AfterInfo -- are considered identical
+    usages of after.'''
+    def __init__(self, key, dimsizes):
+        self.key = key
+        self.dimsizes = dimsizes
+
+    @abstractproperty
+    def string_key(self):
+        '''A key for the AfterInfo -- thus a key for the set of artifacts
+        generated for the unique usage of 'after'. This must be suitable for
+        use as a string in generated code -- in particular anonymization of
+        confidential names must be done.'''
+
+    @abstractproperty
+    def cident_prefix(self):
+        '''A prefix for C identifiers used for the naming of artifacts
+        generated for the unique usage of 'after' '''
+
+    @abstractproperty
+    def args_type(self):
+        '''A type that represents all information needed to execute the
+        callback of the 'after', excluding indices and after domains.
+        If no additional information is needed this should return None.
+        '''
+
+    @abstractproperty
+    def types_to_declare(self):
+        '''An iterable of the novel types used by the generated artifacts of
+        the 'after', and which must be declared.'''
+
+    @property
+    def cident_callback(self):
+        return self.cident_prefix + 'callback'
+
+    @property
+    def dimensions(self):
+        return len(self.dimsizes)
+
+class AfterDelayInfo(AfterInfo):
+    def __init__(self, key, dimsizes, uniq):
+        self.uniq = uniq
+        super().__init__(key, dimsizes)
+
+    @abstractmethod
+    def generate_callback_call(self, indices_lit, args_lit): pass
+
+    @property
+    def cident_prefix(self):
+        return f'_simple_event_{self.uniq}_'
+
+    @property
+    def cident_get_value(self):
+        if self.dimensions or self.args_type is not None:
+            return self.cident_prefix + 'get_value'
+        else:
+            return '_simple_event_only_domains_get_value'
+
+    @property
+    def cident_set_value(self):
+        if self.dimensions or self.args_type is not None:
+            return self.cident_prefix + 'set_value'
+        else:
+            return '_simple_event_only_domains_set_value'
+
+
+class AfterOnHookInfo(AfterInfo):
+    def __init__(self, dimsizes, parent, typeseq_info, prim_key,
+                 param_to_msg_comp, inp, has_serialized_args):
+        self.typeseq_info = typeseq_info
+        self.parent = parent
+        # TODO drop?
+        self.inp = inp
+        self.has_serialized_args = has_serialized_args
+        self.prim_key = prim_key
+        self.param_to_msg_comp = param_to_msg_comp
+        self.uniq = len(dml.globals.after_on_hook_infos)
+        dml.globals.after_on_hook_infos.append(self)
+        super().__init__((prim_key, self.param_to_msg_comp_key), dimsizes)
+
+    @abstractmethod
+    def generate_callback_call(self, indices_lit, args_lit, msg_lit): pass
+
+    @abstractmethod
+    def generate_args_serializer(self, site, args_expr, out_expr): pass
+
+    @abstractmethod
+    def generate_args_deserializer(self, site, val_expr, out_expr, error_out):
+        pass
+
+    @abstractproperty
+    def string_prim_key(self):
+        '''The AfterOnHookInfo key for the primary component -- the target
+        callback -- of the hook-based after'''
+
+    @property
+    def param_to_msg_comp_key(self):
+        return tuple(i if i in self.param_to_msg_comp else None
+                     for i in range(len(self.inp)))
+
+    @property
+    def string_key(self):
+        return str((self.string_prim_key, self.param_to_msg_comp_key))
+
+    @property
+    def cident_prefix(self):
+        return f'_after_on_hook_{self.uniq}_'
+
+    @property
+    def cident_args_serializer(self):
+        assert self.has_serialized_args
+        return self.cident_prefix + 'args_serializer'
+
+    @property
+    def cident_args_deserializer(self):
+        assert self.has_serialized_args
+        return self.cident_prefix + 'args_deserializer'
+
+class AfterDelayIntoMethodInfo(AfterDelayInfo):
+    def __init__(self, method, uniq):
+        self.method = method
+        super().__init__(method, method.dimsizes, uniq)
+        self._args_type = (TStruct(dict(method.inp),
+                                   label=f'_simple_event_{self.uniq}_args')
+                           if method.inp else None)
+
+    @property
+    def args_type(self):
+        return self._args_type
+
+    @property
+    def types_to_declare(self):
+        return (self._args_type,) * (self._args_type is not None)
+
+    @property
+    def string_key(self):
+        return self.method.logname_anonymized()
+
+    def generate_callback_call(self, indices_lit, args_lit):
+        site = self.method.site
+        indices = tuple(mkLit(site, f'{indices_lit}[{i}]', TInt(32, False))
+                        for i in range(self.method.dimensions))
+        args = tuple(mkLit(site, f'{args_lit}->{pname}', ptype)
+                     for (pname, ptype) in self.method.inp)
+        with LogFailure(site, self.method, indices), \
+             crep.DeviceInstanceContext():
+            code = codegen_call(site, self.method, indices, args, ())
+        code = mkCompound(site, [code])
+        code.toc()
+
+class AfterDelayIntoSendNowInfo(AfterDelayInfo):
+    def __init__(self, typeseq_info, uniq):
+        super().__init__(typeseq_info, [], uniq)
+        self .typeseq_info = typeseq_info
+        hookref_type = THook(typeseq_info.types, validated=True)
+        self._args_type = (
+            TStruct({'hookref': hookref_type,
+                     'args': typeseq_info.struct},
+                    label=f'_simple_event_{self.uniq}_args')
+            if typeseq_info.types else hookref_type)
+
+    @property
+    def args_type(self):
+        return self._args_type
+
+    @property
+    def types_to_declare(self):
+        return (self._args_type,) * bool(self.typeseq_info.types)
+
+    @property
+    def string_key(self):
+        return self.typeseq_info.string_key
+
+    def generate_callback_call(self, indices_lit, args_lit):
+        assert indices_lit is None
+        has_args = bool(self.typeseq_info.types)
+        hookref = f'{args_lit}->hookref' if has_args else f'*{args_lit}'
+        args = f'&{args_lit}->args' if has_args else 'NULL'
+        out('_DML_send_hook(&_dev->obj, &_dev->_detached_hook_queue_stack, '
+            + f'_DML_resolve_hookref(_dev, _hook_aux_infos, {hookref}), '
+            + f'{args});\n')
+
+def get_after_delay(key):
+    try:
+        return dml.globals.after_delay_infos[key]
+    except:
+        uniq = len(dml.globals.after_delay_infos)
+        info = after_delay_info_constructors[type(key)](key, uniq)
+        dml.globals.after_delay_infos[key] = info
+        return info
+
+
+class AfterOnHookIntoMethodInfo(AfterOnHookInfo):
+    def __init__(self, typeseq_info, method, param_to_msg_comp):
+        self.method = method
+        super().__init__(method.dimsizes, method.parent, typeseq_info, method,
+                         param_to_msg_comp, method.inp, bool(self.method.inp))
+        self._args_type = (
+            TStruct({name: typ
+                    for (i, (name, typ)) in enumerate(method.inp)
+                     if i not in param_to_msg_comp},
+                    label=f'_after_on_hook_{self.uniq}_args')
+            if len(self.method.inp) > len(param_to_msg_comp) else None)
+
+    def generate_callback_call(self, indices_lit, args_lit, msg_lit):
+        site = self.method.site
+        indices = tuple(mkLit(site, f'{indices_lit}[{i}]', TInt(32, False))
+                        for i in range(self.method.dimensions))
+        args = tuple(
+            mkLit(site,
+                  f'{msg_lit}->comp{self.param_to_msg_comp[i]}'
+                  if i in self.param_to_msg_comp else f'{args_lit}->{pname}',
+                  ptype)
+            for (i, (pname, ptype)) in enumerate(self.method.inp))
+        with LogFailure(site, self.method, indices), \
+             crep.DeviceInstanceContext():
+            code = codegen_call(site, self.method, indices, args, ())
+        code = mkCompound(site, [code])
+        code.toc()
+
+    def generate_args_serializer(self, site, args_expr, out_expr):
+        sources = tuple((ctree.mkSubRef(site, args_expr, name, "."),
+                         safe_realtype(typ))
+                        if i not in self.param_to_msg_comp else None
+                        for (i, (name, typ)) in enumerate(self.method.inp))
+        serialize.serialize_sources_to_list(site, sources, out_expr)
+
+    def generate_args_deserializer(self, site, val_expr, out_expr, error_out):
+        if self.args_type:
+            tmp_out_decl, tmp_out_ref = serialize.declare_variable(
+                site, '_tmp_out', self.args_type)
+            tmp_out_decl.toc()
+        else:
+            tmp_out_ref = None
+        targets = tuple((ctree.mkSubRef(site, tmp_out_ref, name, "."),
+                         safe_realtype(typ))
+                        if i not in self.param_to_msg_comp else None
+                        for (i, (name, typ)) in enumerate(self.method.inp))
+
+        def error_out_at_index(_i, exc, msg):
+            return error_out(exc, msg)
+
+        serialize.deserialize_list_to_targets(
+            site, val_expr, targets, error_out_at_index,
+            f'deserialization of arguments to {self.method.name}')
+        if self.args_type:
+            ctree.mkAssignStatement(site, out_expr,
+                                    ctree.ExpressionInitializer(
+                                        tmp_out_ref)).toc()
+
+    @property
+    def args_type(self):
+        return self._args_type
+
+    @property
+    def types_to_declare(self):
+        return (self._args_type,) * (self._args_type is not None)
+
+    @property
+    def string_prim_key(self):
+        return self.method.logname_anonymized(("%u",) * self.method.dimensions)
+
+
+class AfterOnHookIntoSendNowInfo(AfterOnHookInfo):
+    def __init__(self, typeseq_info, sendnow_typeseq_info, param_to_msg_comp):
+        self.sendnow_typeseq_info = sendnow_typeseq_info
+        inp = [(f'comp{i}', typ)
+               for (i, typ) in enumerate(sendnow_typeseq_info.types)]
+        has_inner_args = len(inp) > len(param_to_msg_comp)
+        super().__init__([], dml.globals.device, typeseq_info,
+                         sendnow_typeseq_info, param_to_msg_comp, inp, True)
+        sendnow_hookref_type = THook(sendnow_typeseq_info.types,
+                                     validated=True)
+        self.inner_args_type = (
+            TStruct({name: typ
+                    for (i, (name, typ)) in enumerate(inp)
+                     if i not in param_to_msg_comp},
+                    label=f'_after_on_hook_{self.uniq}_inner_args')
+            if has_inner_args else None)
+        self._args_type = (
+            TStruct({'hookref': sendnow_hookref_type,
+                     'args': self.inner_args_type},
+                     label=f'_after_on_hook_{self.uniq}_args')
+            if has_inner_args else sendnow_hookref_type)
+
+    def generate_callback_call(self, indices_lit, args_lit, msg_lit):
+        assert indices_lit is None
+        has_inner_args = (len(self.sendnow_typeseq_info.types)
+                          > len(self.param_to_msg_comp))
+        hookref = f'{args_lit}->hookref' if has_inner_args else f'*{args_lit}'
+
+        sendnow_msg_struct = self.sendnow_typeseq_info.struct
+        args = (('&(%s_t) {%s}'
+                % (sendnow_msg_struct.label,
+                   ', '.join(
+                       f'{msg_lit}->comp{self.param_to_msg_comp[i]}'
+                       if i in self.param_to_msg_comp else
+                       f'{args_lit}->args.comp{i}'
+                       for i in range(len(self.sendnow_typeseq_info.types)))))
+                if self.sendnow_typeseq_info.types else 'NULL')
+
+        out('_DML_send_hook(&_dev->obj, &_dev->_detached_hook_queue_stack, '
+            + f'_DML_resolve_hookref(_dev, _hook_aux_infos, {hookref}), '
+            + f'{args});\n')
+
+    def generate_args_serializer(self, site, args_expr, out_expr):
+        has_inner_args = (len(self.sendnow_typeseq_info.types)
+                          > len(self.param_to_msg_comp))
+        hookref = (ctree.mkSubRef(site, args_expr, "hookref", ".")
+                   if has_inner_args else args_expr)
+        sources = [(hookref,
+                    THook(self.sendnow_typeseq_info.types, validated=True))]
+        if has_inner_args:
+            inner_args_val_decl, inner_args_val = serialize.declare_variable(
+                site, 'inner_args_val', TNamed('attr_value_t'))
+            inner_args_val_decl.toc()
+            inner_args = ctree.mkSubRef(site, args_expr, 'args', '.')
+            inner_args_sources = (
+                (ctree.mkSubRef(site, inner_args, f'comp{i}', '.'), typ)
+                if i not in self.param_to_msg_comp else None
+                for (i, typ) in enumerate(self.sendnow_typeseq_info.types))
+            serialize.serialize_sources_to_list(site, inner_args_sources,
+                                                inner_args_val)
+            sources.append((inner_args_val, None))
+
+        serialize.serialize_sources_to_list(site, sources, out_expr)
+
+    def generate_args_deserializer(self, site, val_expr, out_expr, error_out):
+        has_inner_args = (len(self.sendnow_typeseq_info.types)
+                          > len(self.param_to_msg_comp))
+        tmp_out_decl, tmp_out_ref = serialize.declare_variable(
+            site, '_tmp_out', self.args_type)
+        tmp_out_decl.toc()
+        hookref = (ctree.mkSubRef(site, tmp_out_ref, 'hookref', '.')
+                   if has_inner_args else tmp_out_ref)
+        targets = [(hookref,
+                    safe_realtype(THook(self.sendnow_typeseq_info.types,
+                                        validated=True)))]
+        if has_inner_args:
+            inner_args_val_decl, inner_args_val = serialize.declare_variable(
+                site, '_inner_args_val', TNamed('attr_value_t'))
+            inner_args_val_decl.toc()
+            targets.append((inner_args_val, None))
+
+
+        def error_out_at_index(_i, exc, msg):
+            return error_out(exc, msg)
+
+        serialize.deserialize_list_to_targets(
+            site, val_expr, targets, error_out_at_index,
+            'deserialization of arguments to a send_now')
+
+        if has_inner_args:
+            inner_args = ctree.mkSubRef(site, tmp_out_ref, 'args', '.')
+            inner_args_targets = (
+                (ctree.mkSubRef(site, inner_args, f'comp{i}', '.'),
+                 safe_realtype(typ))
+                if i not in self.param_to_msg_comp else None
+                for (i, typ) in enumerate(self.sendnow_typeseq_info.types))
+            serialize.deserialize_list_to_targets(
+                site, inner_args_val, inner_args_targets, error_out_at_index,
+                'deserialization of arguments to a send_now')
+
+
+        ctree.mkAssignStatement(site, out_expr,
+                                ctree.ExpressionInitializer(tmp_out_ref)).toc()
+
+    @property
+    def args_type(self):
+        return self._args_type
+
+    @property
+    def types_to_declare(self):
+        return ((self.inner_args_type, self._args_type)
+                * (self.inner_args_type is not None))
+    @property
+    def string_prim_key(self):
+        return self.sendnow_typeseq_info.string_key
+
+after_delay_info_constructors = {
+    objects.Method: AfterDelayIntoMethodInfo,
+    TypeSequenceInfo: AfterDelayIntoSendNowInfo
+}
+
+after_on_hook_info_constructors = {
+    objects.Method: AfterOnHookIntoMethodInfo,
+    TypeSequenceInfo: AfterOnHookIntoSendNowInfo
+}
+
+class AfterArgsInit:
+    @abstractmethod
+    def args_init(self): pass
+
+class AfterIntoSendNowArgsInit(AfterArgsInit):
+    def __init__(self, inargs, hookref):
+        self.inargs = inargs
+        self.hookref = hookref
+
+    def args_init(self):
+        if self.inargs:
+            return ('{ %s, { %s } }'
+                    % (self.hookref.read(),
+                       ', '.join(inarg.read() for inarg in self.inargs)))
+        else:
+            return self.hookref.read()
+
+class AfterIntoMethodArgsInit(AfterArgsInit):
+    def __init__(self, inargs):
+        self.inargs = inargs
+
+    def args_init(self):
+        assert self.inargs
+        return f'{{ {", ".join(inarg.read() for inarg in self.inargs)} }}'
 
 def declarations(scope):
     "Get all local declarations in a scope as a list of Declaration objects"
@@ -559,7 +1017,7 @@ def expr_unop(tree, location, scope):
         if op == 'defined':
             if undefined(rh):
                 return mkBoolConstant(tree.site, False)
-            if isinstance(rh, (NodeRef, NodeArrayRef, AbstractList)):
+            if isinstance(rh, (NodeRef, NonValueArrayRef, AbstractList)):
                 return mkBoolConstant(tree.site, True)
         if op == '!' and isinstance(rh, InterfaceMethodRef):
             # see bug 24144
@@ -703,9 +1161,9 @@ def try_resolve_len(site, lh):
         if isinstance(lh, AbstractList):
             return mkIntegerConstant(site,
                                      len(tuple(lh.iter_flat())), False)
-        elif isinstance(lh, NodeArrayRef):
+        elif isinstance(lh, NonValueArrayRef):
             return mkIntegerConstant(site,
-                                     lh.node.dimsizes[len(lh.indices)],
+                                     lh.local_dimsizes[len(lh.local_indices)],
                                      False)
     return None
 
@@ -898,6 +1356,17 @@ def fix_printf(fmt, args, argsites, site):
 
     return filtered_fmt, filtered_args
 
+def eval_arraylen(size_ast, parent_scope):
+    size = codegen_expression(size_ast, parent_scope, global_scope)
+    if not size.constant:
+        raise EASZVAR(size.site, size)
+    if not isinstance(size.value, int):
+        report(EBTYPE(size.site, size, "integer"))
+        return 2  # arbitrary nonzero integer
+    if size.value < 1:
+        raise EASZR(size.site)
+    return size.value
+
 def eval_type(asttype, site, location, scope, extern=False, typename=None,
               allow_void=False):
     '''Interpret a type AST.
@@ -991,6 +1460,14 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
                            % (expr, expr))
         elif tag == 'sequence':
             etype = TTraitList(info)
+        elif tag == 'hook':
+            msg_comp_types = []
+            for (_, tsite, _, type_ast) in info:
+                (msg_comp_struct_defs, msg_comp_type) = eval_type(
+                    type_ast, tsite, location, scope, extern)
+                msg_comp_types.append(msg_comp_type)
+                struct_defs.extend(msg_comp_struct_defs)
+            etype = THook(msg_comp_types)
         else:
             raise ICE(site, "Strange type")
     elif isinstance(asttype[0], str):
@@ -1113,33 +1590,6 @@ def eval_method_outp(outp_asts, location, scope):
             # by the generated C function if needed.
             outp.append(('_out%d' % (i,), t))
     return outp
-
-class SimpleEvents(object):
-    def __init__(self):
-        self.__dict = {}
-    def items(self):
-        return self.__dict.items()
-    def add(self, method):
-        "Create an event object that calls a method"
-        info = self.__dict.get(method, None)
-        if not info:
-            id = str(len(self.__dict))
-            info = {'callback': f'_simple_event_{id}',
-                    'destroy': '_destroy_simple_event_data'}
-            for fun in ('get_value', 'set_value'):
-                info[fun] = ('_simple_event_%s_%s'
-                             % ((id if method.dimensions or method.inp
-                                 else 'only_domains'), fun))
-            info['args_type'] = (TStruct({name: typ
-                                          for (name, typ) in method.inp},
-                                         label=f'_simple_event_{id}_args')
-                                 if method.inp else None)
-
-            self.__dict[method] = info
-
-        return info
-
-simple_events = SimpleEvents()
 
 def check_designated_initializers(site, etype, init_asts, allow_partial):
     shallow_real_etype = safe_realtype_shallow(etype)
@@ -1363,7 +1813,7 @@ def get_initializer(site, etype, astinit, location, scope):
         return ExpressionInitializer(mkBoolConstant(site, False))
     elif typ.is_float:
         return ExpressionInitializer(mkFloatConstant(site, 0.0))
-    elif isinstance(typ, (TStruct, TExternStruct, TArray, TTrait)):
+    elif isinstance(typ, (TStruct, TExternStruct, TArray, TTrait, THook)):
         return MemsetInitializer(site)
     elif isinstance(typ, TPtr):
         return ExpressionInitializer(mkLit(site, 'NULL', typ))
@@ -1731,7 +2181,7 @@ def try_codegen_invocation(site, init_ast, outargs, location, scope):
     meth_expr = codegen_expression_maybe_nonvalue(meth_ast, location, scope)
     if (isinstance(meth_expr, NonValue)
         and not isinstance(meth_expr, (
-            TraitMethodRef, NodeRef, InterfaceMethodRef))):
+            TraitMethodRef, NodeRef, InterfaceMethodRef, HookSendNowRef))):
         raise meth_expr.exc()
     if isinstance(meth_expr, TraitMethodRef):
         if not meth_expr.throws and len(meth_expr.outp) <= 1:
@@ -2164,41 +2614,208 @@ def stmt_after(stmt, location, scope):
     else:
         domains = [TraitObjIdentity(site, lookup_var(site, scope, "this"))]
 
-    method = codegen_expression_maybe_nonvalue(method_ast, location, scope)
+    methodref = codegen_expression_maybe_nonvalue(method_ast, location, scope)
 
-    if not isinstance(method, NodeRef):
-        raise ENMETH(site, method)
+    if isinstance(methodref, NodeRef) and methodref.node.objtype == 'method':
+        method, indices = methodref.get_ref()
 
-    method, indices = method.get_ref()
+        if len(method.outp) > 0:
+            raise EAFTER(site, None, method, None)
 
-    if method.objtype != 'method':
-        raise ENMETH(site, method)
+        require_fully_typed(site, method)
+        func = method_instance(method)
+        inp = func.inp
+        kind = 'method'
+    elif isinstance(methodref, HookSendNowRef):
+        indices = ()
+        send_now_hookref = methodref.hookref_expr
+        msg_types = safe_realtype_shallow(send_now_hookref.ctype()).msg_types
+        inp = [(f'comp{i}', typ) for (i, typ) in enumerate(msg_types)]
+        kind = 'send_now'
+    else:
+        raise ENMETH(site, methodref)
 
-    if len(method.outp) > 0:
-        raise EAFTER(site, method, None)
-
-    require_fully_typed(site, method)
-    func = method_instance(method)
-
-    inargs = typecheck_inarg_inits(site, inargs, func.inp, location, scope,
-                                   'method')
+    inargs = typecheck_inarg_inits(site, inargs, inp, location, scope, kind)
 
     # After-call is only possible for methods with serializable parameters
     unserializable = []
-    for (pname, ptype) in func.inp:
+    for (pname, ptype) in inp:
         try:
             serialize.mark_for_serialization(site, ptype)
         except ESERIALIZE:
             unserializable.append((pname, ptype))
 
-    if len(unserializable) > 0:
-        raise EAFTER(site, method, unserializable)
+    if kind == 'method':
+        if len(unserializable) > 0:
+            raise EAFTER(site, None, method, unserializable)
+        else:
+            mark_method_referenced(func)
+            after_info = get_after_delay(method)
+            args_init = AfterIntoMethodArgsInit(inargs)
+    else:
+        assert kind == 'send_now'
+        if len(unserializable) > 0:
+            raise EAFTERSENDNOW(site, None, methodref.hookref_expr,
+                                unserializable)
+        else:
+            typeseq_info = get_type_sequence_info(
+                (typ for (_, typ) in inp), create_new=True)
+            after_info = get_after_delay(typeseq_info)
+            args_init = AfterIntoSendNowArgsInit(inargs,
+                                                 methodref.hookref_expr)
 
-    mark_method_referenced(func)
-    eventinfo = simple_events.add(method)
+    return [mkAfter(site, api_unit, delay, domains, after_info, indices,
+                    args_init)]
 
-    return [mkAfter(site, api_unit, delay, domains, method, eventinfo, indices,
-                    inargs)]
+
+class MsgCompParamRestrictedSymbol(NonValue):
+    @auto_init
+    def __init__(self, site, name): pass
+    def __str__(self):
+        return self.name
+    def exc(self):
+        return EAFTERMSGCOMPPARAM(self.site, self.name)
+
+class MsgCompParam(Expression):
+    @auto_init
+    def __init__(self, site, name, type): pass
+    def __str__(self):
+        return self.name
+    def read(self):
+        raise ICE(self.site,
+                  (f".read() of message component parameter '{self.name}' "
+                   + "called"))
+
+@statement_dispatcher
+def stmt_afteronhook(stmt, location, scope):
+    [hookref, msg_comp_param_asts, callexpr] = stmt.args
+    site = stmt.site
+
+    if callexpr[0] != 'apply':
+        raise ESYNTAX(site, None,
+                      'callback expression to after statement must be a '
+                      + 'function application')
+
+    method = callexpr[2]
+    inarg_asts = callexpr[3]
+
+    hookref_expr = codegen_expression(hookref, location, scope)
+    hooktype = hookref_expr.ctype()
+    real_hooktype = safe_realtype_shallow(hooktype)
+    if not isinstance(real_hooktype, THook):
+        raise EBTYPE(hookref_expr.site, hooktype, 'hook')
+
+    real_hooktype.validate(hooktype.declaration_site or hookref_expr.site)
+
+    # TODO after statement should be extended to allow the user to explicitly
+    # give the domains
+    if location.method():
+        domains = [ObjIdentity(site, location.node.parent, location.indices)]
+    else:
+        domains = [TraitObjIdentity(site, lookup_var(site, scope, "this"))]
+
+    methodref = codegen_expression_maybe_nonvalue(method, location, scope)
+
+    if isinstance(methodref, NodeRef) and methodref.node.objtype == 'method':
+        method, indices = methodref.get_ref()
+
+        if len(method.outp) > 0:
+            raise EAFTER(site, None, method, None)
+
+        require_fully_typed(site, method)
+        func = method_instance(method)
+        inp = func.inp
+        kind = 'method'
+    elif isinstance(methodref, HookSendNowRef):
+        indices = ()
+        send_now_hookref = methodref.hookref_expr
+        msg_types = safe_realtype_shallow(send_now_hookref.ctype()).msg_types
+        inp = [(f'comp{i}', typ) for (i, typ) in enumerate(msg_types)]
+        kind = 'send_now'
+    else:
+        raise ENMETH(site, methodref)
+
+    if len(msg_comp_param_asts) != len(real_hooktype.msg_types):
+        raise EAFTERHOOK(
+            site, hookref_expr, len(real_hooktype.msg_types),
+            len(msg_comp_param_asts))
+
+    msg_comp_params = {}
+    for (idx, (mcp_site, mcp_name)) in enumerate(msg_comp_param_asts):
+        if mcp_name in msg_comp_params:
+            raise EDVAR(mcp_site, msg_comp_params[mcp_name][1],
+                        mcp_name)
+        else:
+            msg_comp_params[mcp_name] = (idx, mcp_site)
+
+    arg_index_to_msg_comp_param = {}
+    for (idx, inarg) in enumerate(inarg_asts):
+        if (inarg.kind == 'initializer_scalar'
+            and inarg.args[0].kind == 'variable'
+            and inarg.args[0].args[0] in msg_comp_params):
+            arg_index_to_msg_comp_param[idx] = (
+                inarg.args[0].args[0],
+                *msg_comp_params[inarg.args[0].args[0]])
+
+    inarg_inits = []
+    for (i, inarg_ast) in enumerate(inarg_asts):
+        if i in arg_index_to_msg_comp_param:
+            (name, param_idx, site) = arg_index_to_msg_comp_param[i]
+            typ = real_hooktype.msg_types[param_idx]
+            inarg_inits.append(
+                ExpressionInitializer(MsgCompParam(site, name, typ)))
+        else:
+            inarg_inits.append(inarg_ast)
+
+    args_scope = MethodParamScope(scope)
+    for (name, (_, msg_param_site)) in msg_comp_params.items():
+        args_scope.add(ExpressionSymbol(
+            name, MsgCompParamRestrictedSymbol(msg_param_site, name),
+            msg_param_site))
+
+    inargs = typecheck_inarg_inits(site, inarg_inits, inp, location,
+                                   args_scope, kind)
+    filtered_inargs = [inarg for (i, inarg) in enumerate(inargs)
+                       if i not in arg_index_to_msg_comp_param]
+
+    unserializable = []
+    for (idx, (pname, ptype)) in enumerate(inp):
+        if idx not in arg_index_to_msg_comp_param:
+            try:
+                serialize.mark_for_serialization(site, ptype)
+            except ESERIALIZE:
+                unserializable.append((pname, ptype))
+
+    if kind == 'method':
+        if len(unserializable) > 0:
+            raise EAFTER(site, hookref_expr, method, unserializable)
+        else:
+            mark_method_referenced(func)
+            aoh_key = method
+            args_init = AfterIntoMethodArgsInit(filtered_inargs)
+    else:
+        assert kind == 'send_now'
+        if len(unserializable) > 0:
+            raise EAFTERSENDNOW(site, hookref_expr, methodref.hookref_expr,
+                                unserializable)
+        else:
+            aoh_key = get_type_sequence_info(
+                (typ for (_, typ) in inp), create_new=True)
+            args_init = AfterIntoSendNowArgsInit(filtered_inargs,
+                                                 methodref.hookref_expr)
+
+    param_idx_to_msg_comp_idx = { i: arg_index_to_msg_comp_param[i][1]
+                                  for i in arg_index_to_msg_comp_param }
+
+    typeseq_info = get_type_sequence_info(real_hooktype.msg_types,
+                                          create_new=True)
+
+    aoh_info = typeseq_info.get_after_on_hook(
+        aoh_key, param_idx_to_msg_comp_idx, len(inp), create_new=True)
+
+    return [mkAfterOnHook(site, domains, hookref_expr, aoh_info, indices,
+                          args_init)]
+
 
 @statement_dispatcher
 def stmt_select(stmt, location, scope):

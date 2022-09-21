@@ -169,6 +169,8 @@ typedef struct {
     _identity_t id;
 } _traitref_t;
 
+typedef _identity_t _hookref_t;
+
 // List of vtables of a specific trait in one specific object
 typedef struct {
         // trait vtable instance
@@ -303,6 +305,12 @@ _vtable_sequence_param(_traitref_t traitref, size_t vtable_member_offset)
       ({_traitref_t __tref = traitref;                                  \
         (var_type)((uintptr_t)dev + ((vtable_type *)__tref.trait)->member) \
            + __tref.id.encoded_index; })
+
+#define VTABLE_HOOK(traitref, vtable_type, member, coeff, offset)           \
+    ({_traitref_t __tref = traitref;                                        \
+        (_hookref_t){ .id = ((vtable_type *)__tref.trait)->member,          \
+                      .encoded_index = __tref.id.encoded_index * (coeff)    \
+                                       + (offset)}; })
 
 #define _raw_load_uint8_be_t   UNALIGNED_LOAD_BE8
 #define _raw_load_uint16_be_t  UNALIGNED_LOAD_BE16
@@ -674,14 +682,14 @@ _deserialize_identity(ht_str_table_t *id_info_ht, attr_value_t val,
     const _id_info_t *info = ht_lookup_str(id_info_ht, logname);
 
     if (unlikely(!info)) {
-        SIM_c_attribute_error("Failed to look up object node '%s' when "
+        SIM_c_attribute_error("Failed to look up node '%s' when "
                               "deserializing _identity_t", logname);
         return Sim_Set_Illegal_Value;
     }
     if (unlikely(SIM_attr_list_size(indices_attr) != info->dimensions)) {
         SIM_c_attribute_error(
             "Invalid number of indices for when attempting "
-            "to deserialize _identity_t for object node %s. "
+            "to deserialize _identity_t for node %s. "
             "Expected %u indices, got %u.",
             logname, info->dimensions, SIM_attr_list_size(indices_attr));
         return Sim_Set_Illegal_Value;
@@ -697,7 +705,7 @@ _deserialize_identity(ht_str_table_t *id_info_ht, attr_value_t val,
         if (unlikely(index >= info->dimsizes[i])) {
             SIM_c_attribute_error(
                 "Encountered invalid index when attempting to deserialize "
-                "_identity_t for object node %s. The size of dimension %u is "
+                "_identity_t for node %s. The size of dimension %u is "
                 "%u, but deserialized index for that dimension is %u.",
                 logname, i, info->dimsizes[i], index);
             return Sim_Set_Illegal_Value;
@@ -1209,6 +1217,454 @@ _deserialize_simple_event_data(
   error:
     _free_simple_event_data(temp_out);
     return error;
+}
+
+// All auxiliary info needed to de/serialize suspended calls created
+// from a specific after-on-hook.
+//
+// An after-on-hook is unique in respect to three things:
+// 1. The message component types of the hook
+// 2. The target callback, which is either...
+//    a. A method, unique in respect to the specific method
+//    b. send_now of a hook, unique in respect to the message component types
+//       of the hook.
+// 3. What message components of the hook are propagated to what parameters of
+//    the target callback.
+//
+// Any after-on-hooks that are identical in respect to these three things
+// share the same set of after-on-hook info.
+typedef struct {
+    const char *callback_key;
+    void (*callback)(conf_object_t *dev, const uint32 *indices,
+                     const void *args, const void *msg);
+    _serializer_t args_serializer;
+    _deserializer_t args_deserializer;
+    // Size of the data args_de/serializer works with
+    uint32 args_size;
+    // id of the object parent of the target callback method
+    uint32 method_parent_id;
+} _dml_after_on_hook_info_t;
+
+// An element of a hook queue. Currently, the only elements of a hook queue
+// are calls suspended from an after-on-hook, so that's what this represents.
+typedef struct {
+    void (*callback)(conf_object_t *dev, const uint32 *indices,
+                     const void *args, const void *msg);
+    _simple_event_data_t data;
+    const char *callback_key;
+} _dml_hook_queue_elem_t;
+
+// A hook queue, which may or may not have been detached.
+typedef VECT(_dml_hook_queue_elem_t) _dml_hook_queue_t;
+
+// A hook queue detached from its hook due to it being processed by a send_now
+// in progress.
+typedef struct _dml_detached_hook_queue {
+    _dml_hook_queue_t *queue;
+    // The number of elements of the detached hook queue already processed by
+    // the send_now
+    size_t processed_elems;
+    // The detached hook queue of the next send_now on the call stack
+    // (NULL if there is none). The naming is confusing because
+    // _dml_detached_hook_queue acts like a stack: the detached hook queue of
+    // the next send_now will be on top of this one, hence "prev", as it's
+    // previous element in the stack.
+    //
+    // This member only gets leveraged if the thread the send_now is running on
+    // gets suspended due to shenanigans like SIM_transaction_wait
+    struct _dml_detached_hook_queue *prev;
+    // The detached hook queue of the previous send_now in progress (NULL if
+    // there is none).
+    struct _dml_detached_hook_queue *next;
+} _dml_detached_hook_queue_t;
+
+// All storage associated to a specific hook, allocated as part of the device
+// struct.
+typedef struct {
+    _dml_hook_queue_t queue;
+    // Could be expanded to have additional members, if needed.
+} _dml_hook_t;
+
+// A set of auxiliary info related to a hook node. Each member is used for one
+// or more of the following purposes:
+// 1. resolving hook references to _dml_hook_t pointers
+// 2. checkpointing hook attributes
+// 3. deserializing hook references
+typedef struct {
+    // The offset from the device struct to the _dml_hook_t (array) allocation
+    // of this hook node. Used for 1. and 2.
+    size_t          device_offset;
+    // The uniq of the type sequence corresponding to the message component
+    // types of the hook node. Used for 3.
+    uint32          typeseq_uniq;
+    // The id of the hook node. Used for 2.
+    uint32          hook_id;
+} _dml_hook_aux_info_t;
+
+UNUSED static set_error_t
+_deserialize_hook_reference(ht_str_table_t *hook_id_info_ht,
+                            const _dml_hook_aux_info_t *hook_aux_infos,
+                            uint32 expected_typ_uniq,
+                            attr_value_t val,
+                            _hookref_t *out_hookref) {
+    const char *logname = SIM_attr_string(SIM_attr_list_item(val, 0));
+    _hookref_t hookref;
+    set_error_t error = _deserialize_identity(hook_id_info_ht, val, &hookref);
+    if (unlikely(error != Sim_Set_Ok)) {
+        return error;
+    }
+    if (unlikely(hookref.id == 0)) {
+        // Deserialized _identity_t's id being 0 indicates the serialized
+        // hook reference was zero-initialized.
+        *out_hookref = (_hookref_t) { 0 };
+        return Sim_Set_Ok;
+    }
+    if (unlikely(hook_id_info_ht == NULL)) {
+        SIM_c_attribute_error("Failed to look up hook '%s' when "
+                              "deserializing _hookref_t", logname);
+        return Sim_Set_Illegal_Value;
+    }
+    if (unlikely(hook_aux_infos[hookref.id - 1].typeseq_uniq
+                 != expected_typ_uniq)) {
+        SIM_c_attribute_error("Failed to deserialize _hookref_t: the message"
+                              "component types for hook '%s' doesn't match"
+                              "the message component types of the desired"
+                              "hook type", logname);
+        return Sim_Set_Illegal_Value;
+    }
+    *out_hookref = hookref;
+    return Sim_Set_Ok;
+}
+
+UNUSED static inline _dml_hook_t *
+_DML_resolve_hookref(void *dev, const _dml_hook_aux_info_t *hook_aux_infos,
+                     _hookref_t hookref) {
+    ASSERT(hookref.id);
+    return (_dml_hook_t *)((uintptr_t)dev
+                           + hook_aux_infos[hookref.id - 1].device_offset)
+         + hookref.encoded_index;
+}
+
+UNUSED static void
+_DML_free_hook_queue(_dml_hook_queue_t *q) {
+    VFORT(*q, _dml_hook_queue_elem_t, elem) {
+        _free_simple_event_data(elem.data);
+    }
+    VFREE(*q);
+}
+
+UNUSED static void
+_DML_attach_callback_to_hook(
+    _dml_hook_t *hook, const _dml_after_on_hook_info_t *info,
+    const uint32 *indices, uint32 dimensions, const void *args,
+    const _identity_t *domains, uint32 no_domains) {
+    _dml_hook_queue_elem_t elem = { .callback = info->callback,
+                                    .callback_key = info->callback_key};
+    if (dimensions) {
+        elem.data.indices = MM_MALLOC(dimensions, uint32);
+        for (uint32 i = 0; i < dimensions; ++i) {
+            elem.data.indices[i] = indices[i];
+        }
+    }
+    if (args) {
+        elem.data.args = MM_MALLOC(info->args_size, uint8);
+        memcpy(elem.data.args, args, info->args_size);
+    }
+    if (no_domains) {
+        elem.data.no_domains = no_domains;
+        elem.data.domains = MM_MALLOC(no_domains, _identity_t);
+        for (uint32 i = 0; i < no_domains; ++i) {
+            elem.data.domains[i] = domains[i];
+        }
+    }
+    VADD(hook->queue, elem);
+}
+
+UNUSED static uint64
+_DML_send_hook(conf_object_t *dev,
+               _dml_detached_hook_queue_t **detached_queue_stack,
+               _dml_hook_t *hook, const void *msg) {
+    _dml_hook_queue_t detached_queue = hook->queue;
+    _dml_detached_hook_queue_t detached_queue_ref =
+        { .queue = &detached_queue };
+    if (!*detached_queue_stack) {
+        *detached_queue_stack = &detached_queue_ref;
+    } else {
+        ASSERT(!(*detached_queue_stack)->prev);
+        (*detached_queue_stack)->prev = &detached_queue_ref;
+        detached_queue_ref.next = *detached_queue_stack;
+        *detached_queue_stack = &detached_queue_ref;
+    }
+    VINIT(hook->queue);
+    // The use of VFORI+VGET instead of VFOREACH or VFORT is important, here!
+    // The detached_queue.elements pointer _can plausibly be changed_
+    // as a result of the callbacks, which VFOREACH and VFORT can't handle!
+    VFORI(detached_queue, i) {
+        _dml_hook_queue_elem_t elem = VGET(detached_queue, i);
+        ++detached_queue_ref.processed_elems;
+        elem.callback(dev, elem.data.indices, elem.data.args, msg);
+        _free_simple_event_data(elem.data);
+    }
+    if (detached_queue_ref.next) {
+        detached_queue_ref.next->prev = detached_queue_ref.prev;
+    }
+    if (likely(detached_queue_ref.prev == NULL)) {
+        ASSERT(*detached_queue_stack == &detached_queue_ref);
+        *detached_queue_stack = detached_queue_ref.next;
+    } else {
+        // There is an unfinished send_now in progress that started *after*
+        // this one! This is only possible with thread suspension shenanigans
+        // like SIM_transaction_wait in play.
+        detached_queue_ref.prev->next = detached_queue_ref.next;
+    }
+    // The length of the detached queue _after it has been processed_
+    // indicates how many callbacks have been resolved.
+    // The length of the queue before processing is not good enough since
+    // elements later in the queue can actually be removed during
+    // the loop.
+    uint64 no_resolved_callbacks = VLEN(detached_queue);
+    VFREE(detached_queue);
+    return no_resolved_callbacks;
+}
+
+
+UNUSED static void
+_DML_cancel_afters_in_hook_queue(
+    _dml_hook_queue_t *queue, _identity_t id, uint32 start_offset) {
+    uint32 queue_len = VLEN(*queue);
+    if (start_offset >= queue_len) {
+        return;
+    }
+    _dml_hook_queue_t new_queue = VNULL;
+    if (start_offset > 0) {
+        VCOPY(new_queue, *queue);
+        VTRUNCATE(new_queue, start_offset);
+    }
+
+    for (uint32 i = start_offset; i < queue_len; ++i) {
+        _dml_hook_queue_elem_t elem = VGET(*queue, i);
+        bool found = false;
+        for (uint32 j = 0; j < elem.data.no_domains; ++j) {
+            if (_identity_eq(id, elem.data.domains[j])) {
+                found = true;
+                break;
+            }
+        }
+        if (found) {
+            _free_simple_event_data(elem.data);
+        } else {
+            VADD(new_queue, elem);
+        }
+    }
+    _dml_hook_queue_t old_queue = *queue;
+    *queue = new_queue;
+    VFREE(old_queue);
+}
+
+UNUSED static void
+_DML_cancel_afters_in_detached_hook_queues(
+    _dml_detached_hook_queue_t *stack, _identity_t id) {
+    ASSERT(stack == NULL || stack->prev == NULL);
+    while (stack) {
+        _DML_cancel_afters_in_hook_queue(stack->queue, id,
+                                         stack->processed_elems);
+        stack = stack->next;
+    }
+}
+
+// Hook attributes:
+//
+// Excluding array wrapping, a hook attribute is conceptually of the form
+// "[[sa]*]", which represents the hook queue. Each element of the hook queue
+// is represented through the corresponding element of the list -- though it
+// may look like it, this is _not_ a pseudodictionary. Instead the idea is
+// that for each inner element "[sa]", the string is a tag which simultaneously
+// tells what kind of element has been serialized, and what serialized
+// representation it uses. The "a" should therefore be processed according to
+// what the tag tells.
+//
+// Currently, there exists only one kind of hook queue element -- a call
+// suspended by an after-on-hook -- and only one representation for that
+// element kind. So currently, there is only one valid tag, "after".
+// Once coroutines are introduced, we may introduce the tag "coroutine", and
+// if we want to change the serialized representation of after-on-hook elems,
+// we can tag that representation using the tag "after1".
+//
+// The "after" representation (what "a" actually is with that tag) is as
+// follows:
+//
+//  [ s                    [i*]      [a*]          [[s[i*]]*]           ]
+//    ^ after-on-hook key  ^indices  ^arguments    ^after domains
+//                                                  (list of identities)
+//
+// The after-on-hook key is used to look up the _dml_after_on_hook_into_t
+// needed to deserialize this element.
+
+// val is a serialization of an after elem of a hook queue, minus the tag
+UNUSED static set_error_t
+_DML_deserialize_hook_queue_elem_after(ht_str_table_t *callback_ht,
+                                       ht_str_table_t *id_info_ht,
+                                       const _id_info_t *id_infos,
+                                       attr_value_t val,
+                                       _dml_hook_queue_elem_t *e) {
+    _simple_event_data_t data = { 0 };
+
+    const char *callback_key    = SIM_attr_string(SIM_attr_list_item(val, 0));
+    attr_value_t indices_attr   = SIM_attr_list_item(val, 1);
+    attr_value_t arguments_attr = SIM_attr_list_item(val, 2);
+    attr_value_t domains_attr   = SIM_attr_list_item(val, 3);
+
+    set_error_t error = Sim_Set_Ok;
+
+    _dml_after_on_hook_info_t *callback_info = ht_lookup_str(callback_ht,
+                                                             callback_key);
+    if (unlikely(!callback_info)) {
+        SIM_c_attribute_error("Failed lookup using after callback key: '%s'",
+                              callback_key);
+        error = Sim_Set_Illegal_Value;
+        goto error;
+    }
+
+    _id_info_t id_info = id_infos[callback_info->method_parent_id - 1];
+    error = _deserialize_simple_event_indices(
+        id_info.dimsizes, id_info.dimensions, &indices_attr,
+        &data.indices);
+    if (unlikely(error != Sim_Set_Ok)) {
+        goto error;
+    }
+
+    error = _deserialize_simple_event_arguments(
+        callback_info->args_size, callback_info->args_deserializer,
+        &arguments_attr, &data.args);
+    if (unlikely(error != Sim_Set_Ok)) {
+        goto error;
+    }
+
+    error = _deserialize_simple_event_domains(
+        id_info_ht, &domains_attr, &data.domains, &data.no_domains);
+    if (unlikely(error != Sim_Set_Ok)) {
+        goto error;
+    }
+
+    e->callback = callback_info->callback;
+    e->data = data;
+    e->callback_key = callback_info->callback_key;
+    return Sim_Set_Ok;
+  error:
+    _free_simple_event_data(data);
+    return error;
+}
+
+// Serializes an after elem of a hook queue, and INCLUDES the "after" tag
+UNUSED static attr_value_t
+_DML_serialize_hook_queue_elem_after(ht_str_table_t *callback_ht,
+                                     const _id_info_t *id_infos,
+                                     _dml_hook_queue_elem_t elem) {
+    _dml_after_on_hook_info_t *callback_info =
+        ht_lookup_str(callback_ht, elem.callback_key);
+    ASSERT(callback_info);
+    _id_info_t id_info = id_infos[callback_info->method_parent_id - 1];
+    attr_value_t callback_key_attr
+        = SIM_make_attr_string(callback_info->callback_key);
+
+    attr_value_t indices_attr = SIM_alloc_attr_list(id_info.dimensions);
+    attr_value_t *indices_attr_list = SIM_attr_list(indices_attr);
+    for (uint32 i = 0; i < id_info.dimensions; ++i) {
+        indices_attr_list[i] = SIM_make_attr_uint64(elem.data.indices[i]);
+    }
+    attr_value_t arguments_attr =
+          callback_info->args_serializer
+        ? callback_info->args_serializer(elem.data.args)
+        : SIM_make_attr_list(0);
+
+    attr_value_t domains_attr = SIM_alloc_attr_list(elem.data.no_domains);
+    attr_value_t *domains_attr_list = SIM_attr_list(domains_attr);
+    for (uint32 i = 0; i < elem.data.no_domains; ++i) {
+        domains_attr_list[i] = _serialize_identity(id_infos,
+                                                   elem.data.domains[i]);
+    }
+
+    return SIM_make_attr_list(2, SIM_make_attr_string("after"),
+                              SIM_make_attr_list(4, callback_key_attr,
+                                                 indices_attr, arguments_attr,
+                                                 domains_attr));
+}
+
+UNUSED static set_error_t
+_DML_deserialize_hook_queue(ht_str_table_t *callback_ht,
+                            ht_str_table_t *id_info_ht,
+                            const _id_info_t *id_infos,
+                            attr_value_t val,
+                            _dml_hook_queue_t *q) {
+    uint32 queue_len = SIM_attr_list_size(val);
+    _dml_hook_queue_t temp_q = VNULL;
+    set_error_t error = Sim_Set_Ok;
+    VRESIZE(temp_q, queue_len);
+    uint32 i = 0;
+    for (; i < queue_len; ++i) {
+        attr_value_t item = SIM_attr_list_item(val, i);
+        const char *elem_kind = SIM_attr_string(SIM_attr_list_item(item,
+                                                                       0));
+        if (unlikely(strcmp(elem_kind, "after") != 0)) {
+            SIM_c_attribute_error("Illegal hook queue elem kind '%s' when "
+                                  "deserializing hook queue", elem_kind);
+            error = Sim_Set_Illegal_Value;
+            goto error;
+        }
+        _dml_hook_queue_elem_t elem;
+        error = _DML_deserialize_hook_queue_elem_after(
+            callback_ht, id_info_ht, id_infos, SIM_attr_list_item(item, 1),
+            &elem);
+        if (unlikely(error != Sim_Set_Ok)) {
+            goto error;
+        }
+        VSET(temp_q, i, elem);
+    }
+    _DML_free_hook_queue(q);
+    *q = temp_q;
+    return Sim_Set_Ok;
+  error:
+    VTRUNCATE(temp_q, i);
+    _DML_free_hook_queue(&temp_q);
+    return error;
+}
+
+
+UNUSED static attr_value_t
+_DML_serialize_hook_queue(ht_str_table_t *callback_ht,
+                          const _id_info_t *id_infos,
+                          _dml_hook_queue_t *q) {
+    attr_value_t out = SIM_alloc_attr_list(VLEN(*q));
+    attr_value_t *out_list = SIM_attr_list(out);
+    VFORI(*q, i) {
+        out_list[i] = _DML_serialize_hook_queue_elem_after(callback_ht,
+                                                           id_infos,
+                                                           VGET(*q, i));
+    }
+    return out;
+}
+
+
+UNUSED static void
+_DML_register_hook_attribute(conf_class_t *cls, const char *attrname,
+                             get_attr_t getter, set_attr_t setter,
+                             const _dml_hook_aux_info_t *aux_info,
+                             _id_info_t hook_id_info, uint32 port_dims) {
+
+    // Conceptually, "[[sa]*]". Since the only elem representation is that of
+    // "after", instead of "a" that representation is used directly.
+    strbuf_t type = sb_newf("[[s[s[i*][a*][[s[i*]]*]]]*]");
+    for (uint32 i = 0; i < hook_id_info.dimensions - port_dims; ++i) {
+        char *tmp_type = sb_detach(&type);
+        sb_addfmt(&type, "[%s{%d}]", tmp_type,
+                  hook_id_info.dimsizes[hook_id_info.dimensions - 1 - i]);
+        MM_FREE(tmp_type);
+    }
+    SIM_register_typed_attribute(cls, attrname, getter, (lang_void *) aux_info,
+                                 setter, (lang_void *) aux_info,
+                                 Sim_Attr_Optional | Sim_Attr_Internal,
+                                 sb_str(&type), NULL, "hook");
+    sb_free(&type);
 }
 
 UNUSED static void
@@ -2405,6 +2861,18 @@ _get_device_member(char *ptr,
         return to_return;
 }
 
+UNUSED static set_error_t
+_set_device_member_via_deserializer(attr_value_t val, void *dest,
+                                    void *deserializer) {
+    return ((_deserializer_t)deserializer)(val, dest);
+}
+
+UNUSED static attr_value_t
+_get_device_member_via_serializer(void *val, void *serializer) {
+    return ((_serializer_t)serializer)(val);
+}
+
+
 typedef struct {
         ptrdiff_t relative_base;
         // excluding port dimensions
@@ -2491,6 +2959,43 @@ _get_port_saved_variable(lang_void *saved_access, conf_object_t *_portobj,
                                   acc->ndims,
                                   _saved_device_member_getter,
                                   (uintptr_t) acc);
+}
+
+UNUSED static void
+_DML_init_dimension_strides_from_dimsizes(
+    uint32 *buffer, const uint32 *dimsizes, uint32 dims, size_t member_size) {
+    if (dims == 0) {
+        return;
+    }
+    ASSERT(dimsizes != NULL);
+    for (uint32 i = 0; i < dims; ++i) {
+        buffer[dims - i - 1] = member_size;
+        member_size *= dimsizes[dims - i - 1];
+    }
+}
+
+typedef struct {
+    ht_str_table_t *callback_ht;
+    ht_str_table_t *id_info_ht;
+    const _id_info_t *id_infos;
+} _dml_hook_get_set_aux_data_t;
+
+UNUSED static set_error_t
+_DML_set_single_hook_attr(attr_value_t val, void *_hook, uintptr_t _aux) {
+    _dml_hook_t *hook = _hook;
+    _dml_hook_get_set_aux_data_t *aux = (typeof(aux))_aux;
+
+    return _DML_deserialize_hook_queue(aux->callback_ht, aux->id_info_ht,
+                                       aux->id_infos, val, &hook->queue);
+}
+
+UNUSED static attr_value_t
+_DML_get_single_hook_attr(void *_hook, uintptr_t _aux) {
+    _dml_hook_t *hook = _hook;
+    _dml_hook_get_set_aux_data_t *aux = (typeof(aux))_aux;
+
+    return _DML_serialize_hook_queue(aux->callback_ht, aux->id_infos,
+                                     &hook->queue);
 }
 
 

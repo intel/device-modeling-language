@@ -1,0 +1,34 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// DMLC-FLAG --enable-features-for-internal-testing-dont-use-this
+
+template t {
+    shared hook() h1;
+    /// WARNING WEXPERIMENTAL
+    shared hook(int, bool) h2[5][7];
+
+    shared method get_some_hooks(int i, int j)
+        -> (hook(), hook(int, bool), hook(int, bool)) {
+        return (h1, h2[2][3], h2[i][j]);
+    }
+}
+
+group g[i < 3] is t;
+
+is t;
+
+method init() {
+    #foreach obj in ([dev, g[0], g[1], g[2]]) {
+        local (hook() x, hook(int, bool) y,
+               hook(int, bool) z) = obj.get_some_hooks(3, 1);
+        assert obj.h1 == x && x == cast(obj, t).h1;
+        assert obj.h2[2][3] == y && y == cast(obj, t).h2[2][3];
+        assert obj.h2[3][1] == z && z == cast(obj, t).h2[3][1];
+    }
+}

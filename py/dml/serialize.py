@@ -183,6 +183,15 @@ def serialize(real_type, current_expr, target_expr):
                                  [id_infos, identity_expr], attr_value_t)
         return ctree.mkAssignStatement(current_site, target_expr,
                                        ctree.ExpressionInitializer(apply_expr))
+    elif isinstance(real_type, THook):
+        id_infos = expr.mkLit(current_site,
+                              '_hook_id_infos' if dml.globals.hooks
+                              else 'NULL',
+                              TPtr(TNamed('_id_info_t', const = True)))
+        apply_expr = apply_c_fun(current_site, "_serialize_identity",
+                                 [id_infos, current_expr], attr_value_t)
+        return ctree.mkAssignStatement(current_site, target_expr,
+                                       ctree.ExpressionInitializer(apply_expr))
     else:
         # Callers are responsible for checking that the type is serializeable,
         # which should be done with the mark_for_serialization function
@@ -300,6 +309,27 @@ def deserialize(real_type, current_expr, target_expr, error_out):
                  current_expr, addressof_target_unconst()],
                 set_error_t)
         return construct_subcall(apply_expr)
+    elif isinstance(real_type, THook):
+        id_info_ht = expr.mkLit(current_site,
+                                '&_hook_id_info_ht'
+                                if dml.globals.hooks else 'NULL',
+                                TPtr(TNamed('ht_str_table_t')))
+        hook_aux_infos = expr.mkLit(current_site,
+                                    '_hook_aux_infos'
+                                    if dml.globals.hooks else 'NULL',
+                                    TPtr(const_void))
+        from .codegen import get_type_sequence_info
+        expected_typ_uniq = ctree.mkIntegerConstant(
+            current_site,
+            get_type_sequence_info(real_type.msg_types).uniq,
+            False)
+
+        apply_expr = apply_c_fun(
+            current_site, '_deserialize_hook_reference',
+            [id_info_ht, hook_aux_infos, expected_typ_uniq, current_expr,
+             addressof_target_unconst()],
+            set_error_t)
+        return construct_subcall(apply_expr)
     else:
         raise ICE(current_site, "Unexpectedly asked to deserialize %s" % (
             real_type))
@@ -326,7 +356,7 @@ def map_dmltype_to_attrtype(site, dmltype):
         # Byte arrays may use data values
         or_data = '|d' * (real_type.base.is_int and real_type.base.bits == 8)
         return '[%s{%s}]' % (arr_attr_type, arr_length) + or_data
-    if isinstance(real_type, TTrait):
+    if isinstance(real_type, (TTrait, THook)):
         return '[s[i*]]'
     # TODO should be implemented
     #if isinstance(real_type, TVector):
@@ -348,6 +378,10 @@ def mark_for_serialization(site, dmltype):
         mark_for_serialization(site, real_type.base)
     elif isinstance(real_type, TTrait):
         dml.globals.serialized_traits.add(real_type.trait)
+    elif isinstance(real_type, THook):
+        real_type.validate(dmltype.declaration_site or site)
+        from .codegen import get_type_sequence_info
+        get_type_sequence_info(real_type.msg_types, create_new=True)
     elif not isinstance(real_type, (IntegerType, TBool, TFloat)):
         raise messages.ESERIALIZE(site, dmltype)
 
@@ -391,6 +425,11 @@ def type_signature(dmltype, is_for_serialization):
     if isinstance(dmltype, TTrait):
         return 'T' + (cident(dmltype.trait.name)
                       if not is_for_serialization else '')
+    if isinstance(dmltype, THook):
+        from .codegen import get_type_sequence_info
+        suffix = (str(get_type_sequence_info(dmltype.msg_types).uniq)
+                  if not is_for_serialization else '')
+        return 'H' + suffix
     assert False
 
 def serialize_sources_to_list(site, sources, out_attr):
@@ -454,7 +493,7 @@ def generate_serialize(real_type):
         elif isinstance(real_type, TVector):
             raise ICE(site, "TODO: serialize vector")
         elif isinstance(real_type, (IntegerType, TBool, TFloat, TTrait,
-                                    TArray)):
+                                    TArray, THook)):
             serialize(real_type,
                       ctree.mkDereference(site, in_arg),
                       out_arg).toc()
@@ -587,7 +626,7 @@ def generate_deserialize(real_type):
         elif isinstance(real_type, TVector):
             raise ICE(site, "TODO: serialize vector")
         elif isinstance(real_type, (IntegerType, TBool, TFloat, TTrait,
-                                    TArray)):
+                                    TArray, THook)):
             deserialize(real_type,
                         in_arg,
                         ctree.mkDereference(site, out_arg),

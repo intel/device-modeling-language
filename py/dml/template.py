@@ -116,6 +116,8 @@ class ObjectSpec(object):
                     for decl_ast in sub.args[0]:
                         (name, _) = decl_ast.args
                         symbols[name] = (sub.kind, sub.site)
+                elif sub.kind == 'hook':
+                    symbols[sub.args[0]] = (sub.kind, sub.site)
                 else:
                     assert sub.kind == 'error'
             for (_, name, _, specs) in composite:
@@ -166,7 +168,7 @@ def flatten_ifs(stmts, preconds):
             composite.append(stmt)
         else:
             if stmt.kind not in ('method', 'session', 'saved',
-                                 'error', 'export'):
+                                 'error', 'export', 'hook'):
                 raise ICE(stmt.site, 'unexpected AST kind %s' % (stmt.kind,))
             simple.append(stmt)
     result.append((preconds, simple, composite))
@@ -281,7 +283,7 @@ def rank_structure(asts):
             queue.extend((s, True) for s in f)
         else:
             assert spec.kind in {'error', 'method', 'parameter',
-                                 'session', 'saved', 'export'}
+                                 'session', 'saved', 'export', 'hook'}
     return (inferior, unconditional, in_each_structure)
 
 def process_templates(template_decls):

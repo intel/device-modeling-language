@@ -15,6 +15,7 @@ __all__ = (
     'Code',
     'Expression',
     'NonValue',
+    'NonValueArrayRef',
     'mkLit', 'Lit',
     'mkApply', 'mkApplyInits', 'Apply',
     'mkNullConstant', 'NullConstant',
@@ -230,6 +231,19 @@ class NonValue(Expression):
         '''Exception to raise when expression appears in an incorrect context'''
         return ENVAL(self.site, self)
 
+class NonValueArrayRef(NonValue):
+    '''Reference to an array node before it's indexed. Indexing is the
+    only supported operation.'''
+
+    @abc.abstractproperty
+    def local_indices(self): pass
+
+    @abc.abstractproperty
+    def local_dimsizes(self): pass
+
+    def exc(self):
+        return EARRAY(self.site, self)
+
 class Lit(Expression):
     "A literal C expression"
     slots = ('safe', 'cexpr', 'type', 'str')
@@ -292,6 +306,10 @@ def typecheck_inargs(site, args, inp, kind="function", known_arglen=None):
         else:
             raise EPTYPE(site, arg, rtype, pname, kind)
 
+# Typecheck a DML method application, where the arguments are given as a list
+# where each element is either an AST of an initializer, or an initializer
+# directly.
+# Returns a list of expressions corresponding to the provided initializers
 def typecheck_inarg_inits(site, inits, inp, location, scope,
                           kind="function", variadic=False,
                           allow_undefined_args=False):
@@ -301,10 +319,27 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
     from .expr_util import coerce_if_eint
     from .codegen import eval_initializer, codegen_expression, \
                          codegen_expression_maybe_nonvalue
+    from .ctree import Initializer, ExpressionInitializer
 
     args = []
     for (init, (pname, ptype)) in zip(inits, inp):
-        if ptype is None:
+        if isinstance(init, Initializer):
+            if ptype is None:
+                assert isinstance(init, ExpressionInitializer)
+                args.append(init.expr)
+            try:
+                args.append(init.as_expr(ptype))
+            except EASTYPE as e:
+                if e.site is init.site:
+                    raise EPTYPE(site, e.source, e.target_type, pname,
+                                 kind) from e
+                raise
+            # better error message
+            except EDISCONST as e:
+                if e.site is init.site:
+                    raise ECONSTP(site, pname, kind + " call") from e
+                raise
+        elif ptype is None:
             if init.kind != 'initializer_scalar':
                 raise ESYNTAX(init.site, '{',
                               'the argument for an untyped parameter must be '

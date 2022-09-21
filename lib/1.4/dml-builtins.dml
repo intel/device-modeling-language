@@ -600,6 +600,10 @@ extern typedef struct { } dml_qname_cache_t;
 // Used by qname
 session dml_qname_cache_t _qname_cache;
 
+extern typedef struct { } _dml_detached_hook_queue_t;
+// Used by hooks
+session _dml_detached_hook_queue_t *_detached_hook_queue_stack;
+
 // Shared parameters for attributes, registers and connects, which all produce
 // attributes. Methods get_attribute and set_attribute are abstract.
 template _conf_attribute is object {

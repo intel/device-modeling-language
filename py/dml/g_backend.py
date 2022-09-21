@@ -29,6 +29,7 @@ ID_INTERFACE = 11
 ID_GROUP     = 12
 ID_DEVICE    = 13
 ID_SUBDEVICE = 14
+ID_HOOK      = 15
 
 def array_info(obj):
     return list(zip(obj._arraylens, obj._idxvars))
@@ -110,6 +111,10 @@ def en_device(node):
 def en_subdevice(node):
     return (ID_SUBDEVICE, node.name, array_info(node), en_subobjs(node))
 
+def en_hook(node):
+    return (ID_HOOK, node.name, node._arraylens,
+            [str(typ) for typ in node.msg_types])
+
 obj_encoder_map = {
     'device'    : en_device,
     'bank'      : en_bank,
@@ -127,7 +132,8 @@ obj_encoder_map = {
     'implement' : en_implement,
     'event'     : en_event,
     'interface' : en_interface,
-    'group'     : en_group}
+    'group'     : en_group,
+    'hook'      : en_hook}
 
 def en_obj(node):
     return obj_encoder_map[node.objtype](node)

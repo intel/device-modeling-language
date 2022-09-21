@@ -139,6 +139,17 @@ def cref_session(node, indices):
     return ('.'.join(reversed(components))
             + ''.join(f'[{i.read()}]' for i in indices))
 
+def cref_hook(hook, indices):
+    assert hook.objtype == 'hook'
+    assert isinstance(indices, tuple)
+    components = []
+    parent = hook
+    while parent.parent:
+        components.append(cname(parent))
+        parent = parent.parent
+    return ('.'.join(reversed(components))
+            + ''.join(f'[{i.read()}]' for i in indices))
+
 def node_storage_type(node, site = None):
     "Return the storage type for a node, or None"
     if node.objtype == 'session' or node.objtype == 'saved':
@@ -223,5 +234,8 @@ def cloggroup(name):
 evclasses = {}
 def get_evclass(obj):
     if obj not in evclasses:
-        evclasses[obj] = '_evclass_' + '_'.join(ancestor_cnames(obj)[1:])
+        if isinstance(obj, Method):
+            evclasses[obj] = '_evclass_' + '_'.join(ancestor_cnames(obj)[1:])
+        else:
+            evclasses[obj] = f'_send_now_evclass_{obj.uniq}'
     return evclasses[obj]

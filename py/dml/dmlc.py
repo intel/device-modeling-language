@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 from . import structure, logging, messages, ctree, ast, expr_util, toplevel
-from . import serialize
+from . import codegen, serialize
 from . import dmlparse
 from . import output
 
@@ -462,6 +462,12 @@ def main(argv):
         default = '0',
         help = optparse.SUPPRESS_HELP)
 
+    # Enable features for internal testing
+    optpar.add_option(
+        '--enable-features-for-internal-testing-dont-use-this',
+        dest = 'enable_testing_features', action = 'store_true',
+        help = optparse.SUPPRESS_HELP)
+
     (options, args) = optpar.parse_args(argv[1:])
 
     global outputbase, output_c
@@ -512,6 +518,15 @@ def main(argv):
     dml.globals.linemarks = not options.noline
 
     dml.globals.state_change_dml12 = options.state_change_dml12
+
+    dml.globals.enable_testing_features = options.enable_testing_features
+
+    if dml.globals.enable_testing_features:
+        prerr("dmlc: ***Features for internal testing are enabled!!! "
+              + "These are near-guaranteed to NOT SURVIVE in their current "
+              + "form. They are COMPLETELY UNSUPPORTED. "
+              + "The DMLC developers WILL NOT respect their use. "
+              + "NEVER enable this flag for any kind of production code!!!***")
 
     if options.api_version not in api_versions():
         prerr("dmlc: the version '%s' is not a valid API version" % (

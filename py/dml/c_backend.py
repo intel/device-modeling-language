@@ -149,7 +149,8 @@ def print_device_substruct(node):
           or (dml.globals.dml_version == (1, 2)
               and node.objtype == 'interface')):
         return arraywrap(node, crep.node_storage_type(node, node.site))
-
+    elif node.objtype == 'hook':
+        return arraywrap(node, TNamed('_dml_hook_t'))
     elif (node.objtype in ('register', 'field')
           and dml.globals.dml_version == (1, 2)):
         allocate = param_bool(node, 'allocate', fallback=True)
@@ -171,7 +172,7 @@ def print_device_substruct(node):
                         if not sub.simple_storage:
                             raise ICE(sub.site,
                                       'implicit fields may not contain '
-                                      + 'data/saved variables')
+                                      + 'data/saved variables or hooks')
 
                         # storage is inherited from the parent register
                         continue
@@ -329,13 +330,19 @@ def generate_hfile(device, headers, filename):
         print_vtable_struct_declaration(t)
     out('\n')
 
-    for args_type in (eventinfo['args_type']
-                      for (method, eventinfo) in simple_events.items()
-                      if method.inp):
-        args_type.print_struct_definition()
-        out(f'typedef struct {args_type.label} {args_type.label}_t;\n')
+    for info in dml.globals.type_sequence_infos.values():
+        if info.struct:
+            info.struct.print_struct_definition()
+            out(f'typedef struct {info.struct.label} {info.struct.label}_t;\n')
     out('\n')
 
+    for typ in (typ
+                for info in itertools.chain(
+                        dml.globals.after_delay_infos.values(),
+                        dml.globals.after_on_hook_infos)
+                for typ in info.types_to_declare):
+        typ.print_struct_definition()
+    out('\n')
 
     print_device_substruct(device)
 
@@ -633,7 +640,7 @@ def generate_attributes(initcode, node, port=None,
             report(e)
         return
 
-    if node.objtype in {'parameter', 'method', 'session', 'saved'}:
+    if node.objtype in {'parameter', 'method', 'session', 'saved', 'hook'}:
         return
 
     # Registration order is undefined but has significance, so
@@ -1013,11 +1020,9 @@ def generate_simple_event_only_domains_funs():
     out('}\n\n', preindent=-1)
 
 def generate_simple_events(device):
-    for (method, info) in simple_events.items():
-        site = method.site
-
+    for info in dml.globals.after_delay_infos.values():
         start_function_definition(
-            f'void {info["callback"]}(conf_object_t *_obj, '
+            f'void {info.cident_callback}(conf_object_t *_obj, '
             + 'lang_void *_data)')
         out('{\n', postindent = 1)
         out(crep.structtype(device) + ' *_dev UNUSED = ('
@@ -1027,31 +1032,30 @@ def generate_simple_events(device):
             + '(_simple_event_data_t *)_data;\n')
 
         # If data is NULL, report it and use emergency indices/args
-        if method.dimensions > 0 or len(method.inp) > 0:
+        if info.dimensions or info.args_type:
             out('if (!data) {', postindent=1)
             out('const char *msg = "Failed deserialization of after event '
                 + 'data. Using emergency indices/arguments.";\n')
             out('VT_critical_error(msg, msg);\n')
             out('}', preindent=-1)
 
-        if method.dimensions > 0:
+        if info.dimensions > 0:
             out('const uint32 *_indices = data ? data->indices '
                 + (': (const uint32 [%s]) { 0 };\n'
-                   % (method.dimensions,)))
+                   % (info.dimensions,)))
 
-        if len(method.inp) > 0:
-            args_struct_t = info['args_type'].label + '_t'
-            out('const %s *_args = data ? data->args : &(%s) { 0 };\n'
-                % (args_struct_t, args_struct_t))
+        if info.args_type:
+            args_decl = TPtr(
+                conv_const(True, info.args_type)).declaration('_args')
+            emergency_args_c_type = TArray(
+                info.args_type,
+                mkIntegerConstant(None, 1, False)).declaration('')
+            out('%s = data ? data->args : (%s) { 0 };\n'
+                % (args_decl, emergency_args_c_type))
 
-        indices = tuple(mkLit(site, f'_indices[{i}]', TInt(32, False))
-                        for i in range(method.dimensions))
-        params = tuple(mkLit(site, f'_args->{pname}', ptype)
-                       for (pname, ptype) in method.inp)
-        with LogFailure(site, method, indices), crep.DeviceInstanceContext():
-            code = codegen_call(site, method, indices, params, ())
-        code = mkCompound(site, [code])
-        code.toc()
+        indices_lit = '_indices' if info.dimensions else None
+        args_lit = '_args' if info.args_type else None
+        info.generate_callback_call(indices_lit, args_lit)
         out('if (data) {\n', postindent=1)
         out('_free_simple_event_data(*data);\n')
         out('MM_FREE(data);\n')
@@ -1060,34 +1064,34 @@ def generate_simple_events(device):
         out('}\n\n', preindent = -1)
         splitting_point()
 
-        if method.dimensions > 0 or len(method.inp) > 0:
+        if info.dimensions or info.args_type:
             start_function_definition(
-                f'attr_value_t {info["get_value"]}'
+                f'attr_value_t {info.cident_get_value}'
                 + '(conf_object_t *_obj, lang_void *data)')
             out('{\n', postindent = 1)
             out(('return _serialize_simple_event_data(%d, %s, _id_infos, '
                  + '(_simple_event_data_t *)data);\n')
-                % (method.dimensions,
-                   (serialize.lookup_serialize(info['args_type'])
-                    if method.inp else 'NULL')))
+                % (info.dimensions,
+                   (serialize.lookup_serialize(info.args_type)
+                    if info.args_type else 'NULL')))
             out('}\n\n', preindent = -1)
             splitting_point()
 
             start_function_definition(
-                f'lang_void *{info["set_value"]}'
+                f'lang_void *{info.cident_set_value}'
                 + '(conf_object_t *_obj, attr_value_t val)')
             out('{\n', postindent = 1)
             out('_simple_event_data_t *out;\n')
             out(('set_error_t error = _deserialize_simple_event_data(%s, '
                  + '%d, %s, %s, &_id_info_ht, val, &out);\n')
                 % ((('(const uint32 []) {%s}'
-                     % (', '.join(map(str, method.dimsizes)),))
-                    if method.dimensions > 0 else 'NULL'),
-                   method.dimensions,
-                   (f'sizeof({info["args_type"].label}_t)'
-                    if method.inp else 0),
-                   (serialize.lookup_deserialize(info['args_type'])
-                    if method.inp else 'NULL'),
+                     % (', '.join(map(str, info.dimsizes)),))
+                    if info.dimensions > 0 else 'NULL'),
+                   info.dimensions,
+                   (f'sizeof({info.args_type.declaration("")})'
+                    if info.args_type else 0),
+                   (serialize.lookup_deserialize(info.args_type)
+                    if info.args_type else 'NULL'),
                    ))
             out('if (error != Sim_Set_Ok) {\n', postindent=1)
             out('out = NULL;\n')
@@ -1098,14 +1102,143 @@ def generate_simple_events(device):
 
     reset_line_directive()
 
-def generate_simple_events_control_methods():
+def generate_after_on_hooks_artifacts(device):
+    for info in dml.globals.after_on_hook_infos:
+        site = SimpleSite(f'after on hook {string_literal(info.string_key)}')
+
+        start_function_definition(
+            f'void {info.cident_callback}(conf_object_t *_obj, '
+            + 'const uint32 *indices, const void *_args, const void *_msg)')
+        out('{\n', postindent = 1)
+        out(crep.structtype(device) + ' *_dev UNUSED = ('
+            + crep.structtype(device) + '*)_obj;\n')
+        if info.param_to_msg_comp:
+            out(f'const {info.typeseq_info.struct.label}_t *msg UNUSED '
+                + '= _msg;\n')
+
+        if info.args_type:
+            args_decl = TPtr(
+                conv_const(True, info.args_type)).declaration('args')
+            out('%s = _args;\n' % (args_decl,))
+        indices_lit = 'indices' if info.dimensions else None
+        args_lit = 'args' if info.args_type else None
+        msg_lit = 'msg' if info.param_to_msg_comp else None
+        info.generate_callback_call(indices_lit, args_lit, msg_lit)
+        out('}\n\n', preindent = -1)
+        splitting_point()
+
+        if info.has_serialized_args:
+            start_function_definition(
+                f'attr_value_t {info.cident_args_serializer}('
+                + 'const void *_args)')
+            out('{\n', postindent = 1)
+            if info.args_type:
+                args_type_ptr = TPtr(conv_const(True, info.args_type))
+                out(f'{args_type_ptr.declaration("args")} = _args;\n')
+                args_expr = mkDereference(site, mkLit(site, 'args', args_type_ptr))
+            else:
+                args_expr = None
+            out('attr_value_t out;\n')
+            out_expr = mkLocalVariable(
+                site, LocalSymbol('out', 'out', attr_value_t, site=site))
+            info.generate_args_serializer(site, args_expr, out_expr)
+            out('return out;\n')
+            out('}\n\n', preindent = -1)
+            splitting_point()
+
+            start_function_definition(
+                f'set_error_t {info.cident_args_deserializer}('
+                + 'attr_value_t val, void *_out)')
+            out('{\n', postindent = 1)
+            out('set_error_t _success UNUSED = Sim_Set_Ok;\n')
+
+            if info.args_type:
+                out(f'{TPtr(info.args_type).declaration("out")} = _out;\n')
+                out_expr = mkDereference(site, mkLit(site, 'out',
+                                                     TPtr(info.args_type)))
+            else:
+                out_expr = None
+            def error_out(exc, msg):
+                stmts = []
+                stmts.append(mkInline(site, f'_success = {exc};'))
+                if msg is not None:
+                    stmts.append(
+                        mkInline(site, f'SIM_attribute_error("{msg}");'))
+                stmts.append(mkInline(site, 'goto _exit;'))
+                return stmts
+            val_expr = mkLit(site, 'val', attr_value_t)
+
+            info.generate_args_deserializer(site, val_expr, out_expr,
+                                            error_out)
+
+            out('_exit:\n')
+            out('return _success;\n')
+            out('}\n\n', preindent = -1)
+            splitting_point()
+
+    reset_line_directive()
+
+    if dml.globals.after_on_hook_infos:
+        init = '{\n%s\n}' % (',\n'.join(
+            '    {%s, %s, %s, %s, %s, %d}'
+            % ((string_literal(info.string_key), info.cident_callback)
+               + ((info.cident_args_serializer, info.cident_args_deserializer)
+                  if info.has_serialized_args else ('NULL', 'NULL'))
+               + (f'sizeof({info.args_type.declaration("")})'
+                  if info.args_type else '0', info.parent.uniq))
+            for info in dml.globals.after_on_hook_infos),)
+        add_variable_declaration(
+            'const _dml_after_on_hook_info_t _after_on_hook_infos[]', init)
+
+    add_variable_declaration('ht_str_table_t _typeseq_after_on_hook_hts[%d]'
+                             % (len(dml.globals.type_sequence_infos),))
+
+    start_function_definition(
+        'void _initialize_typeseq_after_on_hook_hts(void)')
+    out('{\n', postindent = 1)
+    for typeseq_info in dml.globals.type_sequence_infos.values():
+        ht_ident = f'_typeseq_after_on_hook_hts[{typeseq_info.uniq}]'
+        for info in typeseq_info.after_on_hooks.values():
+            out(f'ht_insert_str(&{ht_ident}, '
+                + f'_after_on_hook_infos[{info.uniq}].callback_key, '
+                + f'&_after_on_hook_infos[{info.uniq}]);\n')
+    out('}\n', preindent = -1)
+    reset_line_directive()
+    splitting_point()
+
+
+def generate_simple_events_control_methods(device):
     start_function_definition(
         'void _cancel_simple_events(conf_object_t *_obj, _identity_t domain)')
     out('{\n', postindent = 1)
-    for (method, _) in list(simple_events.items()):
+    out(crep.structtype(device) + ' *_dev UNUSED = ('
+        + crep.structtype(device) + '*)_obj;\n')
+    for key in dml.globals.after_delay_infos:
         out('SIM_event_cancel_time('
-            + f'SIM_object_clock(_obj), {crep.get_evclass(method)}, _obj, '
+            + f'SIM_object_clock(_obj), {crep.get_evclass(key)}, _obj, '
             + '_simple_event_predicate, (lang_void *) &domain);\n')
+
+    site = logging.SimpleSite('<_cancel_simple_events>')
+    by_dims = {}
+    for hook in dml.globals.hooks:
+        by_dims.setdefault(hook.dimsizes, []).append(hook)
+
+    for (dims, hooks) in by_dims.items():
+        for i in range(len(dims)):
+            out(f'for (uint32 _i{i} = 0; _i{i} < {dims[i]}; _i{i}++) {{\n',
+                postindent=1)
+
+        indices = tuple(mkLit(site, f'_i{i}', TInt(32, False))
+                        for i in range(len(dims)))
+        for hook in hooks:
+            out('_DML_cancel_afters_in_hook_queue('
+                + f'&_dev->{crep.cref_hook(hook, indices)}.queue, domain, '
+                + '0);\n')
+        for i in range(len(dims)):
+            out('}\n', preindent=-1)
+
+    out('_DML_cancel_afters_in_detached_hook_queues('
+        + '_dev->_detached_hook_queue_stack, domain);\n')
     out('}\n\n', preindent = -1)
     splitting_point()
 
@@ -1133,12 +1266,12 @@ def event_callbacks(event, indices):
 
 def generate_register_events(device):
     events = device.get_recursive_components('event')
-    for (method, _) in list(simple_events.items()):
+    for key in dml.globals.after_delay_infos:
         add_variable_declaration(
-            'event_class_t *%s' % (crep.get_evclass(method),))
+            'event_class_t *%s' % (crep.get_evclass(key),))
     start_function_definition('void _register_events(conf_class_t *class)')
     out('{\n', postindent = 1)
-    if not events and not simple_events:
+    if not events and not dml.globals.after_delay_infos:
         out('return;\n')
     else:
         for event in events:
@@ -1155,13 +1288,12 @@ def generate_register_events(device):
                         cname
                         for (_, cname) in event_callbacks(event,
                                                           indices))))
-        for (method, info) in list(simple_events.items()):
-            out(('%s = SIM_register_event("%s", class, 0, %s, %s, %s, %s, '
+        for (key, info) in dml.globals.after_delay_infos.items():
+            out(('%s = SIM_register_event(%s, class, 0, %s, %s, %s, %s, '
                 + 'NULL);\n')
-                % ((crep.get_evclass(method),
-                    method.logname_anonymized())
-                + tuple(info[fun] for fun in ('callback', 'destroy',
-                                              'get_value', 'set_value'))))
+                % (crep.get_evclass(key), string_literal(info.string_key),
+                   info.cident_callback, '_destroy_simple_event_data',
+                   info.cident_get_value, info.cident_set_value))
     out('}\n\n', preindent = -1)
     splitting_point()
 
@@ -1305,21 +1437,26 @@ def generate_marker(device):
     out(f'const int _dml_gdb_marker_{mangled_classname} UNUSED = 0;\n')
 
 def generate_identity_data_decls():
-    items = ('{"%s", %s, %d, %d}' %
-             ('dev' if node is dml.globals.device
-              else node.logname_anonymized(("%u",) * node.dimensions),
-              ('(const uint32 []) {%s}' % (', '.join(map(str, node.dimsizes)),)
-               if node.dimensions else 'NULL'),
-              node.dimensions,
-              node.uniq)
-             for node in dml.globals.objects)
-    init = '{\n%s\n}' % (',\n'.join('    %s' % (item,) for item in items),)
-    add_variable_declaration(
-        'const _id_info_t _id_infos[%d]' % (len(dml.globals.objects)),
-        init)
+    def declare_id_infos(nodes, prefix):
+        items = ('{"%s", %s, %d, %d}' %
+                 ('dev' if node is dml.globals.device
+                  else node.logname_anonymized(("%u",) * node.dimensions),
+                  ('(const uint32 []) {%s}' % (', '.join(map(str, node.dimsizes)),)
+                   if node.dimensions else 'NULL'),
+                  node.dimensions,
+                  node.uniq)
+                 for node in nodes)
+        init = '{\n%s\n}' % (',\n'.join('    %s' % (item,) for item in items),)
+        add_variable_declaration(
+            f'const _id_info_t {prefix}_id_infos[{len(nodes)}]',
+            init)
 
-    add_variable_declaration('ht_str_table_t _id_info_ht',
-                             'HT_STR_NULL(false)')
+        add_variable_declaration(f'ht_str_table_t {prefix}_id_info_ht',
+                                 'HT_STR_NULL(false)')
+
+    declare_id_infos(dml.globals.objects, '')
+    if dml.globals.hooks:
+        declare_id_infos(dml.globals.hooks, '_hook')
 
 def generate_class_var_decl():
     add_variable_declaration('conf_class_t *_dev_class')
@@ -1337,8 +1474,36 @@ def generate_init_identity_hashtable():
         postindent=1)
     out('ht_insert_str(&_id_info_ht, _id_infos[i].logname, &_id_infos[i]);\n')
     out('}\n', preindent=-1)
+    if dml.globals.hooks:
+        out('for (uint64 i = 0; i < %d; ++i) {\n' % (len(dml.globals.hooks),),
+            postindent=1)
+        out('ht_insert_str(&_hook_id_info_ht, _hook_id_infos[i].logname, '
+            + '&_hook_id_infos[i]);\n')
+        out('}\n', preindent=-1)
     out('}\n', preindent=-1)
     splitting_point()
+
+def generate_hook_auxiliary_info_array():
+    items = []
+    for hook in dml.globals.hooks:
+        offset = ('offsetof(%s, %s)'
+                  % (crep.structtype(dml.globals.device),
+                     crep.cref_hook(
+                         hook, (mkIntegerConstant(hook.site, 0, False),)
+                         * hook.dimensions)))
+
+        try:
+            typeseq_uniq = get_type_sequence_info(
+                hook.msg_types, create_new=True).uniq
+            items.append('{%s, %d, %d}' % (offset, typeseq_uniq, hook.uniq))
+        except DMLUnkeyableType:
+            pass # already reported
+    if dml.globals.hooks:
+        init = '{\n%s\n}' % (',\n'.join(f'    {item}' for item in items),)
+        add_variable_declaration(
+            'const _dml_hook_aux_info_t '
+            + f'_hook_aux_infos[{len(dml.globals.hooks)}]',
+            init)
 
 def generate_alloc(device):
     start_function_definition(
@@ -1436,48 +1601,58 @@ def generate_deinit(device):
         + crep.structtype(device) + ' *)_obj;\n')
 
     with crep.DeviceInstanceContext():
-        scope = Symtab(global_scope)
-        code = []
         # Cancel all events
         events = device.get_recursive_components('event')
 
+        by_dims = {}
         for event in events:
-            method = event.get_component('_cancel_all', 'method')
-            for index_ints in event.all_indices():
-                # Functions called from pre_delete_instance shouldn't throw any
-                # exceptions. But we don't want to force them to insert
-                # try-catch in the init method.
-                indices = tuple(
-                    mkIntegerLiteral(device.site, i) for i in index_ints)
-                with LogFailure(device.site, event, indices):
-                    code.append(codegen_inline(
-                            device.site, method, indices, [], []))
+            by_dims.setdefault(event.dimsizes, []).append(event)
 
-            for (method, _) in list(simple_events.items()):
-                code.append(mkExpressionStatement
-                            (device.site,
-                             mkLit(None,
-                                   ('SIM_event_cancel_time(_obj, %s, _obj, 0, '
-                                    + 'NULL)')
-                                   % crep.get_evclass(method),
-                                   TVoid())))
+        for (dims, events) in by_dims.items():
+            for i in range(len(dims)):
+                out(f'for (uint32 _i{i} = 0; _i{i} < {dims[i]}; _i{i}++) {{\n',
+                    postindent=1)
+
+            indices = tuple(mkLit(device.site, f'_i{i}', TInt(32, False))
+                            for i in range(len(dims)))
+            for event in events:
+                method = event.get_component('_cancel_all', 'method')
+                # Functions called from pre_delete_instance shouldn't throw
+                # any exceptions. But we don't want to force them to insert
+                # try-catch in the init method.
+                with LogFailure(device.site, event, indices):
+                    codegen_inline(device.site, method, indices, [], []).toc()
+            for i in range(len(dims)):
+                out('}\n', preindent=-1)
+
+        for key in dml.globals.after_delay_infos:
+            out(f'SIM_event_cancel_time(_obj, {crep.get_evclass(key)}, _obj, '
+                + '0, NULL);\n')
+
+        # Cancel all pending afters on hooks
+        by_dims = {}
+        for hook in dml.globals.hooks:
+            by_dims.setdefault(hook.dimsizes, []).append(hook)
+
+        for (dims, hooks) in by_dims.items():
+            for i in range(len(dims)):
+                out(f'for (uint32 _i{i} = 0; _i{i} < {dims[i]}; _i{i}++) {{\n',
+                    postindent=1)
+
+            indices = tuple(mkLit(device.site, f'_i{i}', TInt(32, False))
+                            for i in range(len(dims)))
+            for hook in hooks:
+                out('_DML_free_hook_queue('
+                    + f'&_dev->{crep.cref_hook(hook, indices)}.queue);\n')
+            for i in range(len(dims)):
+                out('}\n', preindent=-1)
 
         with LogFailure(device.site, device, ()):
-            code.append(codegen_inline_byname(device, (), 'destroy', [], [],
-                                              device.site))
+            codegen_inline_byname(device, (), 'destroy', [], [],
+                                  device.site).toc()
         # Free the tables used for log_once after all calls into device code
         # are done
-        table_ptr = TPtr(TNamed("ht_int_table_t"))
-        code.append(mkExpressionStatement(
-            device.site,
-            mkApply(device.site,
-                    mkLit(device.site, "_free_table",
-                          TFunction([table_ptr], TVoid())),
-                    [mkLit(device.site, '&(_dev->_subsequent_log_ht)',
-                           table_ptr)]
-                    )))
-        code = mkCompound(device.site, declarations(scope) + code)
-        code.toc()
+        out('_free_table(&_dev->_subsequent_log_ht);\n')
 
     out('}\n\n', preindent = -1)
     reset_line_directive()
@@ -1744,6 +1919,7 @@ def generate_init(device, initcode, outprefix):
     out('_initialize_traits();\n')
     out('_initialize_identity_ht();\n')
     out('_initialize_vtable_hts();\n')
+    out('_initialize_typeseq_after_on_hook_hts();\n')
     out('_register_events(class);\n')
     # initcode is independently indented
     out(initcode.buf, preindent = -1, postindent = 1)
@@ -1954,6 +2130,7 @@ def tinit_args(trait):
         trait.vtable_methods,
         trait.vtable_params,
         trait.vtable_sessions,
+        trait.vtable_hooks,
         trait.vtable_memoized_outs,
         (name for name in trait.ancestor_vtables
          if (name not in trait.method_impl_traits
@@ -2075,8 +2252,10 @@ def print_vtable_struct_declaration(trait):
             out(f"_each_in_param_t {name};\n")
         else:
             out(f'{TPtr(ptype).declaration(name)};\n')
-    for (name, (_, ptype)) in list(trait.vtable_sessions.items()):
-        out(f'uint32 {name};\n')
+    for name in trait.vtable_sessions:
+        out(f'uint32 {name};\n') # device struct offset
+    for name in trait.vtable_hooks:
+        out(f'uint32 {name};\n') # hook unique id
     for (name, (_, inp, outp, throws, independent, startup,
                 memoized)) in trait.vtable_methods.items():
         t = trait.vtable_method_type(inp, outp, throws, independent)
@@ -2119,6 +2298,8 @@ fields.
         initializers.append('.%s = %s' % (name, scramble_argname(name)))
     for name in sorted(trait.vtable_sessions):
         initializers.append('.%s = %s' % (name, scramble_argname(name)))
+    for name in sorted(trait.vtable_hooks):
+        initializers.append('.%s = %s' % (name, scramble_argname(name)))
     for name in sorted(trait.vtable_memoized_outs):
         initializers.append('.%s = %s' % (name, scramble_argname(name)))
 
@@ -2128,7 +2309,7 @@ fields.
         for name in tinit_args(parent):
             scrambled_name = scramble_argname(name)
             kind = parent.member_kind(name)
-            if kind in ('parameter', 'session', 'memoized_outs'):
+            if kind in ('parameter', 'session', 'hook', 'memoized_outs'):
                 args.append(scrambled_name)
             else:
                 assert kind == 'method'
@@ -2159,7 +2340,9 @@ fields.
             else:
                 out(f', {TPtr(typ).declaration(scrambled_name)}')
         elif member_kind == 'session':
-            out(', uint32 %s' % (scrambled_name))
+            out(', uint32 %s' % (scrambled_name)) # device struct offset
+        elif member_kind == 'hook':
+            out(', uint32 %s' % (scrambled_name)) # hook unique id
         else:
             assert member_kind == 'memoized_outs'
             memo_outs_struct = vtable_trait.vtable_memoized_outs[name]
@@ -2331,6 +2514,10 @@ def init_trait_vtable(node, trait, param_overrides):
                     session_node,
                     (mkIntegerConstant(node.site, 0, False),)
                     * node.dimensions)))
+        elif member_kind == 'hook':
+            hook_node = node.get_component(name)
+            assert hook_node.objtype == 'hook'
+            args.append(str(hook_node.uniq))
         else:
             assert member_kind == 'memoized_outs'
             typ = trait.vtable_trait(name).vtable_memoized_outs[name]
@@ -2654,6 +2841,189 @@ def register_saved_attributes(initcode, dev):
         initcode.out('}\n', preindent=-1)
         initcode.out('}\n', preindent=-1)
 
+def generate_hook_attr_names(node, prefix):
+    # Generate attributes for all subcomponents.
+    for child in sorted(node.get_components(),
+                        key=lambda o: o.name or ''):
+        if child.objtype == 'hook':
+            yield (child, prefix + child.ident)
+        elif (isinstance(child, objects.CompositeObject)
+              and child.objtype not in {'bank', 'port', 'subdevice'}):
+
+            if child.ident is None:
+                assert (dml.globals.dml_version == (1, 2)
+                        and child.objtype == 'field')
+                if child.get_recursive_components('hook'):
+                    raise ICE(child.site,
+                              'implicit fields may not contain hooks')
+            else:
+                yield from generate_hook_attr_names(
+                    child, prefix + child.name_anonymized + "_")
+
+def register_hook_attributes(initcode, dev):
+    ports = [dev]
+    ports.extend(dev.get_recursive_components('bank', 'port', 'subdevice'))
+    for node in ports:
+        hook_attr_names = list(generate_hook_attr_names(node, ''))
+        if not hook_attr_names:
+            continue
+
+        if not node.name:
+            # anonymous bank
+            assert dml.globals.dml_version == (1, 2) and node.objtype == "bank"
+            raise ICE(node.site,
+                      'anonymous banks may not (indirectly) contain hooks')
+
+        if node is dev:
+            cls = 'class'
+            getter = '_DML_get_hook_attr'
+            setter = '_DML_set_hook_attr'
+        else:
+            cls = port_class_ident(node)
+            getter = '_DML_get_port_hook_attr'
+            setter = '_DML_set_port_hook_attr'
+
+        initcode.out('{\n', postindent=1)
+        initcode.out('const char *hook_attr_names[%d] = {\n'
+                     % (len(hook_attr_names),), postindent=1)
+        for (hook, attr_name) in hook_attr_names:
+            register_attribute(
+                hook.site, None if node is dml.globals.device else node,
+                attr_name)
+            initcode.out(f'"{attr_name}",\n')
+        initcode.out('};\n', preindent=-1)
+        initcode.out(f'const uint32 hook_ids[{len(hook_attr_names)}] = {{\n',
+                     postindent=1)
+        for (hook, _) in hook_attr_names:
+            initcode.out(f'{hook.uniq},\n')
+        initcode.out('};\n', preindent=-1)
+        initcode.out('for (uint32 idx = 0; idx < %d; ++idx) {\n'
+                     % (len(hook_attr_names),) , postindent = 1)
+        initcode.out(
+            f'_DML_register_hook_attribute({cls}, hook_attr_names[idx], '
+            + f'{getter}, {setter}, &_hook_aux_infos[hook_ids[idx] - 1], '
+            + f'_hook_id_infos[hook_ids[idx] - 1], {node.dimensions});\n')
+        initcode.out('}\n', preindent=-1)
+        initcode.out('}\n', preindent=-1)
+
+
+def generate_hook_attribute_funs():
+    if not dml.globals.hooks:
+        return
+
+    start_function_definition(
+        'attr_value_t _DML_get_hook_attr('
+        + 'lang_void *hook_access, conf_object_t *obj, '
+        + 'attr_value_t *_)')
+    body = '''{
+    _dml_hook_aux_info_t *acc = (_dml_hook_aux_info_t *) hook_access;
+    _dml_hook_get_set_aux_data_t data = {
+        &_typeseq_after_on_hook_hts[acc->typeseq_uniq],
+        &_id_info_ht, _id_infos };
+    _id_info_t info = _hook_id_infos[acc->hook_id - 1];
+    uint32 dimension_strides[info.dimensions];
+    _DML_init_dimension_strides_from_dimsizes(
+        dimension_strides, info.dimsizes, info.dimensions,
+        sizeof(_dml_hook_t));
+
+    attr_value_t val = _get_device_member((char *)obj + acc->device_offset,
+                                          info.dimsizes,
+                                          dimension_strides,
+                                          info.dimensions,
+                                          _DML_get_single_hook_attr,
+                                          (uintptr_t) &data);
+    return val;
+}\n'''
+    out(body)
+
+    start_function_definition(
+        'set_error_t _DML_set_hook_attr('
+        + 'lang_void *hook_access, conf_object_t *obj, '
+        + 'attr_value_t *val, attr_value_t *_)')
+    body = '''{
+    _dml_hook_aux_info_t *acc = (_dml_hook_aux_info_t *) hook_access;
+    _dml_hook_get_set_aux_data_t data = {
+        &_typeseq_after_on_hook_hts[acc->typeseq_uniq],
+        &_id_info_ht, _id_infos };
+    _id_info_t info = _hook_id_infos[acc->hook_id - 1];
+    uint32 dimension_strides[info.dimensions];
+    _DML_init_dimension_strides_from_dimsizes(
+        dimension_strides, info.dimsizes, info.dimensions,
+        sizeof(_dml_hook_t));
+    set_error_t error = _set_device_member(*val,
+                                           (char *)obj + acc->device_offset,
+                                           info.dimsizes,
+                                           dimension_strides,
+                                           info.dimensions,
+                                           _DML_set_single_hook_attr,
+                                           (uintptr_t) &data);
+    return error;
+}\n'''
+    out(body)
+
+    start_function_definition(
+        'attr_value_t _DML_get_port_hook_attr('
+        + 'lang_void *hook_access, conf_object_t *_portobj, '
+        + 'attr_value_t *_)')
+    body = '''{
+    _port_object_t *portobj = (_port_object_t *)_portobj;
+    conf_object_t *obj = portobj->dev;
+    _dml_hook_aux_info_t *acc = (_dml_hook_aux_info_t *) hook_access;
+    _dml_hook_get_set_aux_data_t data = {
+        &_typeseq_after_on_hook_hts[acc->typeseq_uniq],
+        &_id_info_ht, _id_infos };
+    _id_info_t info = _hook_id_infos[acc->hook_id - 1];
+    uint32 dimension_strides[info.dimensions];
+    _DML_init_dimension_strides_from_dimsizes(
+        dimension_strides, info.dimsizes, info.dimensions,
+        sizeof(_dml_hook_t));
+    char *ptr = (char *)obj + acc->device_offset;
+    for (int i = 0; i < portobj->ndims; ++i) {
+            ptr += portobj->indices[i] * dimension_strides[i];
+    }
+
+
+    attr_value_t val = _get_device_member(ptr,
+                                          info.dimsizes + portobj->ndims,
+                                          dimension_strides + portobj->ndims,
+                                          info.dimensions - portobj->ndims,
+                                          _DML_get_single_hook_attr,
+                                          (uintptr_t) &data);
+    return val;
+}\n'''
+    out(body)
+
+    start_function_definition(
+        'set_error_t _DML_set_port_hook_attr('
+        + 'lang_void *hook_access, conf_object_t *_portobj, '
+        + 'attr_value_t *val, attr_value_t *_)')
+    body = '''{
+    _port_object_t *portobj = (_port_object_t *)_portobj;
+    conf_object_t *obj = portobj->dev;
+    _dml_hook_aux_info_t *acc = (_dml_hook_aux_info_t *) hook_access;
+    _dml_hook_get_set_aux_data_t data = {
+        &_typeseq_after_on_hook_hts[acc->typeseq_uniq],
+        &_id_info_ht, _id_infos };
+    _id_info_t info = _hook_id_infos[acc->hook_id - 1];
+    uint32 dimension_strides[info.dimensions];
+    _DML_init_dimension_strides_from_dimsizes(
+        dimension_strides, info.dimsizes, info.dimensions,
+        sizeof(_dml_hook_t));
+    char *ptr = (char *)obj + acc->device_offset;
+    for (int i = 0; i < portobj->ndims; ++i) {
+            ptr += portobj->indices[i] * dimension_strides[i];
+    }
+    set_error_t error = _set_device_member(*val,
+                                           ptr,
+                                           info.dimsizes + portobj->ndims,
+                                           dimension_strides + portobj->ndims,
+                                           info.dimensions - portobj->ndims,
+                                           _DML_set_single_hook_attr,
+                                           (uintptr_t) &data);
+    return error;
+}\n'''
+    out(body)
+
 def generate_startup_call_loops(startup_methods):
     by_dims = {}
     for (method_data_tuple, dims) in startup_methods:
@@ -2951,16 +3321,21 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
                    reverse=True),
             indent=2))
 
+    generate_hook_auxiliary_info_array()
+
     with crep.DeviceInstanceContext():
         register_saved_attributes(init_code, device)
+        register_hook_attributes(init_code, device)
         generate_init(device, init_code, filename_prefix)
 
     generate_trait_deserialization_hashtables(device)
     generate_init_trait_vtables(device, trait_param_values)
     generate_each_in_tables()
+    generate_after_on_hooks_artifacts(device)
+    generate_hook_attribute_funs()
     generate_simple_events(device)
     generate_simple_event_only_domains_funs()
-    generate_simple_events_control_methods()
+    generate_simple_events_control_methods(device)
     generate_init_identity_hashtable()
     generate_register_events(device)
     generate_init_port_objs(device)

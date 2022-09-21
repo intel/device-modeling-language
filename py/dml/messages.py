@@ -26,18 +26,25 @@ def unary_dump(rh):
 
 class EAFTER(DMLError):
     """
-    An illegal `after (..) call ..` was made.  A method called this way
-    may only have serializable input parameters, and may not have any output
-    parameters."""
-    fmt = "illegal 'after' call to '%s': %s"
-    def __init__(self, site, method, unserializable):
+    An illegal `after` statement was specified. The method callback specified
+    may not have any output parameters/return values, and every input parameter
+    must be of serializable type (except input parameters that receive a
+    message component, if the `after` statement is attaching the callback to a
+    hook.)"""
+    fmt = "illegal 'after' statement%s with callback method '%s': %s"
+    def __init__(self, site, hookexpr, method, unserializable):
         if unserializable:
-            msg = 'all method input parameters must be serializable'
+            msg = (('every method input parameter %smust be of serializable '
+                    + 'type')
+                   % ('not receiving a message component '
+                      * (hookexpr is not None),))
         else:
             msg = ('method must not have any %s'
                    % ('output parameters' if site.dml_version() == (1, 2)
                       else 'return values'))
-        DMLError.__init__(self, site, method.name, msg)
+        on_hook = (f" bound to hook '{hookexpr}'"
+                   if hookexpr is not None else '')
+        DMLError.__init__(self, site, on_hook, method.name, msg)
         self.method = method
         self.unserializable = unserializable
     def log(self):
@@ -49,6 +56,61 @@ class EAFTER(DMLError):
                 f"\nmethod parameter '{pname}' is of unserializable type: "
                 + f"{ptype}"
                 for (pname, ptype) in self.unserializable or []))
+
+class EAFTERSENDNOW(DMLError):
+    """
+    An illegal `after` statement was specified where the callback is `send_now`
+    of a hook. Every message component type of the hook must be serializable
+    (unless that component is provided through a message component parameter
+    of the `after` statement, if the `after` statement is attaching the
+    callback to another hook.)
+    """
+    version = "1.4"
+    fmt = ("illegal 'after' statement%s with callback '%s.send_now': "
+           + "every message component of '%s' %smust be of serializable type%s"
+           )
+    def __init__(self, site, target_hook, callback_hook, unserializable):
+        # Two hooks involved makes this messy, clarify as well as possible
+        clarification = ("not provided through a message component parameter "
+                         "of the 'after' " * (target_hook is not None))
+        unserializable_msg = (''.join(
+                f"\nmessage component {idx} is of unserializable type: "
+                + f"{ptype}"
+                for (idx, ptype) in unserializable))
+
+        on_hook = (f"bound to hook '{target_hook}'"
+                   if target_hook is not None else '')
+        DMLError.__init__(self, site, on_hook, callback_hook, callback_hook,
+                          clarification, unserializable_msg)
+
+class EAFTERHOOK(DMLError):
+    """
+    An illegal hook-bound `after` statement was specified.
+    The number of message component parameters must be equal to the number of
+    message components of the hook.
+    """
+    version = "1.4"
+    fmt = ("illegal 'after' statement bound to hook '%s': "
+           + 'hook has %d message components, but %d message component '
+           + 'parameters are given')
+
+class EAFTERMSGCOMPPARAM(DMLError):
+    """Message component parameters bound by a hook-bound after statement can
+    only be used as direct arguments to the specified callback method, and
+    cannot be used in arbitrary expressions.
+    """
+    version = "1.4"
+    fmt = ("'%s' is a message component parameter, and can only be used as a "
+           "direct argument to the callback method of the after statement")
+
+class EHOOKTYPE(DMLError):
+    """There are some minor restrictions to a hook's message component
+    types. Anonymous structs and arrays of variable/unknown size are not
+    supported.
+    """
+    version = "1.4"
+    fmt = ("'%s' is a not a valid message component type for a hook, as it "
+           "is or contains some %s")
 
 class ECYCLICIMP(DMLError):
     """
@@ -1349,8 +1411,8 @@ class EARRAY(DMLError):
     A whole array cannot be used as a single value.
     """
     fmt = "cannot use an array as a value: '%s'"
-    def __init__(self, node, a):
-        DMLError.__init__(self, node, a.identity())
+    def __init__(self, site, a):
+        DMLError.__init__(self, site, a)
 
 class EMEMBER(DMLError):
     """

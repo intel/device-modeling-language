@@ -29,6 +29,9 @@ dml_version = None
 # Array of all declared composite objects
 objects = []
 
+# Array of all declared hooks
+hooks = []
+
 # Array of all session/saved variables declared in methods, represented by
 # pairs (Symbol, init) where init is str or None
 static_vars = []
@@ -39,6 +42,17 @@ object_trait = None
 # Set of template types which get serialized
 # serialize.SerializedTraits
 serialized_traits = None
+
+# Array of all codegen.AfterOnHookInfo:s
+after_on_hook_infos = []
+
+# A mapping from any after delay key to its after delay info
+# object -> codegen.AfterDelayInfo
+after_delay_infos = {}
+
+# A mapping from a unique type sequence to its TypeSequenceInfo
+# types.TypeSequence -> codegen.TypeSequenceInfo
+type_sequence_infos = {}
 
 # 1.4 style integer operations in 1.2, --strict-dml12-int
 strict_int_flag = None
@@ -54,6 +68,11 @@ debuggable = False
 coverity = False
 
 coverity_pragmas = {}
+
+# Enable features that are not supported in any capacity, for testing purposes.
+# This is reserved for features that are fully implemented, but whose design
+# cannot be finalized until later in the future.
+enable_testing_features = False
 
 illegal_attributes = {
     'access_count',

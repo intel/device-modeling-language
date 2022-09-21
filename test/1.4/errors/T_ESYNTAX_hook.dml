@@ -1,0 +1,22 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// ERROR ESYNTAX
+hook(int i) h1;
+/// ERROR ESYNTAX
+hook(int (*f)(void *aux)) h2;
+/// ERROR ESYNTAX
+hook(int array[4]) h3;
+
+// no error
+hook(int (*)(void *aux)) h4;
+hook(int [4]) h5;
+
+
+/// ERROR ESYNTAX
+hook(int) h6[2];

@@ -363,7 +363,8 @@ class Register(CompositeObject):
     @property
     def simple_storage(self):
         return self.wholefield and \
-               not bool(self.get_recursive_components('session', 'saved'))
+               not bool(self.get_recursive_components('session', 'saved',
+                                                      'hook'))
 
     @property
     def name_anonymized(self):
@@ -383,7 +384,8 @@ class Field(CompositeObject):
     def simple_storage(self):
         """Return true if the allocated value is stored in struct member
         __DMLfield."""
-        return not bool(self.get_recursive_components('session', 'saved'))
+        return not bool(self.get_recursive_components('session', 'saved',
+                                                      'hook'))
 
     @property
     def name_anonymized(self):
@@ -448,6 +450,46 @@ class Saved(Session):
         return 'Saved(%s,%s)' % (self.name, repr(self._type))
     def copy(self, parent):
         return Saved(self.name, self._type, self.astinit, self.site, parent)
+
+class Hook(DMLObject):
+    __slots__ = ('msg_types', '_arraylens', 'uniq')
+    objtype = 'hook'
+    allowed_components = []
+
+    def __init__(self, name, site, parent, msg_types, arraylens = ()):
+        DMLObject.__init__(self, name, site, parent)
+        self.msg_types = msg_types
+        self._arraylens = arraylens
+        self.dimensions += self.local_dimensions()
+        self.uniq = len(dml.globals.hooks) + 1
+        dml.globals.hooks.append(self)
+
+    def logname(self, indices=(), relative='device'):
+        if self.isindexed():
+            suff = "".join(f'[{i}]' for i in
+                           indices[-self.local_dimensions():])
+            suff += "".join('[]' for _ in
+                            range(self.local_dimensions() - len(indices)))
+            indices = indices[:-self.local_dimensions()]
+        else:
+            suff = ''
+        name = DMLObject.logname(self, indices, relative)
+        return name + suff
+
+    def logname_anonymized(self, indices=(), relative='device'):
+        if dml.globals.dml_version != (1, 2):
+            return self.logname(indices, relative)
+
+        if self.isindexed():
+            suff = "".join(f'[{i}]' for i in
+                           indices[-self.local_dimensions():])
+            suff += "".join('[]' for _ in
+                            range(self.local_dimensions() - len(indices)))
+            indices = indices[:-self.local_dimensions()]
+        else:
+            suff = ''
+        name = DMLObject.logname_anonymized(self, indices, relative)
+        return name + suff
 
 class Port(CompositeObject):
     __slots__ = ()

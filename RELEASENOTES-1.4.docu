@@ -485,4 +485,13 @@
   <build-id value="6223"><add-note>Fixed an issue where having a const-qualified
       layout type could lead to internal compiler errors in certain
       scenarios.</add-note></build-id>
+  <build-id value="next"><add-note> Added <tt>hook</tt> declarations; a
+      <tt>hook</tt> is a named object member to which suspended computations may
+      be attached for execution at a later point. Computations suspended on a
+      hook are detached and executed through the <tt>send_now()</tt> operation
+      of the hook, which can also provide data for use by the resumed
+      computations.
+      Currently, the only form of computations that can be suspended on hooks
+      are single method calls. This is done via the <tt>after</tt> statement,
+      which has been extended to permit this.</add-note></build-id>
 </rn>

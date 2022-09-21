@@ -6,6 +6,8 @@ dml 1.4;
 
 device test;
 
+/// DMLC-FLAG --enable-features-for-internal-testing-dont-use-this
+
 import "utility.dml";
 
 // Simple types
@@ -116,8 +118,13 @@ port p_saved2 is saved_template {
 }
 
 template t {
+    hook() h1;
+    hook(int, bool) h2;
+    /// WARNING WEXPERIMENTAL
+    hook(int, bool) h3[4][2];
     param p : int64;
 }
+
 // identity
 template mass_groups {
     param coeff;
@@ -164,6 +171,33 @@ saved t saved_traitref_g2_1_children_2_4 =
 // checkpoints.
 saved t saved_traitref_invalid;
 
+// hook references
+saved hook() saved_hookref_g1_h1 = initial.g1.h1;
+saved hook() saved_hookref_g2_2_h1 = initial.g2[2].h1;
+saved hook() saved_hookref_g2_0_child_h1 = initial.g2[0].child.h1;
+saved hook() saved_hookref_g2_1_children_2_4_h1 =
+    initial.g2[1].children[2][4].h1;
+
+saved hook(int, bool) saved_hookref_g1_h2 = initial.g1.h2;
+saved hook(int, bool) saved_hookref_g2_2_h2 = initial.g2[2].h2;
+saved hook(int, bool) saved_hookref_g2_0_child_h2 = initial.g2[0].child.h2;
+saved hook(int, bool) saved_hookref_g2_1_children_2_4_h2 =
+    initial.g2[1].children[2][4].h2;
+
+saved hook(int, bool) saved_hookref_g1_h3_2_1 = initial.g1.h3[2][1];
+saved hook(int, bool) saved_hookref_g2_2_h3_2_1 = initial.g2[2].h3[2][1];
+saved hook(int, bool) saved_hookref_g2_0_child_h3_2_1 =
+    initial.g2[0].child.h3[2][1];
+saved hook(int, bool) saved_hookref_g2_1_children_2_4_h3_2_1 =
+    initial.g2[1].children[2][4].h3[2][1];
+
+// Check that zero-initialized hook references don't result in unrestorable
+// checkpoints, and that hook reference types not otherwise used don't cause
+// issues
+saved hook()                 saved_hookref_invalid_1;
+saved hook(int, bool)        saved_hookref_invalid_2;
+saved hook(int, bool, float) saved_hookref_invalid_3;
+
 attribute test_initial is write_only_attr {
     param type = "n";
 
@@ -205,6 +239,17 @@ attribute test_initial is write_only_attr {
         assert saved_traitref_g2_2.p == 4;
         assert saved_traitref_g2_0_child.p == 5;
         assert saved_traitref_g2_1_children_2_4.p == 61;
+
+        assert saved_hookref_g1_h1 == initial.g1.h1;
+        assert saved_hookref_g2_2_h1 == initial.g2[2].h1;
+        assert saved_hookref_g2_0_child_h1 == initial.g2[0].child.h1;
+        assert saved_hookref_g2_1_children_2_4_h1 ==
+            initial.g2[1].children[2][4].h1;
+        assert saved_hookref_g1_h2 == initial.g1.h2;
+        assert saved_hookref_g2_2_h2 == initial.g2[2].h2;
+        assert saved_hookref_g2_0_child_h2 == initial.g2[0].child.h2;
+        assert saved_hookref_g2_1_children_2_4_h2 ==
+            initial.g2[1].children[2][4].h2;
     }
 }
 
@@ -291,5 +336,14 @@ attribute test_later is write_only_attr {
         assert saved_traitref_g2_2.p == -4;
         assert saved_traitref_g2_0_child.p == -5;
         assert saved_traitref_g2_1_children_2_4.p == -61;
+
+        assert saved_hookref_g1_h1 == g1.h1;
+        assert saved_hookref_g2_2_h1 == g2[2].h1;
+        assert saved_hookref_g2_0_child_h1 == g2[0].child.h1;
+        assert saved_hookref_g2_1_children_2_4_h1 == g2[1].children[2][4].h1;
+        assert saved_hookref_g1_h2 == g1.h2;
+        assert saved_hookref_g2_2_h2 == g2[2].h2;
+        assert saved_hookref_g2_0_child_h2 == g2[0].child.h2;
+        assert saved_hookref_g2_1_children_2_4_h2 == g2[1].children[2][4].h2;
     }
 }

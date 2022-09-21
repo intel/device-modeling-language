@@ -6,6 +6,7 @@
 __all__ = (
     'DMLTypeError',
     'DMLUnknownType',
+    'DMLUnkeyableType',
     'parse_type',
     'realtype_shallow',
     'realtype',
@@ -19,6 +20,7 @@ __all__ = (
     'global_type_declaration_order',
     'global_anonymous_structs',
     'add_late_global_struct_defs',
+    'TypeSequence',
     'DMLType',
     'TVoid',
     'TUnknown',
@@ -39,6 +41,7 @@ __all__ = (
     'TStruct',
     'TLayout',
     'TFunction',
+    'THook',
     'cident',
     'void',
 )
@@ -62,6 +65,16 @@ class DMLUnknownType(DMLTypeError):
         self.type = t
     def __str__(self):
         return "Unknown type: %s" % (self.type,)
+
+class DMLUnkeyableType(DMLTypeError):
+    def __init__(self, t, clarification=None):
+        DMLTypeError.__init__(self)
+        self.type = t
+        self.clarification = clarification
+    def __str__(self):
+        return "Unkeyable type %s%s" % (self.type,
+                                         (': ' + self.clarification)
+                                         if self.clarification else '')
 
 # Types that are defined in DML, as list of type names, in the order
 # they need to be declared in C.
@@ -120,6 +133,10 @@ def realtype(t):
         output_type = realtype(t.output_type)
         if input_types != t.input_types or output_type != t.output_type:
             return TFunction(input_types, output_type, t.varargs, t.const)
+    elif isinstance(t, THook):
+        msg_types = tuple(realtype(sub) for sub in t.msg_types)
+        if msg_types != t.msg_types:
+            return THook(msg_types, t.validated, t.const)
 
     return t
 
@@ -157,6 +174,23 @@ def deep_const(origt):
         #     subtypes.extend(typ for (typ, _, _) in st.members.values())
 
     return False
+
+class TypeSequence:
+    '''A sequence of types, meant to be used as keys for dictionaries.'''
+    def __init__(self, types):
+        self.types = tuple(safe_realtype(t) for t in types)
+
+    def __eq__(self, other):
+        if not isinstance(other, TypeSequence):
+            return NotImplemented
+
+        return (len(self.types) == len(other.types)
+                and all(typ_self.cmp(typ_other) == 0
+                        for (typ_self, typ_other)
+                        in zip(self.types, other.types)))
+
+    def __hash__(self):
+        return hash(tuple(type(elem) for elem in self.types))
 
 class DMLType(metaclass=abc.ABCMeta):
     '''The type of a value (expression or declaration) in DML. One DML
@@ -235,6 +269,9 @@ class DMLType(metaclass=abc.ABCMeta):
     def describe(self):
         raise Exception("%s.describe not implemented" % self.__class__.__name__)
 
+    def key(self):
+        return self.const_str + self.describe()
+
     def describe_assign_types(self):
         """Describe the types that can be used to assign to a variable
         of this type."""
@@ -294,6 +331,8 @@ class TDevice(DMLType):
         return 'TDevice(%s)' % repr(self.name)
     def describe(self):
         return 'pointer to %s' % self.name
+    def key(self):
+        return 'device'
     def cmp(self, other):
         return 0 if isinstance(realtype(other), TDevice) else NotImplemented
     def canstore(self, other):
@@ -346,6 +385,8 @@ class TNamed(DMLType):
         return '%s(%r,%r)' % (self.__class__.__name__, self.c, self.const)
     def describe(self):
         return self.c
+    def key(self):
+        raise ICE(self.declaration_site, 'need realtype before key')
     def cmp(self, other):
         assert False, 'need realtype before cmp'
 
@@ -667,6 +708,12 @@ class TArray(DMLType):
         self.size = size
     def __repr__(self):
         return "TArray(%r,%r,%r)" % (self.base, self.size, self.const)
+    def key(self):
+        if not self.size.constant:
+            raise DMLUnkeyableType(self, "array of non-constant size")
+        return ('array(%s)[%s]'
+                % (conv_const(self.const, self.base).key(),
+                   self.size.value))
     def describe(self):
         return 'array of size %s of %s' % (self.size.read(),
                                            self.base.describe())
@@ -714,6 +761,8 @@ class TPtr(DMLType):
         self.base = base
     def __repr__(self):
         return "TPtr(%r,%r)" % (self.base, self.const)
+    def key(self):
+        return f'{self.const_str}pointer({self.base.key()})'
     def describe(self):
         return 'pointer to %s' % (self.base.describe())
     def cmp(self, other):
@@ -771,6 +820,8 @@ class TVector(DMLType):
         self.base = base
     def __repr__(self):
         return "TVector(%r,%r)" % (self.base, self.const)
+    def key(self):
+        return f'{self.const_str}vector({self.base.key()})'
     def describe(self):
         return 'vector of %s' % self.base.describe()
     def cmp(self, other):
@@ -808,6 +859,8 @@ class TTrait(DMLType):
         else:
             return NotImplemented
 
+    def key(self):
+        return f'{self.const_str}trait({self.trait.name})'
     def describe(self):
         return 'trait ' + self.trait.name
 
@@ -832,6 +885,9 @@ class TTraitList(DMLType):
             return 0
         else:
             return NotImplemented
+
+    def key(self):
+        return f'{self.const_str}sequence({self.traitname})'
 
     def describe(self):
         return 'list of trait ' + self.traitname
@@ -883,6 +939,12 @@ class TExternStruct(StructType):
         TExternStruct.count += 1
         return TExternStruct.count
 
+    def key(self):
+        if not self.typename:
+            raise DMLUnkeyableType(self, 'anonymous struct')
+        # TODO consider dropping the explicit 'externstruct'
+        return self.const_str + f'externstruct {self.typename}'
+
     def describe(self):
         return 'extern struct' + (' ' + self.typename if self.typename else '')
 
@@ -922,6 +984,12 @@ class TStruct(StructType):
     def __repr__(self):
         return 'TStruct(%r,%r,%r)' % (self.members, self.label, self.const)
 
+    def key(self):
+        if self.anonymous:
+            raise DMLUnkeyableType(self, 'anonymous struct')
+        # TODO consider dropping the explicit 'struct'
+        return f"{self.const_str}struct {self.label}"
+
     def describe(self):
         return 'struct %s' % (self.label,)
 
@@ -959,6 +1027,11 @@ class TLayout(TStruct):
     def __repr__(self):
         return 'TLayout(%r, %r, %r, %r)' % (self.endian, self.member_decls,
                                             self.label, self.const)
+    def key(self):
+        if self.anonymous:
+            raise DMLUnkeyableType(self, 'anonymous layout')
+        # TODO consider dropping the explicit 'layout'
+        return f"{self.const_str}layout {self.label}"
 
     def describe(self):
         return 'layout'
@@ -1047,6 +1120,13 @@ class TFunction(DMLType):
     def __repr__(self):
         return "TFunction(%r,%r)" % (self.input_types, self.output_type)
 
+    def key(self):
+        return ('%sfunction(%s%s)->(%s)'
+                % (self.const_str,
+                   ','.join(t.key() for t in self.input_types),
+                   ',...' * self.varargs,
+                   self.output_type.key()))
+
     def describe(self):
         inparams = ",".join([t.describe() if t else "?"
                              for t in self.input_types])
@@ -1082,6 +1162,52 @@ class TFunction(DMLType):
             varargs = ""
         return self.output_type.declaration(
             "%s(%s%s)" % (var, ", ".join(params), varargs))
+
+class THook(DMLType):
+    __slots__ = ('msg_types', 'validated')
+
+    def __init__(self, msg_types, validated=False, const=False):
+        DMLType.__init__(self, const)
+        self.msg_types = msg_types
+        self.validated = validated
+
+    def __repr__(self):
+        return 'THook(%s)' % (', '.join(repr(typ) for typ in self.msg_types),)
+
+    def clone(self):
+        return THook(self.msg_types, self.validated, self.const)
+
+    def cmp(self, other):
+        if (isinstance(other, THook)
+            and len(self.msg_types) == len(other.msg_types)
+            and all(own_comp.cmp(other_comp) == 0
+                    for (own_comp, other_comp) in zip(self.msg_types,
+                                                      other.msg_types))):
+            return 0
+        else:
+            return NotImplemented
+
+    def key(self):
+        return ('%shook(%s)'
+                % (self.const_str, ','.join(t.key() for t in self.msg_types)))
+
+    def describe(self):
+        return ('hook with message component types: (%s)'
+                % (', '.join(typ.describe() for typ in self.msg_types),))
+
+    def declaration(self, var):
+        return f'{self.const_str}_hookref_t {var}'
+
+    def validate(self, fallback_site):
+        if not self.validated:
+            self.validated = True
+            for typ in self.msg_types:
+                try:
+                    safe_realtype(typ).key()
+                except DMLUnkeyableType as e:
+                    raise EHOOKTYPE(self.declaration_site or fallback_site,
+                                    typ, e.clarification) from e
+
 
 intre = re.compile('(u?)int([1-5][0-9]?|6[0-4]?|[789])(_be_t|_le_t)?$')
 def parse_type(typename):

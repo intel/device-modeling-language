@@ -1,0 +1,33 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+/// DMLC-FLAG --enable-features-for-internal-testing-dont-use-this
+
+template t {
+    /// WARNING WEXPERIMENTAL
+    shared hook() h[5][3];
+
+    shared method sm() {
+        /// ERROR EARRAY
+        h.send_now();
+        /// ERROR EARRAY
+        h[0].send_now();
+        // no error
+        h[0][0].send_now();
+    }
+}
+
+is t;
+
+method init() {
+    /// ERROR EARRAY
+    cast(dev, t).h.send_now();
+    /// ERROR EARRAY
+    cast(dev, t).h[0].send_now();
+    // no error
+    cast(dev, t).h[0][0].send_now();
+}

@@ -602,3 +602,13 @@ session int s = 4;
 
 // References device instance
 param s_param = s;
+
+method increment_s() {
+    ++s;
+}
+
+hook() h;
+
+method after_on_hook(hook() x) {
+    after x: increment_s();
+}
