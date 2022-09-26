@@ -376,9 +376,9 @@
       <pre>
       local struct { int value; bool valid; } x = {.valid = false, ...}
       </pre></add-note></build-id>
-  <build-id value="next"><add-note>Template types are now considered
+  <build-id value="6178"><add-note>Template types are now considered
       serializable <bug number="SIMICS-18507"/>.</add-note></build-id>
-  <build-id value="next"><add-note>Casts of constant object references to
+  <build-id value="6178"><add-note>Casts of constant object references to
       template types are now considered constant expressions, allowing for their
       use as initializers for <tt>session</tt>/<tt>saved</tt> variables:
       <pre>
