@@ -731,7 +731,8 @@ _deserialize_trait_reference(ht_str_table_t *id_info_ht,
     if (unlikely(error != Sim_Set_Ok)) {
         return error;
     }
-    void *trait = ht_lookup_int(vtable_ht, id.id);
+    void *trait = vtable_ht ? ht_lookup_int(vtable_ht, id.id)
+        : (void*)(uintptr_t)0XC0FFEE;
     if (unlikely(!trait)) {
         const char *name = SIM_attr_string(SIM_attr_list_item(val, 0));
         SIM_c_attribute_error("Failed to deserialize value of template type: "
