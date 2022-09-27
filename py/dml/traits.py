@@ -668,6 +668,11 @@ class Trait(SubTrait):
         s.add(ExpressionSymbol('this', selfref, self.site))
         return s
 
+    def empty(self):
+        return not (self.direct_parents or self.vtable_params
+                    or self.vtable_sessions or self.vtable_methods
+                    or self.vtable_memoized_outs)
+
     def members(self):
         '''Return a generator yielding the names of all members of this
         trait'''

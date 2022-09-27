@@ -1858,6 +1858,8 @@ def generate_trait_deserialization_hashtables(device):
 
     inserts = []
     for (trait, nodes) in by_trait.items():
+        if trait.empty():
+            continue
         add_variable_declaration('ht_int_table_t '
                                  + f'_{cident(trait.name)}_vtable_ht',
                                  'HT_INT_NULL()')
@@ -2037,10 +2039,8 @@ def method_tinit_arg(trait, parent, name, scrambled_name):
 
 def print_vtable_struct_declaration(trait):
     out('struct _%s {\n' % cident(trait.name), postindent=1)
-    empty = True
     for p in trait.direct_parents:
         out("struct _%s %s;\n" % (cident(p.name), cident(p.name)))
-        empty = False
     for (name, (_, ptype)) in list(trait.vtable_params.items()):
         if isinstance(realtype(ptype), TTraitList):
             out(f"_each_in_param_t {name};\n")
@@ -2052,14 +2052,10 @@ def print_vtable_struct_declaration(trait):
                 memoized)) in trait.vtable_methods.items():
         t = trait.vtable_method_type(inp, outp, throws, independent)
         out(f'{t.declaration(name)};\n')
-        empty = False
 
     for (name, memo_outs_struct) in trait.vtable_memoized_outs.items():
         decl = TPtr(memo_outs_struct).declaration(name)
         out(f'{decl};\n')
-        empty = False
-    if empty:
-        out('uint8 _dummy;\n')
     out('};\n', preindent=-1)
 
 def generate_tinit(trait):

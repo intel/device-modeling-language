@@ -262,7 +262,8 @@ def deserialize(real_type, current_expr, target_expr, error_out):
         id_info_ht = expr.mkLit(current_site, '&_id_info_ht',
                                 TPtr(TNamed('ht_str_table_t')))
         vtable_ht = expr.mkLit(current_site,
-                               f'&_{cident(vtable_name)}_vtable_ht',
+                               'NULL' if real_type.trait.empty()
+                               else f'&_{cident(vtable_name)}_vtable_ht',
                                TPtr(TNamed('ht_int_table_t')))
         apply_expr = apply_c_fun(
             current_site, '_deserialize_trait_reference',
