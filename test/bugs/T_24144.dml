@@ -22,10 +22,11 @@ connect c {
     interface x;
 }
 
+data x_interface_t x;
+
 method test() -> (bool ok) {
-    local x_interface_t x;
-    x.m0 = NULL;
-    $c.x = cast(&x, void *);
+    $x.m0 = NULL;
+    $c.x = cast(&$x, void *);
     // There is currently no documented way to check if an interface method is
     // NULL. Two hacks have been added for backward compatibility. Bug 24144 is
     // to replace those hacks with a better, documented, way to do it.
