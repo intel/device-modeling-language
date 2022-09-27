@@ -13,13 +13,9 @@ extern typedef uint8 my_uint8;
 method test -> (bool ok)
 {
     local uint8 y1[123];
-    local uint8 y2[12];
     local my_uint8 y3[123];
-    local my_uint8 y4[12];
     foo(y1);
-    foo(y2);
     foo(y3);
-    foo(y4);
     ok = true;
 }
 
