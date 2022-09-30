@@ -8,6 +8,7 @@ from . import ctree, expr, types, logging, symtab, messages, output, logging
 from .types import *
 from .logging import *
 from .expr_util import *
+import dml.globals
 
 __all__ = (
     'map_dmltype_to_attrtype',
@@ -162,13 +163,6 @@ def serialize(real_type, current_expr, target_expr):
                           lookup_serialize(real_type),
                           [ctree.mkAddressOf(current_site, current_expr),
                            ctree.mkAddressOf(current_site, target_expr)])
-    elif isinstance(real_type, TObjIdentity):
-        id_infos = expr.mkLit(current_site, '_id_infos',
-                              TPtr(TNamed('_id_info_t', const = True)))
-        apply_expr = apply_c_fun(current_site, "_serialize_identity",
-                                 [id_infos, current_expr], attr_value_t)
-        return ctree.mkAssignStatement(current_site, target_expr,
-                                       ctree.ExpressionInitializer(apply_expr))
     elif isinstance(real_type, TTrait):
         id_infos = expr.mkLit(current_site, '_id_infos',
                               TPtr(TNamed('_id_info_t', const = True)))
@@ -248,29 +242,30 @@ def deserialize(real_type, current_expr, target_expr, error_out):
             [ctree.mkAddressOf(current_site, current_expr),
              ctree.mkAddressOf(current_site, target_expr)], set_error_t)
         return construct_subcall(apply_expr)
-    elif isinstance(real_type, TObjIdentity):
-        id_info_ht = expr.mkLit(current_site, '&_id_info_ht',
-                                TPtr(TNamed('ht_str_table_t')))
-        apply_expr = apply_c_fun(
-            current_site, '_deserialize_identity',
-            [id_info_ht, current_expr,
-             ctree.mkAddressOf(current_site, target_expr)],
-            set_error_t)
-        return construct_subcall(apply_expr)
     elif isinstance(real_type, TTrait):
-        vtable_name = real_type.trait.name
         id_info_ht = expr.mkLit(current_site, '&_id_info_ht',
                                 TPtr(TNamed('ht_str_table_t')))
-        vtable_ht = expr.mkLit(current_site,
-                               'NULL' if real_type.trait.empty()
-                               else f'&_{cident(vtable_name)}_vtable_ht',
-                               TPtr(TNamed('ht_int_table_t')))
-        apply_expr = apply_c_fun(
-            current_site, '_deserialize_trait_reference',
-            [id_info_ht, vtable_ht,
-             ctree.mkStringConstant(current_site, vtable_name), current_expr,
-             ctree.mkAddressOf(current_site, target_expr)],
-            set_error_t)
+        assert dml.globals.object_trait
+        if real_type.trait is dml.globals.object_trait:
+            object_vtable_array = expr.mkLit(current_site, '_object_vtables',
+                                             TPtr(TPtr(void, const=True)))
+            apply_expr = apply_c_fun(
+                current_site, '_deserialize_object_trait_reference',
+                [id_info_ht, object_vtable_array,
+                 current_expr, ctree.mkAddressOf(current_site, target_expr)],
+                set_error_t)
+        else:
+            vtable_name = real_type.trait.name
+            vtable_ht = expr.mkLit(current_site,
+                                   'NULL' if real_type.trait.empty()
+                                   else f'&_{cident(vtable_name)}_vtable_ht',
+                                   TPtr(TNamed('ht_int_table_t')))
+            apply_expr = apply_c_fun(
+                current_site, '_deserialize_trait_reference',
+                [id_info_ht, vtable_ht,
+                 ctree.mkStringConstant(current_site, vtable_name), current_expr,
+                 ctree.mkAddressOf(current_site, target_expr)],
+                set_error_t)
         return construct_subcall(apply_expr)
     else:
         raise ICE(current_site, "Unexpectedly asked to deserialize %s" % (
@@ -300,8 +295,6 @@ def map_dmltype_to_attrtype(site, dmltype):
         # Byte arrays may use data values
         or_data = '|d' * (real_type.base.is_int and real_type.base.bits == 8)
         return '[%s{%s}]' % (arr_attr_type, arr_length) + or_data
-    if isinstance(real_type, TObjIdentity):
-        return '[s[i*]]'
     if isinstance(real_type, TTrait):
         serialized_traits.add(real_type.trait)
         # TODO Is this redundant?
@@ -349,8 +342,6 @@ def type_signature(dmltype, is_for_serialization):
         return 'A%d%s' % (arr_length, arr_attr_type)
     if isinstance(dmltype, TVector):
         return 'V%s' % type_signature(dmltype.base, is_for_serialization)
-    if isinstance(dmltype, TObjIdentity):
-        return 'Id'
     if isinstance(dmltype, TTrait):
         return 'T' + (cident(dmltype.trait.name)
                       if not is_for_serialization else '')
@@ -404,8 +395,8 @@ def generate_serialize(real_type):
                 site, [attr_assign_statement, imm_attr_decl] + statements).toc()
         elif isinstance(real_type, TVector):
             raise ICE(site, "TODO: serialize vector")
-        elif isinstance(real_type, (IntegerType, TBool, TFloat, TObjIdentity,
-                                    TTrait, TArray)):
+        elif isinstance(real_type, (IntegerType, TBool, TFloat, TTrait,
+                                    TArray)):
             serialize(real_type,
                       ctree.mkDereference(site, in_arg),
                       ctree.mkDereference(site, out_arg)).toc()
@@ -488,8 +479,8 @@ def generate_deserialize(real_type):
 
         elif isinstance(real_type, TVector):
             raise ICE(site, "TODO: serialize vector")
-        elif isinstance(real_type, (IntegerType, TBool, TFloat, TObjIdentity,
-                                    TTrait, TArray)):
+        elif isinstance(real_type, (IntegerType, TBool, TFloat, TTrait,
+                                    TArray)):
             deserialize(real_type,
                         ctree.mkDereference(site, in_arg),
                         ctree.mkDereference(site, out_arg),

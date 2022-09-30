@@ -401,4 +401,8 @@
       the <tt>map_target</tt> template can now be overridden, to
       add extra behavior before and after the attribute
       is set.</add-note></build-id>
+  <build-id value="next"><add-note>Any value of a template type can now be cast
+      to the template type <tt>object</tt>, even if <tt>object</tt> is not an
+      ancestor of the template <bug number="SIMICS-19950"/>.</add-note>
+  </build-id>
 </rn>

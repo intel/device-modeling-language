@@ -8,8 +8,6 @@ device test;
 
 import "utility.dml";
 
-/// WARNING WEXPERIMENTAL T_saved_declaration.dml
-
 // Simple types
 saved int saved_int = 2;
 
@@ -140,19 +138,19 @@ group initial is mass_groups {
 is mass_groups;
 param coeff = -1;
 
-saved _identity_t saved_identity_g1 = cast(initial.g1, _identity_t);
-saved _identity_t saved_identity_g2_2 = cast(initial.g2[2], _identity_t);
-saved _identity_t saved_identity_g2_0_child =
-    cast(initial.g2[0].child, _identity_t);
-saved _identity_t saved_identity_g2_1_children_2_4 =
-    cast(initial.g2[1].children[2][4], _identity_t);
+saved object saved_identity_g1 = cast(initial.g1, object);
+saved object saved_identity_g2_2 = cast(initial.g2[2], object);
+saved object saved_identity_g2_0_child =
+    cast(initial.g2[0].child, object);
+saved object saved_identity_g2_1_children_2_4 =
+    cast(initial.g2[1].children[2][4], object);
 
 // test serialization of the device object and a top-level object of the same
 // name
 group test;
 
-saved _identity_t saved_identity_device = cast(dev, _identity_t);
-saved _identity_t saved_identity_test = cast(test, _identity_t);
+saved object saved_identity_device = cast(dev, object);
+saved object saved_identity_test = cast(test, object);
 
 // template types
 saved t saved_traitref_g1 = cast(initial.g1, t);
@@ -188,15 +186,15 @@ attribute test_initial is write_only_attr {
         assert p_saved1.v == 0;
         assert p_saved2.v == 4;
 
-        assert saved_identity_g1 == cast(initial.g1, _identity_t);
-        assert saved_identity_g2_2 == cast(initial.g2[2], _identity_t);
+        assert saved_identity_g1 == cast(initial.g1, object);
+        assert saved_identity_g2_2 == cast(initial.g2[2], object);
         assert saved_identity_g2_0_child
-            == cast(initial.g2[0].child, _identity_t);
+            == cast(initial.g2[0].child, object);
         assert saved_identity_g2_1_children_2_4
-            == cast(initial.g2[1].children[2][4], _identity_t);
+            == cast(initial.g2[1].children[2][4], object);
 
-        assert saved_identity_device == cast(dev, _identity_t);
-        assert saved_identity_test == cast(test, _identity_t);
+        assert saved_identity_device == cast(dev, object);
+        assert saved_identity_test == cast(test, object);
 
         assert saved_traitref_g1 == cast(initial.g1, t);
         assert saved_traitref_g2_2 == cast(initial.g2[2], t);
@@ -272,15 +270,15 @@ attribute test_later is write_only_attr {
         assert p_saved1.v == -5;
         assert p_saved2.v == 5;
 
-        assert saved_identity_g1 == cast(g1, _identity_t);
-        assert saved_identity_g2_2 == cast(g2[2], _identity_t);
+        assert saved_identity_g1 == cast(g1, object);
+        assert saved_identity_g2_2 == cast(g2[2], object);
         assert saved_identity_g2_0_child
-            == cast(g2[0].child, _identity_t);
+            == cast(g2[0].child, object);
         assert saved_identity_g2_1_children_2_4
-            == cast(g2[1].children[2][4], _identity_t);
+            == cast(g2[1].children[2][4], object);
 
-        assert saved_identity_device == cast(dev, _identity_t);
-        assert saved_identity_test == cast(test, _identity_t);
+        assert saved_identity_device == cast(dev, object);
+        assert saved_identity_test == cast(test, object);
 
         assert saved_traitref_g1 == cast(g1, t);
         assert saved_traitref_g2_2 == cast(g2[2], t);

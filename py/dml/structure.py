@@ -138,7 +138,7 @@ def mkglobals(stmts):
                             trait_body.append(tstmt)
                     else:
                         template_body.append(tstmt)
-                if stmt.kind == 'template_dml12':
+                if stmt.kind == 'template_dml12' and name != 'object':
                     # guaranteed by grammar.
                     assert trait_body == []
                     # means that no type is created
@@ -197,6 +197,8 @@ def mkglobals(stmts):
 
     (dml.globals.templates, dml.globals.traits) = template.process_templates(
         templates)
+    assert 'object' in dml.globals.traits
+    dml.globals.object_trait = dml.globals.traits['object']
 
     for (tname, tpl) in list(dml.globals.templates.items()):
         if tpl.trait:
@@ -241,7 +243,7 @@ def check_named_types(t):
     elif isinstance(t, TTraitList):
         if t.traitname not in dml.globals.traits:
             raise ETYPE(t.declaration_site, t)
-    elif isinstance(t, (TVoid, IntegerType, TBool, TFloat, TTrait, TObjIdentity)):
+    elif isinstance(t, (TVoid, IntegerType, TBool, TFloat, TTrait)):
         pass
     else:
         raise ICE(t.declaration_site, "unknown type %r" % t)
