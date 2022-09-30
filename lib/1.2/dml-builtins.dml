@@ -47,6 +47,10 @@ extern typedef _callback_entry_t * vect _callback_vect_t;
 extern typedef _connection_entry_t * vect _connection_vect_t;
 
 extern typedef struct {} _id_info_t;
+extern typedef struct {
+    uint32 id;
+    uint32 encoded_index;
+} _identity_t;
 
 extern bank_callback_handle_t _register_before_read(
     conf_object_t *bank,

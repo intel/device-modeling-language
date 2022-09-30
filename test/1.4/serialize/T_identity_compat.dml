@@ -6,5 +6,4 @@ dml 1.4;
 
 device test;
 
-/// WARNING WEXPERIMENTAL
-saved _identity_t s;
+saved object s;

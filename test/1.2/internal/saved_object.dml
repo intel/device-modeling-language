@@ -4,15 +4,15 @@
 */
 dml 1.4;
 
-saved _identity_t saved_identity;
+saved object saved_object;
 
-method check_identity_logname(_identity_t id, const char *expected_name,
+method check_object_logname(object obj, const char *expected_name,
                               const char *obj_name) {
-    saved_identity = id;
+    saved_object = obj;
     local const char *logname = SIM_attr_string(
-        SIM_attr_list_item(SIM_get_attribute(dev.obj, "saved_identity"), 0));
+        SIM_attr_list_item(SIM_get_attribute(dev.obj, "saved_object"), 0));
     if (strcmp(logname, expected_name) != 0) {
-        log error: "cast(%s, _identity_t) serialized logname is %s, and not "
+        log error: "cast(%s, object) serialized logname is %s, and not "
                  + "the expected %s", obj_name, logname, expected_name;
     }
 }

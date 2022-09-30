@@ -54,6 +54,14 @@ extern typedef _callback_entry_t * vect _callback_vect_t;
 extern typedef _connection_entry_t * vect _connection_vect_t;
 
 extern typedef struct {} _id_info_t;
+extern typedef struct {
+    uint32 id;
+    uint32 encoded_index;
+} _identity_t;
+extern typedef struct {
+    void *trait;
+    _identity_t id;
+} _traitref_t;
 
 extern bank_callback_handle_t _register_before_read(
     conf_object_t *bank,
@@ -445,7 +453,8 @@ template object is (name, _qname, desc, documentation, limitations) {
     param dev                       = defined parent #? parent.dev #: this;
 
     shared method cancel_after() {
-        _cancel_simple_events(dev.obj, cast(this, _identity_t));
+        local object ref = this;
+        _cancel_simple_events(dev.obj, cast(&ref, _traitref_t *)->id);
     }
 }
 
@@ -3269,7 +3278,8 @@ extern const char *_DML_get_qname(_identity_t, const _id_info_t *,
                                   dml_qname_cache_t *, const char *);
 template _qname {
     shared method _qname() -> (const char *) {
-        return _DML_get_qname(cast(this, _identity_t), _id_infos,
+        local _qname ref = this;
+        return _DML_get_qname(cast(&ref, _traitref_t *)->id, _id_infos,
                               &_qname_cache, dev.name);
     }
 }

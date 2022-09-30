@@ -1084,6 +1084,15 @@ x.val = 14;  // sets regs.r0.val
 Two values of the same template type can be compared for equality, and are
 considered equal when they both reference the same object.
 
+A value of a template type can be upcast to an ancestor template type; for
+example:
+```
+local uint64_attr x = cast(attr, uint64_attr);
+local attribute y = cast(x, attribute);
+```
+In addition, a value of any template type can be cast to the template type
+`object`, even if `object` is not an ancestor of the template.
+
 ### Shared methods
 If a method is declared in a template, then one copy of the method
 will appear in each object where the template is instantiated;

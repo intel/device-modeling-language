@@ -787,7 +787,7 @@ def expr_cast(tree, location, scope):
 
     if isinstance(expr, NonValue) and (
             not isinstance(expr, NodeRef)
-            or not isinstance(safe_realtype(type), (TTrait, TObjIdentity))):
+            or not isinstance(safe_realtype(type), TTrait)):
         raise expr.exc()
     else:
         return mkCast(tree.site, expr, type)
@@ -997,9 +997,6 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
             raise ICE(site, "Strange type")
     elif isinstance(asttype[0], str):
         etype = parse_type(asttype[0])
-        if (isinstance(etype, TObjIdentity)
-            and os.path.basename(site.filename()) != 'dml-builtins.dml'):
-            report(WEXPERIMENTAL(site, '_identity_t'))
     else:
         raise ICE(site, "Stranger type")
 
@@ -1368,7 +1365,7 @@ def get_initializer(site, etype, astinit, location, scope):
         return ExpressionInitializer(mkBoolConstant(site, False))
     elif typ.is_float:
         return ExpressionInitializer(mkFloatConstant(site, 0.0))
-    elif isinstance(typ, (TStruct, TExternStruct, TArray, TTrait, TObjIdentity)):
+    elif isinstance(typ, (TStruct, TExternStruct, TArray, TTrait)):
         return MemsetInitializer(site)
     elif isinstance(typ, TPtr):
         return ExpressionInitializer(mkLit(site, 'NULL', typ))
@@ -2074,7 +2071,7 @@ def stmt_log(stmt, location, scope):
             identity = TraitObjIdentity(site, lookup_var(site, scope, "this"))
         key = mkApply(site,
                       mkLit(site, "_identity_to_key",
-                            TFunction([TObjIdentity()], TInt(64, False))),
+                            TFunction([TNamed('_identity_t')], TInt(64, False))),
                       [identity])
 
         once_lookup = mkLit(

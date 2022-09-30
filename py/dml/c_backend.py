@@ -1857,8 +1857,9 @@ def generate_trait_deserialization_hashtables(device):
                 by_trait.setdefault(trait, []).append(node)
 
     inserts = []
+    assert dml.globals.object_trait
     for (trait, nodes) in by_trait.items():
-        if trait.empty():
+        if trait.empty() or trait is dml.globals.object_trait:
             continue
         add_variable_declaration('ht_int_table_t '
                                  + f'_{cident(trait.name)}_vtable_ht',
@@ -1878,6 +1879,22 @@ def generate_trait_deserialization_hashtables(device):
         out(line)
     out('}\n', preindent=-1)
 
+def generate_object_vtables_array():
+    items = []
+    for node in dml.globals.objects:
+        if node.traits:
+            node.traits.mark_referenced(dml.globals.object_trait)
+            ancestry_path = node.traits.ancestry_paths[dml.globals.object_trait][0]
+            structref = node.traits.vtable_cname(ancestry_path[0])
+            pointer = '(&%s)' % ('.'.join([structref] + [
+                cident(t.name) for t in ancestry_path[1:]]))
+        else:
+            pointer = 'NULL'
+        items.append(pointer)
+    init = '{%s}' % (', '.join(items),)
+    add_variable_declaration(
+        'void * const _object_vtables[%d]' % (len(dml.globals.objects)),
+        init)
 
 def generate_trait_method(m):
     code = m.codegen_body()
@@ -2817,6 +2834,7 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     generate_dealloc(device)
     generate_events(device)
     generate_identity_data_decls()
+    generate_object_vtables_array()
     generate_class_var_decl()
     generate_startup_calls_entry_function(device)
     generate_init_data_objs(device)

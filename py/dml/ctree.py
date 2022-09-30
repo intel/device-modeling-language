@@ -124,7 +124,7 @@ __all__ = (
     'TraitMethodDirect',
     'mkTraitUpcast',
     'TraitUpcast',
-    'try_convert_identity',
+    'TraitObjectCast',
     'ObjIdentity',
     'TraitObjIdentity',
     'ObjTraitRef',
@@ -1263,10 +1263,8 @@ class Equals(BinOp):
             if (isinstance(lh, StringConstant)
                 and isinstance(rh, StringConstant)):
                 return mkBoolConstant(site, lh.value == rh.value)
-            if ((isinstance(lh, ObjIdentity) and isinstance(rh, ObjIdentity))
-                or (isinstance(lh, ObjTraitRef)
-                    and isinstance(rh, ObjTraitRef)
-                    and lh.trait is rh.trait)):
+            if (isinstance(lh, ObjTraitRef) and isinstance(rh, ObjTraitRef)
+                and lh.trait is rh.trait):
                 lh_indices = [idx.value for idx in lh.indices]
                 rh_indices = [idx.value for idx in rh.indices]
                 return mkBoolConstant(site, (lh.node is rh.node
@@ -1301,23 +1299,16 @@ class Equals(BinOp):
             or (isinstance(lhtype, TBool) and isinstance(rhtype, TBool))):
             return Equals(site, lh, rh)
 
-        def mkIdentityEq(lh, rh):
-            return mkApply(site,
-                           mkLit(site, '_identity_eq',
-                                 TFunction([TObjIdentity(), TObjIdentity()],
-                                           TBool())),
-                           [lh, rh])
-
-        # Equality between trait references of the same template is
-        # implicitly converted to equality between identities
         if (isinstance(lhtype, TTrait) and isinstance(rhtype, TTrait)
             and lhtype.trait is rhtype.trait):
-            return mkIdentityEq(TraitObjIdentity(lh.site, lh),
-                                TraitObjIdentity(rh.site, rh))
+            return mkApply(site,
+                           mkLit(site, '_identity_eq',
+                                 TFunction([TNamed('_identity_t'),
+                                            TNamed('_identity_t')],
+                                           TBool())),
+                           [TraitObjIdentity(lh.site, lh),
+                            TraitObjIdentity(rh.site, rh)])
 
-        if (isinstance(lhtype, TObjIdentity)
-            and isinstance(rhtype, TObjIdentity)):
-            return mkIdentityEq(lh, rh)
         raise EILLCOMP(site, lh, lhtype, rh, rhtype)
 
 def mkEquals(site, lh, rh):
@@ -3255,19 +3246,6 @@ class ObjTraitRef(Expression):
         else:
             return traitref_expr
 
-def try_convert_identity(expr, convert_value_noderefs = True):
-    if (isinstance(expr, NodeRef)
-        and isinstance(expr.node, objects.CompositeObject)
-        and (convert_value_noderefs or isinstance(expr, NonValue))):
-        return ObjIdentity(expr.site, expr.node, expr.indices)
-    elif not isinstance(expr, NonValue):
-        typ = safe_realtype(expr.ctype())
-        if isinstance(typ, TObjIdentity):
-            return expr
-        elif isinstance(typ, TTrait):
-            return TraitObjIdentity(expr.site, expr)
-    return None
-
 class ObjIdentity(Expression):
     '''A unique identifier for a specific compound object'''
     slots = ('constant', 'constant_indices', 'value')
@@ -3291,7 +3269,7 @@ class ObjIdentity(Expression):
         return "%s" % (self.node.logname(self.indices),)
 
     def ctype(self):
-        return TObjIdentity()
+        return TNamed('_identity_t')
 
     def read(self):
         if self.constant:
@@ -3318,7 +3296,7 @@ class TraitObjIdentity(Expression):
         return "%s" % (self.traitref,)
 
     def ctype(self):
-        return TObjIdentity()
+        return TNamed('_identity_t')
 
     def read(self):
         return "(%s).id" % (self.traitref.read(),)
@@ -3345,13 +3323,30 @@ class TraitUpcast(Expression):
                    ".".join(cident(t.name) for t in
                             typ.trait.ancestry_paths[self.parent][0])))
 
+class TraitObjectCast(Expression):
+    @auto_init
+    def __init__(self, site, sub): pass
+
+    def __str__(self):
+        return f'cast({self.sub}, object)'
+
+    def ctype(self):
+        return TTrait(dml.globals.object_trait)
+
+    def read(self):
+        return (f'({{_identity_t __id = ({self.sub.read()}).id; '
+                + '(_traitref_t) {_object_vtables[__id.id], __id};})')
+
 def mkTraitUpcast(site, sub, parent):
     typ = safe_realtype(sub.ctype())
+    assert dml.globals.object_trait
     if isinstance(typ, TTrait):
         if typ.trait is parent:
             return sub
         elif parent in typ.trait.ancestors:
             return TraitUpcast(site, sub, parent)
+        elif parent is dml.globals.object_trait:
+            return TraitObjectCast(site, sub)
     raise ETEMPLATEUPCAST(site, typ, parent.type())
 
 def vtable_read(expr):
@@ -3961,12 +3956,6 @@ def mkCast(site, expr, new_type):
             raise ETEMPLATEUPCAST(site, "object", new_type)
         else:
             return mkTraitUpcast(site, expr, real.trait)
-    elif isinstance(real, TObjIdentity):
-        converted = try_convert_identity(expr)
-        if converted:
-            return converted
-        else:
-            raise ICE(site, "invalid cast to '_identity_t'")
     old_type = safe_realtype(expr.ctype())
     if (dml.globals.compat_dml12_int(site)
         and (isinstance(old_type, (TStruct, TVector, TLayout))
@@ -3978,7 +3967,7 @@ def mkCast(site, expr, new_type):
                          TLayout, TFunction)):
         raise ECAST(site, expr, new_type)
     if isinstance(old_type, (TVoid, TStruct, TVector, TTraitList, TLayout,
-                             TTrait, TObjIdentity)):
+                             TTrait)):
         raise ECAST(site, expr, new_type)
     if old_type.is_int and old_type.is_endian:
         expr = as_int(expr)
@@ -4373,8 +4362,7 @@ class MemsetInitializer(Initializer):
     def assign_to(self, dest, typ):
         '''output C statements to assign an lvalue'''
         assert isinstance(safe_realtype(typ),
-                          (TExternStruct, TStruct, TArray, TEndianInt, TTrait,
-                           TObjIdentity))
+                          (TExternStruct, TStruct, TArray, TEndianInt, TTrait))
         # (void *) cast to avoid GCC erroring if the target type is
         # (partially) const-qualified. See ExpressionInitializer.assign_to
         out('memset((void *)&%s, 0, sizeof(%s));\n'
