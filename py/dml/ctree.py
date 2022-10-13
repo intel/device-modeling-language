@@ -1067,8 +1067,9 @@ class Compare(BinOp):
         unsigned integer, with (int, uint) and (uint, int) args,
         respectively'''
 
+    @staticmethod
     @abc.abstractmethod
-    def eval_const(self, lh, rh):
+    def eval_const(lh, rh):
         pass
 
     @classmethod
@@ -1406,6 +1407,7 @@ class BitBinOp(BinOp):
         return '(%s) %s (%s)' % (self.lh, self.op, self.rh)
     def read(self):
         return '(%s) %s (%s)' % (self.lh.read(), self.op, self.rh.read())
+    @staticmethod
     @abc.abstractmethod
     def eval_const(left, right): pass
     @classmethod
@@ -1595,6 +1597,7 @@ class BitShift(BinOp):
         '''lh and rh must have 64-bit integer types with the given signedness'''
     def __str__(self):
         return '(%s) %s (%s)' % (self.lh, self.op, self.rh)
+    @staticmethod
     @abc.abstractmethod
     def eval_const(left, right): pass
     @classmethod
@@ -1777,6 +1780,7 @@ class ArithBinOp(BinOp):
         '''lh and rh must have types that produce res_type in C'''
     def __str__(self):
         return '(%s) %s (%s)' % (self.lh, self.op, self.rh)
+    @staticmethod
     @abc.abstractmethod
     def eval_const(left, right): pass
     @classmethod
