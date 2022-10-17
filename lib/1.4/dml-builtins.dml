@@ -721,9 +721,11 @@ template attribute is _conf_attribute {
 ## Attribute templates
 
 Four templates are used to create a simple checkpointable attribute with
-standard types, storing the attribute value in a member `val`, and
-providing default implementations of methods `get` and `set`
-accordingly:
+standard types. Each store the attribute value in a member `val`,
+provide default implementations of methods `get` and `set` according to the
+type, and provide a default implementation of `init` that initializes
+`val` using the `init_val` parameter also provided by the template (whose
+default definition simply zero-initializes `val`.) These four templates are:
 
 <dl><dt>
 
@@ -784,9 +786,14 @@ Pseudo attribute that cannot be read. Method `set` is
 These templates are not compatible with the `bool_attr`, `uint64_attr`,
 `int64_attr`, or `float_attr` templates.
 */
-template bool_attr is attribute {
+template bool_attr is (attribute, init) {
     param type = "b";
+    param init_val : bool;
+    param init_val default false;
     session bool val;
+    shared method init() default {
+        val = init_val;
+    }
     shared method get() -> (attr_value_t) default {
         return SIM_make_attr_boolean(val);
     }
@@ -795,9 +802,14 @@ template bool_attr is attribute {
     }
 }
 
-template uint64_attr is attribute {
+template uint64_attr is (attribute, init) {
     param type = "i";
+    param init_val : uint64;
+    param init_val default 0;
     session uint64 val;
+    shared method init() default {
+        val = init_val;
+    }
     shared method get() -> (attr_value_t) default {
         return SIM_make_attr_uint64(val);
     }
@@ -811,9 +823,14 @@ template uint64_attr is attribute {
     }
 }
 
-template int64_attr is attribute {
+template int64_attr is (attribute, init) {
     param type = "i";
+    param init_val : int64;
+    param init_val default 0;
     session int64 val;
+    shared method init() default {
+        val = init_val;
+    }
     shared method get() -> (attr_value_t) default {
         return SIM_make_attr_int64(val);
     }
@@ -827,9 +844,14 @@ template int64_attr is attribute {
     }
 }
 
-template double_attr is attribute {
+template double_attr is (attribute, init) {
     param type = "f";
+    param init_val : double;
+    param init_val default 0.0;
     session double val;
+    shared method init() default {
+        val = init_val;
+    }
     shared method get() -> (attr_value_t) default {
         return SIM_make_attr_floating(val);
     }
