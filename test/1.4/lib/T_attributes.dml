@@ -30,6 +30,27 @@ attribute f is (double_attr) {
 //    method set(attr_value_t value) throws default { default(value); }
 }
 
+attribute b2 is (bool_attr) {
+    param init_val = true;
+}
+
+attribute u2 is (uint64_attr) {
+    param init_val = 33;
+}
+
+attribute i2 is (int64_attr) {
+    param init_val = -33;
+}
+
+attribute f2 is (double_attr) {
+    param init_val = 3.3;
+}
+
+attribute overridden_init is (bool_attr) {
+    param init_val = true;
+    method init() { }
+}
+
 
 method test() throws {
     b.val = true;
@@ -69,4 +90,10 @@ method test() throws {
     local attr_value_t float_attr = SIM_make_attr_floating(1.414);
     SIM_set_attribute(dev.obj, "f", &float_attr);
     expect(f.val == 1.414, "set f");
+
+    expect(b2.val, "init_val b2");
+    expect(u2.val == 33, "init_val u2");
+    expect(i2.val == -33, "init_val i2");
+    expect(f2.val == 3.3, "init_val f2");
+    expect(!overridden_init.val, "init_val overridden_init");
 }

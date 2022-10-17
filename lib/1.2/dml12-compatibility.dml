@@ -7,7 +7,18 @@ dml 1.4;
 
 import "simics/devs/signal.dml";
 
-template bool_attr is attribute {
+template _banned_init_val {
+    // The init template isn't available in 1.2, thus init_val support can't be
+    // implemented without some ad-hoc hacks in DMLC. Its use is banned
+    // instead.
+    param init_val default undefined;
+    #if (defined(init_val)) {
+        error "init_val for bool_attr, uint64_attr, int64_attr, and "
+            + "double_attr is not supported for DML 1.2 devices";
+    }
+}
+
+template bool_attr is (attribute, _banned_init_val) {
     param allocate_type = "bool";
     param val = this;
     // Since we are by definition backed by 1.2 builtins, get throws
@@ -15,14 +26,14 @@ template bool_attr is attribute {
     shared method set(attr_value_t val) throws;
 }
 
-template uint64_attr is attribute {
+template uint64_attr is (attribute, _banned_init_val) {
     param allocate_type = "uint64";
     param val = this;
     shared method get() -> (attr_value_t);
     shared method set(attr_value_t val) throws;
 }
 
-template int64_attr is attribute {
+template int64_attr is (attribute, _banned_init_val) {
     param allocate_type = "int64";
     param val = this;
     shared method get() -> (attr_value_t);
@@ -35,7 +46,7 @@ template int64_attr is attribute {
     }
 }
 
-template double_attr is attribute {
+template double_attr is (attribute, _banned_init_val) {
     param allocate_type = "double";
     param val = this;
     shared method get() -> (attr_value_t);

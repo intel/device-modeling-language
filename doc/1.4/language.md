@@ -596,6 +596,9 @@ functions. The type of the value read and written through the get/set functions
 is controlled by the `type` parameter. More information about configuration
 object attributes can be found in *Simics Model Builder User's Guide*.
 
+The [`init`](dml-builtins.html#init) template and associated method is often
+useful together with `attribute` objects to initialize any associated state.
+
 Four standard templates are provided for attributes: `bool_attr`, `int64_attr`,
 `uint64_attr` and `double_attr`. They provide overridable `get` and `set`
 methods, and store the attribute's value in a session variable named `val`,
@@ -606,10 +609,17 @@ attribute `a`, then one can access it as follows:
 log info: "the value of attribute a is %d", dev.a.val;
 ```
 
-The [`init` template](dml-builtins.html#init) is often useful together with
-`attribute` objects &mdash; in particular in combination with these standard
-templates &mdash; in order to initialize the state associated with the
-`attribute` object.
+These templates also provide an overridable implementation of
+[`init()`](dml-builtins.html#init) that initializes the `val` session variable.
+The value that `val` is initialized to is controlled by the `init_val`
+parameter, whose default definition simply causes `val` to be zero-initialized.
+
+Defining `init_val` is typically the most convenient way of initializing any
+attribute instantiating any one of the these templates &mdash; however,
+overriding the default `init()` implementation with a custom one may still be
+desirable in certain cases. In particular, the definition of `init_val` must be
+constant, so a custom `init()` implementation is necessary if `val` should be
+initialized to a non-constant value.
 
 Note that using an attribute object purely to store and checkpoint simple
 internal device state is not recommended; prefer

@@ -405,4 +405,11 @@
       to the template type <tt>object</tt>, even if <tt>object</tt> is not an
       ancestor of the template <bug number="SIMICS-19950"/>.</add-note>
   </build-id>
+  <build-id value="next"><add-note>A new parameter <tt>init_val</tt> has been
+      introduced to the attribute templates <tt>bool_attr</tt>,
+      <tt>uint64_attr</tt>, <tt>int64_attr</tt> and <tt>double_attr</tt>. These
+      templates now also provide a default <tt>init()</tt> implementation
+      that leverages <tt>init_val</tt> in order to initialize the <tt>val</tt>
+      variable provided by the template <bug number="SIMICS-20108"/>.
+  </add-note></build-id>
 </rn>
