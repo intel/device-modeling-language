@@ -455,4 +455,13 @@
       (<tt>-g</tt>) that caused <tt>inline</tt> method calls to inline constant
       arguments even for parameters not declared <tt>inline</tt>
       <bug number="16019548195"/>.</add-note></build-id>
+  <build-id value="next"><add-note>Two new overridable methods
+      <tt>get_val() -> (<em>type</em>)</tt> and
+      <tt>set_val(<em>type</em> val) throws</tt> have been introduced to the
+      attribute templates <tt>bool_attr</tt>, <tt>uint64_attr</tt>,
+      <tt>int64_attr</tt> and <tt>double_attr</tt>. These methods are used by
+      the default implementations of <tt>get</tt> and <tt>set</tt>, and
+      overriding them is an alternate way of specifying custom get/set logic for
+      attributes making use of these templates <bug number="SIMICS-17951"/>.
+  </add-note></build-id>
 </rn>
