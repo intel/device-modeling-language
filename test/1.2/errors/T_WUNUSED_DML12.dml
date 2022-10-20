@@ -8,6 +8,7 @@ device test;
 
 /// COMPILE-ONLY
 
+/// WARNING WEXPERIMENTAL dml12-compatibility.dml
 import "dml12-compatibility.dml";
 
 // We omit SCAN-FOR-TAGS on purpose, warning annotations from this file
