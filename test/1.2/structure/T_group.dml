@@ -6,7 +6,6 @@ dml 1.2;
 
 device test;
 
-/// WARNING WEXPERIMENTAL dml12-compatibility.dml
 import "dml12-compatibility.dml";
 import "../../1.4/structure/group_hierarchy.dml";
 

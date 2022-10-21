@@ -482,8 +482,9 @@ def sort_method_implementations(implementations):
         for r in ranks}
     method_order = list(reversed(topsort.topsort(method_map)))
 
-    if dml.globals.dml_version == (1, 2):
-        m = method_order[0]
+    m = method_order[0]
+    if (dml.globals.dml_version == (1, 2)
+        and os.path.basename(m.site.filename()) != 'dml12-compatibility.dml'):
         if len(implementations) > 2:
             report(WEXPERIMENTAL(
                 m.site, "more than one level of method overrides"))

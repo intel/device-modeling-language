@@ -12,7 +12,6 @@ constant x = 0;
 
 parameter is_dml_12 = true;
 
-/// WARNING WEXPERIMENTAL dml12-compatibility.dml
 /// WARNING WEXPERIMENTAL dml14.dml
 /// SCAN-FOR-TAGS dml14.dml
 import "dml14.dml";
