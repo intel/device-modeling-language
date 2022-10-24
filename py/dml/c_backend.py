@@ -140,7 +140,7 @@ def print_device_substruct(node):
 
     if node.objtype == 'device':
         members = [("obj", conf_object_t)]
-        for v in node.staticvars:
+        for (v, _) in dml.globals.static_vars:
             members.append((v.value, v.type))
         return composite_ctype(node,
                                members + [(crep.cname(sub), print_device_substruct(sub))
@@ -1597,12 +1597,10 @@ def generate_init_static_vars(device):
     start_function_definition(
         'void _init_static_vars(%s *_dev)' % (crep.structtype(device),))
     out('{\n', postindent = 1)
-    with crep.DeviceInstanceContext():
-        for v in device.staticvars:
-            if v.init:
-                assert isinstance(v.init, Initializer)
-                var = mkStaticVariable(v.site, v)
-                v.init.assign_to(var, var.sym.type)
+    for (_, init) in dml.globals.static_vars:
+        if init:
+            for line in init.splitlines(keepends=True):
+                out(line)
     out('}\n\n', preindent = -1)
     reset_line_directive()
 
@@ -2825,6 +2823,7 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     generate_identity_data_decls()
     generate_class_var_decl()
     generate_startup_calls_entry_function(device)
+    generate_init_data_objs(device)
     if dml.globals.dml_version == (1, 2):
         generate_reset(device, 'hard')
         generate_reset(device, 'soft')
@@ -2894,7 +2893,6 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     generate_register_events(device)
     generate_init_port_objs(device)
     generate_init_static_vars(device)
-    generate_init_data_objs(device)
     # generate_serialize must take place after register_saved_attributes
     # and generate_simple_events
     generate_serialize(device)

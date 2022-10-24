@@ -1,0 +1,34 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// COMPILE-ONLY
+
+template t {
+    shared method m();
+    method m() { }
+}
+
+template u {
+    shared method n();
+    method n() { }
+}
+
+group g is (t, u);
+is (t, u);
+
+session t ses1 = cast(g, t);
+session t ses2 = cast(dev, t);
+saved t sav1 = cast(g, t);
+saved t sav2 = cast(dev, t);
+
+method init() {
+    session u static_ses1 = cast(this, u);
+    session u static_ses2 = cast(g, u);
+    saved   u static_sav1 = cast(this, u);
+    saved   u static_sav2 = cast(g, u);
+}

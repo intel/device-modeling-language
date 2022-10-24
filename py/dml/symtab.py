@@ -98,27 +98,21 @@ class Symtab(object):
     def symbols(self):
         return self.symlist[:]
 
-    def add_variable(self, name, type = None, init = None,
-                     site = None, static = False, stmt = False,
+    def add_variable(self, name, type=None, init=None, site=None, stmt=False,
                      make_unique=True):
         if init:
             from . import ctree
             assert isinstance(init, ctree.Initializer)
-        if static:
-            cname = dml.globals.device.get_unique_static_name(name)
-            sym = StaticSymbol(name, cname, type=type, init=init,
-                               site=site, stmt=stmt)
+        if make_unique:
+            cname = self.unique_cname(name)
         else:
-            if make_unique:
-                cname = self.unique_cname(name)
-            else:
-                cname = name
-            if init:
-                # We need to add to the reference count here, since it
-                # will be decremented in declarations()
-                init.incref()
-            sym = LocalSymbol(name, cname, type=type, init=init,
-                              site=site, stmt=stmt)
+            cname = name
+        if init:
+            # We need to add to the reference count here, since it
+            # will be decremented in declarations()
+            init.incref()
+        sym = LocalSymbol(name, cname, type=type, init=init,
+                          site=site, stmt=stmt)
         self.add(sym)
         return sym
 
