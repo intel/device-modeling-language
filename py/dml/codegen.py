@@ -11,7 +11,7 @@ import os
 import math
 
 from . import objects, crep, ctree, ast, int_register, logging, serialize
-from . import dmlparse
+from . import dmlparse, output
 from .logging import *
 from .expr import *
 from .ctree import *
@@ -1554,8 +1554,8 @@ def stmt_session(stmt, location, scope):
 
     return []
 
-def make_static_var(site, location, static_sym_type, name, init = None,
-                    stmt = False, saved = False):
+def make_static_var(site, location, static_sym_type, name, init=None,
+                    stmt=False, saved=False):
     # generate a nested array of variables, indexed into by
     # the dimensions of the method dimensions
     for dimsize in reversed(location.method().dimsizes):
@@ -1568,14 +1568,24 @@ def make_static_var(site, location, static_sym_type, name, init = None,
         # index-dependent initialization now, though
         if init is not None:
             init = CompoundInitializer(site, [init] * dimsize)
-    static_sym_name = dml.globals.device.get_unique_static_name(name)
+
+    static_sym_name = f'static{len(dml.globals.static_vars)}_{name}'
     static_sym = StaticSymbol(static_sym_name, static_sym_name,
                               static_sym_type, site, init, stmt)
     static_var_expr = mkStaticVariable(site, static_sym)
     for idx in location.indices:
         static_var_expr = mkIndex(site, static_var_expr, idx)
 
-    dml.globals.device.add_static_var(static_sym)
+    if init is not None:
+        assert isinstance(init, Initializer)
+        init_code = output.StrOutput()
+        with init_code:
+            init.assign_to(mkStaticVariable(site, static_sym),
+                           static_sym_type)
+        c_init = init_code.buf
+    else:
+        c_init = None
+    dml.globals.static_vars.append((static_sym, c_init))
     if saved:
         saved_method_variables.setdefault(location.method(), []).append(
             (static_sym, name))
@@ -1818,8 +1828,7 @@ def stmt_assign(stmt, location, scope):
         for (i, tgt) in enumerate(reversed(tgts[1:])):
             name = 'tmp%d' % (i,)
             sym = lscope.add_variable(
-                name, type=tgt.ctype(), site=tgt.site, init=init, static=False,
-                stmt=True)
+                name, type=tgt.ctype(), site=tgt.site, init=init, stmt=True)
             init = ExpressionInitializer(mkLocalVariable(tgt.site, sym))
             stmts.extend([sym_declaration(sym),
                           mkAssignStatement(tgt.site, tgt, init)])
@@ -1847,7 +1856,7 @@ def stmt_assign(stmt, location, scope):
             name = 'tmp%d' % (i,)
             sym = lscope.add_variable(
                     name, type=tgt.ctype(), site=tgt.site, init=init,
-                    static=False, stmt=True)
+                    stmt=True)
             syms.append(sym)
 
         stmts.extend(map(sym_declaration, syms))
@@ -1878,8 +1887,7 @@ def stmt_assignop(stmt, location, scope):
     lscope = Symtab(scope)
     sym = lscope.add_variable(
         'tmp', type = TPtr(ttype), site = tgt.site,
-        init = ExpressionInitializer(mkAddressOf(tgt.site, tgt)),
-        static = False, stmt = True)
+        init = ExpressionInitializer(mkAddressOf(tgt.site, tgt)), stmt=True)
     # Side-Effect Free representation of the tgt lvalue
     tgt_sef = mkDereference(site, mkLocalVariable(tgt.site, sym))
     return [
@@ -1959,8 +1967,7 @@ def stmt_return(stmt, location, scope):
         if outp is not None:
             lscope = Symtab(scope)
             outarg_syms = [
-                lscope.add_variable(f'tmp{i}', type=typ, site=site,
-                                    static=False, stmt=True)
+                lscope.add_variable(f'tmp{i}', type=typ, site=site, stmt=True)
                 for (i, (_, typ)) in enumerate(outp)]
             outargs = [mkLocalVariable(site, sym) for sym in outarg_syms]
             method_invocation = try_codegen_invocation(site, inits, outargs,

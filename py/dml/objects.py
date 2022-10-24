@@ -283,28 +283,19 @@ class CompositeObject(DMLObject):
         self.traits = traits
 
 class Device(CompositeObject):
-    __slots__ = ('staticvars', 'initdata', 'static_idx')
+    __slots__ = ('initdata',)
     objtype = 'device'
     allowed_components = [ 'parameter', 'method', 'saved', 'session', 'bank',
                            'connect', 'attribute', 'event', 'port', 'implement',
-                           'group', 'subdevice', 'staticvars', 'initdata']
+                           'group', 'subdevice', 'initdata']
     def __init__(self, ident, site):
         super(Device, self).__init__(ident, site, None)
-        self.static_idx = 0
-        self.staticvars = []
         self.initdata = []
 
     def attrname(self):
         return None
 
     dimsizes = ()
-
-    def get_unique_static_name(self, name):
-        self.static_idx = self.static_idx + 1
-        return 'static%d_%s' % (self.static_idx, name)
-
-    def add_static_var(self, sym):
-        self.staticvars.append(sym)
 
     def add_init_data(self, node):
         assert isinstance(node, Session)
