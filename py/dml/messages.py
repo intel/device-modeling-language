@@ -1107,8 +1107,8 @@ class EIDXVAR(DMLError):
 class EINDEPENDENTVIOL(DMLError):
     """Expressions that depend on values stored in a device instance cannot be
     evaluated in contexts where the device instance is not available. This
-    is within static contexts -- for example when initializing typed
-    template parameters -- or within independent methods."""
+    is within static contexts &mdash; for example when initializing typed
+    template parameters  &mdash; or within independent methods."""
     fmt = "cannot access device instance in device independent context"
 
 class ETYPEDPARAMVIOL(DMLError):

@@ -1769,8 +1769,8 @@ session conf_object_t *obj;
 In the absence of explicit initializer expressions, a default
 "all zero" initializer will be applied to each declared object.
 
-Note that the number of initializers -- together given as a tuple
--- must match the number of declared variables.
+Note that the number of initializers &mdash; together given as a tuple
+&mdash; must match the number of declared variables.
 In addition, the number of elements in each initializer must match with
 the number of elements or fields of the type of the declared *session*
 variable. This also implies that each sub-element, if itself being a
@@ -2879,14 +2879,14 @@ DML adds the following statements:
 </pre>
 
 Assign values to targets according to an initializer. Unlike C, assignments are
-not expressions, and the right-hand side can be any initializer -- such as
+not expressions, and the right-hand side can be any initializer &mdash; such as
 compound initializers (<tt>{<em>...</em>}</tt>) for struct-like types.
 
 The first form is chaining assignments. The initializer is executed once and
 the value it evaluates to is assigned to each target.
 
 The second form is multiple simultaneous assignment. The initializer describes
-multiple values -- one for each target. This can be done either through:
+multiple values &mdash; one for each target. This can be done either through:
 * Providing an initializer for each target through tuple syntax, e.g.:
 ```
 (a, i) = (false, 4);

@@ -95,6 +95,11 @@ def main():
                 line = md_files[path][:match.start()].count('\n') + 1
                 sys.stderr.write(f'{path}:{line}: error: {message}\n')
                 ok = False
+        for (i, line) in enumerate(md_files[path].split('\n')):
+            if ' -- ' in f' {line} ':
+                sys.stderr.write(
+                    f'{path}:{i+1}: error: replace -- with &mdash;\n')
+                ok = False
     sys.exit(0 if ok else 1)
 
 if __name__ == '__main__':
