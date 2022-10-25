@@ -2278,7 +2278,7 @@ val [integer]
 
 The contents of the register.
 Manipulating `val` is a simpler, but less safe
-alternative to using `get_val()` and `set_val()` -- unlike `set_val()`,
+alternative to using `get_val()` and `set_val()` &mdash; unlike `set_val()`,
 it is *undefined behavior* to write a value to `val` larger than what the
 register can hold.
 
