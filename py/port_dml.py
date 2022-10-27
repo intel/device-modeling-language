@@ -1036,7 +1036,7 @@ def main(argv):
             tagfilename, args.src))
         exit(1)
 
-    if is_device_file(args.src) and args.compat:
+    if args.compat and is_device_file(args.src):
         sys.stderr.write('%s:0: warning: file contains device statement,'
                          % (args.src,) + ' ignoring --compat flag\n')
         args.compat = False
