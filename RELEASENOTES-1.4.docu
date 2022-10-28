@@ -389,7 +389,7 @@
   <build-id value="6183"><add-note> Fixed a bug for ports/banks inside
       groups, that inhibited the creation of attributes for <tt>saved</tt>
       variables <bug number="SIMICS-19422"/></add-note></build-id>
-  <build-id value="next"><add-note>Fixed a bug where
+  <build-id value="6184"><add-note>Fixed a bug where
       <tt>session</tt>/<tt>saved</tt> variables initialized to values of
       template types could cause internal compiler errors or invalid generated
       C <bug number="SIMICS-20145"/>.</add-note></build-id>
