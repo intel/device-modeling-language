@@ -1,0 +1,45 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+// test-dmlc-g.dml - A device containing DML items to test dmlc's -g flag
+
+dml 1.4;
+
+device test;
+
+header %{
+typedef struct sample_interface {
+    void (*simple_method)(conf_object_t *obj, int arg);
+} sample_interface_t;
+%}
+
+extern typedef struct {
+    void (*simple_method)(conf_object_t *obj, int arg);
+} sample_interface_t;
+
+session double d = 3.14;
+
+param endian_int = cast(13, int24_be_t);
+param traitref   = cast(reg[1], bank);
+
+attribute int_attr is int64_attr;
+
+port p_irq {
+    implement sample {}
+}
+
+bank reg[i < 2] {
+    group x {}
+    register r size 4 @ 0x0000 {
+        field EN @ [0];
+    }
+}
+
+connect pic {
+    interface sample;
+}
+
+event ev_cycles is simple_cycle_event {
+    method event() { }
+}

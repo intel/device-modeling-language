@@ -960,6 +960,11 @@ all_tests.append(CTestCase(
          join(testdir, "1.2", "misc", "test_dmlc_g.dml"),
          dmlc_extraargs = ["-g"]))
 
+all_tests.append(CTestCase(
+         ["1.4", "misc", "test_dmlc_g"],
+         join(testdir, "1.4", "misc", "test_dmlc_g.dml"),
+         dmlc_extraargs = ["-g"]))
+
 # Test the --werror flag
 all_tests.append(CTestCase(
          ["werror"],
