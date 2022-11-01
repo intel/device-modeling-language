@@ -39,10 +39,12 @@ def en_parameter(node):
             val = expr.value
             if isinstance(val, list):
                 return [enc(e) for e in val]
-            else:
+            elif isinstance(val, (int, str, bytes, float, bool)):
+                # Not every constant expression can be encoded through .value
+                # ObjTraitRef is an example of such an expression class
                 return val
-        else:
-            return (str(expr),)
+
+        return (str(expr),)
 
     try:
         with crep.DeviceInstanceContext():
