@@ -1299,12 +1299,12 @@ template bank_obj is (bank, name) {
 
    A `connect` object can instantiate the template `map_target`. The template
    provides an easy way to send memory transactions to objects that can be
-   mapped into Simics memory maps. It defines a default implementation of
-   `validate` which verifies that the object can be used to create a map
-   target, i.e. the Simics API `SIM_new_map_target` returns a valid
-   pointer. The template provides a session variable `map_target` of the type
-   `map_target_t *` which can be used to issue transactions to the connected
-   object.
+   mapped into Simics memory maps. It defines a default implementation of `set`
+   which assigns the session variable `map_target` of type `map_target_t *`,
+   which can be used to issue transactions to the connected object. It also
+   defines a default implementation of `validate` which verifies that the
+   object can be used to create a map target, i.e. the Simics API
+   `SIM_new_map_target` returns a valid pointer.
 
    The template defines the following methods:
 */
@@ -1336,7 +1336,7 @@ template map_target is (connect, _qname) {
         return true;
     }
 
-    method set(conf_object_t *obj) {
+    method set(conf_object_t *obj) default {
         SIM_free_map_target(this.map_target);
         default(obj);
         this.map_target = obj ? SIM_new_map_target(obj, NULL, NULL) : NULL;

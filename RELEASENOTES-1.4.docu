@@ -397,4 +397,8 @@
       any parameter defined to be a value of a template type resulted
       in broken generated debug files when compiling with <tt>-g</tt>
       <bug number="SIMICS-20200"/>.</add-note></build-id>
+  <build-id value="next"><add-note>The <tt>set</tt> method in
+      the <tt>map_target</tt> template can now be overridden, to
+      add extra behavior before and after the attribute
+      is set.</add-note></build-id>
 </rn>
