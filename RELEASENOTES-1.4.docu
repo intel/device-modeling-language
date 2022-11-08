@@ -393,11 +393,11 @@
       <tt>session</tt>/<tt>saved</tt> variables initialized to values of
       template types could cause internal compiler errors or invalid generated
       C <bug number="SIMICS-20145"/>.</add-note></build-id>
-  <build-id value="next"><add-note>Fixed a bug where models containing
+  <build-id value="6187"><add-note>Fixed a bug where models containing
       any parameter defined to be a value of a template type resulted
       in broken generated debug files when compiling with <tt>-g</tt>
       <bug number="SIMICS-20200"/>.</add-note></build-id>
-  <build-id value="next"><add-note>The <tt>set</tt> method in
+  <build-id value="6187"><add-note>The <tt>set</tt> method in
       the <tt>map_target</tt> template can now be overridden, to
       add extra behavior before and after the attribute
       is set.</add-note></build-id>
