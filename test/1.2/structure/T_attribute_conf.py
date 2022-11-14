@@ -3,7 +3,10 @@
 
 import stest
 
-obj = SIM_create_object('test', 'obj', [['b_a', 5]])
+obj = SIM_create_object('test', 'obj', [['b1_a', 5], ['b2_a', [0,1,2,3]]])
+
+stest.expect_equal(obj.bank.b1.a, 5)
+stest.expect_equal([obj.bank.b2[i].a for i in range(4)], list(range(4)))
 
 # Check that persistent attributes work
 
