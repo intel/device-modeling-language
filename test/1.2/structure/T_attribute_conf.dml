@@ -18,7 +18,15 @@ attribute pseudo {
     parameter allocate_type = "int32";
 }
 
-bank b {
+bank b1 {
+    attribute a {
+        parameter allocate_type = "uint64";
+        parameter configuration = "required";
+        parameter documentation = "hello";
+    }
+}
+
+bank b2[4] {
     attribute a {
         parameter allocate_type = "uint64";
         parameter configuration = "required";

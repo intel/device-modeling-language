@@ -1421,6 +1421,7 @@ _register_port_attr(conf_class_t *devcls, conf_class_t *portcls,
 
 typedef struct {
         ptrdiff_t port_obj_base_offset;
+        const char *attrname;
         get_attr_t get;
         set_attr_t set;
         void *getset_data;
@@ -1458,8 +1459,18 @@ _set_legacy_proxy_array_attr(lang_void *ptr, conf_object_t *obj,
         for (uint32 i = 0; i < port->array_size; i++) {
                 conf_object_t *port_obj = port_obj_ptr_base[i];
                 attr_value_t val = SIM_attr_list_item(*vals, i);
-                set_error_t err = port->set(port->getset_data, port_obj, &val,
-                                            NULL);
+                set_error_t err;
+                if (port->attrname == NULL
+                    || SIM_object_is_configured(port_obj)) {
+                        err = port->set(port->getset_data, port_obj, &val,
+                                        NULL);
+                } else {
+                        // port attribute is registered as required; need to
+                        // propagate value through API call to fulfil
+                        // requirement
+                        err = SIM_set_attribute_default(port_obj,
+                                                        port->attrname, val);
+                }
                 if (err != Sim_Set_Ok) {
                         return err;
                 }
@@ -1476,6 +1487,12 @@ _register_port_array_legacy_proxy_attr(
     attr_attr_t attr, const char *type, const char *desc, void *getset_data) {
         _port_array_attr_t *data = MM_MALLOC(1, _port_array_attr_t);
         data->port_obj_base_offset = port_obj_offset;
+        if ((attr & Sim_Attr_Flag_Mask) == Sim_Attr_Required) {
+            ASSERT(setter);
+            data->attrname = MM_STRDUP(attrname);
+        } else {
+            data->attrname = NULL;
+        }
         data->get = getter;
         data->set = setter;
         data->array_size = array_size;
