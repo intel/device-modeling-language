@@ -865,13 +865,12 @@ instantiating that template. FSM states can also be represented through a
 template instantiated by groups.
 
 The following demonstrates a simple example of how such an abstraction may be
-implemented (note that this is missing important features such as checkpointing
-support):
+implemented:
 
 ```
 // Template for finite state machines
 template fsm is init {
-    session fsm_state curr_state;
+    saved fsm_state curr_state;
 
     // The initial FSM state.
     // Must be defined by any object instantiating this template.
