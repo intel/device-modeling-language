@@ -1,0 +1,29 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// COMPILE-ONLY
+
+template t {
+    shared method studied();
+}
+
+template u {
+    shared method unstudied();
+}
+
+is (t, u);
+
+method studied() {}
+
+method unstudied() {
+    error "should not get studied";
+}
+
+method init() {
+    cast(dev, t).studied();
+}

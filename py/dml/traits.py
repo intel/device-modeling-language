@@ -559,7 +559,8 @@ class ObjTraits(SubTrait):
         if not sub in self.referenced:
             self.referenced.add(sub)
             for m in list(self.method_overrides.values()):
-                codegen.mark_method_referenced(codegen.method_instance(m))
+                if sub.member_declaration(m.name) is not None:
+                    codegen.mark_method_referenced(codegen.method_instance(m))
             sub.mark_referenced()
 
     def vtable_cname(self, trait):
