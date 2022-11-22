@@ -1,0 +1,38 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// COMPILE-ONLY
+
+template t {
+    shared method m();
+}
+
+template u {
+    shared method n();
+}
+template uninstantiated_1 {
+    shared method o();
+}
+template uninstantiated_2 {
+    shared method p();
+}
+
+is t;
+
+group g is u {
+    method n() {}
+}
+
+saved t object_saved;
+saved uninstantiated_1 object_saved_uninstantiated;
+
+method m() {
+    saved u method_saved;
+    saved uninstantiated_2 method_saved_uninstantiated;
+}
+

@@ -425,4 +425,9 @@
       such objects are always reported by the compiler, even if the
       <tt>configuration</tt> parameter is defined to be <tt>"none"</tt>.
   </add-note></build-id>
+  <build-id value="next"><add-note>Fixed a bug where leveraging serialization
+      of a template type could cause an internal compiler error if there is
+      some object in the model instantiating that template which never gets
+      referenced in a value of that template type <bug number="SIMICS-20301"/>.
+  </add-note></build-id>
 </rn>

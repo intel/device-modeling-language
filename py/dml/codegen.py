@@ -1628,6 +1628,8 @@ def stmt_saved(stmt, location, scope):
                 init = None
         check_shadowing(scope, name, stmt.site)
 
+        serialize.mark_for_serialization(stmt.site, etype)
+
         # acquire better name
         node = location.node
         cname = name
@@ -2175,7 +2177,7 @@ def stmt_after(stmt, location, scope):
     unserializable = []
     for (pname, ptype) in func.inp:
         try:
-            serialize.map_dmltype_to_attrtype(site, ptype)
+            serialize.mark_for_serialization(site, ptype)
         except ESERIALIZE:
             unserializable.append((pname, ptype))
 

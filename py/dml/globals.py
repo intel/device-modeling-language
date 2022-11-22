@@ -12,6 +12,11 @@ missing_templates = set()
 
 traits = None
 
+# A mapping from each trait to the set of objects instantiating that trait.
+# Trait -> {CompositeObject}
+trait_instances = {}
+
+
 log_groups = []
 device = None
 
