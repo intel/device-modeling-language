@@ -31,8 +31,19 @@ deserializer_t = TFunction([TPtr(attr_value_t), TPtr(void)], set_error_t)
 serialize_prototypes = []
 serialize_function_code = []
 
+
+class SerializedTraits:
+    def __init__(self):
+        self.traits = set()
+
+    def add(self, trait):
+        if trait not in self.traits:
+            self.traits.add(trait)
+            for node in dml.globals.trait_instances.get(trait, ()):
+                node.traits.mark_referenced(trait)
+
 # Set of template types which get serialized
-serialized_traits = set()
+serialized_traits = SerializedTraits()
 
 # list of tuples (dml_descriptor, mapping fun)
 # used to convert dmltype to attr_value_t
@@ -171,8 +182,8 @@ def serialize(real_type, current_expr, target_expr):
         return ctree.mkAssignStatement(current_site, target_expr,
                                        ctree.ExpressionInitializer(apply_expr))
     else:
-        # Callers are responsible for checking that the type is serializeable
-        # usually done with the map_dmltype_to_attrtype function
+        # Callers are responsible for checking that the type is serializeable,
+        # which should be done with the mark_for_serialization function
         raise ICE(current_site, "Unexpectedly asked to serialize %s" % (
             real_type))
 
@@ -287,23 +298,36 @@ def map_dmltype_to_attrtype(site, dmltype):
         return '[%s]' % "".join([map_dmltype_to_attrtype(site, mt)
                                  for mt in real_type.members.values()])
     if isinstance(real_type, TArray):
-        # Can only save constant-size arrays
-        if not real_type.size.constant:
-            raise messages.ESERIALIZE(site, dmltype)
+        assert real_type.size.constant
         arr_attr_type = map_dmltype_to_attrtype(site, real_type.base)
         arr_length = expr_intval(real_type.size)
         # Byte arrays may use data values
         or_data = '|d' * (real_type.base.is_int and real_type.base.bits == 8)
         return '[%s{%s}]' % (arr_attr_type, arr_length) + or_data
     if isinstance(real_type, TTrait):
-        serialized_traits.add(real_type.trait)
-        # TODO Is this redundant?
-        real_type.trait.mark_referenced()
         return '[s[i*]]'
     # TODO should be implemented
     #if isinstance(real_type, TVector):
         # return '[%s*]' % (map_dmltype_to_attrtype(site, real_type.base))
-    raise messages.ESERIALIZE(site, dmltype)
+    raise ICE(site, 'unserializable type: %r' % (dmltype,))
+
+def mark_for_serialization(site, dmltype):
+    '''check a dml type for serializability and ensure artifacts needed for
+    calls of serialize/deserialize to result in valid C are generated
+    '''
+    real_type = safe_realtype(dmltype)
+    if isinstance(real_type, TStruct):
+        for mt in real_type.members.values():
+            mark_for_serialization(site, mt)
+    elif isinstance(real_type, TArray):
+        # Can only serialize constant-size arrays
+        if not real_type.size.constant:
+            raise messages.ESERIALIZE(site, dmltype)
+        mark_for_serialization(site, real_type.base)
+    elif isinstance(real_type, TTrait):
+        serialized_traits.add(real_type.trait)
+    elif not isinstance(real_type, (IntegerType, TBool, TFloat)):
+        raise messages.ESERIALIZE(site, dmltype)
 
 # generate a part of the function name from a description of the dmltype
 # Each type maps uniquely to a string, obeying the following invariants:

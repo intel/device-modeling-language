@@ -1857,23 +1857,15 @@ def generate_each_in_tables():
             f'const _vtable_list_t *const {EachIn.array_ident(t)}', 'NULL')
 
 def generate_trait_deserialization_hashtables(device):
-    by_trait = {}
-    if serialize.serialized_traits:
-        for node in flatten_object_subtree(device):
-            traits = node.traits.ancestors.intersection(
-                serialize.serialized_traits)
-            for trait in traits:
-                by_trait.setdefault(trait, []).append(node)
-
     inserts = []
     assert dml.globals.object_trait
-    for (trait, nodes) in by_trait.items():
+    for trait in serialize.serialized_traits.traits:
         if trait.empty() or trait is dml.globals.object_trait:
             continue
         add_variable_declaration('ht_int_table_t '
                                  + f'_{cident(trait.name)}_vtable_ht',
                                  'HT_INT_NULL()')
-        for node in nodes:
+        for node in dml.globals.trait_instances.get(trait, ()):
             node.traits.mark_referenced(trait)
             ancestry_path = node.traits.ancestry_paths[trait][0]
             structref = node.traits.vtable_cname(ancestry_path[0])

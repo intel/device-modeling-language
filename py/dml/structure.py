@@ -16,6 +16,7 @@ from . import toplevel
 from . import topsort
 from . import slotsmeta
 from . import ctree
+from . import serialize
 from .logging import *
 from .codegen import *
 from .symtab import *
@@ -806,9 +807,12 @@ def mksaved(spec, parent):
     if astinit:
         dml.globals.device.add_init_data(obj)
     try:
-        realtype(crep.node_storage_type(obj))
+        typ = realtype(crep.node_storage_type(obj))
     except DMLUnknownType as e:
         raise ETYPE(obj, e.type)
+    else:
+        serialize.mark_for_serialization(site, typ)
+
     return obj
 
 def register_fields(reg):
