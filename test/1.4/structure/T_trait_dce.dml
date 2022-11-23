@@ -18,9 +18,13 @@ template u {
 
 is (t, u);
 
-method studied() {}
+method studied() {
+    /// ERROR EERRSTMT
+    error "is studied";
+}
 
 method unstudied() {
+    // no error
     error "should not get studied";
 }
 
