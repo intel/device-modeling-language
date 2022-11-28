@@ -201,7 +201,8 @@ def dump_input_files(outputbase, imported):
                 tf.add(hfile, h_path_in_tar)
             for path in paths:
                 symlink = os.path.normpath(os.path.join(prefix, path))
-                if os.path.dirname(symlink) == os.path.normpath(prefix):
+                if (os.path.normpath(os.path.dirname(symlink))
+                    == os.path.normpath(prefix)):
                     # import path resolves to file already present in tarfile
                     continue
                 # file imported through relative path, create symlink where

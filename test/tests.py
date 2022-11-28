@@ -829,10 +829,15 @@ class DMLCProfileTestCase(CTestCase):
                 raise TestFail(f'cannot load profile data')
         else:
             raise TestFail(f'stats file not generated')
+
+
 class DumpInputFilesTestCase(CTestCase):
     '''Test that the DMLC_DUMP_INPUT_FILES variable works.  It creates a
     tarball of input DML files that can be compiled standalone.'''
-    __slots__ = ()
+    __slots__ = ('prefix',)
+    def __init__(self, *args, prefix='', **kwargs):
+        self.prefix = prefix
+        super().__init__(*args, **kwargs)
     def test(self):
         super().test()
         dir = Path(self.scratchdir) / 'dumped'
@@ -840,14 +845,15 @@ class DumpInputFilesTestCase(CTestCase):
         with tarfile.open(Path(self.scratchdir) / f'T_{self.shortname}.tar.xz',
                           'r:xz') as tf:
             tf.extractall(dir)
-        if is_windows():
-            assert (dir / '_' / os.path.basename(self.filename)).is_file()
-        else:
+        assert (dir.joinpath(*self.prefix)
+                / os.path.basename(self.filename)).is_file()
+        if not is_windows():
             # This does not work on Windows, for unknown reasons.
             # Seems related to symlink semantics somehow, but no
             # need to explore deeper until we have a use case for it.
-            cmd = dmlc + ['_/' + os.path.basename(self.filename),
-                          self.shortname]
+            cmd = dmlc + [
+                join(*(self.prefix + [os.path.basename(self.filename)])),
+                self.shortname]
             self.pr(f"Running: {' '.join(cmd)}")
             output = Path(self.scratchdir) / 'recompile.out'
             try:
@@ -894,8 +900,15 @@ all_tests.append(DMLCProfileTestCase(["dmlc_profile"],
                                      extraenv={'DMLC_PROFILE': '1'}))
 
 all_tests.append(DumpInputFilesTestCase(
+    ["dump-input-files-minimal"],
+    join(testdir, 'minimal.dml'),
+    prefix=[],
+    extraenv={'DMLC_DUMP_INPUT_FILES': '1'}))
+
+all_tests.append(DumpInputFilesTestCase(
     ["dump-input-files"],
     join(testdir, '1.4', 'misc', 'T_import_rel.dml'),
+    prefix=['_'],
     extraenv={'DMLC_DUMP_INPUT_FILES': '1'}))
 
 # Test that it fails with a good error message if it can't create the
