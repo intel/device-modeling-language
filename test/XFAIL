@@ -76,9 +76,6 @@
 # SIMICS-16524
 1.4/errors/EVOID_typedefed
 
-# SIMICS-18244
-1.4/misc/register_view_fields
-
 # SIMICS-11957
 1.4/structure/array_size_param
 

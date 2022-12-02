@@ -2392,19 +2392,6 @@ template bank is (object, shown_desc) {
         return success;
     }
 
-    shared method _first_dot_idx(const char *s) -> (int) {
-        for (local int idx = 0; idx < strlen(s); ++idx) {
-            if (s[idx] == '.') {
-                return idx;
-            }
-        }
-        assert false;
-    }
-
-    shared method _group_register_name(const char *s) -> (const char *) {
-        return s + _first_dot_idx(s) + 1;
-    }
-
     param use_io_memory : bool;
     param use_io_memory default dev.use_io_memory;
 
@@ -2450,7 +2437,7 @@ template bank is (object, shown_desc) {
             foreach f in (r.fields) {
                 local attr_value_t elem = SIM_make_attr_list(
                     4,
-                    SIM_make_attr_string(f.name),
+                    SIM_make_attr_string(f._qname() + strlen(r._qname()) + 1),
                     // TODO: NULL should give a nil value
                     SIM_make_attr_string(f.shown_desc == NULL ? ""
                                          : f.shown_desc),
@@ -2463,7 +2450,7 @@ template bank is (object, shown_desc) {
             local attr_value_t ret;
             ret = SIM_make_attr_list(
                 6,
-                SIM_make_attr_string(_group_register_name(r._qname())),
+                SIM_make_attr_string(r._qname() + strlen(bank._qname()) + 1),
                 // TODO: NULL should give a nil value
                 SIM_make_attr_string(r.shown_desc == NULL ? ""
                                      : r.shown_desc),
