@@ -430,4 +430,7 @@
       some object in the model instantiating that template which never gets
       referenced in a value of that template type <bug number="SIMICS-20301"/>.
   </add-note></build-id>
+  <build-id value="next"><add-note>The <tt>register_info</tt> interface
+      for banks now provide unique names for each field in an array
+      <bug number="SIMICS-18244"/>.</add-note></build-id>
 </rn>
