@@ -707,8 +707,6 @@ def try_resolve_len(site, lh):
             return mkIntegerConstant(site,
                                      lh.node.dimsizes[len(lh.indices)],
                                      False)
-    elif isinstance(lh, EachIn):
-        return mkSequenceLength(site, lh)
     return None
 
 @expression_dispatcher

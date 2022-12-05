@@ -35,6 +35,8 @@ method test() throws {
     assert (each t in (dev)).len == 3;
     assert (each t in (b[0])).len == 1;
     assert (each group in (dev)).len == 7;
+    local sequence(group) x = each group in (dev);
+    assert x.len == 7;
     // Regular lists
     assert [0, 1, 1, 3, 2, 1].len == 6;
     assert [0, 1, [2, 2, 2], 3].len == 4;

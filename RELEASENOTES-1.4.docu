@@ -433,4 +433,7 @@
   <build-id value="next"><add-note>The <tt>register_info</tt> interface
       for banks now provide unique names for each field in an array
       <bug number="SIMICS-18244"/>.</add-note></build-id>
+  <build-id value="next"><add-note>Fixed a bug where <tt>.len</tt> on template
+      type sequences could only be used with direct <tt>each</tt>-<tt>in</tt>
+      expressions <bug number="SIMICS-20278"/>.</add-note></build-id>
 </rn>
