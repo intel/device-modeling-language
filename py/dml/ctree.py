@@ -2942,14 +2942,13 @@ class SequenceLength(Expression):
     '''The length of a sequence'''
     type = TInt(64, False)
     @auto_init
-    def __init__(self, site, expr):
-        assert isinstance(expr, EachIn)
+    def __init__(self, site, expr, trait): pass
 
     def __str__(self):
         return "%s.len" % self.expr
     def read(self):
         return (f'_count_eachin({self.expr.read()}'
-                f', {EachIn.array_ident(self.expr.trait)})')
+                f', {EachIn.array_ident(self.trait)})')
 
 mkSequenceLength = SequenceLength
 
@@ -3865,6 +3864,12 @@ def mkSubRef(site, expr, sub, op):
             return mkIntegerConstant(site, basetype.size.value, False)
         else:
             raise EVLALEN(site)
+    elif isinstance(basetype, TTraitList) and sub == 'len':
+        try:
+            trait = dml.globals.traits[basetype.traitname]
+        except KeyError:
+            raise ETYPE(basetype.declaration_site or site, basetype)
+        return mkSequenceLength(site, baseexpr, trait)
     else:
         raise ENOSTRUCT(site, expr)
 
