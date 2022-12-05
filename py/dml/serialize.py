@@ -177,8 +177,10 @@ def serialize(real_type, current_expr, target_expr):
     elif isinstance(real_type, TTrait):
         id_infos = expr.mkLit(current_site, '_id_infos',
                               TPtr(TNamed('_id_info_t', const = True)))
-        apply_expr = apply_c_fun(current_site, "_serialize_trait_reference",
-                                 [id_infos, current_expr], attr_value_t)
+        identity_expr = ctree.StructMember(current_site, current_expr, "id",
+                                           TNamed("_identity_t"), ".")
+        apply_expr = apply_c_fun(current_site, "_serialize_identity",
+                                 [id_infos, identity_expr], attr_value_t)
         return ctree.mkAssignStatement(current_site, target_expr,
                                        ctree.ExpressionInitializer(apply_expr))
     else:

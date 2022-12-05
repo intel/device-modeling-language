@@ -36,7 +36,7 @@ class Test_traits(unittest.TestCase):
                 self.site, dml.ctree.mkNodeRef(self.site, self.dev, ()),
                 t.type()).read(),
             '((t) {(&_tr__dev__t), '
-            + '((_identity_t) {.id = 0, .encoded_index = 0})})'
+            + '((_identity_t) {.id = 1, .encoded_index = 0})})'
             )
 
     def test_one_default_method(self):

@@ -216,7 +216,7 @@ class CompositeObject(DMLObject):
 
         self._confidential = False
 
-        self.uniq = len(dml.globals.objects)
+        self.uniq = len(dml.globals.objects) + 1
         dml.globals.objects.append(self)
 
     @property

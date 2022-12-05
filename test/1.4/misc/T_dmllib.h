@@ -308,9 +308,9 @@ attr_value_t stub_serializer(const void *src) {
 
 void round_trip_tests(void) {
     _id_info_t infos[3] = {
-        {"a", NULL,                         0, 0},
-        {"b", (const uint32 []) {4},        1, 1},
-        {"c", (const uint32 []) {7, 4, 10}, 3, 2}
+        {"a", NULL,                         0, 1},
+        {"b", (const uint32 []) {4},        1, 2},
+        {"c", (const uint32 []) {7, 4, 10}, 3, 3}
     };
     ht_str_table_t ht = HT_STR_NULL(false);
     for (int i = 0; i < 3; ++i) {
@@ -320,7 +320,7 @@ void round_trip_tests(void) {
     _simple_event_data_t in_event_data = {
         .indices    = (uint32 []) { 2, 3, 5},
         .args       = (void *) "event_data",
-        .domains    = (_identity_t []) {{2, 187}, {1, 2}, {0, 0}},
+        .domains    = (_identity_t []) {{3, 187}, {2, 2}, {1, 0}},
         .no_domains = 3
     };
 
