@@ -628,7 +628,16 @@ FOR_ENDIAN_VARIANTS(DEFINE_PRECHANGE);
 
 UNUSED static attr_value_t
 _serialize_identity(const _id_info_t *id_info_array, const _identity_t id) {
-    _id_info_t info = id_info_array[id.id];
+    if (unlikely(id.id) == 0) {
+        // Zero-initialized _identity_t's are invalid.
+        // This must be handled to avoid creating unrestorable checkpoints.
+        // A zero-initialized _identity_t is signaled through an empty
+        // logname.
+        ASSERT(id.encoded_index == 0);
+        return SIM_make_attr_list(2, SIM_make_attr_string(""),
+                                  SIM_make_attr_list(0));
+    }
+    _id_info_t info = id_info_array[id.id - 1];
     attr_value_t inner = SIM_alloc_attr_list(info.dimensions);
     uint32 index = id.encoded_index;
     for (int i = info.dimensions - 1; i >= 0; --i) {
@@ -655,6 +664,13 @@ _deserialize_identity(ht_str_table_t *id_info_ht, attr_value_t val,
     }
 
     const char *logname = SIM_attr_string(logname_attr);
+
+    // Serialized zero-initialized _identity_t
+    if (unlikely(logname[0] == '\0')) {
+        *out_id = (_identity_t) { 0 };
+        return Sim_Set_Ok;
+    }
+
     const _id_info_t *info = ht_lookup_str(id_info_ht, logname);
 
     if (unlikely(!info)) {
@@ -698,59 +714,33 @@ _deserialize_identity(ht_str_table_t *id_info_ht, attr_value_t val,
     return Sim_Set_Illegal_Type;
 }
 
-// Used during trait reference deserialization for traits with empty vtables.
-// Any arbitrary non-NULL pointer can be used for trait references where
-// the vtable is empty, and so to not waste memory, vtable hashtables are
-// not generated for traits with empty vtables. Non-NULL is important
-// as checking if the vtable pointer is NULL is how trait reference
-// serialization checks if the value being serialized is zero-initialized.
-// The address chosen is 0xC0FFEE instead of simple like 0x1 to make it
-// obvious that address is arbitrary, and so that people debugging who spot it
-// won't mistake it as the result of some issue (e.g. an offset of a
-// null pointer.)
-#define _DML_EMPTY_VTABLE_PTR (void *)(uintptr_t)0XC0FFEE
-
-UNUSED static attr_value_t
-_serialize_trait_reference(const _id_info_t *id_info_array,
-                           _traitref_t traitref) {
-    if (likely(traitref.trait != NULL)) {
-        return _serialize_identity(id_info_array, traitref.id);
-    } else {
-        // Template types are unique in that they are serializable types
-        // for which a zero-initialized value is invalid.
-        // This must be handled to avoid creating unrestorable checkpoints.
-        // A zero-initialized trait reference is signaled through an empty
-        // logname.
-        return SIM_make_attr_list(2, SIM_make_attr_string(""),
-                                  SIM_make_attr_list(0));
-    }
-}
-
 UNUSED static set_error_t
 _deserialize_trait_reference(ht_str_table_t *id_info_ht,
                              ht_int_table_t *vtable_ht,
                              const char *template_name,
                              attr_value_t val,
                              _traitref_t *out) {
-    if (unlikely(SIM_attr_string(SIM_attr_list_item(val, 0))[0] == '\0')) {
-        // The logname being empty indicates the original serialized traitref
-        // was zero-initialized.
-        *out = (_traitref_t) { 0 };
-        return Sim_Set_Ok;
-    }
     _identity_t id;
     set_error_t error = _deserialize_identity(id_info_ht, val, &id);
     if (unlikely(error != Sim_Set_Ok)) {
         return error;
     }
-    void *trait = vtable_ht ? ht_lookup_int(vtable_ht, id.id)
-        : _DML_EMPTY_VTABLE_PTR;
-    if (unlikely(!trait)) {
-        const char *name = SIM_attr_string(SIM_attr_list_item(val, 0));
-        SIM_c_attribute_error("Failed to deserialize value of template type: "
-                              "object node '%s' doesn't instantiate %s",
-                              name, template_name);
-        return Sim_Set_Illegal_Value;
+    if (unlikely(id.id == 0)) {
+        // Deserialized _identity_t's id being 0 indicates the serialized
+        // trait reference was zero-initialized.
+        *out = (_traitref_t) { 0 };
+        return Sim_Set_Ok;
+    }
+    void *trait = NULL;
+    if (vtable_ht) {
+        trait = ht_lookup_int(vtable_ht, id.id);
+        if (unlikely(!trait)) {
+            const char *name = SIM_attr_string(SIM_attr_list_item(val, 0));
+            SIM_c_attribute_error("Failed to deserialize value of template type: "
+                                  "object node '%s' doesn't instantiate %s",
+                                  name, template_name);
+            return Sim_Set_Illegal_Value;
+        }
     }
     *out = (_traitref_t) { trait, id };
     return Sim_Set_Ok;
@@ -761,18 +751,18 @@ _deserialize_object_trait_reference(ht_str_table_t *id_info_ht,
                                     void *const *object_vtables,
                                     attr_value_t val,
                                     _traitref_t *out) {
-    if (unlikely(SIM_attr_string(SIM_attr_list_item(val, 0))[0] == '\0')) {
-        // The logname being empty indicates the original serialized traitref
-        // was zero-initialized.
-        *out = (_traitref_t) { 0 };
-        return Sim_Set_Ok;
-    }
     _identity_t id;
     set_error_t error = _deserialize_identity(id_info_ht, val, &id);
     if (unlikely(error != Sim_Set_Ok)) {
         return error;
     }
-    *out = (_traitref_t) { object_vtables[id.id], id };
+    if (unlikely(id.id == 0)) {
+        // Deserialized _identity_t's id being 0 indicates the serialized
+        // trait reference was zero-initialized.
+        *out = (_traitref_t) { 0 };
+        return Sim_Set_Ok;
+    }
+    *out = (_traitref_t) { object_vtables[id.id - 1], id };
     return Sim_Set_Ok;
 }
 
@@ -1556,7 +1546,7 @@ __qname(dml_qname_cache_t *cache, const char *fmt, ...)
 UNUSED static const char *
 _DML_get_qname(_identity_t id, const _id_info_t *id_infos,
                dml_qname_cache_t *cache, const char *dev_name) {
-    _id_info_t info = id_infos[id.id];
+    _id_info_t info = id_infos[id.id - 1];
 
     const char *logname = info.logname;
 
@@ -2727,7 +2717,7 @@ UNUSED static void _DML_register_attributes(
         }
 
         _dml_attr_getset_info_t attr_getset_info = {
-            &id_info_array[list.id],
+            &id_info_array[list.id - 1],
             traitref.trait,
             num,
             attr_info.allow_cutoff
@@ -2744,7 +2734,7 @@ UNUSED static void _DML_register_attributes(
         }
 
         strbuf_t type = sb_newf("%s", attr_info.type);
-        _id_info_t id_info = id_info_array[list.id];
+        _id_info_t id_info = id_info_array[list.id - 1];
         for (int64 i = (int64)id_info.dimensions - 1; i >= attr_info.start_dim;
              --i) {
             char *tmp_type = sb_detach(&type);

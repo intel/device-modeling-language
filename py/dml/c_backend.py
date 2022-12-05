@@ -1332,7 +1332,7 @@ def generate_init_identity_hashtable():
     # This gets overridden if there's a top-level object that shares its name
     # with the device.
     out(f'ht_insert_str(&_id_info_ht, "{dml.globals.device.name}", '
-        + f'&_id_infos[{dml.globals.device.uniq}]);\n')
+        + f'&_id_infos[{dml.globals.device.uniq} - 1]);\n')
     out('for (uint64 i = 0; i < %d; ++i) {\n' % (len(dml.globals.objects),),
         postindent=1)
     out('ht_insert_str(&_id_info_ht, _id_infos[i].logname, &_id_infos[i]);\n')
