@@ -448,13 +448,6 @@ class AfterInfo(ABC):
         self.dimsizes = dimsizes
 
     @abstractproperty
-    def string_key(self):
-        '''A key for the AfterInfo -- thus a key for the set of artifacts
-        generated for the unique usage of 'after'. This must be suitable for
-        use as a string in generated code -- in particular anonymization of
-        confidential names must be done.'''
-
-    @abstractproperty
     def cident_prefix(self):
         '''A prefix for C identifiers used for the naming of artifacts
         generated for the unique usage of 'after' '''
@@ -479,7 +472,15 @@ class AfterInfo(ABC):
     def dimensions(self):
         return len(self.dimsizes)
 
-class AfterDelayInfo(AfterInfo):
+class CheckpointedAfterInfo(AfterInfo):
+    @abstractproperty
+    def string_key(self):
+        '''A key for the AfterInfo -- thus a key for the set of artifacts
+        generated for the unique usage of 'after'. This must be suitable for
+        use as a string in generated code -- in particular anonymization of
+        confidential names must be done.'''
+
+class AfterDelayInfo(CheckpointedAfterInfo):
     def __init__(self, key, dimsizes, uniq):
         self.uniq = uniq
         super().__init__(key, dimsizes)
@@ -506,7 +507,7 @@ class AfterDelayInfo(AfterInfo):
             return '_simple_event_only_domains_set_value'
 
 
-class AfterOnHookInfo(AfterInfo):
+class AfterOnHookInfo(CheckpointedAfterInfo):
     def __init__(self, dimsizes, parent, typeseq_info, prim_key,
                  param_to_msg_comp, inp, has_serialized_args):
         self.typeseq_info = typeseq_info
@@ -557,6 +558,18 @@ class AfterOnHookInfo(AfterInfo):
     def cident_args_deserializer(self):
         assert self.has_serialized_args
         return self.cident_prefix + 'args_deserializer'
+
+class ImmediateAfterInfo(AfterInfo):
+    def __init__(self, key, dimsizes, uniq):
+        self.uniq = uniq
+        super().__init__(key, dimsizes)
+
+    @abstractmethod
+    def generate_callback_call(self, indices_lit, args_lit): pass
+
+    @property
+    def cident_prefix(self):
+        return f'_immediate_after_{self.uniq}_'
 
 class AfterDelayIntoMethodInfo(AfterDelayInfo):
     def __init__(self, method, uniq):
@@ -819,6 +832,71 @@ class AfterOnHookIntoSendNowInfo(AfterOnHookInfo):
     def string_prim_key(self):
         return self.sendnow_typeseq_info.string_key
 
+class ImmediateAfterIntoMethodInfo(ImmediateAfterInfo):
+    def __init__(self, method, uniq):
+        self.method = method
+        super().__init__(method, method.dimsizes, uniq)
+        self._args_type = (TStruct(dict(method.inp),
+                                   label=f'_immediate_after_{self.uniq}_args')
+                           if method.inp else None)
+
+    @property
+    def args_type(self):
+        return self._args_type
+
+    @property
+    def types_to_declare(self):
+        return (self._args_type,) * (self._args_type is not None)
+
+    def generate_callback_call(self, indices_lit, args_lit):
+        site = self.method.site
+        indices = tuple(mkLit(site, f'{indices_lit}[{i}]', TInt(32, False))
+                        for i in range(self.method.dimensions))
+        args = tuple(mkLit(site, f'{args_lit}->{pname}', ptype)
+                     for (pname, ptype) in self.method.inp)
+        with LogFailure(site, self.method, indices), \
+             crep.DeviceInstanceContext():
+            code = codegen_call(site, self.method, indices, args, ())
+        code = mkCompound(site, [code])
+        code.toc()
+
+class ImmediateAfterIntoSendNowInfo(ImmediateAfterInfo):
+    def __init__(self, typeseq_info, uniq):
+        super().__init__(typeseq_info, [], uniq)
+        self.typeseq_info = typeseq_info
+        hookref_type = THook(typeseq_info.types, validated=True)
+        self._args_type = (
+            TStruct({'hookref': hookref_type,
+                     'args': typeseq_info.struct},
+                    label=f'_immediate_after_{self.uniq}_args')
+            if typeseq_info.types else hookref_type)
+
+    @property
+    def args_type(self):
+        return self._args_type
+
+    @property
+    def types_to_declare(self):
+        return (self._args_type,) * bool(self.typeseq_info.types)
+
+    def generate_callback_call(self, indices_lit, args_lit):
+        assert indices_lit is None
+        has_args = bool(self.typeseq_info.types)
+        hookref = f'{args_lit}->hookref' if has_args else f'*{args_lit}'
+        args = f'&{args_lit}->args' if has_args else 'NULL'
+        out('_DML_send_hook(&_dev->obj, &_dev->_detached_hook_queue_stack, '
+            + f'_DML_resolve_hookref(_dev, _hook_aux_infos, {hookref}), '
+            + f'{args});\n')
+
+def get_immediate_after(key):
+    try:
+        return dml.globals.immediate_after_infos[key]
+    except:
+        uniq = len(dml.globals.immediate_after_infos)
+        info = immediate_after_info_constructors[type(key)](key, uniq)
+        dml.globals.immediate_after_infos[key] = info
+        return info
+
 after_delay_info_constructors = {
     objects.Method: AfterDelayIntoMethodInfo,
     TypeSequenceInfo: AfterDelayIntoSendNowInfo
@@ -827,6 +905,11 @@ after_delay_info_constructors = {
 after_on_hook_info_constructors = {
     objects.Method: AfterOnHookIntoMethodInfo,
     TypeSequenceInfo: AfterOnHookIntoSendNowInfo
+}
+
+immediate_after_info_constructors = {
+    objects.Method: ImmediateAfterIntoMethodInfo,
+    TypeSequenceInfo: ImmediateAfterIntoSendNowInfo
 }
 
 class AfterArgsInit:
@@ -2181,7 +2264,8 @@ def try_codegen_invocation(site, init_ast, outargs, location, scope):
     meth_expr = codegen_expression_maybe_nonvalue(meth_ast, location, scope)
     if (isinstance(meth_expr, NonValue)
         and not isinstance(meth_expr, (
-            TraitMethodRef, NodeRef, InterfaceMethodRef, HookSendNowRef))):
+            TraitMethodRef, NodeRef, InterfaceMethodRef, HookSendNowRef,
+            HookSendRef))):
         raise meth_expr.exc()
     if isinstance(meth_expr, TraitMethodRef):
         if not meth_expr.throws and len(meth_expr.outp) <= 1:
@@ -2816,6 +2900,65 @@ def stmt_afteronhook(stmt, location, scope):
     return [mkAfterOnHook(site, domains, hookref_expr, aoh_info, indices,
                           args_init)]
 
+@statement_dispatcher
+def stmt_immediateafter(stmt, location, scope):
+    [callexpr] = stmt.args
+    site = stmt.site
+
+    if callexpr[0] != 'apply':
+        raise ESYNTAX(site, None,
+                      'callback expression to after statement must be a '
+                      + 'function application')
+
+    method = callexpr[2]
+    inarg_asts = callexpr[3]
+
+    # TODO after statement should be extended to allow the user to explicitly
+    # give the domains
+    if location.method():
+        domains = [ObjIdentity(site, location.node.parent, location.indices)]
+    else:
+        domains = [TraitObjIdentity(site, lookup_var(site, scope, "this"))]
+
+    methodref = codegen_expression_maybe_nonvalue(method, location, scope)
+
+    if isinstance(methodref, NodeRef) and methodref.node.objtype == 'method':
+        method, indices = methodref.get_ref()
+
+        if len(method.outp) > 0:
+            raise EAFTER(site, None, method, None)
+
+        require_fully_typed(site, method)
+        func = method_instance(method)
+        inp = func.inp
+        kind = 'method'
+    elif isinstance(methodref, HookSendNowRef):
+        indices = ()
+        send_now_hookref = methodref.hookref_expr
+        msg_types = safe_realtype_shallow(send_now_hookref.ctype()).msg_types
+        inp = [(f'comp{i}', typ) for (i, typ) in enumerate(msg_types)]
+        kind = 'send_now'
+    else:
+        raise ENMETH(site, methodref)
+
+    inargs = typecheck_inarg_inits(
+        site, inarg_asts, inp, location, scope, kind,
+        on_ptr_to_stack=(lambda x: report(WIMMAFTER(x.site, x))))
+
+
+    if kind == 'method':
+        mark_method_referenced(func)
+        after_info = get_immediate_after(method)
+        args_init = AfterIntoMethodArgsInit(inargs)
+    else:
+        assert kind == 'send_now'
+        typeseq_info = get_type_sequence_info((typ for (_, typ) in inp),
+                                              create_new=True)
+        after_info = get_immediate_after(typeseq_info)
+        args_init = AfterIntoSendNowArgsInit(inargs,
+                                             methodref.hookref_expr)
+
+    return [mkImmediateAfter(site, domains, after_info, indices, args_init)]
 
 @statement_dispatcher
 def stmt_select(stmt, location, scope):

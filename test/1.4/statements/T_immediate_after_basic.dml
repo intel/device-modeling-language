@@ -1,0 +1,115 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+session int count;
+session int storage;
+session int array_storage[5][7];
+
+method inc() {
+    ++count;
+}
+
+method store(int x) {
+    storage = x;
+}
+
+session (int last_i, int last_j) = (-1, -1);
+
+group g[i < 5][j < 7]{
+    method set_lasts() {
+        (last_i, last_j) = (i, j);
+    }
+    method store_targeted(int (*arr)[5][7], int x) {
+        (*arr)[i][j] = x;
+    }
+}
+
+
+session int queue[6];
+session int *queue_ptr;
+
+method init() {
+    queue_ptr = queue;
+}
+
+method order_test_callback(int id) {
+    *queue_ptr++ = id;
+}
+
+method post_order_test_callback(int id) {
+    after: order_test_callback(id);
+}
+
+method subsequent_immediate_afters() {
+    after: order_test_callback(3);
+    (&post_order_test_callback)(dev.obj, 4);
+    after: order_test_callback(5);
+}
+
+
+method do_setup() {
+    after: inc();
+    after: store(4);
+    after: g[1][2].set_lasts();
+    after: g[3][4].store_targeted(&array_storage, 7);
+
+    // order test
+    after: subsequent_immediate_afters();
+    after: order_test_callback(0);
+    (&post_order_test_callback)(dev.obj, 1);
+    after: order_test_callback(2);
+    do_confirm_setup();
+}
+
+method do_confirm_setup() {
+    assert count == 0 && storage == 0 && last_i == -1 && last_j == -1
+        && array_storage[3][4] == 0;
+    assert queue_ptr == queue;
+}
+
+attribute confirm_setup is read_only_attr {
+    param type = "n";
+    method get() -> (attr_value_t) {
+        do_confirm_setup();
+        return SIM_make_attr_nil();
+    }
+}
+
+
+attribute setup is read_only_attr {
+    param type = "n";
+    method get() -> (attr_value_t) {
+        do_setup();
+        return SIM_make_attr_nil();
+    }
+}
+
+attribute test is read_only_attr {
+    param type = "n";
+    method get() -> (attr_value_t) {
+        assert count == 1 && storage == 4 && last_i == 1 && last_j == 2
+            && array_storage[3][4] == 7;
+        for (local int i = 0; i < array_storage.len; ++i) {
+            for (local int j = 0; j < array_storage[i].len; ++j) {
+                if (i != 3 && j != 4) {
+                    assert array_storage[i][j] == 0;
+                }
+            }
+        }
+        assert queue_ptr == queue + 6;
+        for (local int i = 0; i < queue.len; ++i) {
+            assert queue[i] == i;
+        }
+        memset(queue, 0, sizeof(queue));
+        memset(array_storage, 0, sizeof(array_storage));
+        queue_ptr = queue;
+        count = storage = 0;
+        last_i = last_j = -1;
+        return SIM_make_attr_nil();
+    }
+}

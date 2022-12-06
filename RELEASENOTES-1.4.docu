@@ -502,4 +502,11 @@
       variables or arguments of <tt>after</tt> statements) would lead
       to an internal compiler error
       <bug number="SIMICS-21424"/>.</add-note></build-id>
+  <build-id value="next"><add-note> Added a new form of the <tt>after</tt>
+      statement, called <em>immediate <tt>after</tt></em>. Syntax is
+      <tt>after: callback(1, false)</tt>. An immediate after will delay the call
+      to the specified method until all current entries into devices on the call
+      stack have been completed, and the simulation of the current
+      processor would otherwise be ready to move onto the next cycle
+      <bug number="SIMICS-20379"/>.</add-note></build-id>
 </rn>

@@ -203,6 +203,12 @@ class Expression(Code):
         'Apply this expression as a function'
         return mkApplyInits(self.site, self, inits, location, scope)
 
+    @property
+    def is_pointer_to_stack_allocation(self):
+        '''Returns True only if it's known that the expression is a pointer
+           to stack-allocated data'''
+        return False
+
     def incref(self):
         pass
 
@@ -299,7 +305,6 @@ def typecheck_inargs(site, args, inp, kind="function", known_arglen=None):
         rtype = safe_realtype(ptype)
         assert rtype
         (ok, trunc, constviol) = rtype.canstore(argtype)
-
         if ok:
             if constviol:
                 raise ECONSTP(site, pname, kind + " call")
@@ -312,7 +317,8 @@ def typecheck_inargs(site, args, inp, kind="function", known_arglen=None):
 # Returns a list of expressions corresponding to the provided initializers
 def typecheck_inarg_inits(site, inits, inp, location, scope,
                           kind="function", variadic=False,
-                          allow_undefined_args=False):
+                          allow_undefined_args=False,
+                          on_ptr_to_stack=None):
     if (not variadic and len(inits) != len(inp)) or len(inits) < len(inp):
         raise EARG(site, kind)
 
@@ -326,19 +332,20 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
         if isinstance(init, Initializer):
             if ptype is None:
                 assert isinstance(init, ExpressionInitializer)
-                args.append(init.expr)
-            try:
-                args.append(init.as_expr(ptype))
-            except EASTYPE as e:
-                if e.site is init.site:
-                    raise EPTYPE(site, e.source, e.target_type, pname,
-                                 kind) from e
-                raise
-            # better error message
-            except EDISCONST as e:
-                if e.site is init.site:
-                    raise ECONSTP(site, pname, kind + " call") from e
-                raise
+                arg = init.expr
+            else:
+                try:
+                    arg = init.as_expr(ptype)
+                except EASTYPE as e:
+                    if e.site is init.site:
+                        raise EPTYPE(site, e.source, e.target_type, pname,
+                                     kind) from e
+                    raise
+                # better error message
+                except EDISCONST as e:
+                    if e.site is init.site:
+                        raise ECONSTP(site, pname, kind + " call") from e
+                    raise
         elif ptype is None:
             if init.kind != 'initializer_scalar':
                 raise ESYNTAX(init.site, '{',
@@ -349,7 +356,6 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
             if (isinstance(arg, NonValue)
                 and not (allow_undefined_args and arg.undefined)):
                 raise arg.exc()
-            args.append(arg)
         elif (dml.globals.compat_dml12_int(site)
             and dml.globals.compat_dml12_int(init.site)
             and init.kind == 'initializer_scalar'):
@@ -368,11 +374,10 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
                     raise ECONSTP(site, pname, kind + " call")
             else:
                 raise EPTYPE(site, arg, rtype, pname, kind)
-            args.append(arg)
         else:
             try:
-                args.append(eval_initializer(init.site, ptype, init, location,
-                                             scope, False).as_expr(ptype))
+                arg = eval_initializer(init.site, ptype, init, location,
+                                       scope, False).as_expr(ptype)
             except EASTYPE as e:
                 if e.site is init.site:
                     raise EPTYPE(site, e.source, e.target_type, pname,
@@ -383,6 +388,11 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
                 if e.site is init.site:
                     raise ECONSTP(site, pname, kind + " call") from e
                 raise
+        if (on_ptr_to_stack
+            and isinstance(safe_realtype_shallow(ptype), TPtr)
+            and arg.is_pointer_to_stack_allocation):
+            on_ptr_to_stack(arg)
+        args.append(arg)
 
     if variadic and len(inits) > len(inp):
         for init in inits[len(inp):]:

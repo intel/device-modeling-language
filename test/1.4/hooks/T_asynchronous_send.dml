@@ -1,0 +1,64 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// DMLC-FLAG --enable-features-for-internal-testing-dont-use-this
+
+hook() h1;
+/// WARNING WEXPERIMENTAL
+hook(int *, int) h2[3][5];
+
+session int count;
+session int storage;
+
+method inc() {
+    ++count;
+    after h1: inc();
+}
+
+method store(int *target, int x) {
+    *target = x;
+    after h2[1][2] -> (p, y): store(p, y);
+}
+
+method do_setup() {
+    // h.send(...) is equivalent to after: h.send_now(...),
+    // except it can't be cancelled
+    h1.send();
+    h2[1][2].send(&storage, 6);
+
+    after: h1.send_now();
+    after: h2[1][2].send_now(&storage, -4);
+
+    cancel_after();
+
+    after h1: inc();
+    after h2[1][2] -> (p, y): store(p, y);
+    assert count == 0 && storage == 0;
+}
+
+method do_test() {
+    assert count == 1 && storage == 6;
+    count = storage = 0;
+    cancel_after();
+}
+
+attribute setup is read_only_attr {
+    param type = "n";
+    method get() -> (attr_value_t) {
+        do_setup();
+        return SIM_make_attr_nil();
+    }
+}
+
+attribute test is read_only_attr {
+    param type = "n";
+    method get() -> (attr_value_t) {
+        do_test();
+        return SIM_make_attr_nil();
+    }
+}

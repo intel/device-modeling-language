@@ -27,10 +27,10 @@ def unary_dump(rh):
 class EAFTER(DMLError):
     """
     An illegal `after` statement was specified. The method callback specified
-    may not have any output parameters/return values, and every input parameter
-    must be of serializable type (except input parameters that receive a
-    message component, if the `after` statement is attaching the callback to a
-    hook.)"""
+    may not have any output parameters/return values. If the after is with a
+    time delay or bound to a hook, every input parameter must be of serializable
+    type (unless that input parameter receives a message component of a hook).
+    """
     fmt = "illegal 'after' statement%s with callback method '%s': %s"
     def __init__(self, site, hookexpr, method, unserializable):
         if unserializable:
@@ -1901,6 +1901,42 @@ class WPCAST(DMLWarning):
 #     An unknown pragma was specified
 #     """
 #     fmt = "Unknown pragma: %s"
+
+class WIMMAFTER(DMLWarning):
+    """
+    An immediate `after` statement was specified where some argument to the
+    callback is a pointer to some stack-allocated data &mdash; i.e. a pointer
+    to data stored within a local variable. That data is guaranteed to be
+    invalid by the point the callback is called, which presents an enormous
+    security risk!
+    """
+    version = "1.4"
+    fmt = ("***INCREDIBLY UNSAFE*** use of immediate 'after' statement: the "
+           + "callback argument '%s' is a pointer to stack-allocated data!")
+
+class WHOOKSEND(DMLWarning):
+    """
+    The `send` operation of a hook was called, and some provided message
+    component is a pointer to some stack-allocated data &mdash; i.e. a pointer
+    to data stored within a local variable. That data is guaranteed to be
+    invalid by the point the message is sent, which presents an enormous
+    security risk!
+
+    If you must use pointers to stack-allocated data, then `send_now` should
+    be used instead of `send`. If you want the message to be delayed to avoid
+    ordering bugs, create a method which wraps the `send_now` call together
+    with the declarations of the local variable(s) which you need pointers to,
+    and then use immediate after (`after: m(...)`) to delay the call to that
+    method.
+    """
+    version = "1.4"
+    fmt = ("***INCREDIBLY UNSAFE*** use of the 'send' operation of a hook: "
+           + "the message component '%s' is a pointer to stack-allocated "
+           + "data!\n"
+           + "Did you mean to use 'send_now' instead? See the Hook "
+           + "Declarations section in the DML 1.4 reference manual for "
+           + "information about the differences between 'send' and 'send_now'")
+
 
 class PSHA1(PortingMessage):
     """The `port-dml` script requires that the DML file has not been

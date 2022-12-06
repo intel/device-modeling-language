@@ -1,0 +1,90 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// COMPILE-ONLY
+typedef struct {
+    int *x;
+    int *y[2];
+    int *z[2][3];
+} substruct_t;
+
+typedef struct {
+    int *x;
+    int *y[2];
+    int *z[2][3];
+    substruct_t sub_a;
+    substruct_t sub_b[2];
+    substruct_t sub_c[2][3];
+} struct_t;
+
+method m(void *p) { }
+
+method init() {
+    local int *x;
+    local int *y[2];
+    local int *z[2][3];
+    local struct_t s;
+
+    local int *(*arr)[2][3];
+    local int *(*arr_2)[3];
+
+    // no warning
+    after: m(x);
+    after: m(y[1]);
+    after: m(z[1][2]);
+    after: m(s.x);
+    after: m(s.y[1]);
+    after: m(s.z[1][2]);
+    after: m(s.sub_a.x);
+    after: m(s.sub_b[1].y[1]);
+    after: m(s.sub_b[1].y[1]);
+    after: m(arr);
+    after: m(*arr);
+    after: m((*arr)[1]);
+    after: m((*arr)[1][2]);
+
+    /// WARNING WIMMAFTER
+    after: m(&x);
+    /// WARNING WIMMAFTER
+    after: m(y);
+    /// WARNING WIMMAFTER
+    after: m(z[1]);
+    /// WARNING WIMMAFTER
+    after: m(&y[1]);
+    /// WARNING WIMMAFTER
+    after: m(&z[1][2]);
+    /// WARNING WIMMAFTER
+    after: m(&s.x);
+    /// WARNING WIMMAFTER
+    after: m(s.y);
+    /// WARNING WIMMAFTER
+    after: m(s.z[1]);
+    /// WARNING WIMMAFTER
+    after: m(&s.sub_a.x);
+    /// WARNING WIMMAFTER
+    after: m(s.sub_a.y);
+    /// WARNING WIMMAFTER
+    after: m(s.sub_a.z[1]);
+    /// WARNING WIMMAFTER
+    after: m(s.sub_b[1].y);
+    /// WARNING WIMMAFTER
+    after: m(s.sub_c[1][2].z[1]);
+
+    /// WARNING WIMMAFTER
+    after: m(*cast(z, typeof(arr_2)));
+
+    /// WARNING WIMMAFTER
+    after: m(cast(&*(1 + (&x - 1)), void *));
+
+    // no warning
+    after: m(cast(cast(&x, uintptr_t), void *));
+
+    local int **x_ptr = &x;
+    // no warning
+    after: m(x_ptr);
+}

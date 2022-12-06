@@ -1,0 +1,59 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+attribute count is uint64_attr;
+
+method inc() {
+    ++count.val;
+}
+
+method post_inc() {
+    after: inc();
+}
+
+group g {
+    method post_inc() {
+        after: inc();
+    }
+
+    method cancel() {
+        after: inc(); // cancelled
+        cancel_after();
+    }
+
+    method do_setup() {
+        after: inc();       // cancelled
+        post_inc();         // cancelled
+        dev.post_inc();     // not cancelled
+        (&cancel)(dev.obj);
+        after: inc();       // not cancelled
+        after: post_inc();  // post_inc's after is cancelled
+        after: cancel();
+        after: inc();       // cancelled
+        assert count.val == 0;
+    }
+}
+
+attribute setup is read_only_attr {
+    param type = "n";
+
+    method get() -> (attr_value_t) {
+        g.do_setup();
+        return SIM_make_attr_nil();
+    }
+}
+
+attribute test is read_only_attr {
+    param type = "n";
+
+    method get() -> (attr_value_t) {
+        assert count.val == 2;
+        count.val = 0;
+        return SIM_make_attr_nil();
+    }
+}

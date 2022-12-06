@@ -1,0 +1,138 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+import "simics/devs/signal.dml";
+
+/// INSTANTIATE-MANUALLY
+
+// attributes set/get -- hardcoded
+
+attribute count is uint64_attr {
+    method post_inc() {
+        after: inc();
+    }
+    method inc() {
+        ++count.val;
+    }
+}
+
+method post_inc() {
+    // test the after call is actually delayed, and that repeated entrance
+    // doesn't muck things up.
+    local uint64 before = count.val;
+    (&count.post_inc)(dev.obj);
+    assert count.val == before;
+}
+
+export post_inc as "exported_post_inc";
+
+method init() {
+    assert count.val == 0;
+    post_inc();
+}
+
+
+method post_init() {
+    // assert count.val == 1;
+    post_inc();
+    after 0.1 s: post_inc();
+    ev.post(0.2, NULL);
+    // Will get destroyed
+    ev.post(0.3, NULL);
+}
+
+method destroy() {
+    assert count.val == 10;
+    after: after_destroy("dev");
+}
+
+event ev is custom_time_event {
+    method event(void *data) {
+        post_inc();
+    }
+    method get_event_info(void *data) -> (attr_value_t) {
+        return SIM_make_attr_nil();
+    }
+    method set_event_info(attr_value_t info) -> (void *) {
+        return NULL;
+    }
+    method destroy(void *data) {
+        after: after_destroy("event");
+    }
+}
+
+method after_destroy(const char *name) {
+    local attr_value_t args = SIM_make_attr_list(1,
+                                                 SIM_make_attr_string(name));
+    local attr_value_t val = VT_call_python_module_function(
+        "__main__", "destroyed", &args);
+    SIM_attr_free(&val);
+    SIM_attr_free(&args);
+}
+
+implement signal {
+    method signal_raise() {
+        post_inc();
+    }
+    method signal_lower() {}
+}
+
+connect out is init_as_subobj {
+    param classname = "signal-stub";
+    interface signal;
+}
+
+attribute simple_attr is write_only_attr {
+    param type = "n";
+    method set(attr_value_t val) throws {
+        local uint64 before = count.val;
+        out.signal.signal_raise();
+        assert before == count.val;
+    }
+}
+
+attribute recursive_entry_attr is write_only_attr {
+    param type = "n";
+    method set(attr_value_t val) throws {
+        local uint64 before = count.val;
+        out.signal.signal_raise();
+        assert before == count.val;
+    }
+}
+
+
+// Statically or externally exported methods called outside of DML methods
+header %{
+    extern void exported_post_inc(conf_object_t *);
+    void exported_on_notify(conf_object_t * obj, conf_object_t *_,
+                            lang_void *__) {
+        exported_post_inc(obj);
+    }
+%}
+
+extern void (*exported_on_notify)(conf_object_t *, conf_object_t *, void *);
+
+group notifiers[i < 2] is init {
+    session notifier_handle_t *handle;
+    independent startup memoized method notifier() -> (notifier_type_t) {
+        local notifier_type_t notifier = SIM_notifier_type(i == 0
+                                                           ? "static-export"
+                                                           : "extern-export");
+        SIM_register_notifier(SIM_get_class(dev.classname), notifier, NULL);
+        return notifier;
+    }
+    method init() {
+        handle = SIM_add_notifier(dev.obj, notifier(), dev.obj,
+                                  i == 0 ? &on_notify : exported_on_notify,
+                                  NULL);
+    }
+}
+
+method on_notify(conf_object_t *_notifier, void *_data) {
+    post_inc();
+}
