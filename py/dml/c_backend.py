@@ -140,6 +140,8 @@ def print_device_substruct(node):
         members = [("obj", conf_object_t)]
         for (v, _) in dml.globals.static_vars:
             members.append((v.value, v.type))
+        members.append(('_immediate_after_state',
+                        TPtr(TNamed('_dml_immediate_after_state_t'))))
         return composite_ctype(node,
                                members + [(crep.cname(sub), print_device_substruct(sub))
                                           for sub in node.get_components()],
@@ -339,7 +341,8 @@ def generate_hfile(device, headers, filename):
     for typ in (typ
                 for info in itertools.chain(
                         dml.globals.after_delay_infos.values(),
-                        dml.globals.after_on_hook_infos)
+                        dml.globals.after_on_hook_infos,
+                        dml.globals.immediate_after_infos.values())
                 for typ in info.types_to_declare):
         typ.print_struct_definition()
     out('\n')
@@ -429,14 +432,12 @@ def generate_attr_setter(fname, node, port, dimsizes, cprefix, loopvars,
     reset_line_directive()
     if dimsizes:
         # abort on first bad value
-        out('if (_status != Sim_Set_Ok) return _status;\n')
+        out('if (_status != Sim_Set_Ok) goto exit;\n')
         for _ in dimsizes:
             out('}\n', preindent = -1)
-        output_dml_state_change("_dev")
-        out('return Sim_Set_Ok;\n')
-    else:
-        output_dml_state_change("_dev")
-        out('return _status;\n')
+        out('exit:\n')
+    output_dml_state_change('_dev')
+    out('return _status;\n')
     out('}\n\n', preindent = -1)
     splitting_point()
 
@@ -491,7 +492,7 @@ def generate_attr_getter(fname, node, port, dimsizes, cprefix, loopvars):
             % (depth, loopvar.read(), depth + 1))
         out('}\n', preindent = -1)
 
-    output_dml_state_change("_dev")
+    output_dml_state_change('_dev')
     out('return _val0;\n')
     out('}\n\n', preindent = -1)
     splitting_point()
@@ -748,7 +749,7 @@ def wrap_method(meth, wrapper_name, indices=()):
             codegen_call(meth.site, meth,
                          indices,
                          inargs, outargs).toc()
-    output_dml_state_change("_dev")
+    output_dml_state_change('_dev')
 
     reset_line_directive()
     if retvar:
@@ -1058,7 +1059,7 @@ def generate_simple_events(device):
         out('_free_simple_event_data(*data);\n')
         out('MM_FREE(data);\n')
         out('}\n', preindent=-1)
-        output_dml_state_change("_dev")
+        output_dml_state_change('_dev')
         out('}\n\n', preindent = -1)
         splitting_point()
 
@@ -1204,6 +1205,26 @@ def generate_after_on_hooks_artifacts(device):
     reset_line_directive()
     splitting_point()
 
+def generate_immediate_after_callbacks(device):
+    for info in dml.globals.immediate_after_infos.values():
+        start_function_definition(
+            f'void {info.cident_callback}(conf_object_t *_obj, '
+            + 'const uint32 *indices, const void *_args)')
+        out('{\n', postindent = 1)
+        out(crep.structtype(device) + ' *_dev UNUSED = ('
+            + crep.structtype(device) + '*)_obj;\n')
+
+        if info.args_type:
+            args_decl = TPtr(
+                conv_const(True, info.args_type)).declaration('args')
+            out('%s = _args;\n' % (args_decl,))
+        indices_lit = 'indices' if info.dimensions else None
+        args_lit = 'args' if info.args_type else None
+        info.generate_callback_call(indices_lit, args_lit)
+        out('}\n\n', preindent = -1)
+        splitting_point()
+
+    reset_line_directive()
 
 def generate_simple_events_control_methods(device):
     start_function_definition(
@@ -1237,6 +1258,9 @@ def generate_simple_events_control_methods(device):
 
     out('_DML_cancel_afters_in_detached_hook_queues('
         + '_dev->_detached_hook_queue_stack, domain);\n')
+    if dml.globals.immediate_after_infos:
+        out('_DML_cancel_immediate_afters(_dev->_immediate_after_state, '
+            + 'domain);\n')
     out('}\n\n', preindent = -1)
     splitting_point()
 
@@ -1510,6 +1534,8 @@ def generate_alloc(device):
     out(crep.structtype(device) + ' *_dev = MM_ZALLOC(1, '
         + crep.structtype(device) + ');\n')
     objarg = '&_dev->obj'
+    out('_dev->_immediate_after_state = MM_ZALLOC(1, '
+        + '_dml_immediate_after_state_t);\n')
     out('return %s;\n' % objarg)
     out('}\n\n', preindent = -1)
 
@@ -1533,6 +1559,14 @@ def generate_initialize(device):
     out('_init_static_vars(_dev);\n')
     out('_init_data_objs(_dev);\n')
 
+    # Initialize table for tracking log-once feature
+    out('ht_init_int_table(&(_dev->_subsequent_log_ht));\n')
+
+    # All QINIT does is zero-initialization, which is already covered --
+    # this is a Just In Case if the representation of queues were to be
+    # changed such that zero-initialization would not be valid.
+    out('QINIT(_dev->_immediate_after_state->queue);\n')
+
     with crep.DeviceInstanceContext():
         if dml.globals.dml_version == (1, 2):
             # Functions called from init_object shouldn't throw any
@@ -1554,9 +1588,6 @@ def generate_initialize(device):
     if dml.globals.api_version <= '6':
         out('SIM_add_notifier(_obj, Sim_Notify_Object_Delete, _obj, '
             + crep.cname(device) + '_pre_del_notify, NULL);\n')
-
-    # Initialize table for tracking log-once feature
-    out('ht_init_int_table(&(_dev->_subsequent_log_ht));\n')
 
     out('return _obj;\n')
     out('}\n\n', preindent = -1)
@@ -1586,7 +1617,8 @@ def generate_finalize(device):
         else:
             code = codegen_inline_byname(device, (), '_post_init', [], [],
                                      device.site)
-    code.toc()
+    if not code.is_empty:
+        code.toc()
     out('}\n\n', preindent = -1)
     reset_line_directive()
 
@@ -1597,6 +1629,8 @@ def generate_deinit(device):
     out('{\n', postindent = 1)
     out(crep.structtype(device) + ' *_dev UNUSED = ('
         + crep.structtype(device) + ' *)_obj;\n')
+    out('_DML_execute_immediate_afters_now(_obj, '
+        + '_dev->_immediate_after_state);\n')
 
     with crep.DeviceInstanceContext():
         # Cancel all events
@@ -1627,6 +1661,12 @@ def generate_deinit(device):
             out(f'SIM_event_cancel_time(_obj, {crep.get_evclass(key)}, _obj, '
                 + '0, NULL);\n')
 
+        with LogFailure(device.site, device, ()):
+            code = codegen_inline_byname(device, (), 'destroy', [], [],
+                                         device.site)
+        if not code.is_empty:
+            code.toc()
+
         # Cancel all pending afters on hooks
         by_dims = {}
         for hook in dml.globals.hooks:
@@ -1645,12 +1685,21 @@ def generate_deinit(device):
             for i in range(len(dims)):
                 out('}\n', preindent=-1)
 
-        with LogFailure(device.site, device, ()):
-            codegen_inline_byname(device, (), 'destroy', [], [],
-                                  device.site).toc()
+        # Execute all immediate afters posted by destruction code
+        out('_DML_execute_immediate_afters_now(_obj, '
+            + '_dev->_immediate_after_state);\n')
+
         # Free the tables used for log_once after all calls into device code
         # are done
         out('_free_table(&_dev->_subsequent_log_ht);\n')
+
+    out('QFREE(_dev->_immediate_after_state->queue);\n')
+    out('if (likely(!_dev->_immediate_after_state->posted)) {\n', postindent=1)
+    out('MM_FREE(_dev->_immediate_after_state);\n')
+    out('} else {\n', preindent=-1, postindent=1)
+    # Let the posted event deallocate the immediate after state
+    out('_dev->_immediate_after_state->deleted = true;\n')
+    out('}\n', preindent = -1)
 
     out('}\n\n', preindent = -1)
     reset_line_directive()
@@ -3330,6 +3379,7 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     generate_init_trait_vtables(device, trait_param_values)
     generate_each_in_tables()
     generate_after_on_hooks_artifacts(device)
+    generate_immediate_after_callbacks(device)
     generate_hook_attribute_funs()
     generate_simple_events(device)
     generate_simple_event_only_domains_funs()

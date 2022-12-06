@@ -1914,7 +1914,7 @@ computations* may be attached for execution at a later point. By sending a
 *message* through the hook, every computation suspended on the hook will become
 detached from the hook, and then executed &mdash; receiving the message as data.
 Computations suspended on a hook are executed in order of least recently
-attached.
+attached; in other words, FIFO semantics.
 
 Currently, the only computations that can be suspended and attached to hooks are
 single method calls, which is done through the use of the [`after`
@@ -1942,6 +1942,29 @@ hook(int *, bool) h3;
 Beyond suspending computations on it, a hook <tt><em>h</em></tt> has two
 associated operations:
 
+* <pre><em>h</em>.send(<em>msg1</em>, ... <em>msgN</em>)</pre>
+  Sends a message through the hook, with message components
+  <tt><em>msg1</em></tt> through <tt><em>msgN</em></tt>. The number of message
+  components must match the number of message component types of the hook,
+  and each message component must be compatible with the corresponding message
+  component type of the hook.
+
+  `send` is *asynchronous*: the message will only be sent &mdash; and suspended
+  computations executed &mdash; once all current device entries on the call
+  stack have been completed. It is exactly equivalent to
+  <tt>after: <em>h</em>.send_now(<em>msg1</em>, ... <em>msgN</em>)</tt>, except
+  it's not possible to prevent the message from being sent via `cancel_after()`.
+  For more information, see [Immediate After
+  Statements](#immediate-after-statements).
+
+  Like immediate after statements, pointers to stack-allocated data **must not**
+  be passed as message components to a `send`. If you must use pointers to
+  stack-allocated data, then `send_now` should be used instead of `send`. If you
+  want the message to be delayed to avoid ordering bugs, create a method which
+  wraps the `send_now` call together with the declarations of the local
+  variable(s) which are pointed to, and then use an immediate after statement
+  (`after: m(...)`) to delay the call to that method.
+
 * <pre><em>h</em>.send_now(<em>msg1</em>, ... <em>msgN</em>)</pre>
   Sends a message through the hook, with message components
   <tt><em>msg1</em></tt> through <tt><em>msgN</em></tt>. The number of message
@@ -1951,6 +1974,7 @@ associated operations:
 
   `send_now` is *synchronous*: every computation suspended on the hook will
   execute before `send_now` completes.
+
   `send_now` returns the number of suspended computations that were successfully
   resumed from the message being sent. Currently, every suspended computation is
   guaranteed to successfully be resumed unless cancelled by a preceding
@@ -1958,18 +1982,6 @@ associated operations:
   future: coroutines are planned to be able to reject a message and reattach
   themselves to the hook.
 
-  <div class="note">
-  <b>Note:</b> Hooks are planned to be extended with an asynchronous variant of
-  <tt>send_now</tt>, to be simply called <tt>send</tt>. A call to <tt>send</tt>
-  will delay the message from being sent until the current line of execution
-  within the device is completed, and control would otherwise be returned to
-  the simulation engine. <tt>send</tt> is expected to often be preferable to
-  <tt>send_now</tt>, as it prevents subtle ordering bugs from occurring &mdash;
-  i.e. a message being sent through a hook before the computation meant to react
-  to that message is suspended on the hook. Ordering bugs are especially
-  difficult to resolve with the planned design of coroutines, making
-  <tt>send</tt> important for their use.
-  </div>
 * <pre><em>h</em>.suspended</pre>
   Evaluates to the number of computations currently suspended on the hook.
 
@@ -3220,53 +3232,96 @@ return m(e1)
 ### After Statements
 
 <pre>
-after <em>scalar</em> <em>unit</em>: <em>method</em>(<em>e1</em>, ... <em>eN</em>);
-after <em>hookref</em>[-> (<em>msg1</em>, ... <em>msgN</em>)]: <em>method</em>(<em>e1</em>, ... <em>eM</em>);
+after ...: <em>method</em>(<em>e1</em>, ... <em>eN</em>);
 </pre>
 
-The `after` statement sets up the given method call such that it will be
-performed with the provided arguments at a specified point in the future.
+The `after` statement sets up the given method call (the _callback_) such that
+it will be performed with the provided arguments at a specified point in the
+future. There are three different forms of the `after` statement, syntactically
+determined through what appears before the `:` &mdash; each form corresponds
+to different specifications of at what future point the method should be called.
+
 A method call suspended using an `after` statement will be performed at most
 once per execution of the `after` statement; it will not recur. If it's
 desirable to have a suspended method call recur, then the called method must
 itself make use of `after` to set up a method call to itself.
 
-The referenced method must be a true, normal method: it may not be a C
-function, or a [`shared` method](#shared-methods). The only exception to this is
-that the [`send_now` operation of hooks](#hook-declarations) is also supported
-as the callback.
+The referenced method must be a regular or [independent](#independent-methods)
+method with no return values. It may not be a C function, or a [`shared`
+method](#shared-methods). The only exception to this is that the [`send_now`
+operation of hooks](#hook-declarations) is also supported for use as a callback.
 
-In the first form shown above, the specified point in the future is given
-through a time delay (in simulated time, measured in the specified time unit)
-relative to the time when the `after` statement is executed. The currently
-supported time units are `s` for seconds and `cycles` for cycles. Every argument
-to the called method is evaluated at the time the `after` statement is executed,
-and stored so that they may be used when the method call is to be performed.
+All method calls suspended via an `after` statement are *associated* with the
+object that contain the method containing the statement. It is possible to
+cancel all suspended method calls associated with an object through that
+object's `cancel_after()` method, as provided by the [`object`
+template](dml-builtins.html#object).
 
-For example:
+<div class="note">
+
+**Note:** We plan to extend the `after` statement to allow for users to
+explicitly state what objects the suspended method call is to be associated
+with.
+
+</div>
+
+#### After Delay Statements
+<pre>
+after <em>scalar</em> <em>unit</em>: <em>method</em>(<em>e1</em>, ... <em>eN</em>);
+</pre>
+
+In this form, the specified point in the future is given through a time delay
+(in simulated time, measured in the specified time unit) relative to the time
+when the after delay statement is executed. The currently supported time units
+are `s` for seconds and `cycles` for cycles.
+
+Every argument to the called method is evaluated at the time the `after`
+statement is executed, and stored so that they may be used when the method call
+is to be performed. In order to allow the suspended method call to be
+represented in checkpoints, every input parameter of the method must be of
+[*serializable type*](#serializable-types). This means that after delay
+statements cannot be used with methods that e.g. have pointer input parameters.
+unless the arguments for those input parameters are message component parameters
+of the `after`.
+
+Example:
 
 ```
 after 0.1 s: my_callback(1, false);
 ```
 
-This is equivalent to creating a named [`event`](#events) object with
-an event-method that performs the specified call, and posting
+The after delay statement is equivalent to creating a named [`event`](#events)
+object with an event-method that performs the specified call, and posting
 that event at the given time, with associated data corresponding to the
 provided arguments.
 
-In the second form shown above, the suspended method call is bound to the
+#### Hook-Bound After Statements
+<pre>
+after <em>hookref</em>[-> (<em>msg1</em>, ... <em>msgN</em>)]: <em>method</em>(<em>e1</em>, ... <em>eM</em>);
+</pre>
+
+In this form, the suspended method call is bound to the
 [hook](#hook-declarations) specified by <tt><em>hookref</em></tt>. The point in
 the future when the method call is executed is thus the next time a message is
-sent through the specified hook. The *binding syntax* <tt>-> (<em>msg1</em>, ...
-<em>msgN</em>)</tt> is used to bind each component of the message received to a
-corresponding identifier, called a *message component parameter*. These message
-component parameters can be used as arguments of the called method, thus
-propagating the contents of the message to the method call. Every argument to
-the called method which isn't a message component parameter is evaluated at the
-time the `after` statement is executed, and stored so that they may be used when
-the method call is to be performed.
+sent through the specified hook.
 
-For example:
+The *binding syntax* <tt>-> (<em>msg1</em>, ... <em>msgN</em>)</tt> is used to
+bind each component of the message received to a corresponding identifier,
+called a *message component parameter*. These message component parameters can
+be used as arguments of the called method, thus propagating the contents of the
+message to the method call.
+
+Every argument to the called method which isn't a message component parameter is
+evaluated at the time the `after` statement is executed, and stored so that they
+may be used when the method call is to be performed. In order to allow the
+suspended method call to be represented in checkpoints, every input parameter of
+the method must be of [*serializable type*](#serializable-types), unless that
+input parameter receives a message component. This means that hook-bound after
+statements cannot be used with methods that e.g. have pointer input parameters,
+unless the arguments for those input parameters are message component parameters
+of the `after`.
+
+Example use:
 ```
 hook(int, float) h;
 
@@ -3280,7 +3335,7 @@ method m() {
 
 method send_message() {
     // Assuming m() has been called once before, this 'send_now' will result in
-    // `my_callback(1, 3.7, false)` to be called.
+    // `my_callback(1, 3.7, false)` being called.
     h.send_now(1, 3.7);
 }
 ```
@@ -3303,29 +3358,123 @@ after h -> (x, y): my_callback(i, y + 1.5, false)
 ```
 as the message component parameter `y` is used, but not as a direct argument.
 
-For both forms of `after`, to allow the suspended method call to be represented
-in a checkpoint, `after` statements may only be performed with methods that have
-no return values, and where each input parameter of the method must be of
-[*serializable type*](#serializable-types), unless that input parameter receives
-a message component.
+#### Immediate After Statements
+<pre>
+after: <em>method</em>(<em>e1</em>, ... <em>eN</em>);
+</pre>
 
-This means that `after` statements cannot be used with methods that e.g. have
-pointer input parameters, unless the arguments for those input parameters are
-message component parameters of the `after`.
+In this form, the specified point in the future is when control is given back to
+the simulation engine such that the ongoing simulation of the current processor
+may progress, and would otherwise be ready to move onto the next cycle.
+This happens after all entries to devices on the call stack have been completed.
 
-All method calls suspended via an `after` statement are *associated* with the
-object that contain the method containing the statement. It is possible to
-cancel all suspended method calls associated with an object through that
-object's `cancel_after()` method, as provided by the [`object`
-template](dml-builtins.html#object).
+Immediate after statements are most useful to avoid ordering bugs. It can be
+used to delay a method call until all current lines of execution into the device
+have been completed, and the device is guaranteed to be in a consistent state
+where it is ready to handle the method call.
 
-<div class="note">
+Semantically, the immediate after statement is very close to
+`after 0 cycles: ...`, but has a number of advantages. In general, the immediate
+after statement is designed to execute the callback as promptly as possible
+while satisfying the semantics stated above, while `after 0 cycles: ...` is not.
+In particular, in Simics, callbacks delayed via `after 0 cycles` are always
+bound to the clock associated with the device instance, which is not always
+that of the processor currently under simulation &mdash; in such cases the
+simulated processor may progress indefinitely without the posted callback being
+executed. The immediate after statement does not have this issue.
+In addition, if an immediate after statement is executed while the
+simulation is stopped (due to a device entry such as an attribute get/set
+performed from a script/CLI) then the callback is registered as *work*,
+thus guaranteeing that it is called before the simulation starts again.
 
-**Note:** We plan to extend the `after` statement to allow for users to
-explicitly state what objects the suspended method calls are to be associated
-with.
+Within a particular device instance, method calls suspended by immediate
+after statements are executed in order of least recently suspended; in other
+words, FIFO semantics. The order in which method calls suspended by immediate
+after statements are executed across multiple device instances is not defined.
 
-</div>
+Within an immediate after statement, every argument provided to the called
+method is evaluated at the time the `after` statement is executed, and stored so
+that they may be used when the method call is to be performed. Unlike the other
+forms of `after` statements, the input parameters of the method are never
+required to be of serializable type, meaning pointers can be passed as arguments
+to the callback. But **beware**: pointers to stack-allocated data (pointers to
+or within `local` variables) must **never** be passed as arguments. The
+stack with which the `after` statement is executed is *not* preserved, so any
+pointers to stack-allocated data will point to invalid data by the time the
+callback is called. The DML compiler has some checks in place to warn about the
+most obvious cases where pointers to stack-allocated data are provided as
+arguments, but it is unable to detect all cases. It is ultimately the modeller's
+responsibility to ensure it doesn't happen.
+
+To detail a scenario exemplifying the kind of issues that immediate after may
+be leveraged to solve, consider the following device, which needs to communicate
+with a *manager* device and receive permission in order to perform a particular
+action. Its function is simple: once prompted, the device will raise a signal to
+the manager in order to request permission, and waits for it to respond with an
+acknowledgement. Once received, the device lowers the signal to the manager and
+performs the action it just received permission for.
+In order to implement the asynchronous logic needed for this, a simple FSM is
+used.
+```
+param STATE_IDLE = 0;
+param STATE_EXPECTING_ACK = 1;
+saved int curr_state = STATE_IDLE;
+
+port manager_link {
+    connect manager {
+        interface signal;
+    }
+
+    implement signal {
+        method signal_raise() {
+            on_acknowledgement();
+        }
+    }
+}
+
+method request_permission_for_action() {
+    if (curr_state != STATE_IDLE) {
+        log error: "Request already in progress";
+        return;
+    }
+    manager_link.manager.signal.signal_raise();
+    curr_state = STATE_EXPECTING_ACK;
+}
+
+method on_acknowledgement() {
+    if (curr_state != STATE_EXPECTING_ACK) {
+        log spec_viol: "Received ack when not expecting it";
+        return;
+    }
+    manager_link.manager.signal.signal_lower();
+    perform_permission_gated_action();
+    curr_state = STATE_IDLE;
+}
+```
+This device has a subtle bug: it can't handle if the manager responds to the
+`signal_raise()` call synchronously.
+The FSM transitions to the state capable of handling the acknowledgement
+only after the `signal_raise()` call returns, so if the manager responds
+synchronously &mdash; as part of the `signal_raise()` call &mdash; then
+`on_acknowledgement` will be called while the device still considers itself to
+be in its idle state.
+
+This bug can be solved in numerous ways &mdash; the most obvious is to
+transition the state before making the `signal_raise()` call &mdash; but
+immediate after provides a solution which doesn't require carefully managing
+the FSM's logic, by delaying the call to `on_acknowledgement` until the device
+is done with all other logic.
+```
+implement signal {
+    method signal_raise() {
+        after: on_acknowledgement();
+    }
+}
+```
+This guarantees that the FSM is able to finish its current line of execution and
+properly transition itself to its new state before it's asked to manage any
+response of manager, even if the manager responds synchronously.
+
 
 ### Log Statements
 

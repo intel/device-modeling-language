@@ -1,0 +1,90 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// COMPILE-ONLY
+typedef struct {
+    int *x;
+    int *y[2];
+    int *z[2][3];
+} substruct_t;
+
+typedef struct {
+    int *x;
+    int *y[2];
+    int *z[2][3];
+    substruct_t sub_a;
+    substruct_t sub_b[2];
+    substruct_t sub_c[2][3];
+} struct_t;
+
+hook(void *) h;
+
+method init() {
+    local int *x;
+    local int *y[2];
+    local int *z[2][3];
+    local struct_t s;
+
+    local int *(*arr)[2][3];
+    local int *(*arr_2)[3];
+
+    // no warning
+    h.send(x);
+    h.send(y[1]);
+    h.send(z[1][2]);
+    h.send(s.x);
+    h.send(s.y[1]);
+    h.send(s.z[1][2]);
+    h.send(s.sub_a.x);
+    h.send(s.sub_b[1].y[1]);
+    h.send(s.sub_b[1].y[1]);
+    h.send(arr);
+    h.send(*arr);
+    h.send((*arr)[1]);
+    h.send((*arr)[1][2]);
+
+    /// WARNING WHOOKSEND
+    h.send(&x);
+    /// WARNING WHOOKSEND
+    h.send(y);
+    /// WARNING WHOOKSEND
+    h.send(z[1]);
+    /// WARNING WHOOKSEND
+    h.send(&y[1]);
+    /// WARNING WHOOKSEND
+    h.send(&z[1][2]);
+    /// WARNING WHOOKSEND
+    h.send(&s.x);
+    /// WARNING WHOOKSEND
+    h.send(s.y);
+    /// WARNING WHOOKSEND
+    h.send(s.z[1]);
+    /// WARNING WHOOKSEND
+    h.send(&s.sub_a.x);
+    /// WARNING WHOOKSEND
+    h.send(s.sub_a.y);
+    /// WARNING WHOOKSEND
+    h.send(s.sub_a.z[1]);
+    /// WARNING WHOOKSEND
+    h.send(s.sub_b[1].y);
+    /// WARNING WHOOKSEND
+    h.send(s.sub_c[1][2].z[1]);
+
+    /// WARNING WHOOKSEND
+    h.send(*cast(z, typeof(arr_2)));
+
+    /// WARNING WHOOKSEND
+    h.send(cast(&*(1 + (&x - 1)), void *));
+
+    // no warning
+    h.send(cast(cast(&x, uintptr_t), void *));
+
+    local int **x_ptr = &x;
+    // no warning
+    h.send(x_ptr);
+}

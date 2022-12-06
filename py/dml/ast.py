@@ -32,6 +32,7 @@ class AST(object):
 astkinds = {
     'after',
     'afteronhook',
+    'immediateafter',
     'apply',
     'assert',
     'assign',

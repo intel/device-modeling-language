@@ -50,6 +50,10 @@ after_on_hook_infos = []
 # object -> codegen.AfterDelayInfo
 after_delay_infos = {}
 
+# A mapping from any immediate after key to its immediate after info
+# object -> codegen.ImmediateAfterInfo
+immediate_after_infos = {}
+
 # A mapping from a unique type sequence to its TypeSequenceInfo
 # types.TypeSequence -> codegen.TypeSequenceInfo
 type_sequence_infos = {}

@@ -899,6 +899,7 @@ method _get_attribute_attr(const _dml_attr_getset_info_t *_conf_info,
         no_items /= id_info.dimsizes[i];
     }
     local attr_value_t *items = new attr_value_t[no_items];
+    local attr_value_t *items_buf = new attr_value_t[no_items];
     for (local int i = 0; i < no_items; ++i) {
         local _traitref_t traitref = {conf_info.vtable,
                                       {id_info.id, i + flat_index_offset}};
@@ -908,20 +909,19 @@ method _get_attribute_attr(const _dml_attr_getset_info_t *_conf_info,
          --i) {
         local uint32 new_frag_size = id_info.dimsizes[i];
         local size_t new_no_items = no_items / new_frag_size;
-        local attr_value_t *new_items = new attr_value_t[new_no_items];
         for (local int j = 0; j < new_no_items; ++j) {
-            new_items[j] = SIM_alloc_attr_list(new_frag_size);
-            local attr_value_t *new_frag = SIM_attr_list(new_items[j]);
+            items_buf[j] = SIM_alloc_attr_list(new_frag_size);
+            local attr_value_t *new_frag = SIM_attr_list(items_buf[j]);
             for (local int k = 0; k < new_frag_size; ++k) {
                 new_frag[k] = items[j * new_frag_size + k];
             }
         }
-        delete items;
-        items = new_items;
+        (items, items_buf) = (items_buf, items);
         no_items = new_no_items;
     }
     local attr_value_t to_ret = *items;
     delete items;
+    delete items_buf;
     return to_ret;
 }
 
@@ -960,7 +960,8 @@ method _set_attribute_attr(const _dml_attr_getset_info_t *_conf_info,
         return cast(&traitref, _conf_attribute *)->set_attribute(*val);
     }
 
-    local attr_value_t *items = new attr_value_t;
+    local attr_value_t *items = new attr_value_t[conf_info.num];
+    local attr_value_t *items_buf = new attr_value_t[conf_info.num];
     *items = *val;
     local size_t no_items = 1;
     local bool allow_cutoff = conf_info.allow_cutoff;
@@ -968,7 +969,6 @@ method _set_attribute_attr(const _dml_attr_getset_info_t *_conf_info,
     for (local int i = start_dim; i < cast(id_info.dimensions, int); ++i) {
         local uint32 frag_size = id_info.dimsizes[i];
         local size_t new_no_items = no_items * frag_size;
-        local attr_value_t *new_items = new attr_value_t[new_no_items];
         if (allow_cutoff) {
             for (local int j = 0; j < no_items; ++j) {
                 local uint32 subfrag_size = SIM_attr_is_list(items[j])
@@ -979,24 +979,24 @@ method _set_attribute_attr(const _dml_attr_getset_info_t *_conf_info,
                                              : NULL;
                 for (local int k = 0; k < subfrag_size; ++k) {
                     /*% COVERITY copy_paste_error FALSE %*/
-                    new_items[j * frag_size + k] = subfrags[k];
+                    items_buf[j * frag_size + k] = subfrags[k];
                 }
                 for (local int k = subfrag_size; k < frag_size; ++k) {
-                    new_items[j * frag_size + k] = SIM_make_attr_nil();
+                    items_buf[j * frag_size + k] = SIM_make_attr_nil();
                 }
             }
         } else {
             for (local int j = 0; j < no_items; ++j) {
                 local attr_value_t *subfrags = SIM_attr_list(items[j]);
                 for (local int k = 0; k < frag_size; ++k) {
-                    new_items[j * frag_size + k] = subfrags[k];
+                    items_buf[j * frag_size + k] = subfrags[k];
                 }
             }
         }
-        delete items;
-        items = new_items;
+        (items, items_buf) = (items_buf, items);
         no_items = new_no_items;
     }
+    delete items_buf;
     for (local int i = 0; i < no_items; ++i) {
         local _traitref_t traitref = {conf_info.vtable,
                                       {id_info.id, i + flat_index_offset}};

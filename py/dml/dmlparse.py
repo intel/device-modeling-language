@@ -2230,6 +2230,11 @@ def statement_delay_hook_no_msg_params(t):
     'statement_except_hashif : AFTER expression COLON expression SEMI'
     t[0] = ast.afteronhook(site(t), t[2], [], t[4])
 
+@prod_dml14
+def statement_delay_immediate(t):
+    'statement_except_hashif : AFTER COLON expression SEMI'
+    t[0] = ast.immediateafter(site(t), t[3])
+
 @prod_dml12
 def call(t):
     '''statement_except_hashif : CALL expression returnargs SEMI

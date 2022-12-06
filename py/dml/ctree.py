@@ -53,6 +53,7 @@ __all__ = (
     'mkExpressionStatement',
     'mkAfter',
     'mkAfterOnHook',
+    'mkImmediateAfter',
     'mkIf',
     'mkWhile',
     'mkDoWhile',
@@ -110,6 +111,8 @@ __all__ = (
     'InterfaceMethodRef',
     'mkHookSendNowRef', 'HookSendNowRef',
     'mkHookSendNowApply', 'HookSendNowApply',
+    'mkHookSendRef', 'HookSendRef',
+    'mkHookSendApply', 'HookSendApply',
     'mkNew',
     #'Constant',
     'mkIntegerConstant', 'IntegerConstant',
@@ -636,6 +639,33 @@ class AfterOnHook(Statement):
 
 mkAfterOnHook = AfterOnHook
 
+class ImmediateAfter(Statement):
+    @auto_init
+    def __init__(self, site, domains, info, indices, args_init):
+        crep.require_dev(site)
+    def toc(self):
+        self.linemark()
+        indices = ('(const uint32 []) {%s}'
+                   % (', '.join(i.read() for i in self.indices),)
+                   if self.indices else 'NULL')
+        if self.info.args_type is not None:
+            args = ('(%s){%s}'
+                    % (TArray(self.info.args_type,
+                              mkIntegerLiteral(self.site, 1)).declaration(''),
+                       self.args_init.args_init()))
+            args_size = f'sizeof({self.info.args_type.declaration("")})'
+        else:
+            (args, args_size) = ('NULL', '0')
+        domains = ('(const _identity_t []) {%s}'
+                   % (', '.join(domain.read() for domain in self.domains),)
+                   if self.domains else 'NULL')
+        out('_DML_post_immediate_after('
+            + '&_dev->obj, _dev->_immediate_after_state, '
+            + f'{self.info.cident_callback}, {indices}, {len(self.indices)}, '
+            + f'{args}, {args_size}, {domains}, {len(self.domains)});\n')
+
+mkImmediateAfter = ImmediateAfter
+
 class If(Statement):
     @auto_init
     def __init__(self, site, cond, truebranch, falsebranch):
@@ -1006,6 +1036,12 @@ class LValue(Expression):
             return (f'{rt.dmllib_fun("copy")}(&{self.read()},'
                     + f' {source.read()})')
         return '%s = %s' % (self.read(), source.read())
+
+    @property
+    def is_stack_allocated(self):
+        '''Returns true only if it's known that writing to the lvalue will
+           write to stack-allocated data'''
+        return False
 
 class IfExpr(Expression):
     priority = 30
@@ -1961,6 +1997,12 @@ class ArithBinOp(BinOp):
             result = mkCast(site, result, TInt(64, True))
         return result
 
+    @property
+    def is_pointer_to_stack_allocation(self):
+        return (isinstance(safe_realtype_shallow(self.ctype()), (TPtr, TArray))
+                and (self.lh.is_pointer_to_stack_allocation
+                     or self.rh.is_pointer_to_stack_allocation))
+
 class Mult_dml12(ArithBinOp_dml12):
     priority = 130
     op = '*'
@@ -2159,6 +2201,7 @@ class Add_dml12(ArithBinOp_dml12):
 class Add(ArithBinOp):
     priority = 110
     op = '+'
+
     @staticmethod
     def eval_const(left, right):
         return left + right
@@ -2338,6 +2381,10 @@ class AssignOp(BinOp):
     def ctype(self):
         return self.lh.ctype()
 
+    @property
+    def is_pointer_to_stack_allocation(self):
+        return self.rh.is_pointer_to_stack_allocation
+
 def mkAssignOp(site, target, source):
     if isinstance(target, InlinedParam):
         raise EASSINL(target.site, target.name)
@@ -2408,6 +2455,10 @@ class AddressOf(UnaryOp):
             raise ERVAL(rh.site, '&')
         return AddressOf(site, rh)
 
+    @property
+    def is_pointer_to_stack_allocation(self):
+        return isinstance(self.rh, LValue) and self.rh.is_stack_allocated
+
 def mkAddressOf(site, rh):
     if dml.globals.compat_dml12_int(site):
         t = safe_realtype(rh.ctype())
@@ -2437,6 +2488,14 @@ class Dereference(UnaryOp, LValue):
         if etype and not isinstance(etype, TPtr):
             raise ENOPTR(site, rh)
         return Dereference(site, rh)
+
+    @property
+    def is_stack_allocated(self):
+        return self.rh.is_pointer_to_stack_allocation
+
+    @property
+    def is_pointer_to_stack_allocation(self):
+        return isinstance(self.type, TArray) and self.is_stack_allocated
 
 mkDereference = Dereference.make
 
@@ -2600,6 +2659,10 @@ class IncDec(UnaryOp):
     @property
     def op(self):
         return self.base_op
+
+    @property
+    def is_pointer_to_stack_allocation(self):
+        return self.rh.is_pointer_to_stack_allocation
 
 class PreIncDec(IncDec):
     def __str__(self):
@@ -4011,7 +4074,7 @@ class HookSendNowRef(NonValue):
         msg_types = safe_realtype_shallow(self.hookref_expr.ctype()).msg_types
         args = typecheck_inarg_inits(
             self.site, inits,
-            [(str(i + 1), t)
+            [(f'comp{i}', t)
              for (i, t) in enumerate(msg_types)],
             location, scope, 'send_now')
         return mkHookSendNowApply(self.site, self.hookref_expr, args)
@@ -4043,15 +4106,58 @@ class HookSendNowApply(Expression):
         return ('_DML_send_hook(&_dev->obj, '
                 + f'&_dev->_detached_hook_queue_stack, {hookref}, {msg})')
 
-def mkHookSendNowApply(site, hookref_expr, args):
-    msg_types = safe_realtype_shallow(hookref_expr.ctype()).msg_types
-    typecheck_inargs(
-        site, args,
-        [(f'comp{i}', t) for (i, t) in enumerate(msg_types)],
-        'send_now')
-    args = [source_for_assignment(site, msg_type, arg)
-            for (msg_type, arg) in zip(msg_types, args)]
-    return HookSendNowApply(site, hookref_expr, args)
+mkHookSendNowApply = HookSendNowApply
+
+class HookSendRef(NonValue):
+    '''Reference to the send pseudomethod of a hook'''
+    @auto_init
+    def __init__(self, site, hookref_expr): pass
+
+    def __str__(self):
+        return "%s.send" % (self.hookref_expr,)
+    def apply(self, inits, location, scope):
+        msg_types = safe_realtype_shallow(self.hookref_expr.ctype()).msg_types
+        args = typecheck_inarg_inits(
+            self.site, inits,
+            [(f'comp{i}', t)
+             for (i, t) in enumerate(msg_types)],
+            location, scope, 'send',
+            on_ptr_to_stack=(lambda x: report(WHOOKSEND(x.site, x))))
+        from .codegen import get_type_sequence_info, get_immediate_after
+        typeseq_info = get_type_sequence_info(msg_types, create_new=True)
+        after_info = get_immediate_after(typeseq_info)
+        return mkHookSendApply(self.site, self.hookref_expr, args, after_info)
+
+mkHookSendRef = HookSendRef
+
+class HookSendApply(Expression):
+    '''Application of the send pseudomethod with valid arguments'''
+    type = void
+    @auto_init
+    def __init__(self, site, hookref_expr, args, info):
+        crep.require_dev(site)
+
+    def __str__(self):
+        return '%s.send(%s)' % (self.hookref_expr,
+                                ', '.join(str(e) for e in self.args))
+    def read(self):
+        if self.args:
+            args = ('&(%s){ %s, { %s } }'
+                    % (self.info.args_type.declaration(''),
+                       self.hookref_expr.read(),
+                       ', '.join(arg.read() for arg in self.args)))
+        else:
+            args = ('(%s){%s}'
+                    % (TArray(self.info.args_type,
+                              mkIntegerLiteral(self.site, 1)).declaration(''),
+                       self.hookref_expr.read()))
+        args_size = f'sizeof({self.info.args_type.declaration("")})'
+        return ('_DML_post_immediate_after('
+                + '&_dev->obj, _dev->_immediate_after_state, '
+                + f'{self.info.cident_callback}, NULL, 0, {args}, '
+                + f'{args_size}, NULL, 0);\n')
+
+mkHookSendApply = HookSendApply
 
 class Variable(LValue):
     "Variable storage"
@@ -4077,6 +4183,13 @@ class Variable(LValue):
 
 class LocalVariable(Variable):
     "Local variable storage"
+    @property
+    def is_stack_allocated(self):
+        return True
+
+    @property
+    def is_pointer_to_stack_allocation(self):
+        return isinstance(safe_realtype_shallow(self.ctype()), TArray)
 
 mkLocalVariable = LocalVariable
 
@@ -4109,6 +4222,14 @@ class StructMember(LValue):
         if self.expr.priority < self.priority:
             s = '(' + s + ')'
         return s + self.op + self.sub
+
+    @property
+    def is_stack_allocated(self):
+        return isinstance(self.expr, LValue) and self.expr.is_stack_allocated
+
+    @property
+    def is_pointer_to_stack_allocation(self):
+        return isinstance(self.type, TArray) and self.is_stack_allocated
 
 def mkSubRef(site, expr, sub, op):
     if isinstance(expr, NodeRef):
@@ -4185,7 +4306,9 @@ def mkSubRef(site, expr, sub, op):
         return mkSequenceLength(site, baseexpr, trait)
     elif isinstance(real_basetype, THook):
         real_basetype.validate(basetype.declaration_site or site)
-        if sub == 'send_now':
+        if sub == 'send':
+            return mkHookSendRef(site, baseexpr)
+        elif sub == 'send_now':
             return mkHookSendNowRef(site, baseexpr)
         elif sub == 'suspended':
             return mkHookSuspended(site, baseexpr)
@@ -4206,6 +4329,14 @@ class ArrayRef(LValue):
         if self.expr.priority < self.priority:
             expr = '(%s)' % (expr,)
         return '%s[%s]' % (expr, self.idx.read())
+
+    @property
+    def is_stack_allocated(self):
+        return self.expr.is_pointer_to_stack_allocation
+
+    @property
+    def is_pointer_to_stack_allocation(self):
+        return isinstance(self.type, TArray) and self.is_stack_allocated
 
 class VectorRef(LValue):
     slots = ('type',)
@@ -4287,6 +4418,11 @@ class Cast(Expression):
         if self.expr.priority <= self.priority:
             s = '(' + s + ')'
         return '(%s)%s' % (self.type.declaration(''), s)
+
+    @property
+    def is_pointer_to_stack_allocation(self):
+        return (isinstance(self.type, TPtr)
+                and self.expr.is_pointer_to_stack_allocation)
 
 def mkCast(site, expr, new_type):
     real = safe_realtype(new_type)

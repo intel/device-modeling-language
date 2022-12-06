@@ -10,6 +10,7 @@
 
 #include <stddef.h>
 
+#include <simics/base/event.h>
 #include <simics/base/types.h>
 #include <simics/base/log.h>
 #include <simics/base/conf-object.h>
@@ -1236,6 +1237,131 @@ _deserialize_simple_event_data(
     return error;
 }
 
+UNUSED static _simple_event_data_t
+_DML_create_simple_event_data(
+    const uint32 *indices, uint32 dimensions, const void *args,
+    size_t args_size, const _identity_t *domains, uint32 no_domains) {
+    _simple_event_data_t data = { 0 };
+    if (indices) {
+        data.indices = MM_MALLOC(dimensions, uint32);
+        for (uint32 i = 0; i < dimensions; ++i) {
+            data.indices[i] = indices[i];
+        }
+    }
+    if (args_size) {
+        data.args = MM_MALLOC(args_size, uint8);
+        memcpy(data.args, args, args_size);
+    }
+    if (no_domains) {
+        data.no_domains = no_domains;
+        data.domains = MM_MALLOC(no_domains, _identity_t);
+        for (uint32 i = 0; i < no_domains; ++i) {
+            data.domains[i] = domains[i];
+        }
+    }
+    return data;
+}
+typedef struct {
+    void (*callback)(conf_object_t *dev, const uint32 *indices,
+                     const void *args);
+    _simple_event_data_t data;
+} _dml_immediate_after_queue_elem_t;
+
+typedef QUEUE(_dml_immediate_after_queue_elem_t) _dml_immediate_after_queue_t;
+
+typedef struct {
+    // Invariant: nonempty queue implies posted (but not vice versa)
+    _dml_immediate_after_queue_t queue;
+    bool posted;
+    // Invariant: deleted implies posted and empty queue
+    bool deleted;
+} _dml_immediate_after_state_t;
+
+// Execute all pending immediate afters without relying on VT_stacked_post
+// Only safe to call in global context, where SIM_transaction_wait can't happen
+UNUSED static void
+_DML_execute_immediate_afters_now(conf_object_t *dev,
+                                  _dml_immediate_after_state_t *state) {
+    while (!QEMPTY(state->queue)) {
+        _dml_immediate_after_queue_elem_t elem = QREMOVE(state->queue);
+        elem.callback(dev, elem.data.indices, elem.data.args);
+        _free_simple_event_data(elem.data);
+    }
+}
+
+UNUSED static void
+_DML_execute_immediate_afters(conf_object_t *dev, lang_void *aux) {
+    _dml_immediate_after_state_t *state = (_dml_immediate_after_state_t *)aux;
+    ASSERT(state->posted);
+    if (unlikely(state->deleted)) {
+        ASSERT(QEMPTY(state->queue));
+        // No need to call QFREE, already done
+        MM_FREE(state);
+        return;
+    }
+    if (unlikely(QEMPTY(state->queue))) {
+        state->posted = false;
+        return;
+    }
+    _dml_immediate_after_queue_elem_t elem = QREMOVE(state->queue);
+    if (QEMPTY(state->queue)) {
+        state->posted = false;
+    } else {
+        VT_stacked_post(dev,
+                        _DML_execute_immediate_afters,
+                        (lang_void *)state);
+    }
+    elem.callback(dev, elem.data.indices, elem.data.args);
+    _free_simple_event_data(elem.data);
+}
+
+UNUSED static void
+_DML_post_immediate_after(
+    conf_object_t *dev,
+    _dml_immediate_after_state_t *state,
+    void (*callback)(conf_object_t *, const uint32 *, const void *),
+    const uint32 *indices, uint32 dimensions, const void *args,
+    size_t args_size, const _identity_t *domains, uint32 no_domains) {
+    ASSERT(!state->deleted);
+    _dml_immediate_after_queue_elem_t elem = {
+        .callback = callback,
+        .data = _DML_create_simple_event_data(
+            indices, dimensions, args, args_size, domains, no_domains)
+    };
+    QADD(state->queue, elem);
+    if (!state->posted) {
+        state->posted = true;
+        VT_stacked_post(dev,
+                        _DML_execute_immediate_afters,
+                        (lang_void *) state);
+    }
+}
+
+UNUSED static void
+_DML_cancel_immediate_afters(_dml_immediate_after_state_t *state,
+                             _identity_t id) {
+    uint32 queue_len = QLEN(state->queue);
+    _dml_immediate_after_queue_t new_queue = QNULL;
+    for (uint32 i = 0; i < queue_len; ++i) {
+        _dml_immediate_after_queue_elem_t elem = QGET(state->queue, i);
+        bool found = false;
+        for (uint32 j = 0; j < elem.data.no_domains; ++j) {
+            if (_identity_eq(id, elem.data.domains[j])) {
+                found = true;
+                break;
+            }
+        }
+        if (found) {
+            _free_simple_event_data(elem.data);
+        } else {
+            QADD(new_queue, elem);
+        }
+    }
+    _dml_immediate_after_queue_t old_queue = state->queue;
+    state->queue = new_queue;
+    QFREE(old_queue);
+}
+
 // All auxiliary info needed to de/serialize suspended calls created
 // from a specific after-on-hook.
 //
@@ -1375,25 +1501,12 @@ _DML_attach_callback_to_hook(
     _dml_hook_t *hook, const _dml_after_on_hook_info_t *info,
     const uint32 *indices, uint32 dimensions, const void *args,
     const _identity_t *domains, uint32 no_domains) {
-    _dml_hook_queue_elem_t elem = { .callback = info->callback,
-                                    .callback_key = info->callback_key};
-    if (dimensions) {
-        elem.data.indices = MM_MALLOC(dimensions, uint32);
-        for (uint32 i = 0; i < dimensions; ++i) {
-            elem.data.indices[i] = indices[i];
-        }
-    }
-    if (args) {
-        elem.data.args = MM_MALLOC(info->args_size, uint8);
-        memcpy(elem.data.args, args, info->args_size);
-    }
-    if (no_domains) {
-        elem.data.no_domains = no_domains;
-        elem.data.domains = MM_MALLOC(no_domains, _identity_t);
-        for (uint32 i = 0; i < no_domains; ++i) {
-            elem.data.domains[i] = domains[i];
-        }
-    }
+    uint32 args_size = info->args_size;
+    _dml_hook_queue_elem_t elem = {
+        .callback = info->callback,
+        .callback_key = info->callback_key,
+        .data = _DML_create_simple_event_data(
+            indices, dimensions, args, args_size, domains, no_domains)};
     VADD(hook->queue, elem);
 }
 
