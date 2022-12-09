@@ -405,18 +405,18 @@
       to the template type <tt>object</tt>, even if <tt>object</tt> is not an
       ancestor of the template <bug number="SIMICS-19950"/>.</add-note>
   </build-id>
-  <build-id value="next"><add-note>A new parameter <tt>init_val</tt> has been
+  <build-id value="6191"><add-note>A new parameter <tt>init_val</tt> has been
       introduced to the attribute templates <tt>bool_attr</tt>,
       <tt>uint64_attr</tt>, <tt>int64_attr</tt> and <tt>double_attr</tt>. These
       templates now also provide a default <tt>init()</tt> implementation
       that leverages <tt>init_val</tt> in order to initialize the <tt>val</tt>
       variable provided by the template <bug number="SIMICS-20108"/>.
   </add-note></build-id>
-  <build-id value="next"><add-note><tt>NULL</tt> is now considered a constant
+  <build-id value="6191"><add-note><tt>NULL</tt> is now considered a constant
       expression, and equalities between <tt>NULL</tt> and other constant
       expressions of pointer type (in particular, string literals) are now also
       considered constant.</add-note></build-id>
-  <build-id value="next"><add-note>Attribute registration for <tt>connect</tt>,
+  <build-id value="6191"><add-note>Attribute registration for <tt>connect</tt>,
       <tt>attribute</tt>, and <tt>register</tt> objects has been greatly
       optimized, reducing the compilation times of models that feature large
       numbers of such objects <bug number="SIMICS-6271"/>. A consequence of this
@@ -425,15 +425,15 @@
       such objects are always reported by the compiler, even if the
       <tt>configuration</tt> parameter is defined to be <tt>"none"</tt>.
   </add-note></build-id>
-  <build-id value="next"><add-note>Fixed a bug where leveraging serialization
+  <build-id value="6191"><add-note>Fixed a bug where leveraging serialization
       of a template type could cause an internal compiler error if there is
       some object in the model instantiating that template which never gets
       referenced in a value of that template type <bug number="SIMICS-20301"/>.
   </add-note></build-id>
-  <build-id value="next"><add-note>The <tt>register_info</tt> interface
+  <build-id value="6191"><add-note>The <tt>register_info</tt> interface
       for banks now provide unique names for each field in an array
       <bug number="SIMICS-18244"/>.</add-note></build-id>
-  <build-id value="next"><add-note>Fixed a bug where <tt>.len</tt> on template
+  <build-id value="6191"><add-note>Fixed a bug where <tt>.len</tt> on template
       type sequences could only be used with direct <tt>each</tt>-<tt>in</tt>
       expressions <bug number="SIMICS-20278"/>.</add-note></build-id>
 </rn>
