@@ -9,6 +9,8 @@ from contextlib import nullcontext
 from functools import reduce
 from abc import ABC, abstractmethod
 import dataclasses
+import json
+from pathlib import Path
 
 from . import objects, logging, crep, output, ctree, serialize, structure
 from . import traits
@@ -2855,6 +2857,9 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
         for m in list(t.method_impls.values()):
             generate_trait_method(m)
 
+    gather_size_statistics = os.environ.get('DMLC_GATHER_SIZE_STATISTICS', '')
+    size_statistics = {}
+
     # Note: methods may be added to method_queue while doing this,
     # so don't try to be too smart
     generated_funcs = set()
@@ -2869,7 +2874,11 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
                            for (n, v) in func.inp
                            if isinstance(v, Expression)]
 
-        with ErrorContext(func.method):
+        if gather_size_statistics:
+            ctx = StrOutput()
+        else:
+            ctx = nullcontext()
+        with ErrorContext(func.method), ctx:
             if specializations:
                 out('/* %s\n' % func.get_name())
                 for (n, v) in specializations:
@@ -2891,8 +2900,20 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
                 raise ICE(e.site, 'error during late compile stage')
             eom_linemark(func.method.rbrace_site)
             out('}\n\n', preindent = -1)
-            reset_line_directive()
-            splitting_point()
+        reset_line_directive()
+        splitting_point()
+
+        if gather_size_statistics:
+            size_statistics.setdefault(func.method.site.loc(), []).append(
+                len(ctx.buf))
+            out(ctx.buf)
+
+    if gather_size_statistics:
+        Path(filename_prefix + "-size-stats.json").write_text(json.dumps(
+            sorted(((sum(sizes), len(sizes), loc)
+                    for (loc, sizes) in size_statistics.items()),
+                   reverse=True),
+            indent=2))
 
     with crep.DeviceInstanceContext():
         register_saved_attributes(init_code, device)

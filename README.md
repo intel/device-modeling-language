@@ -92,3 +92,25 @@ the same directory (either top level or under a series of subdirectories called
 archive. On Windows, DMLC is sometimes unable to resolve these symlinks
 correctly; for this reason, it is recommended that the archive is only
 extracted and compiled on Linux.
+
+### DMLC_GATHER_SIZE_STATISTICS
+When set, DMLC outputs a file ending with `-size-stats.json`, which shows code
+generation statistics useful to reduce generated code size and increase compile
+speed. The file lists how much C code is generated for each DML method. The
+output is a list of triples `[tot_size, location, num]`, where `tot_size` is
+the total number of bytes of C code generated from one method declaration,
+`num` is how many times C code was generated from this declaration (because it
+was expanded by a template), and `location` is the source location of the
+declaration.
+
+An entry with a large `tot_size` and a large `num` can be reduced by declaring
+the method as `shared`; this should roughly divide the size by `num`. An entry
+with large `tot_size` with `num` equals 1 usually means the method is dominated
+by a construct like `#foreach` or `#select`, and can be reduced by breaking out
+the loop body into a separate method, or by otherwise reworking the loop into
+some other construct like `foreach`.
+
+Note that the statistics only includes code directly generated from method
+declarations; the total code size includes much more. One megabyte of code size
+from method declarations usually contributes with a few seconds of compile
+time.
