@@ -2853,13 +2853,20 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
             for node in flatten_object_subtree(device)
             if node.traits}
 
-    for t in list(dml.globals.traits.values()):
-        for m in list(t.method_impls.values()):
-            generate_trait_method(m)
 
     gather_size_statistics = os.environ.get('DMLC_GATHER_SIZE_STATISTICS', '')
     size_statistics = {}
 
+    for t in list(dml.globals.traits.values()):
+        for m in list(t.method_impls.values()):
+            if gather_size_statistics:
+                ctx = StrOutput()
+                with ctx:
+                    generate_trait_method(m)
+                size_statistics[m.site.loc()] = [len(ctx.buf)]
+                out(ctx.buf)
+            else:
+                generate_trait_method(m)
     # Note: methods may be added to method_queue while doing this,
     # so don't try to be too smart
     generated_funcs = set()
