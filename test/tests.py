@@ -828,6 +828,38 @@ class DMLCProfileTestCase(CTestCase):
             raise TestFail(f'stats file not generated')
 
 
+class SizeStatsTestCase(CTestCase):
+    '''Test that the DMLC_GATHER_SIZE_STATS variable works.  It creates a
+    json file with a list of [size, num, location] tuples.'''
+    __slots__ = ()
+    def test(self):
+        super().test()
+        stats = json.loads(
+            (Path(self.scratchdir)
+             / f'T_{self.shortname}-size-stats.json').read_text())
+        funcs = [tuple(x) for x in stats if 'size_stats.dml:' in x[2]]
+        self.pr(f'{funcs}')
+        # five methods: m1, m2, m3, m4, init
+        assert len(funcs) == 5
+        # sorted by size, descending
+        sz = [s for (s, *_) in funcs]
+        assert sz[0] >= sz[1] >= sz[2] >= sz[3] >= sz[4]
+        # the biggest two are large (caused by code explosion)
+        assert sz[1] > 5000
+        # the third and fourth are optimized and much smaller
+        assert sz[2] < 2000
+        assert sz[3] > 500
+        # the last one (init) is small
+        assert sz[4] < 500
+        # the second field is the number of instances of each method. One
+        # of the two largest is multiplied, remaining are singleton
+        assert {num for (_, num, _) in funcs[:2]} == {1, 12}
+        assert [num for (_, num, _) in funcs[2:4]] == [1, 1]
+        by_lineno = sorted(funcs, key=lambda t: int(t[2].rsplit(':')[-2]))
+        # the largest two appear second and fourth in the file
+        assert {by_lineno[1], by_lineno[3]} == {funcs[0], funcs[1]}
+
+
 class DumpInputFilesTestCase(CTestCase):
     '''Test that the DMLC_DUMP_INPUT_FILES variable works.  It creates a
     tarball of input DML files that can be compiled standalone.'''
@@ -907,6 +939,11 @@ all_tests.append(DumpInputFilesTestCase(
     join(testdir, '1.4', 'misc', 'T_import_rel.dml'),
     prefix=['_'],
     extraenv={'DMLC_DUMP_INPUT_FILES': '1'}))
+
+all_tests.append(SizeStatsTestCase(
+    ["size-stats"],
+    join(testdir, '1.4', 'misc', 'size_stats.dml'),
+    extraenv={'DMLC_GATHER_SIZE_STATISTICS': '1'}))
 
 # Test that it fails with a good error message if it can't create the
 # output files.

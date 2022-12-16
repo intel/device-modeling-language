@@ -1,0 +1,88 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+device test;
+
+/// COMPILE-ONLY
+
+/*
+  This test creates some methods that generate a lot of C code, and see that
+  they show up when compiling with DMLC_GATHER_SIZE_STATISTICS.
+
+  First, the baseline function is a method body that generates a bit over 32*20
+  = 640 bytes of code (-1 expands to a ~20 byte uint64 literal, and we output a
+  variable with 32 copies of -1 as initializers).
+
+  Then two typical code explosion patterns are exercised: one is to instantiate
+  many non-shared implementations of a method, and one is to expand a large
+  body using #foreach or #select. Both expand by a factor of 12,
+  for a total size of > 7680 bytes.
+
+  SIMICS-20398
+*/
+
+template g {
+    // modest contributor to code size: method implementation shared
+    // between all 12 template instances
+    shared method m1() -> (int) {
+        local uint64 i[32] = {
+            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        };
+        return i[10];
+    }
+
+    // large contributor to code size: non-shared method called in all 12
+    // template instances
+    method m2() -> (int) {
+        local uint64 i[32] = {
+            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        };
+        return i[10];
+    }
+}
+
+group g0 is g; group g1 is g; group g2 is g; group g3 is g;
+group g4 is g; group g5 is g; group g6 is g; group g7 is g;
+group g8 is g; group g9 is g; group g10 is g; group g11 is g;
+
+// modest contributor to code size: foreach loop body is generated once
+method m3() -> (int) {
+    local int ret;
+    foreach g in (each g in (dev)) {
+        local uint64 i[32] = {
+            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        };
+        ret += i[10];
+        // make sure m1 isn't optimized out
+        g.m1();
+    }
+    return ret;
+}
+
+// large contributor to code size: #foreach loop body is multiplied by 12
+// by unrolling
+method m4() -> (int) {
+    local int ret;
+    #foreach g in ([g0, g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11]) {
+        local uint64 i[32] = {
+            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        };
+        ret += i[10];
+        // make sure m2 isn't optimized out
+        g.m2();
+    }
+    return ret;
+}
+
+method init() {
+    m3();
+    m4();
+}
