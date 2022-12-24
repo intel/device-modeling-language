@@ -330,6 +330,7 @@ template hard_reset {
         foreach obj in (this._each_hard_reset)
             obj.hard_reset();
     }
+    shared method hard_reset_deassert() default {}
 }
 
 template _init_val_hard_reset is (init_val, hard_reset) {
@@ -342,11 +343,15 @@ template _init_val_hard_reset is (init_val, hard_reset) {
 // Instantiate this on top level to support hard reset.
 template hreset is hard_reset {
     port HRESET {
+        saved bool reset_asserted;
         implement signal {
             method signal_raise() default {
+                reset_asserted = true;
                 dev.hard_reset();
             }
             method signal_lower() default {
+                dev.hard_reset_deassert();
+                reset_asserted = false;
             }
         }
     }
