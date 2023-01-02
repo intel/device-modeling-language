@@ -1,4 +1,4 @@
-# © 2021-2022 Intel Corporation
+# © 2021-2023 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 cpu = SIM_create_object("clock", "cpu", [["freq_mhz", 1]])

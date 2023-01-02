@@ -1,4 +1,4 @@
-# © 2021-2022 Intel Corporation
+# © 2021-2023 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 mem = SIM_create_object("memory-space", "mem",

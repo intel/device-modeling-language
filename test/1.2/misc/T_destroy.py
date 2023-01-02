@@ -1,4 +1,4 @@
-# © 2021-2022 Intel Corporation
+# © 2021-2023 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 # We need to create a second object, since run-test.py expects obj to

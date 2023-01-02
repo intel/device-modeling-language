@@ -1,4 +1,4 @@
-# © 2022 Intel Corporation
+# © 2022-2023 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 import itertools

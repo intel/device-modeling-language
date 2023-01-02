@@ -1,4 +1,4 @@
-# © 2021-2022 Intel Corporation
+# © 2021-2023 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 # Types in DML
