@@ -1618,12 +1618,11 @@ for (testfile, testpath) in walk(testdir):
 class ImportTest(CTestCase):
     __slots__ = ('files', 'extra_code', 'dml_version')
     def __init__(self, testname, dml_version, api_version, files,
-                 extra_code = "", cc_extraargs=()):
+                 extra_code = ""):
         filename = join(testparams.sandbox_path(), "scratch",
                         testname + ".dml")
         CTestCase.__init__(self,  [testname], filename,
-                           api_version=api_version,
-                           cc_extraargs=cc_extraargs)
+                           api_version=api_version)
         self.files = files
         self.extra_code = extra_code
         self.dml_version = dml_version
@@ -1679,14 +1678,7 @@ for dmlver in ["1.2", "1.4"]:
         testname = "api-dml-%s-api-%s" % (dmlver, apiver)
         files = api_files(dmlver, apiver)
         assert files, (dmlver, apiver)
-        if dmlver == "1.4" and is_windows():
-            # Prevents some name clashes with windows.h,
-            # implicitly imported from a few headers
-            cc_extraargs = ["-DWIN32_LEAN_AND_MEAN"]
-        else:
-            cc_extraargs = []
-        all_tests.append(ImportTest(
-            testname, dmlver, apiver, files, cc_extraargs=cc_extraargs))
+        all_tests.append(ImportTest(testname, dmlver, apiver, files))
 
 def filter_tests(tests):
     # Map test name to test object

@@ -324,6 +324,7 @@ cident_renames = {
     'write': '__write',
     'hard_reset': '_hard_reset',
     'soft_reset': '_soft_reset',
+    'interface': '_interface',
 }
 
 def cident(name):
