@@ -1,0 +1,20 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+import "testing.dml";
+
+template a { method m() -> (int) default { return 0; } }
+template b { method m() -> (int) default { return 1; } }
+template c is (a, b) { method m() -> (int) default { return 2; } }
+is c;
+group d is (a, b) { method m() -> (int) default { return 3; } }
+
+method test() throws {
+    assert m() == 2;
+    assert d.m() == 3;
+}
