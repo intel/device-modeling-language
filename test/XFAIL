@@ -58,9 +58,6 @@
 # SIMICS-9783
 1.2/structure/parameter_if
 
-# SIMICS-11346
-1.2/structure/trait
-
 # SIMICS-12233
 1.2/errors/ENAMECOLL_uint32
 
