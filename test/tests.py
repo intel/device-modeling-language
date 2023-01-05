@@ -679,6 +679,8 @@ class CTestCase(DMLFileTestCase):
         sc.write("testname = %r\n" % self.shortname)
         sc.write("scratchdir = %r\n" % self.scratchdir)
         sc.write("basedir = %r\n" % join(os.path.dirname(self.filename)))
+        sc.write("SIM_add_module_dir(scratchdir)\n")
+        sc.write("SIM_module_list_refresh()\n")
         if auto_instantiate:
             sc.write("try:\n")
             sc.write(f"    SIM_load_module('dml-test-{self.shortname}')\n")
@@ -708,7 +710,6 @@ class CTestCase(DMLFileTestCase):
                 "-batch-mode", "-quiet", "-no-copyright", "-no-settings",
                 "-core", "-werror",
                 '-py3k-warnings',
-                "-L", self.scratchdir,
                 "-project", testparams.project_path(),
                 "-p", self.scriptname]
         env = os.environ.copy()
