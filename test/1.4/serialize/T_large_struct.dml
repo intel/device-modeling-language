@@ -1,0 +1,46 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+import "simics/simulator/conf-object.dml";
+import "testing.dml";
+
+// A struct size large enough to make a local variable cause stack overflow.
+// This used to happen in serialization code, HSD-ES 18026246959
+
+constant size = 200_000;
+
+typedef struct {
+    uint8 data[size];
+} huge_t;
+saved huge_t x;
+
+
+header %{
+#ifndef _WIN32
+    #include <sys/resource.h>
+#endif
+    static void run_test(conf_object_t *obj, int stack_limit) {
+#ifndef _WIN32
+        // waste most of the stack. Pass O0 to avoid optimizing out alloca.
+        struct rlimit limit;
+        getrlimit(RLIMIT_STACK, &limit);
+/// CC-FLAG -O0
+        char *x = alloca(limit.rlim_cur - stack_limit);
+        x[0] = 1;
+        x[stack_limit - 1] = 1;
+#endif
+        attr_value_t a = SIM_get_attribute(obj, "x");
+        SIM_set_attribute(obj, "x", &a);
+        SIM_attr_free(&a);
+    }
+%}
+extern void run_test(conf_object_t *obj, int stack_limit);
+
+method test() throws {
+    run_test(dev.obj, 100000);
+}

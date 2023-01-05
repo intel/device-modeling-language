@@ -440,4 +440,8 @@
       error on DMLC-generated code, caused by name clashes with
       the <tt>interface</tt> macro, defined by <tt>windows.h</tt>
       <bug number="15012582368"/>.</add-note></build-id>
+  <build-id value="next"><add-note>Fixed a bug in <tt>saved</tt>
+      variables that caused stack overflow during checkpoint restore
+      for huge (multi-megabyte) struct types
+      <bug number="18026246959"/>.</add-note></build-id>
 </rn>

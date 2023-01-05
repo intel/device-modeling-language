@@ -450,6 +450,7 @@ def generate_deserialize(real_type):
 
     func_code = output.StrOutput()
     with func_code:
+        cleanup = []
         output.out(function_decl + " {\n", postindent = 1)
         out_arg_decl.toc()
         output.out("set_error_t _success UNUSED = Sim_Set_Ok;\n")
@@ -462,14 +463,17 @@ def generate_deserialize(real_type):
             stmts.append(ctree.mkInline(site, 'goto _exit;'))
             return stmts
         if isinstance(real_type, TStruct):
+            (tmp_out_decl, tmp_out_ref) = declare_variable(
+                site, "_tmp_out", TPtr(real_type),
+                ctree.mkNew(site, real_type))
+            tmp_out_decl.toc()
+            cleanup.append(ctree.mkDelete(site, tmp_out_ref))
             statements = []
             imm_attr_decl, imm_attr_ref = declare_variable(
                 site, "_imm_attr", attr_value_t)
-            tmp_out_decl, tmp_out_ref = declare_variable(
-                site, "_tmp_out", real_type)
             for (i, (name, val_type)) in enumerate(real_type.members.items()):
                 index = ctree.mkIntegerConstant(site, i, False)
-                val_ref = ctree.mkSubRef(site, tmp_out_ref, name, ".")
+                val_ref = ctree.mkSubRef(site, tmp_out_ref, name, "->")
                 sim_attr_list_item = apply_c_fun(
                     site, "SIM_attr_list_item",
                     [ctree.mkDereference(site, in_arg), index],
@@ -483,10 +487,11 @@ def generate_deserialize(real_type):
                 statements += [imm_set, sub_deserialize]
             tmp_set = ctree.mkAssignStatement(
                 site, ctree.mkDereference(site, out_arg),
-                ctree.ExpressionInitializer(tmp_out_ref))
+                ctree.ExpressionInitializer(
+                    ctree.mkDereference(site, tmp_out_ref)))
             deserialization = ctree.mkCompound(
                 site,
-                [imm_attr_decl, tmp_out_decl] + statements + [tmp_set])
+                [imm_attr_decl] + statements + [tmp_set])
             is_struct_expr = expr.mkLit(
                 site,
                 'SIM_attr_is_list(*in) && '
@@ -512,6 +517,8 @@ def generate_deserialize(real_type):
         else:
             assert False
         output.out("_exit:\n")
+        for stmt in cleanup:
+            stmt.toc()
         output.out("return _success;\n")
         output.out("}\n", preindent = -1)
 
