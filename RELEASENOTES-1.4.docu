@@ -436,7 +436,7 @@
   <build-id value="6191"><add-note>Fixed a bug where <tt>.len</tt> on template
       type sequences could only be used with direct <tt>each</tt>-<tt>in</tt>
       expressions <bug number="SIMICS-20278"/>.</add-note></build-id>
-  <build-id value="next"><add-note>Fixed Windows-specific gcc compile
+  <build-id value="6195"><add-note>Fixed Windows-specific gcc compile
       error on DMLC-generated code, caused by name clashes with
       the <tt>interface</tt> macro, defined by <tt>windows.h</tt>
       <bug number="15012582368"/>.</add-note></build-id>
