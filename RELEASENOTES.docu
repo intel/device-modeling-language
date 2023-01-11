@@ -1709,4 +1709,7 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
   <build-id value="6176"><add-note> <tt>default</tt> can now be called within
       <tt>destroy()</tt> without causing an internal compiler error
       <bug number="SIMICS-19598"/>.</add-note></build-id>
+  <build-id value="next"><add-note> The DMLC implementation is now
+      shipped as source code, as <tt>.py</tt> files instead
+      of <tt>.pyc</tt>.</add-note></build-id>
 </rn>

@@ -96,7 +96,7 @@ all: $(DMLC_BIN)					\
 EXE_SUFFIX := $(if $(findstring win,$(HOST_TYPE)),.exe,)
 DMLC_CMD := $(PYTHON) $(PYTHONPATH)/__main__.py
 
-PYCOMPILE:=$(PYTHON) $(SIMICS_BASE)/scripts/copy_python.py --compile
+PYCOMPILE:=$(PYTHON) $(SIMICS_BASE)/scripts/copy_python.py
 
 $(OUT_GEN_PYFILES): $(LIBDIR)/dml/python/dml/%.py: %.py
 	$(info Compiling $(<F))
