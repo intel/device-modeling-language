@@ -25,6 +25,9 @@ device test;
   SIMICS-20398
 */
 
+// line directives would make sizes differ depending on the path to DMLC
+/// DMLC-FLAG --noline
+
 template g {
     // modest contributor to code size: method implementation shared
     // between all 12 template instances
