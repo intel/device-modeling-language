@@ -1445,55 +1445,50 @@ def stmt_local(stmt, location, scope):
 
     decls = list(map(convert_decl, decls))
 
-    def mk_sym(name, typ):
-        sym = LocalSymbol(name, scope.unique_cname(name), type=typ,
-                          site=stmt.site, stmt=True)
-        stmts.append(sym_declaration(sym))
-        return sym
-
-    def add_var(name, typ, init = None):
-        sym = scope.add_variable(
-            name, type = typ, site = stmt.site, init = init, stmt = True,
-            make_unique=not dml.globals.debuggable)
-        stmts.append(sym_declaration(sym))
-        return sym
+    def mk_sym(name, typ, mkunique=not dml.globals.debuggable):
+        cname = scope.unique_cname(name) if mkunique else name
+        return LocalSymbol(name, cname, type=typ, site=stmt.site, stmt=True)
 
     if method_call_init:
-        late_sym_adds = []
-        late_declares = []
-        tgts = []
+        syms_to_add = []
+        tgt_syms = []
+        late_declared_syms = []
 
         for (name, typ) in decls:
+            sym = mk_sym(name, typ)
             tgt_typ = safe_realtype_shallow(typ)
             if tgt_typ.const:
                 nonconst_typ = tgt_typ.clone()
                 nonconst_typ.const = False
-                sym = mk_sym('_tmp_' + name, nonconst_typ)
-                late_declares.append((name, typ, sym))
+                tgt_sym = mk_sym('_tmp_' + name, nonconst_typ, True)
+                sym.init = ExpressionInitializer(mkLocalVariable(stmt.site,
+                                                                 tgt_sym))
+                late_declared_syms.append(sym)
             else:
-                sym = mk_sym(name, typ)
-                late_sym_adds.append(sym)
-            tgts.append(mkLocalVariable(stmt.site, sym))
+                tgt_sym = sym
+            syms_to_add.append(sym)
+            tgt_syms.append(tgt_sym)
 
+        tgts = [mkLocalVariable(stmt.site, sym) for sym in tgt_syms]
         method_invocation = try_codegen_invocation(stmt.site,
                                                    inits,
                                                    tgts, location, scope)
         if method_invocation is not None and stmt.site.dml_version != (1, 2):
+            for sym in syms_to_add:
+                scope.add(sym)
+            stmts.extend(sym_declaration(sym, True) for sym in tgt_syms)
             stmts.append(method_invocation)
+            stmts.extend(sym_declaration(sym, True)
+                         for sym in late_declared_syms)
         else:
             if len(tgts) != 1:
-                report(ERETLVALS(site, 1, len(tgts)))
+                report(ERETLVALS(stmt.site, 1, len(tgts)))
             else:
-                tgt = tgts[0]
-                init = ExpressionInitializer(
+                sym = syms_to_add[0]
+                sym.init = ExpressionInitializer(
                     codegen_expression(inits[0].args[0], location, scope))
-                stmts.append(mkAssignStatement(tgt.site, tgt, init))
-
-        for (name, typ, temp_sym) in late_declares:
-            init = ExpressionInitializer(mkLocalVariable(stmt.site, temp_sym))
-            add_var(name, typ, init)
-        for sym in late_sym_adds:
-            scope.add(sym)
+                scope.add(sym)
+                stmts.append(sym_declaration(sym, True))
     else:
         # Initializer evaluation and variable declarations are done in separate
         # passes in order to prevent the newly declared variables from being in
@@ -1501,7 +1496,10 @@ def stmt_local(stmt, location, scope):
         inits = [get_initializer(stmt.site, typ, init, location, scope)
                  for ((_, typ), init) in zip(decls, inits)]
         for ((name, typ), init) in zip(decls, inits):
-            add_var(name, typ, init)
+            sym = scope.add_variable(
+                name, type = typ, site = stmt.site, init = init, stmt = True,
+                make_unique=not dml.globals.debuggable)
+            stmts.append(sym_declaration(sym))
 
     return stmts
 
