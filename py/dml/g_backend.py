@@ -48,7 +48,7 @@ def en_parameter(node):
         return (str(expr),)
 
     try:
-        with crep.DeviceInstanceContext():
+        with crep.DeviceInstanceContext(), ctree.StaticRAIIScope():
             expr = node.get_expr(tuple(
                 mkLit(node.site, dollar(node.site) + idxvar, types.TInt(32, False))
                 for idxvar in node.parent.idxvars()))

@@ -81,7 +81,7 @@ SCRIPTS := $(PYTHONPATH)/port_dml.py
 MPL_LICENSE := $(PYTHONPATH)/LICENSE
 BSD0_LICENSES := $(addsuffix /LICENSE,$(DMLLIB_DESTDIRS) $(OLD_DMLLIB_DESTDIRS_4_8) $(DMLLIB_DEST)/include/simics)
 
-HFILES := $(DMLLIB_DEST)/include/simics/dmllib.h
+HFILES := $(DMLLIB_DEST)/include/simics/dmllib.h $(DMLLIB_DEST)/include/simics/dmlraiitypes.h
 
 DMLC_BIN := $(OUT_PYFILES) $(OUT_GEN_PYFILES) $(HFILES)
 

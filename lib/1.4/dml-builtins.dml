@@ -161,6 +161,13 @@ extern void _callback_after_write(conf_object_t *bank,
 extern void _cancel_simple_events(conf_object_t *obj, _identity_t id);
 extern void _register_attributes(conf_object_t *obj, _identity_t id);
 
+
+// Operations on RAII types
+extern string _dml_string_new(const char *) as mk_string;
+extern string _dml_string_newf(const char *, ...) as mk_string_f;
+extern string _dml_string_from_vect(vect(char)) as mk_string_from_vect;
+extern string _dml_vect_from_string(string) as mk_vect_from_string;
+
 /**
 # Libraries and Built-ins
 
@@ -3615,6 +3622,7 @@ template init_val is init {
 
 extern const char *_DML_get_qname(_identity_t, const _id_info_t *,
                                   dml_qname_cache_t *, const char *);
+
 template _qname {
     shared method _qname() -> (const char *) {
         local _qname ref = this;

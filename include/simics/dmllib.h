@@ -24,6 +24,8 @@
 #include <simics/util/strbuf.h>
 #include <simics/util/swabber.h>
 
+#include <simics/dmlraiitypes.h>
+
 // Copy bits from y given by mask into corresponding bits in x and return the
 // result
 static inline uint64 DML_combine_bits(uint64 x, uint64 y, uint64 mask)
@@ -149,6 +151,11 @@ DML_eq(uint64 a, uint64 b)
 {
         return ((a ^ b) | ((b | a) >> 63)) == 0;
 }
+
+#define DML_SAFE_ASSIGN(dest, src) (({                                        \
+        typeof(dest) __tmp = src;                                             \
+        dest = __tmp;                                                         \
+    }))
 
 
 typedef struct {
@@ -1091,8 +1098,9 @@ _deserialize_simple_event_arguments(
             *out_args = NULL;
             return Sim_Set_Ok;
         } else {
+            // ZALLOC is critical for deserialization of values of RAII type
             void *temp_out_args =
-                args_size ? MM_MALLOC(args_size, uint8) : NULL;
+                args_size ? MM_ZALLOC(args_size, uint8) : NULL;
             set_error_t error = args_deserializer(*arguments_attr,
                                                   temp_out_args);
             if (error != Sim_Set_Ok) {
@@ -1219,12 +1227,14 @@ _deserialize_simple_event_data(
         dimsizes, dimensions, indices_attr, &temp_out.indices);
     if (error != Sim_Set_Ok) goto error;
 
-    error = _deserialize_simple_event_arguments(
-        args_size, args_deserializer, arguments_attr, &temp_out.args);
-    if (error != Sim_Set_Ok) goto error;
-
     error = _deserialize_simple_event_domains(
         id_info_ht, domains_attr, &temp_out.domains, &temp_out.no_domains);
+    if (error != Sim_Set_Ok) goto error;
+
+    // Deserializing arguments last means we need not deal with destroying it
+    // in case of a later error
+    error = _deserialize_simple_event_arguments(
+        args_size, args_deserializer, arguments_attr, &temp_out.args);
     if (error != Sim_Set_Ok) goto error;
 
     _simple_event_data_t *out_ptr = MM_MALLOC(1, _simple_event_data_t);
@@ -1265,6 +1275,7 @@ _DML_create_simple_event_data(
 typedef struct {
     void (*callback)(conf_object_t *dev, const uint32 *indices,
                      const void *args);
+    void (*args_destructor)(void *args);
     _simple_event_data_t data;
 } _dml_immediate_after_queue_elem_t;
 
@@ -1321,11 +1332,13 @@ _DML_post_immediate_after(
     conf_object_t *dev,
     _dml_immediate_after_state_t *state,
     void (*callback)(conf_object_t *, const uint32 *, const void *),
+    void (*args_destructor)(void *),
     const uint32 *indices, uint32 dimensions, const void *args,
     size_t args_size, const _identity_t *domains, uint32 no_domains) {
     ASSERT(!state->deleted);
     _dml_immediate_after_queue_elem_t elem = {
         .callback = callback,
+        .args_destructor = args_destructor,
         .data = _DML_create_simple_event_data(
             indices, dimensions, args, args_size, domains, no_domains)
     };
@@ -1353,6 +1366,8 @@ _DML_cancel_immediate_afters(_dml_immediate_after_state_t *state,
             }
         }
         if (found) {
+            if (elem.args_destructor)
+                elem.args_destructor(elem.data.args);
             _free_simple_event_data(elem.data);
         } else {
             QADD(new_queue, elem);
@@ -1378,24 +1393,23 @@ _DML_cancel_immediate_afters(_dml_immediate_after_state_t *state,
 // Any after-on-hooks that are identical in respect to these three things
 // share the same set of after-on-hook info.
 typedef struct {
-    const char *callback_key;
     void (*callback)(conf_object_t *dev, const uint32 *indices,
                      const void *args, const void *msg);
-    _serializer_t args_serializer;
-    _deserializer_t args_deserializer;
+    void (*args_destructor)(void *);
     // Size of the data args_de/serializer works with
     uint32 args_size;
     // id of the object parent of the target callback method
     uint32 method_parent_id;
+    const char *callback_key;
+    _serializer_t args_serializer;
+    _deserializer_t args_deserializer;
 } _dml_after_on_hook_info_t;
 
 // An element of a hook queue. Currently, the only elements of a hook queue
 // are calls suspended from an after-on-hook, so that's what this represents.
 typedef struct {
-    void (*callback)(conf_object_t *dev, const uint32 *indices,
-                     const void *args, const void *msg);
+    const _dml_after_on_hook_info_t *info;
     _simple_event_data_t data;
-    const char *callback_key;
 } _dml_hook_queue_elem_t;
 
 // A hook queue, which may or may not have been detached.
@@ -1492,6 +1506,8 @@ _DML_resolve_hookref(void *dev, const _dml_hook_aux_info_t *hook_aux_infos,
 UNUSED static void
 _DML_free_hook_queue(_dml_hook_queue_t *q) {
     VFORT(*q, _dml_hook_queue_elem_t, elem) {
+        if (elem.info->args_destructor)
+            elem.info->args_destructor(elem.data.args);
         _free_simple_event_data(elem.data);
     }
     VFREE(*q);
@@ -1504,12 +1520,23 @@ _DML_attach_callback_to_hook(
     const _identity_t *domains, uint32 no_domains) {
     uint32 args_size = info->args_size;
     _dml_hook_queue_elem_t elem = {
-        .callback = info->callback,
-        .callback_key = info->callback_key,
+        .info = info,
         .data = _DML_create_simple_event_data(
-            indices, dimensions, args, args_size, domains, no_domains)};
+            indices, dimensions, args, args_size, domains, no_domains)
+    };
     VADD(hook->queue, elem);
 }
+
+
+#define _DML_SEND_HOOK(hookref, msg)                                          \
+    (({ _DML_send_hook(&_dev->obj, &_dev->_detached_hook_queue_stack,         \
+                       hookref, msg); }))
+
+#define _DML_SEND_HOOK_RAII(hookref, msg, destructor) (({                     \
+    void *__msg = (void *)(msg);                                              \
+    uint64 __resumed = _DML_SEND_HOOK(hookref, __msg);                        \
+    destructor(__msg);                                                        \
+    __resumed; }))
 
 UNUSED static uint64
 _DML_send_hook(conf_object_t *dev,
@@ -1533,7 +1560,7 @@ _DML_send_hook(conf_object_t *dev,
     VFORI(detached_queue, i) {
         _dml_hook_queue_elem_t elem = VGET(detached_queue, i);
         ++detached_queue_ref.processed_elems;
-        elem.callback(dev, elem.data.indices, elem.data.args, msg);
+        elem.info->callback(dev, elem.data.indices, elem.data.args, msg);
         _free_simple_event_data(elem.data);
     }
     if (detached_queue_ref.next) {
@@ -1582,6 +1609,8 @@ _DML_cancel_afters_in_hook_queue(
             }
         }
         if (found) {
+            if (elem.info->args_destructor)
+                elem.info->args_destructor(elem.data.args);
             _free_simple_event_data(elem.data);
         } else {
             VADD(new_queue, elem);
@@ -1664,6 +1693,12 @@ _DML_deserialize_hook_queue_elem_after(ht_str_table_t *callback_ht,
         goto error;
     }
 
+    error = _deserialize_simple_event_domains(
+        id_info_ht, &domains_attr, &data.domains, &data.no_domains);
+    if (unlikely(error != Sim_Set_Ok)) {
+        goto error;
+    }
+
     error = _deserialize_simple_event_arguments(
         callback_info->args_size, callback_info->args_deserializer,
         &arguments_attr, &data.args);
@@ -1671,15 +1706,9 @@ _DML_deserialize_hook_queue_elem_after(ht_str_table_t *callback_ht,
         goto error;
     }
 
-    error = _deserialize_simple_event_domains(
-        id_info_ht, &domains_attr, &data.domains, &data.no_domains);
-    if (unlikely(error != Sim_Set_Ok)) {
-        goto error;
-    }
 
-    e->callback = callback_info->callback;
+    e->info = callback_info;
     e->data = data;
-    e->callback_key = callback_info->callback_key;
     return Sim_Set_Ok;
   error:
     _free_simple_event_data(data);
@@ -1691,12 +1720,9 @@ UNUSED static attr_value_t
 _DML_serialize_hook_queue_elem_after(ht_str_table_t *callback_ht,
                                      const _id_info_t *id_infos,
                                      _dml_hook_queue_elem_t elem) {
-    _dml_after_on_hook_info_t *callback_info =
-        ht_lookup_str(callback_ht, elem.callback_key);
-    ASSERT(callback_info);
-    _id_info_t id_info = id_infos[callback_info->method_parent_id - 1];
+    _id_info_t id_info = id_infos[elem.info->method_parent_id - 1];
     attr_value_t callback_key_attr
-        = SIM_make_attr_string(callback_info->callback_key);
+        = SIM_make_attr_string(elem.info->callback_key);
 
     attr_value_t indices_attr = SIM_alloc_attr_list(id_info.dimensions);
     attr_value_t *indices_attr_list = SIM_attr_list(indices_attr);
@@ -1704,8 +1730,8 @@ _DML_serialize_hook_queue_elem_after(ht_str_table_t *callback_ht,
         indices_attr_list[i] = SIM_make_attr_uint64(elem.data.indices[i]);
     }
     attr_value_t arguments_attr =
-          callback_info->args_serializer
-        ? callback_info->args_serializer(elem.data.args)
+          elem.info->args_serializer
+        ? elem.info->args_serializer(elem.data.args)
         : SIM_make_attr_list(0);
 
     attr_value_t domains_attr = SIM_alloc_attr_list(elem.data.no_domains);
@@ -2149,7 +2175,8 @@ _DML_get_qname(_identity_t id, const _id_info_t *id_infos,
 
     uint32 indices[info.dimensions];
     uint32 index = id.encoded_index;
-    for (int32 i = info.dimensions - 1; i >= 0; --i) {
+    for (uint32 i_ = 0; i_ < info.dimensions; ++i_) {
+        uint32 i = info.dimensions - 1 - i_;
         indices[i] = index % info.dimsizes[i];
         index /= info.dimsizes[i];
     }
@@ -2937,6 +2964,362 @@ _callback_after_write(conf_object_t *bank,
                                   Callback_After_Write);
 }
 
+
+typedef void (*_raii_copier_t)(void *tgt, const void *src);
+typedef void (*_raii_destructor_t)(void *data);
+
+typedef struct {
+    const _raii_destructor_t *destructor_ref;
+    char data[] __attribute__((aligned));
+} _loose_allocation_t;
+
+typedef struct {
+    _raii_destructor_t destructor;
+    char data[] __attribute__((aligned));
+} _orphan_allocation_t;
+
+typedef struct {
+    _raii_destructor_t destructor;
+    void *data;
+} _scope_allocation_t;
+
+#define DML_NEW(t, count, destroy_ref) ({                           \
+    _loose_allocation_t *__alloc =                                  \
+        mm_zalloc(sizeof(_loose_allocation_t)                       \
+                  + sizeof(t)*(size_t)(count),                      \
+                  sizeof(t),                                        \
+                  #t " (DML allocated)",                            \
+                  __FILE__, __LINE__);                              \
+    __alloc->destructor_ref = destroy_ref;                          \
+    (typeof(t) *)__alloc->data; })
+
+#define DML_NEW_ORPHAN(t, destroy) (({                                \
+    _orphan_allocation_t *__alloc =                                   \
+        mm_zalloc(sizeof(_orphan_allocation_t)                        \
+                  + sizeof(t),                                        \
+                  sizeof(t),                                          \
+                  "orphan temporary (DML allocated)",                 \
+                  __FILE__, __LINE__);                                \
+    __alloc->destructor = destroy;                                    \
+    (typeof(t) *)__alloc->data; }))
+
+#define DML_RAII_SCOPE_LVAL(n, destructor, x) do {                            \
+        ASSERT_MSG(_scope_allocs_lens[n]                                      \
+                   < sizeof(_scope_ ## n ## _allocs)                          \
+                     /sizeof(_scope_allocation_t),                            \
+                   "RAII allocation buffer overrun. "                         \
+                   "Report this as a DMLC bug.");                             \
+        _scope_ ## n ## _allocs[_scope_allocs_lens[n]++] =                    \
+            (_scope_allocation_t) { destructor, (void *)&x };                 \
+    } while (0)
+
+
+#define DML_RAII_SCOPE_ORPHAN(n, destructor, x) (*({            \
+    typeof(x) *__alloc = DML_NEW_ORPHAN(typeof(x), destructor); \
+    memcpy(__alloc, (typeof(x)[1]) { x }, sizeof(*__alloc));    \
+    DML_RAII_SCOPE_LVAL(n, _DML_delete_orphan, *__alloc);       \
+    __alloc; }))
+
+#define DML_RAII_SCOPE_ARRAY_ORPHAN(n, destructor, x) (*({      \
+    typeof(x) *__alloc = DML_NEW_ORPHAN(typeof(x), destructor); \
+    memcpy(__alloc, x, sizeof(*__alloc));                       \
+    DML_RAII_SCOPE_LVAL(n, _DML_delete_orphan, *__alloc);       \
+    __alloc; }))
+
+#define DML_RAII_SESSION_ORPHAN(lval, destructor, x) (*({                     \
+    typeof(x) *__alloc = DML_NEW_ORPHAN(typeof(x), destructor);               \
+    memcpy(__alloc, (typeof(x)[1]) { x }, sizeof(*__alloc));                  \
+    lval = __alloc;                                                           \
+    __alloc; }))
+
+#define DML_RAII_SESSION_ARRAY_ORPHAN(lval, destructor, x) (*({               \
+    typeof(x) *__alloc = DML_NEW_ORPHAN(typeof(x), 1, destructor);            \
+    memcpy(__alloc, x, sizeof(*__alloc));                                     \
+    lval = (void *)__alloc;                                                   \
+    __alloc; }))
+
+#define DML_STATIC_ARRAY(t, x) (*({                                           \
+    static typeof(t) __array;                                                 \
+    memcpy(__array, x, sizeof(t));                                            \
+    &__array;}))
+
+#define DML_STATIC_ARRAY_CONSTSAFE(x) (*({                                    \
+    typeof(x) *__array = MM_MALLOC(1, typeof(x));                             \
+    memcpy(*__array, x, sizeof(x));                                           \
+    __array; }))
+
+#define DML_RAII_SCOPE_CLEANUP(n) do {                           \
+        _DML_cleanup_raii_scope(_scope_ ## n ## _allocs,         \
+                                _scope_allocs_lens[n]);    \
+        _scope_allocs_lens[n] = 0;                         \
+    } while (0)
+
+UNUSED static void _DML_cleanup_raii_scope(_scope_allocation_t *allocs,
+                                           uint16 len) {
+    for (uint16 i = 0; i < len; ++i) {
+        allocs[i].destructor(allocs[i].data);
+    }
+}
+
+
+#define DML_DELETE(alloc) (                                                   \
+    _DML_delete(alloc,                                                        \
+                (uintptr_t)_dml_raii_destructors,                             \
+                (uintptr_t)_dml_raii_destructor_ref_none,                     \
+                __FILE__,                                                     \
+                __LINE__))
+
+UNUSED static void _DML_delete(void *_alloc,
+                               uintptr_t _dml_raii_destructors,
+                               uintptr_t _dml_raii_destructor_ref_none,
+                               const char *filename,
+                               int lineno) {
+    if (!_alloc)
+        return;
+    _loose_allocation_t *alloc = (_loose_allocation_t *)(
+        (char *)_alloc - offsetof(_loose_allocation_t, data));
+    if ((uintptr_t)alloc->destructor_ref != _dml_raii_destructor_ref_none) {
+        if (likely((uintptr_t)alloc->destructor_ref >= _dml_raii_destructors
+                   && (uintptr_t)alloc->destructor_ref
+                      < _dml_raii_destructor_ref_none)) {
+            (*alloc->destructor_ref)(alloc->data);
+        } else {
+            _signal_critical_error("%s:%d: DML 'delete' statement used on "
+                                   "pointer %p, which has not been allocated "
+                                   "with 'new'! "
+                                   "Any pointer external to a particular DML "
+                                   "device model should be deallocated using "
+                                   "'MM_FREE'.",
+                                   filename, lineno, _alloc);
+            return;
+        }
+    }
+    MM_FREE(alloc);
+}
+
+UNUSED static void _DML_delete_orphan(void *_alloc) {
+    if (!_alloc)
+        return;
+    _orphan_allocation_t *alloc = (_orphan_allocation_t *)(
+        (char *)_alloc - offsetof(_orphan_allocation_t, data));
+    if (alloc->destructor) {
+        alloc->destructor(alloc->data);
+    }
+    MM_FREE(alloc);
+}
+
+UNUSED static void _dml_vect_free_raii(
+    size_t elem_size, _raii_destructor_t elem_raii_destructor,
+    _dml_vect_t v) {
+    if (elem_raii_destructor) {
+        for (uint32 i = 0; i < v.len; ++i) {
+            elem_raii_destructor(
+                v.elements + DML_VECT_INDEX(v, i)*elem_size);
+        }
+    }
+    _dml_vect_free(v);
+}
+
+UNUSED static void _dml_vect_resize_raii(
+    size_t elem_size, _raii_destructor_t elem_raii_destructor,
+    _dml_vect_t *v, uint32 new_len) {
+    ASSERT(new_len >= v->len || elem_raii_destructor);
+    for (uint32 i = new_len; i < v->len; ++i) {
+        elem_raii_destructor(
+            v->elements + DML_VECT_INDEX(*v, i)*elem_size);
+    }
+    _dml_vect_resize(elem_size, v, new_len, true);
+}
+
+UNUSED static void _dml_vect_clear_raii(
+    size_t elem_size, _raii_destructor_t elem_raii_destructor,
+    _dml_vect_t *v) {
+    for (uint32 i = 0; i < v->len; ++i) {
+        elem_raii_destructor(
+            v->elements + DML_VECT_INDEX(*v, i)*elem_size);
+    }
+    _dml_vect_clear(elem_size, v);
+}
+
+UNUSED static void _dml_vect_resize_destructive_raii(
+    size_t elem_size, _raii_destructor_t elem_raii_destructor,
+    _dml_vect_t *v, uint32 new_len) {
+    for (uint32 i = 0; i < v->len; ++i) {
+        elem_raii_destructor(
+            v->elements + DML_VECT_INDEX(*v, i)*elem_size);
+    }
+    _dml_vect_resize_destructive(elem_size, v, new_len);
+}
+
+
+// TODO consider moving elements to the start
+UNUSED static void _dml_vect_copy_raii(
+    size_t elem_size, _raii_copier_t elem_raii_copier,
+    _raii_destructor_t elem_raii_destructor,
+    _dml_vect_t *tgt, _dml_vect_t src) {
+    if (unlikely((uintptr_t)tgt->elements == (uintptr_t)src.elements)) {
+        ASSERT(tgt->size == src.size && tgt->len == src.len
+               && tgt->start == src.start);
+        return;
+    }
+    _dml_vect_resize_raii(elem_size, elem_raii_destructor, tgt, src.len);
+    for (uint32 i = 0; i < src.len; ++i) {
+        elem_raii_copier(
+            tgt->elements + DML_VECT_INDEX(*tgt, i)*elem_size,
+            src.elements + DML_VECT_INDEX(src, i)*elem_size);
+    }
+}
+
+UNUSED static _dml_vect_t
+_dml_vect_add(size_t elem_size, _dml_vect_t a, _dml_vect_t b) {
+    _dml_vect_append(elem_size, &a, b);
+    return a;
+}
+
+UNUSED static void _dml_vect_append_raii(
+    size_t elem_size, _raii_copier_t elem_raii_copier, _dml_vect_t *tgt,
+    _dml_vect_t src) {
+    uint32 tgt_start = tgt->len, add_len = src.len;
+    if (!add_len) return;
+    bool alias = tgt->elements == src.elements;
+    _dml_vect_resize(elem_size, tgt, tgt->len + src.len, true);
+    if (unlikely(alias))
+        src = *tgt;
+    for (uint32 i = 0; i < add_len; ++i) {
+        elem_raii_copier(tgt->elements
+                         + DML_VECT_INDEX(*tgt, tgt_start + i)*elem_size,
+                         src.elements + DML_VECT_INDEX(src, i)*elem_size);
+    }
+}
+
+UNUSED static _dml_vect_t
+_dml_vect_add_raii(size_t elem_size, _raii_copier_t elem_raii_copier,
+                   _dml_vect_t a, _dml_vect_t b) {
+    _dml_vect_append_raii(elem_size, elem_raii_copier, &a, b);
+    return a;
+}
+
+UNUSED static void _dml_vect_set_compound_init_raii(
+    size_t elem_size, _raii_destructor_t elem_raii_destructor,
+    _dml_vect_t *tgt, const void *src, uint32 no_elements) {
+    if (!no_elements)
+        _dml_vect_clear_raii(elem_size, elem_raii_destructor, tgt);
+
+    _dml_vect_resize_destructive_raii(elem_size, elem_raii_destructor,
+                                      tgt, no_elements);
+    memcpy(tgt->elements, src, no_elements*elem_size);
+}
+
+// TODO(RAII): Just replace usages with _dml_vect_append_array?
+UNUSED static inline void _dml_vect_append_compound_init_raii(
+    size_t elem_size, _dml_vect_t *tgt, const void *src, uint32 no_elements) {
+    _dml_vect_append_array(elem_size, tgt, src, no_elements);
+}
+
+// TODO(RAII): Not currently used.
+#define _DML_RAII_MOVED(x) (({                                                \
+            typeof(x) *__val = &(x);                                          \
+            typeof(x) __ret = *__val;                                         \
+            memset((void *)__val, 0, sizeof(x));                              \
+            __ret;                                                            \
+    }))
+
+#define _DML_RAII_DUPE(t, copier, x) (({                                      \
+            typeof(t) __ret = {0}, __val = x;                                 \
+            copier(&__ret, &__val);                                           \
+            __ret;                                                            \
+        }))
+
+#define _DML_RAII_ZERO_OUT(destroy, lval) (({                                 \
+        void *__pointer = (void *)&(lval);                                    \
+        destroy(__pointer);                                                   \
+        memset(__pointer, 0, sizeof(lval));                                   \
+    }))
+
+#define _DML_RAII_COPY_RVAL(copier, dest, src) (({                            \
+        copier((void *)&(dest), (typeof(dest)[1]){(src)});                    \
+    }))
+
+#define _DML_RAII_DESTROY_RVAL(destroy, expr) (({                             \
+        destroy((void *)(typeof(expr)[1]){(expr)});                           \
+    }))
+
+// No aliasing checks; not needed.
+// Note that src must be evaluated before tgt is destroyed
+#define _DML_RAII_LINEAR_MOVE_SIMPLE_RVAL(t, destroy, tgt, src) (({           \
+        typeof(t) __src = src;                                                \
+        typeof(t) *__dest = (typeof(t) *)&(tgt);                              \
+        destroy(__dest);                                                      \
+        *__dest = __src;                                                      \
+    }))
+
+// No aliasing checks; not needed.
+// Note that src must be evaluated before tgt is destroyed
+#define _DML_RAII_LINEAR_MOVE_SIMPLE(t, destroy, tgt, src) (({                \
+        typeof(t) *__src = (typeof(t) *)&(src);                               \
+        typeof(t) *__dest = (typeof(t) *)&(tgt);                              \
+        destroy(__dest);                                                      \
+        *__dest = *__src;                                                     \
+    }))
+
+
+#define _DML_RAII_LINEAR_MOVE_MEMCPY(destroy, tgt, src) (({                   \
+        const void *__src = &(src);                                           \
+        void *__dest = (void *)&(tgt);                                        \
+        destroy(__dest);                                                      \
+        memcpy(__dest, __src, sizeof(tgt));                                   \
+    }))
+
+#define _DML_RAII_LINEAR_MOVE_MEMCPY_RVAL(destroy, tgt, src) (({              \
+        typeof(tgt) __src = src;                                              \
+        void *__dest = (void *)&(tgt);                                        \
+        destroy((void *)__dest);                                              \
+        memcpy((void *)dest, &__src, sizeof(tgt));                            \
+    }))
+
+UNUSED static void
+_DML_vector_nonraii_elems_destructor(void *data) {
+    _dml_vect_free(*(_dml_vect_t *)data);
+}
+
+UNUSED static void
+_DML_string_destructor(void *data) {
+    _dml_string_free(*(_dml_string_t *)data);
+}
+
+UNUSED static void
+_DML_string_copier(void *tgt, const void *src) {
+    _dml_string_copy((_dml_string_t *)tgt, *(const _dml_string_t *)src);
+}
+
+UNUSED static _dml_string_t
+_dml_string_add(_dml_string_t a, _dml_string_t b) {
+    _dml_string_cat(&a, b);
+    return a;
+}
+
+UNUSED static _dml_string_t
+_dml_string_add_cstr_before(const char *a, _dml_string_t b) {
+    _dml_string_addstr_before(a, &b);
+    return b;
+}
+
+UNUSED static _dml_string_t
+_dml_string_add_cstr(_dml_string_t a, const char *b) {
+    _dml_string_addstr(&a, b);
+    return a;
+}
+
+UNUSED static int
+_dml_string_cmp(_dml_string_t a, _dml_string_t b) {
+    return strcmp(_dml_string_str(a), _dml_string_str(b));
+}
+
+UNUSED static int
+_dml_string_cmp_c_str(_dml_string_t a, const char *b) {
+    return strcmp(_dml_string_str(a), b);
+}
+
 UNUSED static set_error_t
 _set_device_member(attr_value_t val,
                    char *ptr,
@@ -3175,83 +3558,173 @@ _serialize_array(const void *data, size_t elem_size,
                                 total_elem_count, serialize_elem);
 }
 
-
-static set_error_t
-_deserialize_array_aux(attr_value_t val, uint8 *data, size_t elem_size,
-                       const uint32 *dimsizes, uint32 dims,
-                       size_t total_elem_count,
-                       _deserializer_t deserialize_elem,
-                       bool elems_are_bytes) {
-    uint32 len = *dimsizes;
-    ASSERT(len != 0);
-
-    // Allow the final dimension to be represented as data if elems_are_bytes
-    bool data_allowed = elems_are_bytes && dims == 1;
-    if (data_allowed && SIM_attr_is_data(val)) {
-        if (unlikely(SIM_attr_data_size(val) != len)) {
-            SIM_c_attribute_error(
-                "Invalid serialized value of byte array: expected data of %u "
-                "bytes, got %u", len, SIM_attr_data_size(val));
-            return Sim_Set_Illegal_Value;
-        }
-        memcpy(data, SIM_attr_data(val), len);
-        return Sim_Set_Ok;
-    } else if (unlikely(!SIM_attr_is_list(val))) {
-        if (data_allowed) {
-            SIM_attribute_error("Invalid serialized representation of byte "
-                                "array: not a list or data");
-        } else {
-            SIM_attribute_error("Invalid serialized representation of array: "
-                                "not a list");
-        }
-        return Sim_Set_Illegal_Type;
-    } else if (unlikely(SIM_attr_list_size(val) != len)) {
-        SIM_c_attribute_error(
-            "Invalid serialized representation of %sarray: expected list of "
-            "%u elements, got %u", data_allowed ? "byte " : "", len,
-            SIM_attr_list_size(val));
-        return Sim_Set_Illegal_Type;
-    }
-    attr_value_t *items = SIM_attr_list(val);
-    size_t children_elem_count = total_elem_count/len;
-    for (uint32 i = 0; i < len; ++i) {
-        set_error_t error;
-        if (dims == 1) {
-            error = deserialize_elem(items[i], &data[i*elem_size]);
-        } else {
-            error = _deserialize_array_aux(
-                items[i], &data[i*children_elem_count*elem_size], elem_size,
-                dimsizes + 1, dims - 1, children_elem_count, deserialize_elem,
-                elems_are_bytes);
-        }
-        if (error != Sim_Set_Ok) {
-            return error;
-        }
-    }
-    return Sim_Set_Ok;
-}
-
 UNUSED static set_error_t
 _deserialize_array(attr_value_t in_val, void *out_data, size_t elem_size,
                    const uint32 *dimsizes, uint32 dims,
-                   _deserializer_t deserialize_elem, bool elems_are_bytes) {
-    ASSERT(dims > 0);
-    size_t total_elem_count = 1;
-    for (uint32 i = 0; i < dims; ++i) {
-        total_elem_count *= dimsizes[i];
+                   _deserializer_t deserialize_elem,
+                   _raii_destructor_t elem_raii_destructor,
+                   bool elems_are_bytes) {
+    uint32 outer_dims_lists = 1;
+    for (uint32 i = 0; i < dims - 1; ++i) {
+        outer_dims_lists *= dimsizes[i];
     }
-
-    uint8 *temp_out = MM_MALLOC(total_elem_count * elem_size, uint8);
-    set_error_t error = _deserialize_array_aux(
-        in_val, temp_out, elem_size, dimsizes, dims, total_elem_count,
-        deserialize_elem, elems_are_bytes);
-    if (error == Sim_Set_Ok) {
-        memcpy(out_data, temp_out, total_elem_count*elem_size);
+    uint32 total_elem_count = outer_dims_lists*dimsizes[dims-1];
+    attr_value_t *lists = MM_MALLOC(outer_dims_lists, attr_value_t);
+    attr_value_t *lists_buf = MM_MALLOC(outer_dims_lists, attr_value_t);
+    *lists = in_val;
+    size_t no_lists = 1;
+    for (uint32 i = 0; i < dims - 1; ++i) {
+        uint32 frag_size = dimsizes[i];
+        size_t new_no_lists = no_lists * frag_size;
+        for (uint32 j = 0; j < no_lists; ++j) {
+            if (unlikely(!SIM_attr_is_list(lists[j]))) {
+                SIM_attribute_error("Invalid serialized representation of "
+                                    "array: not a list");
+                goto flatten_failure;
+            } else if (unlikely(SIM_attr_list_size(lists[j]) != frag_size)) {
+                SIM_c_attribute_error(
+                    "Invalid serialized representation of array: expected "
+                    "list of %u elements, got %u",
+                    frag_size, SIM_attr_list_size(lists[j]));
+                goto flatten_failure;
+            }
+            attr_value_t *subfrags = SIM_attr_list(lists[j]);
+            for (int k = 0; k < frag_size; ++k) {
+                lists_buf[j * frag_size + k] = subfrags[k];
+            }
+        }
+        attr_value_t *prev_lists = lists;
+        lists = lists_buf;
+        lists_buf = prev_lists;
+        no_lists = new_no_lists;
     }
-    MM_FREE(temp_out);
+    if (0) {
+      flatten_failure:
+        MM_FREE(lists);
+        MM_FREE(lists_buf);
+        return Sim_Set_Illegal_Type;
+    }
+    MM_FREE(lists_buf);
+    uint8 *tmp_out = elem_raii_destructor
+        ? MM_MALLOC(total_elem_count*elem_size, uint8)
+        : MM_ZALLOC(total_elem_count*elem_size, uint8);
+    set_error_t error = Sim_Set_Ok;
+    uint32 processed = 0;
+    uint32 last_dimsize = dimsizes[dims-1];
+    for (uint32 i = 0; i < no_lists; ++i) {
+        attr_value_t list = lists[i];
+        if (elems_are_bytes && SIM_attr_is_data(list)) {
+            if (unlikely(SIM_attr_data_size(list) != last_dimsize)) {
+                SIM_c_attribute_error(
+                    "Invalid serialized value of byte array: expected "
+                    "data of %u bytes, got %u", last_dimsize,
+                    SIM_attr_data_size(list));
+                error = Sim_Set_Illegal_Value;
+                goto elem_deserialization_failure;
+            }
+            memcpy(tmp_out + last_dimsize*i, SIM_attr_data(list),
+                   last_dimsize);
+            processed += last_dimsize;
+        } else if (likely(SIM_attr_is_list(list))) {
+            if (unlikely(SIM_attr_list_size(list) != last_dimsize)) {
+                SIM_c_attribute_error(
+                    "Invalid serialized representation of %sarray: "
+                    "expected list of %u elements, got %u",
+                    elems_are_bytes ? "byte " : "", last_dimsize,
+                    SIM_attr_list_size(list));
+                error = Sim_Set_Illegal_Type;
+                goto elem_deserialization_failure;
+            }
+            attr_value_t *items = SIM_attr_list(list);
+            for (uint32 j = 0; j < last_dimsize; ++j) {
+                error = deserialize_elem(
+                    items[j], &tmp_out[(last_dimsize*i + j)*elem_size]);
+                if (unlikely(error != Sim_Set_Ok))
+                    goto elem_deserialization_failure;
+                ++processed;
+            }
+        } else {
+            SIM_attribute_error(
+                  elems_are_bytes
+                ? "Invalid serialized representation of byte array: not a "
+                  "list or data"
+                : "Invalid serialized representation of array: not a list");
+            error = Sim_Set_Illegal_Type;
+            goto elem_deserialization_failure;
+        }
+    }
+  elem_deserialization_failure:
+    MM_FREE(lists);
+    if (unlikely(error != Sim_Set_Ok)) {
+        if (elem_raii_destructor) {
+            for (uint32 i = 0; i < processed; ++i)
+                elem_raii_destructor(tmp_out + i*elem_size);
+        }
+    } else {
+        if (elem_raii_destructor) {
+            for (uint32 i = 0; i < total_elem_count; ++i)
+                elem_raii_destructor((char *)out_data + i*elem_size);
+        }
+        memcpy(out_data, tmp_out, total_elem_count*elem_size);
+    }
+    MM_FREE(tmp_out);
     return error;
 }
 
+UNUSED static void _dml_vect_move_raii(
+    size_t elem_size, _raii_destructor_t elem_raii_destructor,
+    _dml_vect_t *tgt, _dml_vect_t src) {
+    if (unlikely((uintptr_t)tgt->elements == (uintptr_t)src.elements)) {
+        ASSERT(tgt->size == src.size && tgt->len == src.len
+               && tgt->start == src.start);
+        return;
+    }
+    _dml_vect_free_raii(elem_size, elem_raii_destructor, *tgt);
+    *tgt = src;
+}
+
+UNUSED static attr_value_t
+_serialize_vector(_dml_vect_t v, size_t elem_size,
+                  _serializer_t serialize_elem) {
+    attr_value_t val = SIM_alloc_attr_list(v.len);
+    attr_value_t *items = SIM_attr_list(val);
+    for (uint32 i = 0; i < v.len; ++i) {
+        items[i] = serialize_elem(v.elements + DML_VECT_INDEX(v, i)*elem_size);
+    }
+    return val;
+}
+
+UNUSED static set_error_t
+_deserialize_vector(attr_value_t val, _dml_vect_t *tgt, size_t elem_size,
+                    _deserializer_t deserialize_elem,
+                    _raii_destructor_t elem_raii_destructor) {
+
+    if (unlikely(!SIM_attr_is_list(val))) {
+        SIM_attribute_error("Invalid serialized representation of vector: "
+                            "not a list");
+        return Sim_Set_Illegal_Type;
+    }
+    _dml_vect_t tmp_vect = {0};
+    _dml_vect_resize(elem_size, &tmp_vect, SIM_attr_list_size(val),
+                     elem_raii_destructor ? true : false);
+    ASSERT(tmp_vect.start == 0);
+    attr_value_t *items = SIM_attr_list(val);
+    for (uint32 i = 0; i < tmp_vect.len; ++i) {
+        set_error_t error = deserialize_elem(items[i],
+                                             tmp_vect.elements + i*elem_size);
+        if (error != Sim_Set_Ok) {
+            if (elem_raii_destructor) {
+                for (uint32 j = 0; j < i; ++j) {
+                    elem_raii_destructor(tmp_vect.elements + j*elem_size);
+                }
+            }
+            _dml_vect_free(tmp_vect);
+            return error;
+        }
+    }
+    _dml_vect_move_raii(elem_size, elem_raii_destructor, tgt, tmp_vect);
+    return Sim_Set_Ok;
+}
 
 // The internal format for ht is:
 // dict(trait_identifier -> dict(statement_idx -> bool))
@@ -3402,5 +3875,4 @@ UNUSED static void _DML_register_attributes(
         sb_free(&type);
     }
 }
-
 #endif

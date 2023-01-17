@@ -40,13 +40,13 @@ class Test_dmldir_macro(unittest.TestCase):
 class DummyStatement(ctree.Statement):
     def __repr__(self):
         return 'D'
-    def toc(self): pass
+    def toc_stmt(self): pass
 
 class DummyDecl(ctree.Statement):
     is_declaration = 1
     def __repr__(self):
         return 'decl'
-    def toc(self): pass
+    def toc_stmt(self): pass
 
 class Test_mkcompound(unittest.TestCase):
     def test(self):

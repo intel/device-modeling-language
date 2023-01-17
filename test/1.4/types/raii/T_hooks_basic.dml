@@ -1,0 +1,147 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// DMLC-FLAG --enable-features-for-internal-testing-dont-use-this
+/// WARNING WEXPERIMENTAL hooks_common.dml
+
+import "hooks_common.dml";
+
+template hookset_test is hookset {
+    shared method testhooks();
+    method testhooks() {
+        local uint64 resumed;
+        count = storage = storage_indexed = 0;
+        last_i_indexed = last_j_indexed = -1;
+
+        assert h0.suspended == 0;
+        resumed = h0.send_now();
+        assert resumed == 0;
+
+        after h0: no_params();
+        assert count == 0 && h0.suspended == 1;
+        resumed = h0.send_now();
+        assert h0.suspended == 0 && resumed == 1 && count == 1;
+        resumed = h0.send_now();
+        assert resumed == 0;
+
+        local vect(int) v = {7};
+        after h0: no_params();
+        after h0: one_serializable_param(v);
+        assert h0.suspended == 2 && count == 1 && storage == 0;
+        resumed = h0.send_now();
+        assert h0.suspended == 0 && resumed == 2 && count == 2 && storage == 7;
+        count = storage = 0;
+
+        local int i = 5;
+        after h1 -> p: one_param(p);
+        assert h1.suspended == 1 && i == 5;
+        resumed = h1.send_now(&i);
+        assert h1.suspended == 0 && resumed == 1 && i == 6;
+        v = {-5};
+        after h1 -> p: one_serializable_param(v);
+        assert h1.suspended == 1 && storage == 0 && i == 6;
+        resumed = h1.send_now(&i);
+        assert h1.suspended == 0 && resumed == 1 && storage == -5 && i == 6;
+        storage = i = 0;
+
+        after h2 -> (p, i): two_params(p, i);
+        assert h2.suspended == 1 && i == 0;
+        resumed = h2.send_now(&i, {9});
+        assert h2.suspended == 0 && resumed == 1 && i == 9;
+        v = {2};
+        after h2 -> (p, i): two_params(p, v);
+        assert h2.suspended == 1;
+        resumed = h2.send_now(&i, {9});
+        assert h2.suspended == 0 && resumed == 1 && i == 2;
+        i = 0;
+
+        assert h3[3][4].suspended == 0;
+        after h3[3][4]: no_params();
+        for (local int idx_0; idx_0 < 6; ++idx_0) {
+            for (local int idx_1; idx_1 < 8; ++idx_1) {
+                if (idx_0 != 3 && idx_1 != 4) {
+                    assert h3[idx_0][idx_1].suspended == 0;
+                }
+            }
+        }
+        assert h3[3][4].suspended == 1 && count == 0;
+        resumed = h3[3][4].send_now();
+        assert h3[3][4].suspended == 0 && resumed == 1 && count == 1;
+        count = 0;
+
+        after h0: indexed[3][5].no_params();
+        v = {10};
+        after h0: indexed[2][3].one_serializable_param(v);
+        assert h0.suspended == 2 && last_i_indexed == -1
+            && last_j_indexed == -1 && storage_indexed == 0;
+        resumed = h0.send_now();
+        assert h0.suspended == 0 && resumed == 2 && last_i_indexed == 3
+            && last_j_indexed == 5 && storage_indexed == 10 * (2*7 + 3);
+        (last_i_indexed, last_j_indexed, storage_indexed) = (-1, -1, 0);
+
+        after h1 -> p: indexed[3][5].one_param(p);
+        assert h1.suspended == 1 && i == 0;
+        resumed = h1.send_now(&i);
+        assert h1.suspended == 0 && resumed == 1 && i == 3 * 7 + 5;
+        i = 0;
+        v = {-5};
+        after h1 -> p: indexed[3][5].one_serializable_param(v);
+        assert h1.suspended == 1 && storage_indexed == 0 && i == 0;
+        resumed = h1.send_now(&i);
+        assert h1.suspended == 0 && resumed == 1
+            && storage_indexed == -5 * (3 * 7 + 5) && i == 0;
+        storage_indexed = 0;
+
+        after h2 -> (p, i): indexed[3][5].two_params(p, i);
+        assert h2.suspended == 1;
+        v = {9};
+        resumed = h2.send_now(&i, v);
+        assert h2.suspended == 0 && resumed == 1 && i == 9 * (3*7 + 5);
+        i = 0;
+        v = {2};
+        after h2 -> (p, i): indexed[3][5].two_params(p, v);
+        assert h2.suspended == 1;
+        resumed = h2.send_now(&i, {9});
+        assert h2.suspended == 0 && resumed == 1 && i == 2*(3*7 + 5);
+
+        foreach sub in (each hookset_test in (this)) {
+            sub.testhooks();
+        }
+    }
+}
+
+in each hookset {
+    is hookset_test;
+}
+
+hook(int **) order_test_hook;
+method order_test_callback(int id, int **queue) {
+    **queue = id;
+    ++*queue;
+}
+
+method order_test() {
+    for (local int i = 0; i < 4; ++i) {
+        after order_test_hook -> p: order_test_callback(i, p);
+    }
+    local int queue[4];
+    local int *queue_ptr = queue;
+    assert order_test_hook.suspended == 4;
+    local uint64 resumed = order_test_hook.send_now(&queue_ptr);
+    assert resumed == 4;
+    for (local int i = 0; i < 4; ++i) {
+        assert queue[i] == i;
+    }
+}
+
+method init() {
+    foreach sub in (each hookset_test in (this)) {
+        sub.testhooks();
+    }
+    order_test();
+}

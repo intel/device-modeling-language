@@ -410,7 +410,8 @@ class EEXTERN(DMLError):
 
 class EEXPORT(DMLError):
     """Can only export non-inline, non-shared, non-throwing methods declared
-    outside object arrays."""
+    outside object arrays, that do not have any input parameter or return value
+    of resource-enriched (RAII) type."""
     fmt = "cannot export this method"
     version = "1.4"
 
@@ -1369,10 +1370,10 @@ class ECONSTP(DMLError):
 
 class ECONST(DMLError):
     """
-    The lvalue that is assigned to is declared as a `const` and
-    thus can't be assigned to.
+    Attempted modification (e.g. assignment) of a lvalue that is declared
+    as a `const` and thus can't be modified.
     """
-    fmt = "assignment to constant"
+    fmt = "modification of constant"
     def __init__(self, site):
         DMLError.__init__(self, site);
 
@@ -1585,6 +1586,24 @@ class EVLACONST(DMLError):
     fmt = ("variable length array declared with (partially) const-qualified "
            + "type")
 
+class EVLARAII(DMLError):
+    """
+    Variable length arrays may not have a resource-enriched (RAII) type as
+    base type. Use `vect` instead.
+    """
+    fmt = ("variable length array declared with resource-enriched (RAII) type:"
+           + " %s. Workaround: use a vector ('vect') instead, and resize it "
+           + "to the desired length.")
+
+class EANONRAIISTRUCT(DMLError):
+    """
+    Anonymous structs declared within methods may not have any member of
+    resource-enriched (RAII) type.
+    """
+    fmt = ("method-local anonymous struct declared that has a member of "
+           + "resource-enriched (RAII) type")
+
+
 class EIDENTSIZEOF(DMLError):
     """
     A variant of the EIDENT message exclusive to usages of `sizeof`: it is
@@ -1606,6 +1625,37 @@ class ELOGGROUPS(DMLError):
     """
     fmt = ("Too many loggroup declarations. A maximum of 63 log groups (61 "
            + "excluding builtins) may be declared per device.")
+
+class ERAIIVARARG(DMLError):
+    """
+    Values of resource-enriched (RAII) type cannot be passed as variadic
+    arguments.
+
+    This error typically occurs as the result of trying to pass a value of
+    type `string` to a `printf`-like function, which is a mistake to begin
+    with: `.c_str()` should be used to convert the `string` to `char *`.
+    """
+    fmt = ("values of resource-enriched (RAII) type cannot be passed as "
+           + "variadic arguments%s")
+    def __init__(self, site, is_string):
+        hint = ("\nif you are trying to pass a string to a 'printf'-like "
+                + "function, use '.c_str()' to convert the string to 'char *'"
+                )*is_string
+
+        DMLError.__init__(self, site, hint)
+
+class ESIZEOFRAII(DMLError):
+    """
+    The 'sizeof'/'sizeoftype' operator cannot be used to retrieve the size of
+    a resource-enriched (RAII) type. This is to prevent primitive memory
+    manipulation with values of such types, as such manipulation is always
+    unsafe.
+    """
+    fmt = ("'sizeof'/'sizeoftype' cannot be used with resource-enriched "
+           + "(RAII) types.\n"
+           + "Don't attempt to work around this by using an integer literal "
+           + "instead: any primitive memory manipulation like memcpy is "
+           + "unsafe when involving values of resource-enriched types.")
 
 #
 # WARNINGS (keep these as few as possible)

@@ -8,5 +8,5 @@ dml 1.4;
 
 device test;
 
-/// WARNING WEXPERIMENTAL
+/// WARNING WDEPRECATED
 session int vect x;

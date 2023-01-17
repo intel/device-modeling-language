@@ -783,10 +783,10 @@ class Trait(SubTrait):
                     expr = TraitUpcast(site, expr, impl.vtable_trait)
                 return TraitMethodDirect(site, expr, impl)
         if name in self.vtable_methods:
-            (_, inp, outp, throws, independent, _, _) = \
+            (_, inp, outp, throws, independent, _, memoized) = \
                 self.vtable_methods[name]
             return TraitMethodIndirect(site, expr, name, inp, outp, throws,
-                                       independent)
+                                       independent, memoized)
         if name in self.vtable_params:
             (_, ptype) = self.vtable_params[name]
             return TraitParameter(site, expr, name, ptype)

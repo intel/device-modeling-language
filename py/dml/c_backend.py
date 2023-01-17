@@ -28,6 +28,7 @@ from .types import *
 from .set import Set
 
 prototypes = []
+constants = []
 c_split_threshold = None
 
 log_object_t = TNamed("log_object_t")
@@ -142,6 +143,11 @@ def print_device_substruct(node):
             members.append((v.value, v.type))
         members.append(('_immediate_after_state',
                         TPtr(TNamed('_dml_immediate_after_state_t'))))
+        if dml.globals.session_orphan_allocs:
+            t = TArray(TPtr(void),
+                       ctree.mkIntegerLiteral(
+                           node.site, dml.globals.session_orphan_allocs))
+            members.append(('_orphan_allocs', t))
         return composite_ctype(node,
                                members + [(crep.cname(sub), print_device_substruct(sub))
                                           for sub in node.get_components()],
@@ -365,9 +371,12 @@ def generate_hfile(device, headers, filename):
 
 def generate_protofile(device):
     linkage = 'extern' if c_split_threshold else 'static'
-    out('\n/* generated function prototypes */\n')
+    out('\n/* generated function and variable prototypes */\n')
     for proto in prototypes:
         out("%s %s UNUSED;\n" % (linkage, proto))
+    out('\n/* generated internal constants */\n')
+    for (proto, init) in constants:
+        out("static %s UNUSED = %s;\n" % (proto, init))
 
 def get_attr_fname(node, port, group_prefix):
     port_prefix = port.attrname() + '_' if port else ''
@@ -416,19 +425,19 @@ def generate_attr_setter(fname, node, port, dimsizes, cprefix, loopvars,
         out('attr_value_t attr%d = %s;\n' % (dim, list_item))
         valuevar = 'attr%d' % (dim,)
 
-    with NoFailure(node.site), crep.DeviceInstanceContext():
-        setcode = [
-            codegen_inline_byname(
-                node, port_indices + loopvars,
-                '_set_attribute' if dml.globals.dml_version == (1, 2)
-                else 'set_attribute',
-                [mkLit(node.site, valuevar, TNamed('attr_value_t'))],
-                [mkLit(node.site, '_status', TNamed('set_error_t'))],
-                node.site,
-                inhibit_copyin = not loopvars)]
+    with MethodRAIIScope() as raii_scope, NoFailure(node.site), \
+         crep.DeviceInstanceContext():
+        setcode = codegen_inline_byname(
+            node, port_indices + loopvars,
+            '_set_attribute' if dml.globals.dml_version == (1, 2)
+            else 'set_attribute',
+            [mkLit(node.site, valuevar, TNamed('attr_value_t'))],
+            [mkLit(node.site, '_status', TNamed('set_error_t'))],
+            node.site,
+            inhibit_copyin = not loopvars)
+        code = declarations(fscope) + [setcode]
 
-    code = mkCompound(None, declarations(fscope) + setcode)
-    code.toc_inline()
+    mkCompoundRAII(None, code, raii_scope).toc_inline()
     reset_line_directive()
     if dimsizes:
         # abort on first bad value
@@ -477,15 +486,16 @@ def generate_attr_getter(fname, node, port, dimsizes, cprefix, loopvars):
         out('attr_value_t %s;\n' % (next_valuevar.read()))
         valuevar = next_valuevar
 
-    with NoFailure(node.site), crep.DeviceInstanceContext():
+    with MethodRAIIScope() as raii_scope, NoFailure(node.site), \
+         crep.DeviceInstanceContext():
         getcode = codegen_inline_byname(
             node, port_indices + loopvars,
             '_get_attribute' if dml.globals.dml_version == (1, 2)
             else 'get_attribute',
             [], [valuevar], node.site)
-        code = mkCompound(node.site, declarations(fscope) + [getcode])
-        code.toc_inline()
-        reset_line_directive()
+        code = declarations(fscope) + [getcode]
+    mkCompoundRAII(node.site, code, raii_scope).toc_inline()
+    reset_line_directive()
 
     for depth, loopvar in reversed(list(enumerate(loopvars))):
         out('SIM_attr_list_set_item(&_val%d, %s, _val%d);\n'
@@ -740,7 +750,7 @@ def wrap_method(meth, wrapper_name, indices=()):
         assert meth.dimensions == len(indices)
         out(devstruct+' *_dev UNUSED = ('+devstruct+'*)_obj;\n')
         indices = tuple(mkIntegerLiteral(meth.site, i) for i in indices)
-    with crep.DeviceInstanceContext():
+    with UnusedMethodRAIIScope(), crep.DeviceInstanceContext():
         if retvar:
             decl = mkDeclaration(meth.site, retvar, rettype,
                                  init = get_initializer(meth.site, rettype,
@@ -1036,11 +1046,11 @@ def generate_simple_events(device):
 
         # If data is NULL, report it and use emergency indices/args
         if info.dimensions or info.args_type:
-            out('if (!data) {', postindent=1)
+            out('if (!data) {\n', postindent=1)
             out('const char *msg = "Failed deserialization of after event '
                 + 'data. Using emergency indices/arguments.";\n')
             out('VT_critical_error(msg, msg);\n')
-            out('}', preindent=-1)
+            out('}\n', preindent=-1)
 
         if info.dimensions > 0:
             out('const uint32 *_indices = data ? data->indices '
@@ -1066,6 +1076,25 @@ def generate_simple_events(device):
         output_dml_state_change('_dev')
         out('}\n\n', preindent = -1)
         splitting_point()
+
+        if info.args_type and info.args_type.is_raii:
+            start_function_definition(
+                f'void {info.cident_destroy}'
+                + '(conf_object_t *_obj, lang_void *_data)')
+            out('{\n', postindent = 1)
+            out('_simple_event_data_t *data = '
+                + '(_simple_event_data_t *)_data;\n')
+            out('if (data) {\n', postindent=1)
+            args_decl = TPtr(info.args_type).declaration('_args')
+            out(f'{args_decl} = data->args;\n')
+            raii_info = get_raii_type_info(info.args_type)
+            out(f'{raii_info.read_destroy_lval("*_args")};\n')
+            out('_free_simple_event_data(*data);\n')
+            out('MM_FREE(data);\n')
+            out('}\n', preindent=-1)
+            out('}\n\n', preindent = -1)
+            splitting_point()
+
 
         if info.dimensions or info.args_type:
             start_function_definition(
@@ -1131,6 +1160,19 @@ def generate_after_on_hooks_artifacts(device):
         splitting_point()
 
         if info.has_serialized_args:
+            if info.args_type and info.args_type.is_raii:
+                start_function_definition(
+                    f'void {info.cident_args_destructor}('
+                    + 'void *_args)')
+                out('{\n', postindent = 1)
+                args_type_ptr = TPtr(info.args_type)
+                out(f'{args_type_ptr.declaration("args")} = _args;\n')
+                args_expr = mkDereference(site, mkLit(site, 'args',
+                                                      args_type_ptr))
+                info.generate_args_destructor(site, args_expr)
+                out('}\n\n', preindent = -1)
+                splitting_point()
+
             start_function_definition(
                 f'attr_value_t {info.cident_args_serializer}('
                 + 'const void *_args)')
@@ -1155,12 +1197,28 @@ def generate_after_on_hooks_artifacts(device):
             out('{\n', postindent = 1)
             out('set_error_t _success UNUSED = Sim_Set_Ok;\n')
 
+            cleanup = []
+            cleanup_on_failure = []
             if info.args_type:
-                out(f'{TPtr(info.args_type).declaration("out")} = _out;\n')
-                out_expr = mkDereference(site, mkLit(site, 'out',
-                                                     TPtr(info.args_type)))
+                raii_info = (get_raii_type_info(info.args_type)
+                             if info.args_type.is_raii else None)
+                malloc = mkLit(site,
+                               f'MM_{("Z" if raii_info is not None else "M")}'
+                               + f'ALLOC(1, {info.args_type.declaration("")})',
+                               TPtr(info.args_type))
+                (tmp_out_decl, tmp_out_ref) = serialize.declare_variable(
+                    site, "_tmp_out", TPtr(info.args_type), malloc)
+                tmp_out_decl.toc()
+                tmp_out_expr = mkDereference(site, tmp_out_ref)
+                cleanup_ref = ('(void *)'*deep_const(info.args_type)
+                               + '_tmp_out')
+                cleanup.append(ctree.mkInline(site,
+                                              f'MM_FREE({cleanup_ref});'))
+                if raii_info:
+                    cleanup_on_failure.append(ctree.mkInline(
+                        site, raii_info.read_destroy_lval('*_tmp_out') + ';'))
             else:
-                out_expr = None
+                tmp_out_expr = None
             def error_out(exc, msg):
                 stmts = []
                 stmts.append(mkInline(site, f'_success = {exc};'))
@@ -1171,10 +1229,28 @@ def generate_after_on_hooks_artifacts(device):
                 return stmts
             val_expr = mkLit(site, 'val', attr_value_t)
 
-            info.generate_args_deserializer(site, val_expr, out_expr,
+            info.generate_args_deserializer(site, val_expr, tmp_out_expr,
                                             error_out)
 
-            out('_exit:\n')
+            if info.args_type:
+                out_expr = ctree.mkDereference(
+                    site,
+                    ctree.mkCast(site, mkLit(site, '_out', TPtr(void)),
+                                 TPtr(info.args_type)))
+                src = OrphanWrap(site, tmp_out_expr)
+                ctree.AssignStatement(site, out_expr,
+                                      ctree.ExpressionInitializer(src)).toc()
+            if cleanup_on_failure:
+                out('if (false) {\n', postindent=1)
+                out('_exit:\n')
+                for stmt in cleanup_on_failure:
+                    stmt.toc()
+                out('}\n', preindent=-1)
+            else:
+                out('_exit:\n')
+
+            for stmt in cleanup:
+                stmt.toc()
             out('return _success;\n')
             out('}\n\n', preindent = -1)
             splitting_point()
@@ -1183,12 +1259,16 @@ def generate_after_on_hooks_artifacts(device):
 
     if dml.globals.after_on_hook_infos:
         init = '{\n%s\n}' % (',\n'.join(
-            '    {%s, %s, %s, %s, %s, %d}'
-            % ((string_literal(info.string_key), info.cident_callback)
+            '    {%s, %s, %s, %d, %s, %s, %s}'
+            % ((info.cident_callback,
+                info.cident_args_destructor
+                if info.args_type and info.args_type.is_raii else 'NULL',
+                f'sizeof({info.args_type.declaration("")})'
+                if info.args_type else '0',
+                info.parent.uniq,
+                string_literal(info.string_key))
                + ((info.cident_args_serializer, info.cident_args_deserializer)
-                  if info.has_serialized_args else ('NULL', 'NULL'))
-               + (f'sizeof({info.args_type.declaration("")})'
-                  if info.args_type else '0', info.parent.uniq))
+                  if info.has_serialized_args else ('NULL', 'NULL')))
             for info in dml.globals.after_on_hook_infos),)
         add_variable_declaration(
             'const _dml_after_on_hook_info_t _after_on_hook_infos[]', init)
@@ -1318,7 +1398,7 @@ def generate_register_events(device):
             out(('%s = SIM_register_event(%s, class, 0, %s, %s, %s, %s, '
                 + 'NULL);\n')
                 % (crep.get_evclass(key), string_literal(info.string_key),
-                   info.cident_callback, '_destroy_simple_event_data',
+                   info.cident_callback, info.cident_destroy,
                    info.cident_get_value, info.cident_set_value))
     out('}\n\n', preindent = -1)
     splitting_point()
@@ -1346,17 +1426,20 @@ def generate_reg_callback(meth, name):
     out('{\n', postindent = 1)
     out('%s *_dev = _obj;\n' % dev_t)
     scope = Symtab(global_scope)
-    fail = ReturnFailure(meth.site)
-    with fail, crep.DeviceInstanceContext():
-        inargs = [mkLit(meth.site, n, t) for n, t in meth.inp]
-        outargs = [mkLit(meth.site, "*" + n, t) for n, t in meth.outp]
-        code = [codegen_call(
-                meth.site, meth,
-                tuple(mkLit(meth.site, 'indices[%d]' % i, TInt(32, False))
-                      for i in range(meth.dimensions)),
-                inargs, outargs)]
+    with UnusedMethodRAIIScope():
+        fail = ReturnFailure(meth.site)
+        with fail, crep.DeviceInstanceContext():
+            inargs = [mkLit(meth.site, n, t) for n, t in meth.inp]
+            outargs = [mkLit(meth.site, "*" + n, t) for n, t in meth.outp]
+            code = [codegen_call(
+                    meth.site, meth,
+                    tuple(mkLit(meth.site, 'indices[%d]' % i, TInt(32, False))
+                          for i in range(meth.dimensions)),
+                    inargs, outargs)]
 
-    code = mkCompound(meth.site, declarations(scope) + code + [fail.nofail()])
+        code = mkCompound(meth.site,
+                          declarations(scope) + code + [fail.nofail()])
+
     code.toc()
     out('}\n', preindent = -1)
     out('\n')
@@ -1571,7 +1654,7 @@ def generate_initialize(device):
     # changed such that zero-initialization would not be valid.
     out('QINIT(_dev->_immediate_after_state->queue);\n')
 
-    with crep.DeviceInstanceContext():
+    with MethodRAIIScope() as raii_scope, crep.DeviceInstanceContext():
         if dml.globals.dml_version == (1, 2):
             # Functions called from init_object shouldn't throw any
             # exceptions. But we don't want to force them to insert try-catch
@@ -1584,9 +1667,11 @@ def generate_initialize(device):
                 hard_reset = codegen_call_byname(device.site, device, (),
                                                  'hard_reset', [], [])
 
-            mkCompound(device.site, [init, hard_reset]).toc()
+            code = [init, hard_reset]
         else:
-            codegen_inline_byname(device, (), '_init', [], [], device.site).toc()
+            code = [codegen_inline_byname(device, (), '_init', [], [],
+                                          device.site)]
+    mkCompoundRAII(device.site, code, raii_scope).toc()
 
     reset_line_directive()
     if dml.globals.api_version <= '6':
@@ -1598,9 +1683,47 @@ def generate_initialize(device):
 
 def generate_dealloc(device):
     start_function_definition(
-        f'void {crep.cname(device)}_dealloc(conf_object_t *dev)')
+        f'void {crep.cname(device)}_dealloc(conf_object_t *_obj)')
     out('{\n', postindent = 1)
-    out('MM_FREE(dev);\n')
+    out(crep.structtype(device) + ' *_dev = ('
+        + crep.structtype(device) + ' *)_obj;\n')
+    site = SimpleSite('generated dealloc function for device')
+    by_dims = {}
+    for node in device.get_recursive_components('session', 'saved'):
+        if node._type.is_raii:
+            by_dims.setdefault(node.dimsizes, []).append(node)
+    for dims in by_dims:
+        for i in range(len(dims)):
+            idxvar = '_i%d' % (i,)
+            out('for (uint32 %s = 0; %s < %d; %s++) {\n'
+                % (idxvar, idxvar, dims[i], idxvar), postindent=1)
+
+        indices = tuple(mkLit(site, f'_i{i}', TInt(32, False))
+                        for i in range(len(dims)))
+
+        for node in by_dims[dims]:
+            info = get_raii_type_info(node._type)
+            assert info
+            out(info.read_destroy_lval('_dev->'
+                                      + crep.cref_session(node, indices))
+                + ';\n')
+
+        for i in range(len(dims)):
+            out('}\n', preindent=-1)
+
+    for (sym, _) in dml.globals.static_vars:
+        if not sym.type.is_raii:
+            continue
+        info = get_raii_type_info(sym.type)
+        out(info.read_destroy_lval('_dev->'+sym.value) + ';\n')
+
+    allocs = dml.globals.session_orphan_allocs
+    if allocs:
+        out(f'for (uint32 i = 0; i < {allocs}; ++i)\n', postindent=1)
+        out('_DML_delete_orphan(_dev->_orphan_allocs[i]);\n',
+            postindent=-1)
+
+    out('MM_FREE(_dev);\n')
     out('}\n\n', preindent = -1)
 
 def generate_finalize(device):
@@ -1610,7 +1733,7 @@ def generate_finalize(device):
     out(crep.structtype(device) + ' *_dev UNUSED = ('
         + crep.structtype(device) + ' *)_obj;\n')
 
-    with crep.DeviceInstanceContext():
+    with MethodRAIIScope() as raii_scope, crep.DeviceInstanceContext():
         if dml.globals.dml_version == (1, 2):
             # Functions called from new_instance shouldn't throw any
             # exceptions.  But we don't want to force them to insert try-catch
@@ -1621,8 +1744,7 @@ def generate_finalize(device):
         else:
             code = codegen_inline_byname(device, (), '_post_init', [], [],
                                      device.site)
-    if not code.is_empty:
-        code.toc()
+    mkCompoundRAII(device.site, [code], raii_scope).toc_inline()
     out('}\n\n', preindent = -1)
     reset_line_directive()
 
@@ -1636,66 +1758,66 @@ def generate_deinit(device):
     out('_DML_execute_immediate_afters_now(_obj, '
         + '_dev->_immediate_after_state);\n')
 
-    with crep.DeviceInstanceContext():
-        # Cancel all events
-        events = device.get_recursive_components('event')
+    # Cancel all events
+    events = device.get_recursive_components('event')
 
-        by_dims = {}
+    by_dims = {}
+    for event in events:
+        by_dims.setdefault(event.dimsizes, []).append(event)
+
+    for (dims, events) in by_dims.items():
+        for i in range(len(dims)):
+            out(f'for (uint32 _i{i} = 0; _i{i} < {dims[i]}; _i{i}++) {{\n',
+                postindent=1)
+
+        indices = tuple(mkLit(device.site, f'_i{i}', TInt(32, False))
+                        for i in range(len(dims)))
         for event in events:
-            by_dims.setdefault(event.dimsizes, []).append(event)
+            method = event.get_component('_cancel_all', 'method')
+            # Functions called from pre_delete_instance shouldn't throw
+            # any exceptions. But we don't want to force them to insert
+            # try-catch in the init method.
+            with crep.DeviceInstanceContext(), UnusedMethodRAIIScope(), \
+                 LogFailure(device.site, event, indices):
+                codegen_inline(device.site, method, indices, [], []).toc()
+        for i in range(len(dims)):
+            out('}\n', preindent=-1)
 
-        for (dims, events) in by_dims.items():
-            for i in range(len(dims)):
-                out(f'for (uint32 _i{i} = 0; _i{i} < {dims[i]}; _i{i}++) {{\n',
-                    postindent=1)
+    for key in dml.globals.after_delay_infos:
+        out(f'SIM_event_cancel_time(_obj, {crep.get_evclass(key)}, _obj, '
+            + '0, NULL);\n')
 
-            indices = tuple(mkLit(device.site, f'_i{i}', TInt(32, False))
-                            for i in range(len(dims)))
-            for event in events:
-                method = event.get_component('_cancel_all', 'method')
-                # Functions called from pre_delete_instance shouldn't throw
-                # any exceptions. But we don't want to force them to insert
-                # try-catch in the init method.
-                with LogFailure(device.site, event, indices):
-                    codegen_inline(device.site, method, indices, [], []).toc()
-            for i in range(len(dims)):
-                out('}\n', preindent=-1)
+    # Cancel all pending afters on hooks
+    by_dims = {}
+    for hook in dml.globals.hooks:
+        by_dims.setdefault(hook.dimsizes, []).append(hook)
 
-        for key in dml.globals.after_delay_infos:
-            out(f'SIM_event_cancel_time(_obj, {crep.get_evclass(key)}, _obj, '
-                + '0, NULL);\n')
+    for (dims, hooks) in by_dims.items():
+        for i in range(len(dims)):
+            out(f'for (uint32 _i{i} = 0; _i{i} < {dims[i]}; _i{i}++) {{\n',
+                postindent=1)
 
-        with LogFailure(device.site, device, ()):
-            code = codegen_inline_byname(device, (), 'destroy', [], [],
-                                         device.site)
-        if not code.is_empty:
-            code.toc()
+        indices = tuple(mkLit(device.site, f'_i{i}', TInt(32, False))
+                        for i in range(len(dims)))
+        for hook in hooks:
+            out('_DML_free_hook_queue('
+                + f'&_dev->{crep.cref_hook(hook, indices)}.queue);\n')
+        for i in range(len(dims)):
+            out('}\n', preindent=-1)
 
-        # Cancel all pending afters on hooks
-        by_dims = {}
-        for hook in dml.globals.hooks:
-            by_dims.setdefault(hook.dimsizes, []).append(hook)
+    with MethodRAIIScope() as raii_scope, crep.DeviceInstanceContext(), \
+         LogFailure(device.site, device, ()):
+        code = codegen_inline_byname(device, (), 'destroy', [], [],
+                                     device.site)
+    mkCompoundRAII(device.site, [code], raii_scope).toc()
 
-        for (dims, hooks) in by_dims.items():
-            for i in range(len(dims)):
-                out(f'for (uint32 _i{i} = 0; _i{i} < {dims[i]}; _i{i}++) {{\n',
-                    postindent=1)
+    # Execute all immediate afters posted by destruction code
+    out('_DML_execute_immediate_afters_now(_obj, '
+        + '_dev->_immediate_after_state);\n')
 
-            indices = tuple(mkLit(device.site, f'_i{i}', TInt(32, False))
-                            for i in range(len(dims)))
-            for hook in hooks:
-                out('_DML_free_hook_queue('
-                    + f'&_dev->{crep.cref_hook(hook, indices)}.queue);\n')
-            for i in range(len(dims)):
-                out('}\n', preindent=-1)
-
-        # Execute all immediate afters posted by destruction code
-        out('_DML_execute_immediate_afters_now(_obj, '
-            + '_dev->_immediate_after_state);\n')
-
-        # Free the tables used for log_once after all calls into device code
-        # are done
-        out('_free_table(&_dev->_subsequent_log_ht);\n')
+    # Free the tables used for log_once after all calls into device code
+    # are done
+    out('_free_table(&_dev->_subsequent_log_ht);\n')
 
     out('QFREE(_dev->_immediate_after_state->queue);\n')
     out('if (likely(!_dev->_immediate_after_state->posted)) {\n', postindent=1)
@@ -1717,11 +1839,12 @@ def generate_reset(device, hardness):
     out(crep.structtype(device) + ' *_dev UNUSED = ('
         + crep.structtype(device) + ' *)_obj;\n\n')
     scope = Symtab(global_scope)
-    with LogFailure(device.site, device, ()), crep.DeviceInstanceContext():
+    with MethodRAIIScope() as raii_scope, \
+        LogFailure(device.site, device, ()), crep.DeviceInstanceContext():
         code = codegen_call_byname(device.site, device, (),
                                    hardness+'_reset', [], [])
-    code = mkCompound(device.site, declarations(scope) + [code])
-    code.toc()
+    mkCompoundRAII(device.site, declarations(scope) + [code],
+                   raii_scope).toc_inline()
     out('}\n\n', preindent = -1)
     reset_line_directive()
 
@@ -1863,10 +1986,12 @@ def generate_init_data_objs(device):
             try:
                 # only data/method obj
                 assert not node.isindexed()
-                init = eval_initializer(
-                    node.site, node._type, node.astinit,
-                    Location(node.parent, static_indices(node)),
-                    global_scope, True)
+                with ctree.SessionRAIIScope() as raii_scope:
+                    init = eval_initializer(
+                        node.site, node._type, node.astinit,
+                        Location(node.parent, static_indices(node)),
+                        global_scope, True)
+                dml.globals.session_orphan_allocs += raii_scope.allocs
             # mainly meant to capture EIDXVAR; for other errors, the error will
             # normally re-appear when evaluating per instance
             except DMLError:
@@ -1875,10 +2000,12 @@ def generate_init_data_objs(device):
                                         for i in indices)
                     nref = mkNodeRef(node.site, node, index_exprs)
                     try:
-                        init = eval_initializer(
-                            node.site, node._type, node.astinit,
-                            Location(node.parent, index_exprs), global_scope,
-                            True)
+                        with ctree.SessionRAIIScope() as raii_scope:
+                            init = eval_initializer(
+                                node.site, node._type, node.astinit,
+                                Location(node.parent, index_exprs),
+                                global_scope, True)
+                        dml.globals.session_orphan_allocs += raii_scope.allocs
                     except DMLError as e:
                         report(e)
                     else:
@@ -1886,7 +2013,7 @@ def generate_init_data_objs(device):
                             coverity_marker('store_writes_const_field',
                                             'FALSE',
                                             node.site)
-                        init.assign_to(nref, node._type)
+                        out(init.assign_to(nref.read(), node._type) + ';\n')
             else:
                 index_exprs = ()
                 for (i, sz) in enumerate(node.dimsizes):
@@ -1898,7 +2025,7 @@ def generate_init_data_objs(device):
                 nref = mkNodeRef(node.site, node, index_exprs)
                 if deep_const(node._type):
                     coverity_marker('store_writes_const_field', 'FALSE', node.site)
-                init.assign_to(nref, node._type)
+                out(init.assign_to(nref.read(), node._type) + ';\n')
                 for _ in range(node.dimensions):
                     out('}\n', postindent=-1)
     out('}\n\n', preindent = -1)
@@ -1997,27 +2124,38 @@ def generate_init(device, initcode, outprefix):
 
 def generate_static_trampoline(func):
     # static trampolines never need to be generated for independent methods
-    assert not func.independent
-    params = [("_obj", TPtr(TNamed("conf_object_t")))] + func.cparams[1:]
+    # with the niche exception of when
+    # 1. they are startup memoized
+    # 2. have a return value of RAII Type
+    assert not func.independent or (func.memoized and func.rettype.is_raii)
+    params = ([("_obj", TPtr(TNamed("conf_object_t")))] + func.cparams[1:]
+              if not func.independent else func.cparams)
     params_string = ('void' if not params
                      else ", ".join(t.declaration(n) for (n, t) in params))
     start_function_definition(func.rettype.declaration(
         "%s(%s)" % ("_trampoline" + func.get_cname(), params_string)))
     out("{\n", postindent=1)
-    out('ASSERT(_obj);\n')
-    out('ASSERT(SIM_object_class(_obj) == _dev_class);\n')
-    (name, typ) = func.cparams[0]
-    out("%s = (%s)_obj;\n" % (typ.declaration(name), typ.declaration("")))
+    if not func.independent:
+        out('ASSERT(_obj);\n')
+        out('ASSERT(SIM_object_class(_obj) == _dev_class);\n')
+        (name, typ) = func.cparams[0]
+        out("%s = (%s)_obj;\n" % (typ.declaration(name), typ.declaration("")))
     out("%s%s(%s);\n" % ("" if func.rettype.void
                          else func.rettype.declaration("result") + " = ",
                          func.get_cname(),
                          ", ".join(n for (n, t) in func.cparams)))
-    output_dml_state_change(name)
+    if not func.independent:
+        output_dml_state_change(name)
     if not func.rettype.void:
-        out("return result;\n")
+        ret = 'result'
+        if func.memoized and func.rettype.is_raii:
+            info = get_raii_type_info(func.rettype)
+            ret = info.read_dupe('result')
+        out(f'return {ret};\n')
     out("}\n", preindent=-1)
 
 def generate_extern_trampoline(exported_name, func):
+    assert not (func.independent and func.memoized and func.rettype.is_raii)
     params = (func.cparams if func.independent else
               [("_obj", TPtr(TNamed("conf_object_t")))] + func.cparams[1:])
     params_string = ('void' if not params
@@ -3104,34 +3242,24 @@ def generate_startup_trait_calls(data, idxvars):
         ref = ObjTraitRef(site, node, trait, indices)
         out(f'_tref = {ref.read()};\n')
         for method in trait_methods:
-            outargs = [mkLit(site,
-                             ('*((%s) {0})'
-                              % ((TArray(t, mkIntegerLiteral(site, 1))
-                                  .declaration('')),)),
-                             t)
-                       for (_, t) in method.outp]
+            outargs = [mkDiscardRef(site) for _ in method.outp]
 
             method_ref = TraitMethodDirect(
                 site, mkLit(site, '_tref', TTrait(trait)), method)
-            with IgnoreFailure(site):
+            with UnusedMethodRAIIScope(), IgnoreFailure(site):
                 codegen_call_traitmethod(site, method_ref, [],
-                                         outargs) .toc()
+                                         outargs).toc()
     out('}\n', preindent=-1)
 
 def generate_startup_regular_call(method, idxvars):
     site = method.site
     indices = tuple(mkLit(site, idx, TInt(32, False)) for idx in idxvars)
-    outargs = [mkLit(site,
-                     ('*((%s) {0})'
-                      % ((TArray(t, mkIntegerLiteral(site, 1))
-                          .declaration('')),)),
-                     t)
-               for (_, t) in method.outp]
+    outargs = [mkDiscardRef(site) for _ in method.outp]
     # startup memoized methods can throw, which is ignored during startup.
     # Memoization of the throw then allows for the user to check whether
     # or not the method did throw during startup by calling the method
     # again.
-    with IgnoreFailure(site):
+    with UnusedMethodRAIIScope(), IgnoreFailure(site):
         codegen_call(method.site, method, indices, [], outargs).toc()
 
 def generate_startup_calls_entry_function(devnode):
@@ -3176,6 +3304,48 @@ def generate_startup_calls_entry_function(devnode):
     for startups in (all_startups, all_memoized_startups):
         generate_startup_call_loops(startups)
     out('}\n', preindent=-1)
+
+def generate_raii_artifacts():
+    destructor_array_items = []
+
+    def add_destructor_array_item(ref_name, destructor):
+        constants.append((
+            f'const _raii_destructor_t *const {ref_name}',
+            f'&_dml_raii_destructors[{len(destructor_array_items)}]'))
+        destructor_array_items.append(destructor)
+
+    add_destructor_array_item(StringTypeInfo.cident_destructor_array_item,
+                              StringTypeInfo.cident_destructor)
+    add_destructor_array_item(
+        VectorRAIITypeInfo.cident_destructor_array_item_nonraii_elems,
+        VectorRAIITypeInfo.cident_destructor_nonraii_elems)
+    for info in dml.globals.generated_raii_types.values():
+        if info.should_generate_destructor:
+            start_function_definition(
+                f'void {info.cident_destructor}(void *_data)')
+            out('{\n', postindent=1)
+            TPtr(info.type).print_declaration('data', '_data')
+            info.generate_destructor('data')
+            out('}\n', preindent=-1)
+            add_destructor_array_item(info.cident_destructor_array_item,
+                                      info.cident_destructor)
+
+        if info.should_generate_copier:
+            start_function_definition(
+                f'void {info.cident_copier}(void *_dest, const void *_src)')
+            out('{\n', postindent=1)
+            TPtr(info.type).print_declaration('dest', '_dest')
+            TPtr(conv_const(True, info.type)).print_declaration('src', '_src')
+            info.generate_copier('dest', 'src')
+            out('}\n', preindent=-1)
+
+    constants.append(('const _raii_destructor_t *const '
+                      + '_dml_raii_destructor_ref_none',
+                      f'_dml_raii_destructors + {len(destructor_array_items)}')
+                     )
+    add_variable_declaration('const _raii_destructor_t _dml_raii_destructors'
+                             + f'[{len(destructor_array_items)}]',
+                             '{%s}' % (', '.join(destructor_array_items),))
 
 
 class MultiFileOutput(FileOutput):
@@ -3284,20 +3454,20 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     generate_initialize(device)
     generate_finalize(device)
     generate_deinit(device)
-    generate_dealloc(device)
     generate_events(device)
     generate_identity_data_decls()
     generate_object_vtables_array()
     generate_class_var_decl()
     generate_startup_calls_entry_function(device)
     generate_init_data_objs(device)
+    generate_dealloc(device)
     if dml.globals.dml_version == (1, 2):
         generate_reset(device, 'hard')
         generate_reset(device, 'soft')
 
     # These parameter values are output into static context, so make sure
     # the expressions do not use _dev
-    with crep.TypedParamContext():
+    with crep.TypedParamContext(), ctree.StaticRAIIScope():
         trait_param_values = {
             node: resolve_trait_param_values(node)
             for node in flatten_object_subtree(device)
@@ -3407,6 +3577,7 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
 
     generate_index_enumerations()
     generate_tuple_table()
+    generate_raii_artifacts()
 
     for c in footers:
         c.toc()

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import re
-from abc import ABC, abstractmethod, abstractproperty
+from abc import ABC, ABCMeta, abstractmethod, abstractproperty
 import operator
 import contextlib
 from functools import reduce
@@ -48,6 +48,9 @@ __all__ = (
     'CatchFailure',
     'ReturnFailure',
     'IgnoreFailure',
+    'get_raii_type_info',
+    'StringTypeInfo',
+    'VectorRAIITypeInfo',
 
     'c_rettype',
     'c_inargs',
@@ -100,14 +103,26 @@ class LoopContext:
     def __enter__(self):
         self.prev = LoopContext.current
         LoopContext.current = self
+        assert RAIIScope.scope_stack()
+        self.outermost_raii_scope = RAIIScope.scope_stack()[-1]
+        return self
     def __exit__(self, exc_type, exc_val, exc_tb):
         assert LoopContext.current is self
         LoopContext.current = self.prev
+    @abstractmethod
+    def break_(self, site): pass
+    @abstractmethod
+    def continue_(self, site): pass
 
 class CLoopContext(LoopContext):
     '''DML loop context corresponding to a C loop'''
     def break_(self, site):
-        return [mkBreak(site)]
+        return [codegen_raii_clear_up_to(site, self.outermost_raii_scope),
+                mkBreak(site)]
+
+    def continue_(self, site):
+        return [codegen_raii_clear_up_to(site, self.outermost_raii_scope),
+                mkContinue(site)]
 
 class NoLoopContext(LoopContext):
     '''DML loop context corresponding to an inlined method call.
@@ -115,6 +130,9 @@ class NoLoopContext(LoopContext):
     the inline method call and the method called.'''
     def break_(self, site):
         raise EBREAK(site)
+
+    def continue_(self, site):
+        raise ECONT(site)
 
 class GotoLoopContext(LoopContext):
     '''DML loop context not directly corresponding to a single C loop
@@ -128,7 +146,11 @@ class GotoLoopContext(LoopContext):
 
     def break_(self, site):
         self.used = True
-        return [mkGotoBreak(site, self.label)]
+        return [codegen_raii_clear_up_to(site, self.outermost_raii_scope),
+                mkGotoBreak(site, self.label)]
+
+    def continue_(self, site):
+        raise ECONTU(site)
 
 class Failure(ABC):
     '''Handle exceptions failure handling is supposed to handle the various kind of
@@ -138,6 +160,10 @@ class Failure(ABC):
     fail_stack = []
     def __init__(self, site):
         self.site = site
+        if RAIIScope.scope_stack():
+            self.outermost_raii_scope = RAIIScope.scope_stack()[-1]
+        else:
+            self.outermost_raii_scope = None
     def __enter__(self):
         self.fail_stack.append(self)
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -174,7 +200,12 @@ class ReturnFailure(Failure):
     '''Generate boolean return statements to signal success. False
     means success.'''
     def fail(self, site):
-        return mkReturn(site, mkBoolConstant(site, True))
+        assert self.outermost_raii_scope is not None
+        return mkCompound(site,
+                          [codegen_raii_clear_up_to(
+                              site,
+                              self.outermost_raii_scope),
+                           mkReturn(site, mkBoolConstant(site, True))])
     def nofail(self):
         '''Return code that is used to leave the method successfully'''
         return mkReturn(self.site, mkBoolConstant(self.site, False))
@@ -187,9 +218,13 @@ class CatchFailure(Failure):
         self.label = None
         self.method = method_node
     def fail(self, site):
+        assert self.outermost_raii_scope is not None
         if not self.label:
             self.label = gensym('throw')
-        return mkThrow(site, self.label)
+        return mkCompound(site,
+                          [codegen_raii_clear_up_to(site,
+                                                    self.outermost_raii_scope),
+                            mkThrow(site, self.label)])
 
 class IgnoreFailure(Failure):
     '''Ignore exceptions'''
@@ -199,9 +234,14 @@ class IgnoreFailure(Failure):
 class ExitHandler(ABC):
     current = None
 
+    def __init__(self):
+        assert RAIIScope.scope_stack()
+        self.outermost_raii_scope = RAIIScope.scope_stack()[-1]
+
     def __enter__(self):
         self.prev = ExitHandler.current
         ExitHandler.current = self
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         assert ExitHandler.current is self
         ExitHandler.current = self.prev
@@ -221,12 +261,24 @@ class GotoExit(ExitHandler):
         self.used = False
         GotoExit.count += 1
         self.label = 'exit%d' % (self.count,)
+        super(GotoExit, self).__init__()
+
+def codegen_raii_clear_up_to(site, scope):
+    return mkRAIIScopeClears(site,
+                             RAIIScope.scope_stack()[scope.scope_stack_ix+1:])
+def codegen_raii_clear_up_to_and_including(site, scope):
+    return mkRAIIScopeClears(site,
+                             RAIIScope.scope_stack()[scope.scope_stack_ix:])
+
 
 class GotoExit_dml12(GotoExit):
     def codegen_exit(self, site, retvals):
         assert retvals is None
         self.used = True
-        return mkGoto(site, self.label)
+        return mkCompound(
+            site,
+            [codegen_raii_clear_up_to(site, self.outermost_raii_scope)]
+            + [mkGoto(site, self.label)])
 
 class GotoExit_dml14(GotoExit):
     def __init__(self, outvars):
@@ -240,12 +292,14 @@ class GotoExit_dml14(GotoExit):
             site,
             [mkCopyData(site, val, out)
              for (out, val) in zip(self.outvars, retvals)]
-            + [mkReturnFromInline(site, self.label)])
+            + [codegen_raii_clear_up_to(site, self.outermost_raii_scope),
+               mkReturnFromInline(site, self.label)])
 
 class ReturnExit(ExitHandler):
     def __init__(self, outp, throws):
         self.outp = outp
         self.throws = throws
+        super(ReturnExit, self).__init__()
     def codegen_exit(self, site, retvals):
         assert retvals is not None, 'dml 1.2/1.4 mixup'
         return codegen_return(site, self.outp, self.throws, retvals)
@@ -253,10 +307,10 @@ class ReturnExit(ExitHandler):
 def memoized_return_failure_leave(site, make_ref, failed):
     ran = make_ref('ran', TInt(8, True))
     threw = make_ref('threw', TBool())
-    stmts = [mkCopyData(site, mkIntegerLiteral(site, 1), ran),
-             mkCopyData(site, mkBoolConstant(site, failed), threw),
-             mkReturn(site, mkBoolConstant(site, failed))]
-    return stmts
+    return [mkCopyData(site, mkIntegerLiteral(site, 1), ran),
+            mkCopyData(site, mkBoolConstant(site, failed), threw),
+            mkRAIIScopeClears(site, RAIIScope.scope_stack()),
+            mkReturn(site, mkBoolConstant(site, failed))]
 
 class MemoizedReturnFailure(Failure):
     '''Generate boolean return statements to signal success. False
@@ -293,7 +347,7 @@ class MemoizedReturnExit(ExitHandler):
         for ((name, typ), val) in zip(self.outp, retvals):
             target = self.make_ref(f'p_{name}', typ)
             stmts.append(mkCopyData(site, val, target))
-            targets.append(target)
+            targets.append(OrphanWrap(target.site, target))
         stmts.append(codegen_return(site, self.outp, self.throws, targets))
         return mkCompound(site, stmts)
 
@@ -364,20 +418,22 @@ class SharedIndependentMemoized(Memoization):
                 if self.method.throws else NoFailure(self.method.site))
 
 def memoization_common_prelude(name, site, outp, throws, make_ref):
-    has_run_stmts = []
-    # Throwing is treated as a special kind of output parameter, stored through
-    # 'threw'. When 'ran' indicates the method has been called before to
-    # completion, 'threw' is retrieved to check whether the method threw or
-    # not. If it did, then the call completes by throwing again; otherwise, the
-    # cached return values are retrieved and returned.
-    if throws:
+    with UnusedMethodRAIIScope():
+        has_run_stmts = []
+        # Throwing is treated as a special kind of output parameter, stored
+        # through 'threw'. When 'ran' indicates the method has been called
+        # before to completion, 'threw' is retrieved to check whether the
+        # method threw or not. If it did, then the call completes by throwing
+        # again; otherwise, the cached return values are retrieved and
+        # returned.
+        if throws:
+            has_run_stmts.append(
+                mkIf(site, make_ref('threw', TBool()),
+                     mkReturn(site, mkBoolConstant(site, True))))
         has_run_stmts.append(
-            mkIf(site, make_ref('threw', TBool()),
-                 mkReturn(site, mkBoolConstant(site, True))))
-    has_run_stmts.append(
-        codegen_return(site, outp, throws,
-                       [make_ref(f'p_{pname}', ptype)
-                        for (pname, ptype) in outp]))
+            codegen_return(site, outp, throws,
+                           [OrphanWrap(site, make_ref(f'p_{pname}', ptype))
+                            for (pname, ptype) in outp]))
     # 'ran' is used to check whether the function has been called or not:
     # - 0:  never been called before. Set to -1, and execute the body.
     #       Before any return, cache the results, and set 'ran' to 1.
@@ -506,6 +562,12 @@ class AfterDelayInfo(CheckpointedAfterInfo):
         else:
             return '_simple_event_only_domains_set_value'
 
+    @property
+    def cident_destroy(self):
+        return (self.cident_prefix + 'destroy'
+                if self.args_type and self.args_type.is_raii
+                else '_destroy_simple_event_data')
+
 
 class AfterOnHookInfo(CheckpointedAfterInfo):
     def __init__(self, dimsizes, parent, typeseq_info, prim_key,
@@ -529,6 +591,10 @@ class AfterOnHookInfo(CheckpointedAfterInfo):
 
     @abstractmethod
     def generate_args_deserializer(self, site, val_expr, out_expr, error_out):
+        pass
+
+    @abstractmethod
+    def generate_args_destructor(self, site, args_expr):
         pass
 
     @abstractproperty
@@ -559,10 +625,19 @@ class AfterOnHookInfo(CheckpointedAfterInfo):
         assert self.has_serialized_args
         return self.cident_prefix + 'args_deserializer'
 
+    @property
+    def cident_args_destructor(self):
+        assert self.has_serialized_args and self.args_type.is_raii
+        return self.cident_prefix + 'args_destructor'
+
 class ImmediateAfterInfo(AfterInfo):
     def __init__(self, key, dimsizes, uniq):
         self.uniq = uniq
         super().__init__(key, dimsizes)
+        self.args_raii_info = (get_raii_type_info(self.args_type)
+                               if (self.args_type
+                                   and self.args_type.is_raii)
+                               else None)
 
     @abstractmethod
     def generate_callback_call(self, indices_lit, args_lit): pass
@@ -597,7 +672,7 @@ class AfterDelayIntoMethodInfo(AfterDelayInfo):
                         for i in range(self.method.dimensions))
         args = tuple(mkLit(site, f'{args_lit}->{pname}', ptype)
                      for (pname, ptype) in self.method.inp)
-        with LogFailure(site, self.method, indices), \
+        with UnusedMethodRAIIScope(), LogFailure(site, self.method, indices), \
              crep.DeviceInstanceContext():
             code = codegen_call(site, self.method, indices, args, ())
         code = mkCompound(site, [code])
@@ -606,13 +681,16 @@ class AfterDelayIntoMethodInfo(AfterDelayInfo):
 class AfterDelayIntoSendNowInfo(AfterDelayInfo):
     def __init__(self, typeseq_info, uniq):
         super().__init__(typeseq_info, [], uniq)
-        self .typeseq_info = typeseq_info
+        self.typeseq_info = typeseq_info
         hookref_type = THook(typeseq_info.types, validated=True)
         self._args_type = (
             TStruct({'hookref': hookref_type,
                      'args': typeseq_info.struct},
                     label=f'_simple_event_{self.uniq}_args')
             if typeseq_info.types else hookref_type)
+        self.typeseq_info_struct_raii_info = (
+            get_raii_type_info(typeseq_info.struct)
+            if typeseq_info.types and typeseq_info.struct.is_raii else None)
 
     @property
     def args_type(self):
@@ -630,10 +708,13 @@ class AfterDelayIntoSendNowInfo(AfterDelayInfo):
         assert indices_lit is None
         has_args = bool(self.typeseq_info.types)
         hookref = f'{args_lit}->hookref' if has_args else f'*{args_lit}'
+        resolved_hookref = ('_DML_resolve_hookref(_dev, _hook_aux_infos, '
+                            + f'{hookref})')
         args = f'&{args_lit}->args' if has_args else 'NULL'
-        out('_DML_send_hook(&_dev->obj, &_dev->_detached_hook_queue_stack, '
-            + f'_DML_resolve_hookref(_dev, _hook_aux_infos, {hookref}), '
-            + f'{args});\n')
+        out(f'_DML_SEND_HOOK({resolved_hookref}, {args});\n')
+        if self.typeseq_info_struct_raii_info:
+            out(self.typeseq_info_struct_raii_info.read_destroy_lval(
+                f'{args_lit}->args') + ';\n')
 
 def get_after_delay(key):
     try:
@@ -643,7 +724,6 @@ def get_after_delay(key):
         info = after_delay_info_constructors[type(key)](key, uniq)
         dml.globals.after_delay_infos[key] = info
         return info
-
 
 class AfterOnHookIntoMethodInfo(AfterOnHookInfo):
     def __init__(self, typeseq_info, method, param_to_msg_comp):
@@ -656,22 +736,35 @@ class AfterOnHookIntoMethodInfo(AfterOnHookInfo):
                      if i not in param_to_msg_comp},
                     label=f'_after_on_hook_{self.uniq}_args')
             if len(self.method.inp) > len(param_to_msg_comp) else None)
+        self.args_raii_info = (get_raii_type_info(self._args_type)
+                               if self._args_type and self._args_type.is_raii
+                               else None)
 
     def generate_callback_call(self, indices_lit, args_lit, msg_lit):
         site = self.method.site
         indices = tuple(mkLit(site, f'{indices_lit}[{i}]', TInt(32, False))
                         for i in range(self.method.dimensions))
         args = tuple(
-            mkLit(site,
-                  f'{msg_lit}->comp{self.param_to_msg_comp[i]}'
-                  if i in self.param_to_msg_comp else f'{args_lit}->{pname}',
-                  ptype)
+                (lambda e: RAIIDupe(site, e) if ptype.is_raii else e)(
+                    mkLit(site, f'{msg_lit}->comp{self.param_to_msg_comp[i]}',
+                          ptype))
+                if i in self.param_to_msg_comp else
+                    mkLit(site, f'{args_lit}->{pname}', ptype)
             for (i, (pname, ptype)) in enumerate(self.method.inp))
-        with LogFailure(site, self.method, indices), \
+        with UnusedMethodRAIIScope(), LogFailure(site, self.method, indices), \
              crep.DeviceInstanceContext():
             code = codegen_call(site, self.method, indices, args, ())
         code = mkCompound(site, [code])
         code.toc()
+
+    def generate_args_destructor(self, site, args_expr):
+        for (i, (name, typ)) in enumerate(self.method.inp):
+            if i in self.param_to_msg_comp or not typ.is_raii:
+                continue
+            info = get_raii_type_info(typ)
+            out(info.read_destroy_lval(ctree.mkSubRef(site, args_expr, name,
+                                                     '.').read())
+                + ';\n')
 
     def generate_args_serializer(self, site, args_expr, out_expr):
         sources = tuple((ctree.mkSubRef(site, args_expr, name, "."),
@@ -681,13 +774,7 @@ class AfterOnHookIntoMethodInfo(AfterOnHookInfo):
         serialize.serialize_sources_to_list(site, sources, out_expr)
 
     def generate_args_deserializer(self, site, val_expr, out_expr, error_out):
-        if self.args_type:
-            tmp_out_decl, tmp_out_ref = serialize.declare_variable(
-                site, '_tmp_out', self.args_type)
-            tmp_out_decl.toc()
-        else:
-            tmp_out_ref = None
-        targets = tuple((ctree.mkSubRef(site, tmp_out_ref, name, "."),
+        targets = tuple((ctree.mkSubRef(site, out_expr, name, "."),
                          safe_realtype(typ))
                         if i not in self.param_to_msg_comp else None
                         for (i, (name, typ)) in enumerate(self.method.inp))
@@ -698,10 +785,6 @@ class AfterOnHookIntoMethodInfo(AfterOnHookInfo):
         serialize.deserialize_list_to_targets(
             site, val_expr, targets, error_out_at_index,
             f'deserialization of arguments to {self.method.name}')
-        if self.args_type:
-            ctree.mkAssignStatement(site, out_expr,
-                                    ctree.ExpressionInitializer(
-                                        tmp_out_ref)).toc()
 
     @property
     def args_type(self):
@@ -719,6 +802,11 @@ class AfterOnHookIntoMethodInfo(AfterOnHookInfo):
 class AfterOnHookIntoSendNowInfo(AfterOnHookInfo):
     def __init__(self, typeseq_info, sendnow_typeseq_info, param_to_msg_comp):
         self.sendnow_typeseq_info = sendnow_typeseq_info
+        self.sendnow_typeseq_info_raii_info = (
+            get_raii_type_info(sendnow_typeseq_info.struct)
+            if (self.sendnow_typeseq_info.types
+                and self.sendnow_typeseq_info.struct.is_raii) else None)
+
         inp = [(f'comp{i}', typ)
                for (i, typ) in enumerate(sendnow_typeseq_info.types)]
         has_inner_args = len(inp) > len(param_to_msg_comp)
@@ -743,20 +831,41 @@ class AfterOnHookIntoSendNowInfo(AfterOnHookInfo):
         has_inner_args = (len(self.sendnow_typeseq_info.types)
                           > len(self.param_to_msg_comp))
         hookref = f'{args_lit}->hookref' if has_inner_args else f'*{args_lit}'
+        resolved_hookref = ('_DML_resolve_hookref(_dev, _hook_aux_infos, '
+                            + f'{hookref})')
 
-        sendnow_msg_struct = self.sendnow_typeseq_info.struct
-        args = (('&(%s_t) {%s}'
-                % (sendnow_msg_struct.label,
-                   ', '.join(
-                       f'{msg_lit}->comp{self.param_to_msg_comp[i]}'
-                       if i in self.param_to_msg_comp else
-                       f'{args_lit}->args.comp{i}'
-                       for i in range(len(self.sendnow_typeseq_info.types)))))
-                if self.sendnow_typeseq_info.types else 'NULL')
+        msg_comps = ', '.join(
+            (lambda x: (get_raii_type_info(typ).read_dupe(x)
+                        if typ.is_raii else x))(
+             f'{msg_lit}->comp{self.param_to_msg_comp[i]}')
+            if i in self.param_to_msg_comp else
+            f'{args_lit}->args.comp{i}'
+            for (i, typ) in enumerate(self.sendnow_typeseq_info.types))
+        msg = (('&((%s_t){%s})'
+                % (self.sendnow_typeseq_info.struct.label, msg_comps))
+               if msg_comps else 'NULL')
+        if self.sendnow_typeseq_info_raii_info:
+            destructor = self.sendnow_typeseq_info_raii_info.cident_destructor
+            out(f'_DML_SEND_HOOK_RAII({resolved_hookref}, {msg}, '
+                + f'{destructor});\n')
+        else:
+            out(f'_DML_SEND_HOOK({resolved_hookref}, {msg});\n')
 
-        out('_DML_send_hook(&_dev->obj, &_dev->_detached_hook_queue_stack, '
-            + f'_DML_resolve_hookref(_dev, _hook_aux_infos, {hookref}), '
-            + f'{args});\n')
+    def generate_args_destructor(self, site, args_expr):
+        has_inner_args = (len(self.sendnow_typeseq_info.types)
+                          > len(self.param_to_msg_comp))
+        if not has_inner_args:
+            return
+
+        inner_args = ctree.mkSubRef(site, args_expr, 'args', '.')
+        for (i, typ) in enumerate(self.sendnow_typeseq_info.types):
+            if i in self.param_to_msg_comp or not typ.is_raii:
+                continue
+            info = get_raii_type_info(typ)
+            out(info.read_destroy_lval(ctree.mkSubRef(site, inner_args,
+                                                     f'comp{i}', '.').read())
+                + ';\n')
+
 
     def generate_args_serializer(self, site, args_expr, out_expr):
         has_inner_args = (len(self.sendnow_typeseq_info.types)
@@ -783,11 +892,8 @@ class AfterOnHookIntoSendNowInfo(AfterOnHookInfo):
     def generate_args_deserializer(self, site, val_expr, out_expr, error_out):
         has_inner_args = (len(self.sendnow_typeseq_info.types)
                           > len(self.param_to_msg_comp))
-        tmp_out_decl, tmp_out_ref = serialize.declare_variable(
-            site, '_tmp_out', self.args_type)
-        tmp_out_decl.toc()
-        hookref = (ctree.mkSubRef(site, tmp_out_ref, 'hookref', '.')
-                   if has_inner_args else tmp_out_ref)
+        hookref = (ctree.mkSubRef(site, out_expr, 'hookref', '.')
+                   if has_inner_args else out_expr)
         targets = [(hookref,
                     safe_realtype(THook(self.sendnow_typeseq_info.types,
                                         validated=True)))]
@@ -806,7 +912,7 @@ class AfterOnHookIntoSendNowInfo(AfterOnHookInfo):
             'deserialization of arguments to a send_now')
 
         if has_inner_args:
-            inner_args = ctree.mkSubRef(site, tmp_out_ref, 'args', '.')
+            inner_args = ctree.mkSubRef(site, out_expr, 'args', '.')
             inner_args_targets = (
                 (ctree.mkSubRef(site, inner_args, f'comp{i}', '.'),
                  safe_realtype(typ))
@@ -815,10 +921,6 @@ class AfterOnHookIntoSendNowInfo(AfterOnHookInfo):
             serialize.deserialize_list_to_targets(
                 site, inner_args_val, inner_args_targets, error_out_at_index,
                 'deserialization of arguments to a send_now')
-
-
-        ctree.mkAssignStatement(site, out_expr,
-                                ctree.ExpressionInitializer(tmp_out_ref)).toc()
 
     @property
     def args_type(self):
@@ -835,10 +937,10 @@ class AfterOnHookIntoSendNowInfo(AfterOnHookInfo):
 class ImmediateAfterIntoMethodInfo(ImmediateAfterInfo):
     def __init__(self, method, uniq):
         self.method = method
-        super().__init__(method, method.dimsizes, uniq)
         self._args_type = (TStruct(dict(method.inp),
-                                   label=f'_immediate_after_{self.uniq}_args')
+                                   label=f'_immediate_after_{uniq}_args')
                            if method.inp else None)
+        super().__init__(method, method.dimsizes, uniq)
 
     @property
     def args_type(self):
@@ -854,22 +956,25 @@ class ImmediateAfterIntoMethodInfo(ImmediateAfterInfo):
                         for i in range(self.method.dimensions))
         args = tuple(mkLit(site, f'{args_lit}->{pname}', ptype)
                      for (pname, ptype) in self.method.inp)
-        with LogFailure(site, self.method, indices), \
+        with UnusedMethodRAIIScope(), LogFailure(site, self.method, indices), \
              crep.DeviceInstanceContext():
             code = codegen_call(site, self.method, indices, args, ())
-        code = mkCompound(site, [code])
-        code.toc()
+        mkCompound(site, [code]).toc()
 
 class ImmediateAfterIntoSendNowInfo(ImmediateAfterInfo):
     def __init__(self, typeseq_info, uniq):
-        super().__init__(typeseq_info, [], uniq)
         self.typeseq_info = typeseq_info
         hookref_type = THook(typeseq_info.types, validated=True)
         self._args_type = (
             TStruct({'hookref': hookref_type,
                      'args': typeseq_info.struct},
-                    label=f'_immediate_after_{self.uniq}_args')
+                    label=f'_immediate_after_{uniq}_args')
             if typeseq_info.types else hookref_type)
+        self.typeseq_info_raii_info = (get_raii_type_info(typeseq_info.struct)
+                                       if (typeseq_info.types
+                                           and typeseq_info.struct.is_raii)
+                                       else None)
+        super().__init__(typeseq_info, [], uniq)
 
     @property
     def args_type(self):
@@ -884,9 +989,12 @@ class ImmediateAfterIntoSendNowInfo(ImmediateAfterInfo):
         has_args = bool(self.typeseq_info.types)
         hookref = f'{args_lit}->hookref' if has_args else f'*{args_lit}'
         args = f'&{args_lit}->args' if has_args else 'NULL'
-        out('_DML_send_hook(&_dev->obj, &_dev->_detached_hook_queue_stack, '
-            + f'_DML_resolve_hookref(_dev, _hook_aux_infos, {hookref}), '
-            + f'{args});\n')
+        resolved_hookref = ('_DML_resolve_hookref(_dev, _hook_aux_infos, '
+                            + f'{hookref})')
+        out(f'_DML_SEND_HOOK({resolved_hookref}, {args});\n')
+        if self.typeseq_info_raii_info:
+            out(self.typeseq_info_raii_info.read_destroy_lval(
+                f'{args_lit}->args') + ';\n')
 
 def get_immediate_after(key):
     try:
@@ -937,7 +1045,329 @@ class AfterIntoMethodArgsInit(AfterArgsInit):
         assert self.inargs
         return f'{{ {", ".join(inarg.read() for inarg in self.inargs)} }}'
 
-def declarations(scope):
+class RAIITypeInfo(metaclass=ABCMeta):
+    '''Information used to generate artifact corresponding to a unique RAII
+    type'''
+
+    @abstractproperty
+    def type(self): pass
+
+    @abstractproperty
+    def cident_destructor(self): pass
+
+    @abstractproperty
+    def cident_destructor_array_item(self): pass
+
+    @abstractproperty
+    def cident_copier(self): pass
+
+    # Return a void-typed C expression that consumes all resources
+    # associated with the expression's value
+    @abstractmethod
+    def read_destroy(self, expr): pass
+
+    # A variant of read_destroy specialized for when expr is an lvalue
+    # This can be important for when the RAII type this RAIITypeInfo is
+    # for is arbitrarily large
+    def read_destroy_lval(self, expr):
+        return self.read_destroy(expr)
+
+    # Return a void-typed C expression that copies src into tgt, replacing
+    # tgt's resources with a duplication of those of src.
+    @abstractmethod
+    def read_copy(self, tgt, src): pass
+
+    # A variant of read_copy specialized for when src is an lvalue
+    # This can be important for when the RAII type this RAIITypeInfo is
+    # for can be arbitrarily large
+    def read_copy_lval(self, tgt, src):
+        return self.read_copy(tgt, src)
+
+    # Return a void-typed C expression that moves src into tgt.
+    # tgt must be a C lval. src is consumed by this and must never be accessed
+    # again; including never destroyed. This means src must be orphan.
+    def read_linear_move(self, tgt, src):
+        return (f'_DML_RAII_LINEAR_MOVE_SIMPLE_RVAL('
+                + f'{self.type.declaration("")}, '
+                + f'{self.cident_destructor}, {tgt}, {src})')
+
+    # a specialization of read_linear_move to optimize the case when the src is
+    # a C lvalue.
+    # This can be important if the type this RAIITypeInfo is for can be
+    # arbitrarily large (like structs)
+    def read_linear_move_lval(self, tgt, src):
+        return (f'_DML_RAII_LINEAR_MOVE_SIMPLE({self.type.declaration("")}, '
+                + f'{self.cident_destructor}, {tgt}, {src})')
+
+    # Return a C expression that evaluates to a copy of expr with duplicated
+    # associated resources.
+    def read_dupe(self, expr):
+        t = self.type.declaration('')
+        return f'_DML_RAII_DUPE({t}, {self.cident_copier}, {expr})'
+
+class StringTypeInfo(RAIITypeInfo):
+    type = TString()
+    cident_destructor = '_DML_string_destructor'
+    cident_destructor_array_item = '_DML_string_destructor_ref'
+    cident_copier = '_DML_string_copier'
+
+    def read_destroy(self, expr):
+        return f'_dml_string_free({expr})'
+
+    def read_copy(self, tgt, src):
+        return f'_dml_string_copy((void *)&({tgt}), {src})'
+
+    def read_dupe(self, expr):
+        return f'_dml_string_dupe({expr})'
+
+class GeneratedRAIITypeInfo(RAIITypeInfo):
+    @abstractproperty
+    def cident_prefix(self):
+        '''A prefix for C identifiers used for the naming of artifacts
+        generated for the RAII type'''
+
+    @property
+    def cident_destructor(self):
+        return self.cident_prefix + 'destructor'
+
+    @property
+    def cident_destructor_array_item(self):
+        return self.cident_prefix + 'destructor_ref'
+
+    @property
+    def cident_copier(self):
+        return self.cident_prefix + 'copier'
+
+    @property
+    def cident_dupe(self):
+        return self.cident_prefix + 'dupe'
+
+    def read_destroy(self, expr):
+        return f'_DML_RAII_DESTROY_RVAL({self.cident_destructor}, {expr})'
+
+    def read_destroy_lval(self, expr):
+        return f'{self.cident_destructor}((void *)&({expr}))'
+
+    def read_copy(self, tgt, src):
+        return f'_DML_RAII_COPY_RVAL({self.cident_copier}, {tgt}, {src})'
+
+    def read_copy_lval(self, tgt, src):
+        return f'{self.cident_copier}((void *)&({tgt}), &({src}))'
+
+    should_generate_destructor = True
+    def generate_destructor(self, expr):
+        raise ICE(None, f"generate_destructor of {type(self).__name__} is abstract")
+
+    should_generate_copier = True
+    def generate_copier(self, tgt, src):
+        raise ICE(None, f"generate_copier of {type(self).__name__} is abstract")
+
+class StructRAIITypeInfo(GeneratedRAIITypeInfo):
+    def __init__(self, type):
+        assert isinstance(type, TStruct)
+        self._type = type
+        self.raii_members = [
+            (name, typ, info)
+            for (name, typ) in self.type.members.items()
+            if typ.is_raii
+            for info in (get_raii_type_info(typ),)]
+
+
+    @property
+    def type(self):
+        return self._type
+
+    @property
+    def cident_prefix(self):
+        return '_dml_raii_' + self.type.label + '_'
+
+    def read_linear_move_lval(self, tgt, src):
+        if deep_const(self.type):
+            return (f'_DML_RAII_LINEAR_MOVE_MEMCPY({self.cident_destructor}'
+                    + f', {tgt}, {src})')
+        return GeneratedRAIITypeInfo.read_linear_move_lval(self, tgt, src)
+
+    def read_linear_move(self, tgt, src):
+        if deep_const(self.type):
+            return ('_DML_RAII_LINEAR_MOVE_MEMCPY_RVAL('
+                    + f'{self.cident_destructor}, {tgt}, {src})')
+        return GeneratedRAIITypeInfo.read_linear_move(self, tgt, src)
+
+    def generate_destructor(self, expr):
+        for (name, _, info) in self.raii_members:
+            out(info.read_destroy_lval(f'{expr}->{name}') + ';\n')
+
+    def generate_copier(self, tgt, src):
+        site = logging.SimpleSite(self.cident_copier)
+        for (name, typ) in self.type.members.items():
+            out(ctree.ExpressionInitializer(
+                mkLit(site, f'{src}->{name}', typ)).assign_to(f'{tgt}->{name}',
+                                                              typ)
+                + ';\n')
+
+class ArrayRAIITypeInfo(GeneratedRAIITypeInfo):
+    count = 0
+    def __init__(self, type):
+        assert isinstance(type, TArray) and type.size.constant
+        self._type = type
+        self.base_info = get_raii_type_info(type.base)
+        self.uniq = ArrayRAIITypeInfo.count
+        ArrayRAIITypeInfo.count += 1
+
+    @property
+    def type(self):
+        return self._type
+
+    @property
+    def cident_prefix(self):
+        return f'_dml_raii_array_{self.uniq}_'
+
+    def generate_destructor(self, expr):
+        if not self.type.size.value:
+            return
+        out(f'for (uint32 _i = 0; _i < {self.type.size.read()}; ++_i)\n',
+            postindent=1)
+        out(self.base_info.read_destroy_lval(f'(*{expr})[_i]') + ';\n',
+            postindent=-1)
+
+    def generate_copier(self, tgt, src):
+        site = logging.SimpleSite(self.cident_copier)
+        out(f'for (uint32 _i = 0; _i < {self.type.size.read()}; ++_i) {{\n',
+            postindent=1)
+        out(ctree.ExpressionInitializer(
+            mkLit(site, f'(*{src})[_i]', self.type.base)).assign_to(
+                f'(*({tgt}))[_i]', self.type.base)
+            + ';\n')
+        out('}\n',preindent=-1)
+
+    def read_linear_move_lval(self, tgt, src):
+        return (f'_DML_RAII_LINEAR_MOVE_MEMCPY({self.cident_destructor}'
+                + f', {tgt}, {src})')
+
+    def read_linear_move(self, tgt, src):
+        # Any array expression should be an lvalue
+        raise ICE(None,
+                  'ArrayTypeInfo.read_linear_move called instead of '
+                  + 'read_linear_move_lval')
+
+    def read_dupe(self, expr):
+        raise ICE(None,
+                  'ArrayTypeInfo.read_dupe called. '
+                  + 'Arrays should never be duped!')
+
+class VectorRAIITypeInfo(GeneratedRAIITypeInfo):
+    cident_destructor_nonraii_elems = '_DML_vector_nonraii_elems_destructor'
+    cident_destructor_array_item_nonraii_elems = (
+        '_DML_vector_nonraii_elems_destructor_ref')
+    count = 0
+    def __init__(self, type):
+        assert isinstance(type, TVector)
+        self._type = type
+        self.base_info = (get_raii_type_info(type.base)
+                          if type.base.is_raii else None)
+        self.uniq = VectorRAIITypeInfo.count
+        VectorRAIITypeInfo.count += 1
+
+    @property
+    def type(self):
+        return self._type
+
+    @property
+    def cident_prefix(self):
+        return f'_dml_raii_vector_{self.uniq}_'
+
+    @property
+    def cident_destructor(self):
+        if self.base_info:
+            return super().cident_destructor
+        return self.cident_destructor_nonraii_elems
+
+    @property
+    def cident_destructor_array_item(self):
+        if self.base_info:
+            return super().cident_destructor_array_item
+        return self.cident_destructor_array_item_nonraii_elems
+
+    def read_destroy(self, expr):
+        if self.base_info:
+            return ('_dml_vect_free_raii(sizeof(%s), %s, %s)'
+                    % (self.type.base.declaration(""),
+                       self.base_info.cident_destructor,
+                       expr))
+        else:
+            return f'_dml_vect_free({expr})'
+
+    def read_destroy_lval(self, expr):
+        return self.read_destroy(expr)
+
+    def read_copy(self, tgt, src):
+        if not self.base_info:
+            return ('_dml_vect_copy(sizeof(%s), (_dml_vect_t *)&(%s), %s)'
+                    % (self.type.base.declaration(""), tgt, src))
+        return GeneratedRAIITypeInfo.read_copy(self, tgt, src)
+
+    def read_copy_lval(self, tgt, src):
+        if not self.base_info:
+            return ('_dml_vect_copy(sizeof(%s), (_dml_vect_t *)&(%s), %s)'
+                    % (self.type.base.declaration(""), tgt, src))
+        return GeneratedRAIITypeInfo.read_copy_lval(self, tgt, src)
+
+    @property
+    def should_generate_destructor(self):
+        return self.base_info is not None
+
+    def generate_destructor(self, expr):
+        assert self.should_generate_destructor
+        out(self.read_destroy_lval(f'*{expr}') + ';\n')
+
+    def generate_copier(self, tgt, src):
+        if self.base_info:
+            out(f'if (unlikely({tgt}->elements == {src}->elements)) return;\n')
+            out('_dml_vect_resize_raii(sizeof(%s), %s, %s, %s->len);\n'
+                % (self.type.base.declaration(''),
+                   self.base_info.cident_destructor,
+                   tgt,
+                   src))
+            def elem_of_vec(vec):
+                return ('DML_VECT_ELEM_UNSAFE(%s, %s, _i)'
+                        % (self.type.base.declaration(""), vec))
+            out(f'for (uint32 _i = 0; _i < {src}->len; ++_i)\n',
+                postindent=1)
+            out(self.base_info.read_copy_lval(elem_of_vec(f'*({tgt})'),
+                                             elem_of_vec(f'*({src})'))
+                + ';\n',
+                postindent=-1)
+        else:
+            out('_dml_vect_copy(sizeof(%s), %s, *%s);\n'
+                % (self.type.base.declaration(""), tgt, src))
+
+def get_raii_type_info(t):
+    uct = safe_realtype_unconst(t)
+    assert uct.is_raii
+    if isinstance(uct, TString):
+        return StringTypeInfo()
+    try:
+        return dml.globals.generated_raii_types[TypeKey(uct)]
+    except KeyError:
+        if isinstance(uct, TStruct):
+            if deep_const(uct):
+                raise ICE(t.declaration_site or None,
+                          ('Structs that simultaneously have const-qualified '
+                           + 'members and resource-enriched (RAII) members '
+                           + 'are not supported'))
+            info = StructRAIITypeInfo(uct)
+        elif isinstance(uct, TArray):
+            if not uct.size.constant:
+                raise EVLARAII(t.declaration_site, t.describe())
+            info = ArrayRAIITypeInfo(uct)
+        elif isinstance(uct, TVector):
+            info = VectorRAIITypeInfo(uct)
+        else:
+            assert False
+        dml.globals.generated_raii_types[TypeKey(uct)] = info
+        return info
+
+def declarations(scope, unscoped_raii=False):
     "Get all local declarations in a scope as a list of Declaration objects"
     decls = []
     for sym in scope.symbols():
@@ -946,7 +1376,7 @@ def declarations(scope):
             continue
         if sym.stmt:
             continue
-        decl = sym_declaration(sym)
+        decl = sym_declaration(sym, unscoped_raii=unscoped_raii)
         if decl:
             decls.append(decl)
 
@@ -1061,7 +1491,7 @@ def codegen_sizeof(site, expr):
     fun = mkLit(site, 'sizeof',
                 TFunction([], TNamed('size_t'),
                           varargs = True))
-    return Apply(site, fun, [expr], fun.ctype())
+    return Apply(site, fun, [expr], fun.ctype(), True)
 
 def flatten(x):
     '''Recursively flatten lists and tuples'''
@@ -1084,6 +1514,8 @@ def expr_unop(tree, location, scope):
         var = rh_ast.args[0]
         if var in typedefs and scope.lookup(var) is None:
             report(WSIZEOFTYPE(tree.site))
+            if safe_realtype_shallow(typedefs[var]).is_raii:
+                report(ESIZEOFRAII(tree.site))
             return codegen_sizeof(
                 tree.site, mkLit(tree.site, cident(var), None))
     try:
@@ -1142,8 +1574,10 @@ def expr_unop(tree, location, scope):
     elif op == 'post++':  return mkPostInc(tree.site, rh)
     elif op == 'post--':  return mkPostDec(tree.site, rh)
     elif op == 'sizeof':
-        if not dml.globals.compat_dml12 and not isinstance(rh, ctree.LValue):
+        if not dml.globals.compat_dml12 and not rh.addressable:
             raise ERVAL(rh.site, 'sizeof')
+        if safe_realtype_shallow(rh.ctype()).is_raii:
+            report(ESIZEOFRAII(tree.site))
         return codegen_sizeof(tree.site, rh)
     elif op == 'defined': return mkBoolConstant(tree.site, True)
     elif op == 'stringify':
@@ -1160,6 +1594,8 @@ def expr_typeop(tree, location, scope):
     (struct_defs, t) = eval_type(t, tree.site, location, scope)
     for (site, _) in struct_defs:
         report(EANONSTRUCT(site, "'sizeoftype' expression"))
+    if safe_realtype_shallow(t).is_raii:
+        report(ESIZEOFRAII(tree.site))
     return codegen_sizeof(tree.site, mkLit(tree.site, t.declaration(''), None))
 
 @expression_dispatcher
@@ -1312,24 +1748,14 @@ def expr_list(tree, location, scope):
 
 @expression_dispatcher
 def expr_cast(tree, location, scope):
-    [expr_ast, casttype] = tree.args
-    expr = codegen_expression_maybe_nonvalue(expr_ast, location, scope)
+    [init_ast, casttype] = tree.args
     (struct_defs, type) = eval_type(casttype, tree.site, location, scope)
     for (site, _) in struct_defs:
         report(EANONSTRUCT(site, "'cast' expression"))
 
-    if (dml.globals.compat_dml12 and dml.globals.api_version <= "6"
-        and isinstance(expr, InterfaceMethodRef)):
-        # Workaround for bug 24144
-        return mkLit(tree.site, "%s->%s" % (
-            expr.node_expr.read(), expr.method_name), type)
 
-    if isinstance(expr, NonValue) and (
-            not isinstance(expr, NodeRef)
-            or not isinstance(safe_realtype(type), TTrait)):
-        raise expr.exc()
-    else:
-        return mkCast(tree.site, expr, type)
+    return eval_initializer(tree.site, type, init_ast, location, scope, False,
+                            cast_init=True).as_expr(type)
 
 @expression_dispatcher
 def expr_undefined(tree, location, scope):
@@ -1429,6 +1855,8 @@ def fix_printf(fmt, args, argsites, site):
                                               TPtr(TNamed('char',
                                                           const=True)))),
                               [mkAddressOf(site, arg)])
+            elif isinstance(argtype, TString):
+                arg = mkStringCStrApply(site, arg)
 
         filtered_fmt += "%" + flags + width + precision + length + conversion
         filtered_args.append(arg)
@@ -1551,6 +1979,12 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
                 msg_comp_types.append(msg_comp_type)
                 struct_defs.extend(msg_comp_struct_defs)
             etype = THook(msg_comp_types)
+        elif tag == 'vect':
+            (bsite, btype_ast) = info
+            (local_struct_defs, btype) = eval_type(
+                btype_ast, bsite, location, scope, extern)
+            struct_defs.extend(local_struct_defs)
+            etype = TVector(btype)
         else:
             raise ICE(site, "Strange type")
     elif isinstance(asttype[0], str):
@@ -1575,7 +2009,7 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
         elif asttype[0] == 'vect':
             if etype.void:
                 raise EVOID(site)
-            etype = TVector(etype)
+            etype = TVectorLegacy(etype)
             asttype = asttype[1:]
         elif asttype[0] == 'array':
             if etype.void:
@@ -1780,7 +2214,8 @@ def mk_bitfield_compound_initializer_expr(site, etype, inits, location, scope,
 
     return source_for_assignment(site, etype, bitfields_expr)
 
-def eval_initializer(site, etype, astinit, location, scope, static):
+def eval_initializer(site, etype, astinit, location, scope, static,
+                     cast_init=False):
     """Deconstruct an AST for an initializer, and return a
        corresponding initializer object. Report EDATAINIT errors upon
        invalid initializers.
@@ -1798,12 +2233,22 @@ def eval_initializer(site, etype, astinit, location, scope, static):
     def do_eval(etype, astinit):
         shallow_real_etype = safe_realtype_shallow(etype)
         if astinit.kind == 'initializer_scalar':
-            expr = codegen_expression(astinit.args[0], location, scope)
-            if static and not expr.constant:
+            expr = codegen_expression_maybe_nonvalue(astinit.args[0], location,
+                                                     scope)
+            if (isinstance(expr, StringConstant)
+                and isinstance(shallow_real_etype, TString)):
+                expr = FromCString(astinit.site, expr)
+            elif cast_init:
+                assert not static
+                expr = mkCast(astinit.site, expr, etype)
+            elif isinstance(expr, NonValue):
+                raise expr.exc()
+            elif static and not expr.constant:
                 raise EDATAINIT(astinit.site, 'non-constant expression')
+            else:
+                expr = source_for_assignment(astinit.site, etype, expr)
 
-            return ExpressionInitializer(
-                source_for_assignment(astinit.site, etype, expr))
+            return ExpressionInitializer(expr)
         elif astinit.kind == 'initializer_designated_struct':
             (init_asts, allow_partial) = astinit.args
             if isinstance(shallow_real_etype, StructType):
@@ -1854,6 +2299,12 @@ def eval_initializer(site, etype, astinit, location, scope, static):
                     for ((mn, mt), e) in zip(etype.members_qualified,
                                              init_asts)}
             return DesignatedStructInitializer(site, init)
+        elif isinstance(etype, TVector):
+            return ExpressionInitializer(
+                VectorCompoundLiteral(
+                    site,
+                    tuple(do_eval(etype.base, e) for e in init_asts),
+                    etype.base))
         elif etype.is_int and etype.is_bitfields:
             if len(etype.members) != len(init_asts):
                 raise EDATAINIT(site, 'mismatched number of fields')
@@ -1896,11 +2347,12 @@ def get_initializer(site, etype, astinit, location, scope):
         return ExpressionInitializer(mkBoolConstant(site, False))
     elif typ.is_float:
         return ExpressionInitializer(mkFloatConstant(site, 0.0))
-    elif isinstance(typ, (TStruct, TExternStruct, TArray, TTrait, THook)):
-        return MemsetInitializer(site)
+    elif isinstance(typ, (TStruct, TExternStruct, TArray, TTrait, THook,
+                          TString, TVector)):
+        return MemsetInitializer(site, ignore_raii=True)
     elif isinstance(typ, TPtr):
         return ExpressionInitializer(mkLit(site, 'NULL', typ))
-    elif isinstance(typ, TVector):
+    elif isinstance(typ, TVectorLegacy):
         return ExpressionInitializer(mkLit(site, 'VNULL', typ))
     elif isinstance(typ, TFunction):
         raise EVARTYPE(site, etype.describe())
@@ -1919,8 +2371,12 @@ def codegen_statements(trees, *args):
             report(e)
     return stmts
 
+
 def codegen_statement(tree, *args):
-    return mkCompound(tree.site, codegen_statements([tree], *args))
+    with RAIIScope() as raii_scope:
+        stmts = codegen_statements([tree], *args)
+
+    return mkCompoundRAII(tree.site, stmts, raii_scope)
 
 @statement_dispatcher
 def stmt_compound(stmt, location, scope):
@@ -1940,8 +2396,10 @@ def stmt_compound(stmt, location, scope):
                                          dmlparse.start_site(rh.site),
                                          ret.site))
     lscope = Symtab(scope)
-    statements = codegen_statements(stmt_asts, location, lscope)
-    return [mkCompound(stmt.site, declarations(lscope) + statements)]
+    with RAIIScope() as raii_scope:
+        statements = codegen_statements(stmt_asts, location, lscope)
+    return [mkCompoundRAII(stmt.site, declarations(lscope) + statements,
+                           raii_scope)]
 
 def check_shadowing(scope, name, site):
     if (dml.globals.dml_version == (1, 2)
@@ -1983,6 +2441,10 @@ def stmt_local(stmt, location, scope):
             check_varname(stmt.site, name)
         (struct_decls, etype) = eval_type(asttype, stmt.site, location, scope)
         stmts.extend(mkStructDefinition(site, t) for (site, t) in struct_decls)
+        for (site, t) in struct_decls:
+            if t.is_raii:
+                raise EANONRAIISTRUCT(site)
+
         etype = etype.resolve()
         rt = safe_realtype_shallow(etype)
         if isinstance(rt, TArray) and not rt.size.constant and deep_const(rt):
@@ -2004,14 +2466,16 @@ def stmt_local(stmt, location, scope):
         for (name, typ) in decls:
             sym = mk_sym(name, typ)
             tgt_typ = safe_realtype_shallow(typ)
-            if tgt_typ.const:
-                nonconst_typ = tgt_typ.clone()
-                nonconst_typ.const = False
+            if shallow_const(tgt_typ):
+                nonconst_typ = safe_realtype_unconst(tgt_typ)
                 tgt_sym = mk_sym('_tmp_' + name, nonconst_typ, True)
                 sym.init = ExpressionInitializer(mkLocalVariable(stmt.site,
                                                                  tgt_sym))
                 late_declared_syms.append(sym)
             else:
+                if tgt_typ.is_raii:
+                    sym.init = get_initializer(stmt.site, typ, None, location,
+                                               scope)
                 tgt_sym = sym
             syms_to_add.append(sym)
             tgt_syms.append(tgt_sym)
@@ -2023,9 +2487,9 @@ def stmt_local(stmt, location, scope):
         if method_invocation is not None and stmt.site.dml_version != (1, 2):
             for sym in syms_to_add:
                 scope.add(sym)
-            stmts.extend(sym_declaration(sym, True) for sym in tgt_syms)
+            stmts.extend(sym_declaration(sym, unused=True) for sym in tgt_syms)
             stmts.append(method_invocation)
-            stmts.extend(sym_declaration(sym, True)
+            stmts.extend(sym_declaration(sym, unused=True)
                          for sym in late_declared_syms)
         else:
             if len(tgts) != 1:
@@ -2035,7 +2499,7 @@ def stmt_local(stmt, location, scope):
                 sym.init = ExpressionInitializer(
                     codegen_expression(inits[0].args[0], location, scope))
                 scope.add(sym)
-                stmts.append(sym_declaration(sym, True))
+                stmts.append(sym_declaration(sym, unused=True))
     else:
         # Initializer evaluation and variable declarations are done in separate
         # passes in order to prevent the newly declared variables from being in
@@ -2080,8 +2544,9 @@ def stmt_session(stmt, location, scope):
         add_late_global_struct_defs(struct_decls)
         if init:
             try:
-                init = eval_initializer(
-                    stmt.site, etype, init, location, global_scope, True)
+                with ctree.SessionRAIIScope():
+                    init = eval_initializer(
+                        stmt.site, etype, init, location, global_scope, True)
             except DMLError as e:
                 report(e)
                 init = None
@@ -2122,8 +2587,8 @@ def make_static_var(site, location, static_sym_type, name, init=None,
         with init_code:
             if deep_const(static_sym_type):
                 coverity_marker('store_writes_const_field', 'FALSE')
-            init.assign_to(mkStaticVariable(site, static_sym),
-                           static_sym_type)
+            out(init.assign_to(mkStaticVariable(site, static_sym).read(),
+                               static_sym_type) + ';\n')
         c_init = init_code.buf
     else:
         c_init = None
@@ -2264,8 +2729,7 @@ def try_codegen_invocation(site, init_ast, outargs, location, scope):
     meth_expr = codegen_expression_maybe_nonvalue(meth_ast, location, scope)
     if (isinstance(meth_expr, NonValue)
         and not isinstance(meth_expr, (
-            TraitMethodRef, NodeRef, InterfaceMethodRef, HookSendNowRef,
-            HookSendRef))):
+            TraitMethodRef, NodeRef, InterfaceMethodRef, PseudoMethodRef))):
         raise meth_expr.exc()
     if isinstance(meth_expr, TraitMethodRef):
         if not meth_expr.throws and len(meth_expr.outp) <= 1:
@@ -2373,8 +2837,8 @@ def stmt_assign(stmt, location, scope):
                 name, type=tgt.ctype(), site=tgt.site, init=init, stmt=True)
             init = ExpressionInitializer(mkLocalVariable(tgt.site, sym))
             stmts.extend([sym_declaration(sym),
-                          mkAssignStatement(tgt.site, tgt, init)])
-        return stmts + [mkAssignStatement(tgts[0].site, tgts[0], init)]
+                          AssignStatement(tgt.site, tgt, init)])
+        return stmts + [AssignStatement(tgts[0].site, tgts[0], init)]
     else:
         # Guaranteed by grammar
         assert tgt_ast.kind == 'assign_target_tuple' and len(tgts) > 1
@@ -2403,7 +2867,7 @@ def stmt_assign(stmt, location, scope):
 
         stmts.extend(map(sym_declaration, syms))
         stmts.extend(
-            mkAssignStatement(
+            AssignStatement(
                 tgt.site, tgt, ExpressionInitializer(mkLocalVariable(tgt.site,
                                                                      sym)))
             for (tgt, sym) in zip(tgts, syms))
@@ -2411,32 +2875,84 @@ def stmt_assign(stmt, location, scope):
 
 @statement_dispatcher
 def stmt_assignop(stmt, location, scope):
-    (kind, site, tgt_ast, op, src_ast) = stmt
+    (_, site, tgt_ast, op, src_ast) = stmt
 
     tgt = codegen_expression(tgt_ast, location, scope)
-    if deep_const(tgt.ctype()):
-        raise ECONST(tgt.site)
-    if isinstance(tgt, ctree.BitSlice):
-        # destructive hack
-        return stmt_assign(
-            ast.assign(site, ast.assign_target_chain(site, [tgt_ast]),
-                       [ast.initializer_scalar(
-                           site,
-                           ast.binop(site, tgt_ast, op[:-1], src_ast))]),
-            location, scope)
-    src = codegen_expression(src_ast, location, scope)
+    if isinstance(tgt, ctree.InlinedParam):
+        raise EASSINL(tgt.site, tgt.name)
+    if not tgt.writable:
+        raise EASSIGN(site, tgt)
+
     ttype = tgt.ctype()
+    if deep_const(ttype):
+        raise ECONST(tgt.site)
+
     lscope = Symtab(scope)
-    sym = lscope.add_variable(
-        'tmp', type = TPtr(ttype), site = tgt.site,
-        init = ExpressionInitializer(mkAddressOf(tgt.site, tgt)), stmt=True)
-    # Side-Effect Free representation of the tgt lvalue
-    tgt_sef = mkDereference(site, mkLocalVariable(tgt.site, sym))
-    return [
-        sym_declaration(sym), mkExpressionStatement(
-        site,
-            mkAssignOp(site, tgt_sef, arith_binops[op[:-1]](
-                site, tgt_sef, src)))]
+    tmp_ret_sym = lscope.add_variable(
+        '_tmp_ret', type = ttype, site = src_ast.site,
+        stmt=True)
+
+    if ttype.is_raii:
+        tmp_ret_sym.init = get_initializer(site, ttype, None, location, scope)
+
+    method_invocation = try_codegen_invocation(
+        site, [src_ast], [mkLocalVariable(tgt.site, tmp_ret_sym)], location,
+        scope)
+    if method_invocation:
+        src = OrphanWrap(site, mkLocalVariable(tmp_ret_sym.site, tmp_ret_sym))
+    else:
+        src = (eval_initializer(site, ttype, src_ast, location, scope, False)
+               .as_expr(ttype))
+
+    operation = None
+    # TODO(RAII) this is somewhat hacky.
+    if op == '+=':
+        real_ttype = safe_realtype_shallow(ttype)
+        if isinstance(real_ttype, TString):
+            operation = lambda: [mkStringAppend(site, tgt, src)]
+        if isinstance(real_ttype, TVector):
+            operation = lambda: [mkVectorAppend(site, tgt, src)]
+
+    if operation is None:
+        if tgt.addressable:
+            tmp_tgt_sym = lscope.add_variable(
+                '_tmp_tgt', type = TPtr(ttype), site = tgt.site,
+                init = ExpressionInitializer(mkAddressOf(tgt.site, tgt)),
+                stmt=True)
+            # Side-Effect Free representation of the tgt lvalue
+            tgt = mkDereference(site, mkLocalVariable(tgt.site, tmp_tgt_sym))
+        else:
+            # TODO(RAII) Not ideal. This path is needed to deal with writable
+            # expressions that do not correspond to C lvalues; such as bit
+            # slices or .len of vectors and stirngs.
+            # But the potentially repeated evaluation is painful, (though
+            # that's not a regression compared to how bit slices used to be
+            # managed).
+            # TODO(RAII) Also consider if tgt.adressable should be relaxed to
+            # tgt.c_lval. Other than the considerations of whether that would
+            # be safe, it would also mean mean mkAddressOf can't be used,
+            # which has some ramifications as it has a few layers of expression
+            # adjustment logic to it.
+            tmp_tgt_sym = None
+        def operation():
+            tmp_tgt_decl = ([sym_declaration(tmp_tgt_sym)]
+                            if tmp_tgt_sym is not None else [])
+            assign_src = source_for_assignment(site, ttype,
+                                               arith_binops[op[:-1]](site,
+                                                                     tgt, src))
+
+            return (tmp_tgt_decl
+                    + [mkExpressionStatement(site,
+                                             ctree.AssignOp(site, tgt,
+                                                            assign_src))])
+
+
+    with RAIIScope() as raii_scope:
+        method_invocation = ([sym_declaration(tmp_ret_sym, unscoped_raii=True),
+                              method_invocation]
+                             if method_invocation is not None else [])
+        body = method_invocation + operation()
+    return [mkCompoundRAII(site, body, raii_scope)]
 
 @statement_dispatcher
 def stmt_expression(stmt, location, scope):
@@ -3043,11 +3559,11 @@ def stmt_select(stmt, location, scope):
                 if_chain = mkIf(cond.site, cond, stmt, if_chain)
             return [if_chain]
         raise lst.exc()
-    elif dml.globals.compat_dml12 and isinstance(lst.ctype(), TVector):
+    elif dml.globals.compat_dml12 and isinstance(lst.ctype(), TVectorLegacy):
         itervar = lookup_var(stmt.site, scope, itername)
         if not itervar:
             raise EIDENT(stmt.site, itername)
-        return [mkVectorForeach(stmt.site,
+        return [mkLegacyVectorForeach(stmt.site,
                                 lst, itervar,
                                 codegen_statement(stmt_ast, location, scope))]
     else:
@@ -3060,13 +3576,31 @@ def foreach_each_in(site, itername, trait, each_in,
     inner_scope.add_variable(
         itername, type=trait_type, site=site,
         init=ForeachSequence.itervar_initializer(site, trait))
-    context = GotoLoopContext()
-    with context:
-        inner_body = mkCompound(site, declarations(inner_scope)
-            + codegen_statements([body_ast], location, inner_scope))
+    with GotoLoopContext() as loopcontext, RAIIScope() as raii_scope:
+        body = (declarations(inner_scope)
+                + codegen_statements([body_ast], location, inner_scope))
+    inner_body = mkCompoundRAII(site, body, raii_scope)
 
-    break_label = context.label if context.used else None
+    break_label = loopcontext.label if loopcontext.used else None
     return [mkForeachSequence(site, trait, each_in, inner_body, break_label)]
+
+def foreach_vector(site, itername, vect_realtype, vect, body_ast, location,
+                   scope):
+    if not vect.addressable:
+        raise ERVAL(vect, 'foreach')
+
+    uniq = ForeachVector.count
+    ForeachVector.count += 1
+    inner_scope = Symtab(scope)
+    iter_typ = conv_const(vect_realtype.const, vect_realtype.base)
+    inner_scope.add(
+        ExpressionSymbol(itername,
+                         ForeachVectorIterRef(site, itername, uniq,
+                                              vect.writable, iter_typ),
+                         site))
+    with CLoopContext():
+        body = codegen_statement(body_ast, location, inner_scope)
+    return [mkForeachVector(site, vect, uniq, body)]
 
 @expression_dispatcher
 def expr_each_in(ast, location, scope):
@@ -3091,13 +3625,14 @@ def stmt_foreach_dml12(stmt, location, scope):
                                      statement, location, scope)
 
     list_type = safe_realtype(lst.ctype())
-    if isinstance(list_type, TVector):
+    if isinstance(list_type, TVectorLegacy):
         itervar = lookup_var(stmt.site, scope, itername)
         if not itervar:
             raise EIDENT(lst, itername)
         with CLoopContext():
-            res = mkVectorForeach(stmt.site, lst, itervar,
-                                  codegen_statement(statement, location, scope))
+            res = mkLegacyVectorForeach(stmt.site, lst, itervar,
+                                        codegen_statement(statement, location,
+                                                          scope))
         return [res]
     else:
         raise ENLST(stmt.site, lst)
@@ -3113,6 +3648,9 @@ def stmt_foreach(stmt, location, scope):
             # .traitname was validated by safe_realtype()
             dml.globals.traits[list_type.traitname],
             lst, statement, location, scope)
+    elif isinstance(list_type, TVector):
+        return foreach_vector(
+            stmt.site, itername, list_type, lst, statement, location, scope)
     else:
         raise ENLST(stmt.site, lst)
 
@@ -3211,10 +3749,8 @@ def stmt_switch(stmt, location, scope):
             assert body_ast.kind == 'compound'
             [stmt_asts] = body_ast.args
             stmts = codegen_statements(stmt_asts, location, scope)
-            if (not stmts
-                or not isinstance(stmts[0], (ctree.Case, ctree.Default))):
-                raise ESWITCH(
-                    body_ast.site, "statement before first case label")
+            if not stmts:
+                raise ESWITCH(body_ast.site, "empty switch statement")
             defaults = [i for (i, sub) in enumerate(stmts)
                         if isinstance(sub, ctree.Default)]
             if len(defaults) > 1:
@@ -3256,13 +3792,10 @@ def stmt_switch(stmt, location, scope):
 
 @statement_dispatcher
 def stmt_continue(stmt, location, scope):
-    if (LoopContext.current is None
-        or isinstance(LoopContext.current, NoLoopContext)):
+    if LoopContext.current is None:
         raise ECONT(stmt.site)
-    elif isinstance(LoopContext.current, CLoopContext):
-        return [mkContinue(stmt.site)]
     else:
-        raise ECONTU(stmt.site)
+        return LoopContext.current.continue_(stmt.site)
 
 @statement_dispatcher
 def stmt_break(stmt, location, scope):
@@ -3308,7 +3841,8 @@ def mkcall_method(site, func, indices):
               else [mkLit(site, dev(site),
                           TDevice(crep.structtype(dml.globals.device)))])
     return lambda args: mkApply(
-        site, func.cfunc_expr(site), devarg + list(indices) + args)
+        site, func.cfunc_expr(site), devarg + list(indices) + args,
+        orphan=not func.memoized)
 
 def common_inline(site, method, indices, inargs, outargs):
     if not verify_args(site, method.inp, method.outp, inargs, outargs):
@@ -3341,7 +3875,8 @@ def common_inline(site, method, indices, inargs, outargs):
 
         return codegen_call_stmt(site, func.method.name,
                                  mkcall_method(site, func, indices),
-                                 inp, func.outp, func.throws, inargs, outargs)
+                                 inp, func.outp, func.throws, inargs, outargs,
+                                 move_rets=not func.memoized)
 
     if not method.independent:
         crep.require_dev(site)
@@ -3514,7 +4049,8 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
     # TODO: in python 3.10 we can use parentheses instead of \
     with RecursiveInlineGuard(site, meth_node),  \
          ErrorContext(meth_node, site),          \
-         contextlib.nullcontext() if meth_node.throws else NoFailure(site):
+         contextlib.nullcontext() if meth_node.throws else NoFailure(site), \
+         RAIIScope() as raii_scope:
         param_scope = MethodParamScope(global_scope)
         param_scope.add(meth_node.default_method.default_sym(indices))
 
@@ -3582,7 +4118,7 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
                                 parmtype if parmtype else arg.ctype(),
                                 meth_node.name)
                     for (arg, var, (parmname, parmtype)) in zip(
-                            outargs, outvars, meth_node.outp)] 
+                            outargs, outvars, meth_node.outp)]
             exit_handler = GotoExit_dml12()
             with exit_handler:
                 code = [codegen_statement(meth_node.astcode,
@@ -3591,8 +4127,7 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
             if exit_handler.used:
                 code.append(mkLabel(site, exit_handler.label))
             code.extend(copyout)
-            body = mkCompound(site, declarations(param_scope) + code)
-            return mkInlinedMethod(site, meth_node, body)
+            code = declarations(param_scope) + code
         else:
             assert meth_node.astcode.kind == 'compound'
             [subs] = meth_node.astcode.args
@@ -3602,10 +4137,13 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
                 code = codegen_statements(subs, location, param_scope)
             if exit_handler.used:
                 code.append(mkLabel(site, exit_handler.label))
-            body = mkCompound(site, declarations(param_scope) + code)
-            if meth_node.outp and body.control_flow().fallthrough:
+            code = declarations(param_scope) + code
+            if (meth_node.outp
+                and mkCompound(site, code).control_flow().fallthrough):
                 report(ENORET(meth_node.astcode.site))
-            return mkInlinedMethod(site, meth_node, body)
+
+    return mkInlinedMethod(site, meth_node, mkCompoundRAII(site, code,
+                                                           raii_scope))
 
 def c_rettype(outp, throws):
     if throws:
@@ -3753,7 +4291,7 @@ def codegen_method_func(func):
     intercepted = intercepted_method(method)
     if intercepted:
         assert method.throws
-        with crep.DeviceInstanceContext():
+        with UnusedMethodRAIIScope(), crep.DeviceInstanceContext():
             return intercepted(
                 method.parent, indices,
                 [mkLit(method.site, n, t) for (n, t) in func.inp],
@@ -3793,12 +4331,31 @@ def codegen_return(site, outp, throws, retvals):
         # no fall-through
         return mkAssert(site, mkBoolConstant(site, False))
     if throws:
-        ret = mkReturn(site, mkBoolConstant(site, False))
+        def mk_ret_with_prelude(stmts):
+            return mkCompound(site,
+                              stmts
+                              + [mkReturn(site, mkBoolConstant(site, False))])
     elif outp:
         (_, t) = outp[0]
-        ret = mkReturn(site, retvals[0], t)
+        if t.is_raii:
+            def mk_ret_with_prelude(stmts):
+                scope = Symtab(global_scope)
+                sym = scope.add_variable(
+                    'ret', t, ExpressionInitializer(retvals[0]), site, True,
+                    True)
+                return mkCompound(
+                    site,
+                    [sym_declaration(sym, unscoped_raii=True)]
+                    + stmts
+                    + [mkReturn(site, mkLocalVariable(site, sym), t)])
+        else:
+            def mk_ret_with_prelude(stmts):
+                return mkCompound(site,
+                                  stmts + [mkReturn(site, retvals[0], t)])
     else:
-        ret = mkReturn(site, None)
+        def mk_ret_with_prelude(stmts):
+            return mkCompound(site,
+                              stmts + [mkReturn(site, None)])
     stmts = []
     return_first_outarg = bool(not throws and outp)
     for ((name, typ), val) in itertools.islice(
@@ -3810,13 +4367,14 @@ def codegen_return(site, outp, throws, retvals):
             assert val.rh.str == name
             continue
         stmts.append(mkCopyData(site, val, mkLit(site, "*%s" % (name,), typ)))
-    stmts.append(ret)
-    return mkCompound(site, stmts)
+    stmts.append(mkRAIIScopeClears(site, RAIIScope.scope_stack()))
+    return mk_ret_with_prelude(stmts)
 
 def codegen_method(site, inp, outp, throws, independent, memoization, ast,
                    default, location, fnscope, rbrace_site):
     with (crep.DeviceInstanceContext() if not independent
-          else contextlib.nullcontext()):
+          else contextlib.nullcontext()), \
+          MethodRAIIScope() as raii_scope:
         for (arg, etype) in inp:
             fnscope.add_variable(arg, type=etype, site=site, make_unique=False)
         initializers = [get_initializer(site, parmtype, None, None, None)
@@ -3838,18 +4396,18 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
                             else ReturnExit(outp, throws))
 
         if ast.site.dml_version() == (1, 2):
+            body = []
             if throws:
                 # Declare and initialize one variable for each output
                 # parameter.  We cannot write to the output parameters
                 # directly, because they should be left untouched if an
                 # exception is thrown.
-                code = []
                 for ((varname, parmtype), init) in zip(outp, initializers):
                     sym = fnscope.add_variable(
                         varname, type=parmtype, init=init, make_unique=True,
                         site=ast.site)
                     sym.incref()
-                    code.append(sym_declaration(sym))
+                    body.append(sym_declaration(sym))
             else:
                 if outp:
                     # pass first out argument as return value
@@ -3858,23 +4416,27 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
                                                init=initializers[0],
                                                make_unique=False)
                     sym.incref()
-                    code = [sym_declaration(sym)]
+                    body.append(sym_declaration(sym))
                     for ((name, typ), init) in zip(outp[1:], initializers[1:]):
                         # remaining output arguments pass-by-pointer
                         param = mkDereference(site,
                                               mkLit(site, name, TPtr(typ)))
                         fnscope.add(ExpressionSymbol(name, param, site))
-                        code.append(mkAssignStatement(site, param, init))
+                        body.append(AssignStatement(site, param, init))
                 else:
-                    code = []
+                    body = []
 
+            body.append(mkRAIIScopeDeclarations(site, raii_scope))
+            body.append(mkRAIIScopeBindLVals(
+                site, raii_scope,
+                tuple(lookup_var(site, fnscope, varname)
+                      for (varname, t) in inp if t.is_raii)))
             with fail_handler, exit_handler:
-                code.append(codegen_statement(ast, location, fnscope))
+                body.append(codegen_statement(ast, location, fnscope))
             if exit_handler.used:
-                code.append(mkLabel(site, exit_handler.label))
-            code.append(codegen_return(site, outp, throws, [
+                body.append(mkLabel(site, exit_handler.label))
+            body.append(codegen_return(site, outp, throws, [
                 lookup_var(site, fnscope, varname) for (varname, _) in outp]))
-            to_return = mkCompound(site, code)
         else:
             # manually deconstruct compound AST node, to make sure
             # top-level locals share scope with parameters
@@ -3882,16 +4444,18 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
             [subs] = ast.args
             with fail_handler, exit_handler:
                 body = prelude()
+                body.append(mkRAIIScopeDeclarations(site, raii_scope))
+                body.append(mkRAIIScopeBindLVals(
+                    site, raii_scope,
+                    tuple(lookup_var(site, fnscope, varname)
+                          for (varname, t) in inp if t.is_raii)))
                 body.extend(codegen_statements(subs, location, fnscope))
-                code = mkCompound(site, body)
-                if code.control_flow().fallthrough:
+                if mkCompound(site, body).control_flow().fallthrough:
                     if outp:
                         report(ENORET(site))
                     else:
-                        code = mkCompound(site, body + [codegen_exit(site,
-                                                                     [])])
-            to_return = code
-        return to_return
+                        body.append(codegen_exit(site, []))
+    return mkCompound(site, body)
 
 # Keep track of methods that we need to generate code for
 def mark_method_referenced(func):
@@ -3960,7 +4524,8 @@ def codegen_call_traitmethod(site, expr, inargs, outargs):
         args = [coerce_if_eint(arg) for arg in args]
         return expr.call_expr(args, rettype)
     return codegen_call_stmt(site, str(expr), mkcall, expr.inp, expr.outp,
-                             expr.throws, inargs, outargs)
+                             expr.throws, inargs, outargs,
+                             move_rets=not expr.memoized)
 
 def codegen_call(site, meth_node, indices, inargs, outargs):
     '''Generate a call using a direct reference to the method node'''
@@ -3978,7 +4543,8 @@ def codegen_call(site, meth_node, indices, inargs, outargs):
     mark_method_referenced(func)
     return codegen_call_stmt(site, func.method.name,
                              mkcall_method(site, func, indices),
-                             func.inp, func.outp, func.throws, inargs, outargs)
+                             func.inp, func.outp, func.throws, inargs, outargs,
+                             move_rets=not func.memoized)
 
 def codegen_call_byname(site, node, indices, meth_name, inargs, outargs):
     '''Generate a call using the parent node and indices, plus the method
@@ -3991,7 +4557,7 @@ def codegen_call_byname(site, node, indices, meth_name, inargs, outargs):
         raise UnknownMethod(node, meth_name)
     return codegen_call(site, meth_node, indices, inargs, outargs)
 
-def copy_outarg(arg, var, parmname, parmtype, method_name):
+def copy_outarg(arg, var, parmname, parmtype, method_name, move_outvar=True):
     '''Type-check the output argument 'arg', and create a local
     variable with that type in scope 'callscope'. The address of this
     variable will be passed as an output argument to the C function
@@ -4002,17 +4568,22 @@ def copy_outarg(arg, var, parmname, parmtype, method_name):
     an exception. We would be able to skip the proxy variable for
     calls to non-throwing methods when arg.ctype() and parmtype are
     equivalent types, but we don't do this today.'''
-    argtype = arg.ctype()
-
-    if not argtype:
-        raise ICE(arg.site, "unknown expression type")
+    if isinstance(arg, NonValue):
+        if not arg.writable:
+            raise arg.exc()
     else:
-        ok, trunc, constviol = realtype(parmtype).canstore(realtype(argtype))
-        if not ok:
-            raise EARGT(arg.site, 'call', method_name,
-                         arg.ctype(), parmname, parmtype, 'output')
+        argtype = arg.ctype()
 
-    return mkCopyData(var.site, var, arg)
+        if not argtype:
+            raise ICE(arg.site, "unknown expression type")
+        else:
+            ok, trunc, constviol = realtype(parmtype).canstore(realtype(argtype))
+            if not ok:
+                raise EARGT(arg.site, 'call', method_name,
+                             arg.ctype(), parmname, parmtype, 'output')
+    return mkCopyData(var.site,
+                      OrphanWrap(var.site, var) if move_outvar else var,
+                      arg)
 
 def add_proxy_outvar(site, parmname, parmtype, callscope):
     varname = parmname
@@ -4020,7 +4591,8 @@ def add_proxy_outvar(site, parmname, parmtype, callscope):
     sym = callscope.add_variable(varname, type=parmtype, init=varinit, site=site)
     return mkLocalVariable(site, sym)
 
-def codegen_call_stmt(site, name, mkcall, inp, outp, throws, inargs, outargs):
+def codegen_call_stmt(site, name, mkcall, inp, outp, throws, inargs, outargs,
+                      move_rets=True):
     '''Generate a statement for calling a method'''
     if len(outargs) != len(outp):
         raise ICE(site, "wrong number of outargs")
@@ -4033,23 +4605,28 @@ def codegen_call_stmt(site, name, mkcall, inp, outp, throws, inargs, outargs):
     # an uint8 variable is passed in an uint32 output parameter.
     postcode = []
     outargs_conv = []
-    for (arg, (parmname, parmtype)) in zip(
-            outargs[return_first_outarg:], outp[return_first_outarg:]):
-        # It would make sense to pass output arguments directly, but
-        # the mechanisms to detect whether this is safe are
-        # broken. See bug 21900.
-        # if (isinstance(arg, (
-        #         Variable, ctree.Dereference, ctree.ArrayRef, ctree.SubRef))
-        #     and TPtr(parmtype).canstore(TPtr(arg.ctype()))):
-        #     outargs_conv.append(mkAddressOf(arg.site, arg))
-        # else:
-        var = add_proxy_outvar(site, '_ret_' + parmname, parmtype,
-                               callscope)
-        outargs_conv.append(mkAddressOf(var.site, var))
-        postcode.append(copy_outarg(arg, var, parmname, parmtype, name))
+    # RAII Scope should never need to be leveraged
+    with UnusedMethodRAIIScope():
+        for (arg, (parmname, parmtype)) in zip(
+                outargs[return_first_outarg:], outp[return_first_outarg:]):
+            # It would make sense to pass output arguments directly, but
+            # the mechanisms to detect whether this is safe are
+            # broken. See bug 21900.
+            # if (isinstance(arg, (
+            #         Variable, ctree.Dereference, ctree.ArrayRef,
+            #         ctree.SubRef))
+            #     and TPtr(parmtype).canstore(TPtr(arg.ctype()))):
+            #     outargs_conv.append(mkAddressOf(arg.site, arg))
+            # else:
+            var = add_proxy_outvar(site, '_ret_' + parmname, parmtype,
+                                   callscope)
+            outargs_conv.append(mkAddressOf(var.site, var))
+            postcode.append(copy_outarg(arg, var, parmname, parmtype, name,
+                                        move_outvar=move_rets))
 
     typecheck_inargs(site, inargs, inp, 'method')
     call_expr = mkcall(list(inargs) + outargs_conv)
+    assert call_expr.orphan == move_rets
 
     if throws:
         if not Failure.fail_stack[-1].allowed:
@@ -4061,6 +4638,8 @@ def codegen_call_stmt(site, name, mkcall, inp, outp, throws, inargs, outargs):
         else:
             call_stmt = mkExpressionStatement(site, call_expr)
 
-    return mkCompound(site, declarations(callscope) + [call_stmt] + postcode)
+    return mkCompound(site,
+                      declarations(callscope, unscoped_raii=True)
+                      + [call_stmt] + postcode)
 
 ctree.codegen_call_expr = codegen_call_expr

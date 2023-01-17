@@ -11,12 +11,6 @@ method init() {
         /// ERROR ESWITCH
     {
     }
-    switch (1)
-        // must start with a case
-        /// ERROR ESWITCH
-    {
-        ;
-    }
     switch (1) {
     default:
     #if (true) {
