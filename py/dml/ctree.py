@@ -4540,7 +4540,7 @@ def possible_side_effect(init):
         return False
     return True
 
-def sym_declaration(sym):
+def sym_declaration(sym, unused=False):
     assert not isinstance(sym, symtab.StaticSymbol)
     refcount = sym.refcount()
     if not sym.stmt and refcount == 0 and not possible_side_effect(sym.init):
@@ -4550,7 +4550,7 @@ def sym_declaration(sym):
         return None
 
     # This will prevent warnings from the C compiler
-    unused = (refcount == 0) or sym.value.startswith("__")
+    unused = unused or (refcount == 0) or sym.value.startswith("__")
 
     return mkDeclaration(sym.site, sym.value, sym.type,
                          sym.init, unused)
