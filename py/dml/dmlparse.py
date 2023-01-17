@@ -1648,9 +1648,22 @@ def expression_postincdec(t):
                   | expression MINUSMINUS %prec unary_postfix'''
     t[0] = ast.unop(site(t), 'post' + t[2], t[1])
 
-@prod
+@prod_dml12
 def application(t):
     'expression : expression LPAREN expression_list RPAREN'
+    t[0] = ast.apply(
+        site(t), t[1],
+        [ast.initializer_scalar(init.site, init) for init in t[3]])
+
+@prod_dml14
+def application_none(t):
+    'expression : expression LPAREN RPAREN'
+    t[0] = ast.apply(site(t), t[1], [])
+
+@prod_dml14
+def application_some(t):
+    '''expression : expression LPAREN single_initializer_list RPAREN
+                  | expression LPAREN single_initializer_list COMMA RPAREN'''
     t[0] = ast.apply(site(t), t[1], t[3])
 
 @prod
@@ -2152,7 +2165,10 @@ def call(t):
     # reference.
     if t[2].kind == 'apply':
         method_ast = t[2][2]
-        inargs = t[2][3]
+        inargs = []
+        for init_ast in t[2][3]:
+            assert init_ast.kind == 'initializer_scalar'
+            inargs.append(init_ast.args[0])
     else:
         if logging.show_porting:
             i = min([3, 4], key=lambda i: t.lexpos(i))

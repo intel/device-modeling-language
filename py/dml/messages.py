@@ -280,13 +280,15 @@ class EASSIGN(DMLError):
 
 class EASTYPE(DMLError):
     """
-    The target of an assignment can't store the value given in the
-    source, because they are of different types.
+    The target of an initializer is incompatible with the type of the
+    initializer.
     """
-    fmt = ("wrong type in assignment\n"
+    fmt = ("wrong type for initializer\n"
            "got:      %s\n"
            "expected: %s")
     def __init__(self, site, target_type, source):
+        self.source = source
+        self.target_type = target_type
         DMLError.__init__(self,
                           site, source.ctype().describe(),
                           target_type.describe_assign_types())

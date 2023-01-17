@@ -16,7 +16,7 @@ __all__ = (
     'Expression',
     'NonValue',
     'mkLit', 'Lit',
-    'mkApply', 'Apply',
+    'mkApply', 'mkApplyInits', 'Apply',
     'mkNullConstant', 'NullConstant',
     'StaticIndex',
     'typecheck_inargs',
@@ -24,6 +24,7 @@ __all__ = (
     'site_linemark',
     'coverity_marker',
     'coverity_markers',
+    'typecheck_inarg_inits',
 )
 
 def site_linemark_nocoverity(site, adjust=0):
@@ -197,9 +198,9 @@ class Expression(Code):
         '''The corresponding DML type of this expression'''
         return self.type
 
-    def apply(self, args):
+    def apply(self, inits, location, scope):
         'Apply this expression as a function'
-        return mkApply(self.site, self, args)
+        return mkApplyInits(self.site, self, inits, location, scope)
 
     def incref(self):
         pass
@@ -223,7 +224,7 @@ class NonValue(Expression):
         raise ICE(self.site, 'not a value: %r' % (self,))
     def read(self):
         raise ICE(self.site, 'cannot read non-value %r' % (self,))
-    def apply(self, args):
+    def apply(self, inits, location, scope):
         raise self.exc()
     def exc(self):
         '''Exception to raise when expression appears in an incorrect context'''
@@ -291,6 +292,73 @@ def typecheck_inargs(site, args, inp, kind="function", known_arglen=None):
         else:
             raise EPTYPE(site, arg, rtype, pname, kind)
 
+def typecheck_inarg_inits(site, inits, inp, location, scope,
+                          kind="function", variadic=False,
+                          allow_undefined_args=False):
+    if (not variadic and len(inits) != len(inp)) or len(inits) < len(inp):
+        raise EARG(site, kind)
+
+    from .expr_util import coerce_if_eint
+    from .codegen import eval_initializer, codegen_expression, \
+                         codegen_expression_maybe_nonvalue
+
+    args = []
+    for (init, (pname, ptype)) in zip(inits, inp):
+        if ptype is None:
+            if init.kind != 'initializer_scalar':
+                raise ESYNTAX(init.site, '{',
+                              'the argument for an untyped parameter must be '
+                              + 'a simple expression')
+            arg = codegen_expression_maybe_nonvalue(init.args[0], location,
+                                                    scope)
+            if (isinstance(arg, NonValue)
+                and not (allow_undefined_args and arg.undefined)):
+                raise arg.exc()
+            args.append(arg)
+        elif (dml.globals.compat_dml12_int(site)
+            and dml.globals.compat_dml12_int(init.site)
+            and init.kind == 'initializer_scalar'):
+            arg = coerce_if_eint(codegen_expression(init.args[0],
+                                                    location, scope))
+            argtype = safe_realtype(arg.ctype())
+            if not argtype:
+                raise ICE(site, "unknown expression type")
+
+            rtype = safe_realtype(ptype)
+            assert rtype
+            (ok, trunc, constviol) = rtype.canstore(argtype)
+
+            if ok:
+                if constviol:
+                    raise ECONSTP(site, pname, kind + " call")
+            else:
+                raise EPTYPE(site, arg, rtype, pname, kind)
+            args.append(arg)
+        else:
+            try:
+                args.append(eval_initializer(init.site, ptype, init, location,
+                                             scope, False).as_expr(ptype))
+            except EASTYPE as e:
+                if e.site is init.site:
+                    raise EPTYPE(site, e.source, e.target_type, pname,
+                                 kind) from e
+                raise
+            # better error message
+            except EDISCONST as e:
+                if e.site is init.site:
+                    raise ECONSTP(site, pname, kind + " call") from e
+                raise
+
+    if variadic and len(inits) > len(inp):
+        for init in inits[len(inp):]:
+            if init.kind != 'initializer_scalar':
+                raise ESYNTAX(init.site, '{',
+                              'variadic arguments must be simple expressions')
+            args.append(coerce_if_eint(codegen_expression(init.args[0],
+                                                          location, scope)))
+
+    return args
+
 class Apply(Expression):
     priority = 160
     explicit_type = True
@@ -305,6 +373,31 @@ class Apply(Expression):
     def read(self):
         return (self.fun.read() +
                 '(' + ", ".join(e.read() for e in self.args) + ')')
+
+def mkApplyInits(site, fun, inits, location, scope):
+    '''Apply a C function to initializers'''
+    funtype = fun.ctype()
+
+    if not funtype:
+        raise EAPPLY(fun)
+
+    try:
+        funtype = realtype(funtype)
+        if isinstance(funtype, TPtr) and isinstance(funtype.base, TFunction):
+            # Pointers to functions are the same as the functions
+            funtype = realtype(funtype.base)
+    except DMLUnknownType:
+        raise ETYPE(site, funtype)
+
+    if not isinstance(funtype, TFunction):
+        raise EAPPLY(fun)
+
+    args = typecheck_inarg_inits(
+        site, inits,
+        [(str(i + 1), t) for (i, t) in enumerate(funtype.input_types)],
+        location, scope, 'function', funtype.varargs)
+
+    return Apply(site, fun, args, funtype)
 
 def mkApply(site, fun, args):
     '''Apply a C function'''

@@ -633,11 +633,10 @@ def expr_new(tree, location, scope):
 
 @expression_dispatcher
 def expr_apply(tree, location, scope):
-    [fun, args] = tree.args
+    [fun, arg_inits] = tree.args
     fun = codegen_expression_maybe_nonvalue(fun, location, scope)
-    args = [codegen_expression(arg, location, scope) for arg in args]
     # will report errors for non-callable non-values
-    return fun.apply(args)
+    return fun.apply(arg_inits, location, scope)
 
 @expression_dispatcher
 def expr_variable_dml12(tree, location, scope):
@@ -1732,9 +1731,9 @@ def try_codegen_invocation(site, init_ast, outargs, location, scope):
             # Shared methods marked as 'throws' count as
             # unconditionally throwing
             EBADFAIL_dml12.throwing_methods[location.method()] = site
-        inargs = [
-            codegen_expression(inarg_ast, location, scope)
-            for inarg_ast in inarg_asts]
+        inargs = typecheck_inarg_inits(meth_expr.site, inarg_asts,
+                                       meth_expr.inp, location, scope,
+                                       'method')
         return codegen_call_traitmethod(site, meth_expr, inargs, outargs)
     elif not isinstance(meth_expr, NodeRef):
         return None
@@ -1751,12 +1750,9 @@ def try_codegen_invocation(site, init_ast, outargs, location, scope):
         # some methods in the 1.2 lib (e.g. register.read_access) require
         # args to be undefined, so we must permit this when calling
         # the default implementation
-        inargs = [
-            codegen_expression_maybe_nonvalue(inarg_ast, location, scope)
-            for inarg_ast in inarg_asts]
-        for arg in inargs:
-            if isinstance(arg, NonValue) and not undefined(arg):
-                raise arg.exc()
+        inargs = typecheck_inarg_inits(meth_expr.site, inarg_asts,
+                                       meth_node.inp, location, scope,
+                                       'method', allow_undefined_args=True)
 
         if (site.dml_version() == (1, 2)
             and not in_try_block(location)
@@ -1782,9 +1778,9 @@ def try_codegen_invocation(site, init_ast, outargs, location, scope):
                               mkAssert(site, mkBoolConstant(site, False)))
 
     else:
-        inargs = [
-            codegen_expression(inarg_ast, location, scope)
-            for inarg_ast in inarg_asts]
+        inargs = typecheck_inarg_inits(meth_expr.site, inarg_asts,
+                                       meth_node.inp, location, scope,
+                                       'method')
     if meth_node.fully_typed:
         return codegen_call(site, meth_node, indices, inargs, outargs)
     else:
@@ -1977,9 +1973,8 @@ def stmt_return(stmt, location, scope):
                     report(ERETARGS(stmt.site, len(outp_typs), len(outargs)))
                     # avoid control flow errors by falling back to statement
                     # with no fall-through
-                    return mkAssert(stmt.site,
-                                    mkBoolConstant(stmt.site, False))
-
+                    return [mkAssert(stmt.site,
+                                     mkBoolConstant(stmt.site, False))]
 
                 return ([sym_declaration(sym) for sym in outarg_syms]
                         + [method_invocation,
@@ -2173,10 +2168,8 @@ def stmt_after(stmt, location, scope):
     require_fully_typed(site, method)
     func = method_instance(method)
 
-    inargs = [codegen_expression(inarg, location, scope)
-              for inarg in inargs]
-
-    typecheck_inargs(site, inargs, func.inp, 'method')
+    inargs = typecheck_inarg_inits(site, inargs, func.inp, location, scope,
+                                   'method')
 
     # After-call is only possible for methods with serializable parameters
     unserializable = []
@@ -3129,11 +3122,12 @@ def require_fully_typed(site, meth_node):
                 raise ENARGT(meth_node.site, parmname, 'output', site)
         raise ICE(site, "no missing parameter type")
 
-def codegen_call_expr(site, meth_node, indices, args):
+def codegen_call_expr(site, meth_node, indices, inits, location, scope):
     require_fully_typed(site, meth_node)
     func = method_instance(meth_node)
     mark_method_referenced(func)
-    typecheck_inargs(site, args, func.inp, 'method')
+    args = typecheck_inarg_inits(site, inits, func.inp, location, scope,
+                                 'method')
     return mkcall_method(site, func, indices)(args)
 
 def codegen_call_traitmethod(site, expr, inargs, outargs):
