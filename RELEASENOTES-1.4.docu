@@ -455,4 +455,18 @@
       (<tt>-g</tt>) that caused <tt>inline</tt> method calls to inline constant
       arguments even for parameters not declared <tt>inline</tt>
       <bug number="16019548195"/>.</add-note></build-id>
+  <build-id value="next"><add-note> Compound initializer syntax can now be used
+      to construct arguments of a method or function call, e.g:
+      <pre>
+      method callee(buffer_t buf, bool b) {
+          ...
+      }
+
+      method caller() {
+          callee({ .len = 4, .data = new uint8[4] }, true);
+      }
+      </pre>
+      This syntax can't be used for variadic arguments or any argument
+      corresponding to a method parameter declared `inline`
+      <bug number="SIMICS-20473"/>.</add-note></build-id>
 </rn>

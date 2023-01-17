@@ -2642,19 +2642,12 @@ class InterfaceMethodRef(NonValue):
 
     def __str__(self):
         return "%s.%s" % (self.node_expr, self.method_name)
-    def apply(self, args):
-        if self.ftype.varargs and len(args) > len(self.ftype.input_types):
-            known_arglen = len(self.ftype.input_types)
-        else:
-            known_arglen = len(args)
-
-        typecheck_inargs(
-            self.site, args,
+    def apply(self, inits, location, scope):
+        args = typecheck_inarg_inits(
+            self.site, inits,
             [(str(i + 1), t)
              for (i, t) in enumerate(self.ftype.input_types[1:])],
-            'function', known_arglen)
-
-        args = [coerce_if_eint(arg) for arg in args]
+            location, scope, 'function', self.ftype.varargs)
 
         return InterfaceMethodApply(
             self.site, self.node_expr,
@@ -3521,16 +3514,14 @@ class TraitMethodRef(NonValue):
     @abc.abstractproperty
     def independent(self): pass
 
-    def apply(self, args):
+    def apply(self, inits, location, scope):
         '''Return expression for application as a function'''
         if self.throws or len(self.outp) > 1:
             raise EAPPLYMETH(self.site, self)
         if crep.TypedParamContext.active and self.independent:
             raise ETYPEDPARAMVIOL(self.site)
-        # Run typecheck before coercing endian integers, slightly better
-        # error messages
-        typecheck_inargs(self.site, args, self.inp, 'method')
-        args = [coerce_if_eint(arg) for arg in args]
+        args = typecheck_inarg_inits(self.site, inits, self.inp,
+                                     location, scope, 'method')
         if self.outp:
             [(_, rettype)] = self.outp
         else:
@@ -3658,12 +3649,13 @@ class NodeRef(Expression):
             return '$<anonymous %s>' % self.node.objtype
     def get_ref(self):
         return (self.node, self.indices)
-    def apply(self, args):
+    def apply(self, inits, location, scope):
         '''Apply as an expression'''
         if self.node.objtype == 'method':
             if self.node.throws or len(self.node.outp) > 1:
                 raise EAPPLYMETH(self.site, self.node.name)
-            return codegen_call_expr(self.site, self.node, self.indices, args)
+            return codegen_call_expr(self.site, self.node, self.indices, inits,
+                                     location, scope)
         raise EAPPLY(self, self.node.objtype + " object")
 
 class NodeRefWithStorage(NodeRef, LValue):
@@ -3704,12 +3696,12 @@ class NodeRefWithStorage(NodeRef, LValue):
             expr = '_dev->' + crep.cref_session(node, self.indices)
         return expr
 
-    def apply(self, args):
+    def apply(self, inits, location, scope):
         if self.node.objtype == 'method':
             assert dml.globals.dml_version == (1, 2)
             raise EAPPLYMETH(self.site, self.node.name)
         # storage might be a function pointer
-        return mkApply(self.site, self, args)
+        return mkApplyInits(self.site, self, inits, location, scope)
 
 class SessionVariableRef(LValue):
     "A reference to a session variable"

@@ -1674,6 +1674,29 @@ method from within the body of the overriding method using the identifier
 x = default(...);
 ```
 
+DML supports _compound initializer syntax_ for the arguments of called methods,
+meaning arguments of struct-like types can be constructed using
+<tt>{<em>...</em>}</tt>. For example:
+```
+typedef struct {
+    int x;
+    int y;
+} struct_t;
+
+method copy_struct(struct_t *tgt, struct_t src) {
+    *tgt = src
+}
+
+method m() {
+    local struct_t s;
+    copy_struct(&s, {1, 4});
+    copy_struct(&s, {.y = 1, .x = 4});
+    copy_struct(&s, {.y = 1, ...}); // Partial designated initializer
+}
+```
+This syntax can't be used for variadic arguments or [inline
+arguments](#inline-methods).
+
 ### Inline Methods
 
 Methods can also be defined as inline, meaning that at

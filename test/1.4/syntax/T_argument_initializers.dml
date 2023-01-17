@@ -1,0 +1,76 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+header %{
+typedef struct {
+    int32 z;
+    int32 x;
+    struct {
+        int32 i;
+        int32 k;
+        int32 j;
+    } y;
+} ext_struct_t;
+
+void mkstruct_external(ext_struct_t s, ext_struct_t *tgt) {
+    *tgt = s;
+}
+%}
+
+extern typedef struct {
+    // int32 z;
+    int32 x;
+    struct {
+        int32 i;
+        // int32 k;
+        int32 j;
+    } y;
+} ext_struct_t;
+
+
+typedef struct {
+    int32 x;
+    struct {
+        int32 i;
+        int32 j;
+    } y;
+} struct_t;
+
+method mkstruct(struct_t s) -> (struct_t) {
+    return s;
+}
+
+method mkstruct_throwing(struct_t s) -> (struct_t) throws {
+    return s;
+}
+
+inline method mkstruct_inline(struct_t s, inline tgt) {
+    *tgt = s;
+}
+
+extern void mkstruct_external(ext_struct_t, ...);
+
+method init() {
+    local struct_t a = mkstruct({ 1, {2, 3} });
+    local struct_t b = mkstruct({ .y = { .i = 2, ... }, ... });
+    assert a.x == 1 && a.y.i == 2 && a.y.j == 3;
+    assert b.x == 0 && b.y.i == 2 && b.y.j == 0;
+
+    try {
+        local struct_t c = mkstruct_throwing({ 1, {2, 3} });
+        assert c.x == 1 && c.y.i == 2 && c.y.j == 3;
+    } catch assert false;
+
+    local struct_t d;
+    mkstruct_inline({1, {2, 3}}, &d);
+    assert d.x == 1 && d.y.i == 2 && d.y.j == 3;
+
+    local ext_struct_t e;
+    mkstruct_external({1, {2, 3}}, &e);
+    assert e.x == 1 && e.y.i == 2 && e.y.j == 3;
+}

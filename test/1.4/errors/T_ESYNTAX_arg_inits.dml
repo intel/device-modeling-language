@@ -1,0 +1,26 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+typedef struct {
+    int i;
+} s_t;
+
+method m(s_t x) { }
+
+inline method i(inline x) { }
+
+extern void f(...);
+
+method init() {
+    // no error
+    m({3});
+    /// ERROR ESYNTAX
+    i({3});
+    /// ERROR ESYNTAX
+    f({3});
+}
