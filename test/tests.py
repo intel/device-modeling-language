@@ -74,6 +74,9 @@ line_directives = bool(os.environ.get('DMLC_LINE_DIRECTIVES'))
 
 dmlc = python + [join(project_host_path(), "bin", "dml", "python")]
 
+line_directives = {None: True, 'yes': True, 'no': False}[
+    os.environ.get('DMLC_LINE_DIRECTIVES')]
+
 if not is_windows():
     dmlc_lib_path = ":".join(
         [join(simics_root_path(), host_type(), p) for p in ('bin', 'sys/lib')]
