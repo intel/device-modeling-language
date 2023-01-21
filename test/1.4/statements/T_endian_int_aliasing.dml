@@ -12,6 +12,7 @@ import "simics/simulator/sim-get-class.dml";
 
 // check that GCC actually performs the aliasing-based optimizations we think
 // for non-endian types
+/// CC-FLAG -O2
 method bad() {
     local uint8 buf[10];
     local uint32 *p1 = cast(buf, uint32 *);
