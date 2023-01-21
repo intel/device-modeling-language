@@ -4,7 +4,6 @@
 # Infrastructure for traits
 
 import itertools
-import collections
 import contextlib
 import abc
 import os
@@ -599,10 +598,9 @@ class ReservedSymbol(NonValue):
 class Trait(SubTrait):
     '''A trait, as defined by a top-level 'trait' statement'''
 
-    # set of traits that are actually used. Ordered set, represented
-    # as mapping Trait -> None. A trait should appear before all its
-    # subtraits in the ordering.
-    referenced = collections.OrderedDict()
+    # set of traits that are actually used. Each trait appears before
+    # all its subtraits.
+    referenced = Set()
 
     def __init__(self, site, name, ancestors, methods, params, sessions,
                  ancestor_vtables, ancestor_method_impls, reserved_symbols):
@@ -774,7 +772,7 @@ class Trait(SubTrait):
         if not self in Trait.referenced:
             for p in self.direct_parents:
                 p.mark_referenced()
-            Trait.referenced[self] = None
+            Trait.referenced.add(self)
 
     def implements(self, trait):
         return trait is self or trait in self.ancestors

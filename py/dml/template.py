@@ -3,7 +3,6 @@
 
 # Process templates, from ASTs to Template objects
 
-import collections
 import os
 from . import ast, logging
 from .logging import *
@@ -332,8 +331,8 @@ def process_templates(template_decls):
 
     # The generation of struct definitions assumes the dictionary to
     # be topologically ordered on inheritance: if A inherits B, B
-    # occurs first in the dict.
-    traits = collections.OrderedDict()
+    # appears first in the dict.
+    traits = {}
 
     # name -> Template
     templates = {}
