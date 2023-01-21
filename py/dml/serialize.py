@@ -8,6 +8,7 @@ from . import ctree, expr, types, logging, symtab, messages, output, logging
 from .types import *
 from .logging import *
 from .expr_util import *
+from .set import Set
 import dml.globals
 
 __all__ = (
@@ -34,7 +35,7 @@ serialize_function_code = []
 
 class SerializedTraits:
     def __init__(self):
-        self.traits = set()
+        self.traits = Set()
 
     def add(self, trait):
         if trait not in self.traits:

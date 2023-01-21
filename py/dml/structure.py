@@ -30,6 +30,7 @@ from . import template
 from .template import Rank, RankDesc, ObjectSpec
 from .reginfo import explode_registers
 from . import dmlparse
+from .set import Set
 
 __all__ = (
     'mkglobals', 'mkdev'
@@ -1564,7 +1565,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                 report(EAUNKDIMSIZE(specs[0].site, i, idx))
                 arrayinfo[i] = (idx, ast.int(specs[0].site, 1))
 
-    explicit_traits = {t for (_, t) in obj_traits}
+    explicit_traits = Set(t for (_, t) in obj_traits)
     ancestors = explicit_traits.union(
         *(t.ancestors for t in explicit_traits))
 
@@ -1575,7 +1576,9 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             new_trait = traits.mktrait(
                 obj.site, "__implicit_" + "__".join(sorted(
                     t.name for t in direct_parents)),
-                traitset, {}, {}, {}, {})
+                # traitset is a frozenset, with undefined iteration order;
+                # must sort it to keep compilation deterministic
+                Set(sorted(traitset)), {}, {}, {}, {})
             implicit_traits[traitset] = new_trait
             if new_trait.name in dml.globals.traits:
                 raise ICE(

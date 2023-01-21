@@ -20,6 +20,7 @@ from .symtab import *
 from .messages import *
 from .output import out
 from .types import *
+from .set import Set
 import dml.globals
 
 __all__ = (
@@ -83,7 +84,7 @@ def gensym(prefix = '_gensym'):
 referenced_methods = {}
 method_queue = []
 exported_methods = {}
-statically_exported_methods = set()
+statically_exported_methods = Set()
 
 # Saved variables in methods, method->list of symbols
 saved_method_variables = {}

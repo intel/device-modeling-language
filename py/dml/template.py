@@ -8,6 +8,7 @@ import os
 from . import ast, logging
 from .logging import *
 from .messages import *
+from .set import Set
 import dml.globals
 import dml.traits
 
@@ -250,7 +251,7 @@ def rank_structure(asts):
     conditionally instantiate a template.
     '''
     inferior = {}
-    unconditional = set()
+    unconditional = Set()
     in_each_structure = {}
     queue = [(ast, False) for ast in asts]
     while queue:
@@ -296,7 +297,7 @@ def process_templates(template_decls):
     for (name, (_, asts, _)) in list(template_decls.items()):
         (references, uncond_refs, in_each_structure) = rank_structure(asts)
         template_rank_structure[name] = (references, in_each_structure)
-        referenced = set(references)
+        referenced = Set(references)
         required_templates[name] = referenced
         all_missing = referenced.difference(template_decls)
         if all_missing:
@@ -348,7 +349,8 @@ def process_templates(template_decls):
         else:
             trait = dml.traits.process_trait(
                 spec.site, name, trait_stmts,
-                set().union(*[tpl.traits() for (_, tpl) in spec.templates]),
+                Set().union(
+                    *[tpl.traits() for (_, tpl) in spec.templates]),
                 spec.defined_symbols())
             traits[name] = trait
         templates[name] = Template(name, trait, spec)

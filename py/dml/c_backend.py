@@ -25,6 +25,7 @@ from .expr_util import *
 from .symtab import *
 from .codegen import *
 from .types import *
+from .set import Set
 
 prototypes = []
 c_split_threshold = None
@@ -1851,7 +1852,7 @@ def generate_each_in_tables():
         by_trait.setdefault(trait, []).append((node, subobjs))
     for t in by_trait:
         generate_each_in_table(t, by_trait[t])
-    for t in set(dml.globals.traits.values()) - set(by_trait):
+    for t in Set(dml.globals.traits.values()).difference(by_trait):
         # Need by shared methods that belong to unused templates;
         # when dereferencing sequence params, these methods reference
         # the base array.
@@ -2476,7 +2477,7 @@ def generate_trait_trampoline(method, vtable_trait):
 def generate_trait_trampolines(node):
     '''Generate trampolines for all used trait methods overridden in an
     object, excluding subobjects'''
-    overridden = set(node.traits.method_overrides)
+    overridden = Set(node.traits.method_overrides)
     for trait in node.traits.referenced:
         for name in overridden.intersection(trait.vtable_methods):
             generate_trait_trampoline(
