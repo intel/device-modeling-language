@@ -62,17 +62,14 @@ else:
 bat_sfx = batch_suffix()
 exe_sfx = '.exe' if is_windows() else ""
 
-# Python interpreter for DMLC including args, e.g. '["pypy3", "-X", "utf8"]'
-python = os.environ.get('DMLC_PYTHON')
-if python:
-    python = json.loads(python)
-else:
-    python = [join(simics_root_path(), host_type(), "bin",
-                   "mini-python" + exe_sfx)]
-
-line_directives = bool(os.environ.get('DMLC_LINE_DIRECTIVES'))
-
-dmlc = python + [join(project_host_path(), "bin", "dml", "python")]
+mini_python = [join(simics_root_path(), host_type(), "bin",
+                    "mini-python" + exe_sfx)]
+dmlc_py = [join(project_host_path(), "bin", "dml", "python")]
+main_dmlc = mini_python + dmlc_py
+# Alternative python interpreter for DMLC including args,
+# e.g. '["pypy3", "-X", "utf8"]'
+pypy = os.environ.get('DMLC_PYTHON')
+pypy_dmlc = None if pypy is None else json.loads(pypy) + dmlc_py
 
 line_directives = {None: True, 'yes': True, 'no': False}[
     os.environ.get('DMLC_LINE_DIRECTIVES')]
@@ -249,15 +246,46 @@ class DMLFileTestCase(BaseTestCase):
                 wtime2 - wtime1))
         return status
 
+    def compare_pypy_dmlc(self, reaper, args, env):
+        files = ([self.dmlc_stdout, self.dmlc_stderr]
+                 + [f'{self.cfilename}{suff}'
+                    for suff in ['.c', '-protos.c', '.h', '-struct.h']])
+        for f in files:
+            os.rename(f, f + '.mini-python')
+        argv = reaper + pypy_dmlc + args
+        self.pr(' '.join(argv))
+        with open(self.dmlc_stdout, "w") as stdout, open(
+                self.dmlc_stderr, "w") as stderr:
+            status = subprocess.call(
+                argv, stdout=stdout, stderr=stderr,
+                cwd=self.scratchdir, env=env)
+        if status != 0:
+            self.print_logs('pypy-dmlc', self.dmlc_stdout, self.dmlc_stderr)
+            raise TestFail(f'exit code {status} from {pypy_dmlc}')
+        for f in files:
+            orig = Path(f + '.mini-python').read_text().splitlines(
+                keepends=True)
+            new = Path(f).read_text().splitlines(keepends=True)
+            if orig != new:
+                diff = ''.join(difflib.unified_diff(
+                    orig, new, f + '.mini-python', f))
+                diff_file = Path(f + '.diff')
+                diff_file.write_text(diff)
+                self.pr(f'{diff_file}:1: Difference found')
+                self.pr(diff)
+                self.print_logs('pypy-dmlc', self.dmlc_stdout, self.dmlc_stderr)
+                raise TestFail('difference found')
+        return 0
+
     def run_dmlc(self, filename, dmlc_extraargs):
         name = self.shortname
         self.dmlc_stdout = join(self.scratchdir, name+'.dmlc_stdout')
         self.dmlc_stderr = join(self.scratchdir, name+'.dmlc_stderr')
         exitcode_file = join(self.scratchdir, name + '.dmlc_exitcode')
-        args =[]
-        args += dmlc_reaper_args(exitcode_file,
-                                 dmlc_timeout_multipliers.get(self.fullname, 1))
-        args += dmlc + ["-T"]
+        reaper = dmlc_reaper_args(
+            exitcode_file,
+            dmlc_timeout_multipliers.get(self.fullname, 1))
+        args = ["-T"]
         if not line_directives:
             args += ["--noline"]
         args += dmlc_extraargs
@@ -271,15 +299,21 @@ class DMLFileTestCase(BaseTestCase):
 
         args.extend([filename, os.path.basename(self.cfilename)])
 
-        self.pr(" ".join(args))
+        argv = reaper + main_dmlc + args
+
+        self.pr(" ".join(argv))
 
         env = os.environ.copy()
         env.update(self.extraenv)
-        status = subprocess.call(args,
-                                 stdout = open(self.dmlc_stdout, "w"),
-                                 stderr = open(self.dmlc_stderr, "w"),
-                                 cwd=self.scratchdir, env = env)
+        with open(self.dmlc_stdout, "w") as stdout, open(
+                self.dmlc_stderr, "w") as stderr:
+            status = subprocess.call(argv,
+                                     stdout=stdout,
+                                     stderr=stderr,
+                                     cwd=self.scratchdir, env = env)
         if status == 0:
+            if pypy_dmlc:
+                return self.compare_pypy_dmlc(reaper, args, env)
             return 0
         elif status == 1:
             raise TestFail("dmlc timeout")
@@ -817,6 +851,10 @@ class XmlTestCase(CTestCase):
 class DMLCProfileTestCase(CTestCase):
     __slots__ = ()
 
+    def compare_pypy_dmlc(*args):
+        # Skip check, indeterministic stdout is expected from dmlc
+        return 0
+
     def test(self):
         super().test()
         # Check the existence of profiling data
@@ -883,7 +921,7 @@ class DumpInputFilesTestCase(CTestCase):
             # This does not work on Windows, for unknown reasons.
             # Seems related to symlink semantics somehow, but no
             # need to explore deeper until we have a use case for it.
-            cmd = dmlc + [
+            cmd = main_dmlc + [
                 join(*(self.prefix + [os.path.basename(self.filename)])),
                 self.shortname]
             self.pr(f"Running: {' '.join(cmd)}")
@@ -966,6 +1004,11 @@ all_tests.append(CTestCase(
 
 class SplitTestCase(CTestCase):
     __slots__ = ()
+
+    def compare_pypy_dmlc(*args):
+        # Skip check, output files don't follow standard naming scheme
+        return 0
+
     def run_cc(self, cc_extraargs):
         assert not cc_extraargs
         files = glob.glob(self.cfilename + "-[0-9]*.c")
@@ -1038,6 +1081,10 @@ all_tests.append(DebuggableCheck('debuggable-check'))
 class DmlDepBase(CTestCase):
     '''Base class for DML dependency test cases.'''
     __slots__ = ()
+    def compare_pypy_dmlc(*args):
+        # Skip check, not all files created
+        return 0
+
     def run_cc(self, cc_extraargs):
         assert not cc_extraargs
         name = self.shortname
