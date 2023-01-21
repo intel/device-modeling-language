@@ -494,7 +494,7 @@ def sort_method_implementations(implementations):
 
     return (method_map, method_order)
 
-class SubTrait(object):
+class SubTrait:
     '''Logic shared between nodes and traits, which both can inherit
     other traits.'''
     def __init__(self, ancestors, ancestor_vtables):
