@@ -292,7 +292,7 @@ class CompositeObject(DMLObject):
         self.traits = traits
         for t in itertools.chain(*([t] + list(t.ancestors)
                                    for t in traits.ancestors)):
-            dml.globals.trait_instances.setdefault(t, set()).add(self)
+            dml.globals.trait_instances.setdefault(t, []).append(self)
             if t in serialize.serialized_traits.traits:
                 traits.mark_referenced(t)
 

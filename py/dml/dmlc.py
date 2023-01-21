@@ -580,7 +580,7 @@ def main(argv):
                     sys.stderr.write(f'  {f}\n')
                 # this avoids an infinite make loop, at the cost of ruining
                 # dependencies
-                deplist = set(deplist) - set(future_timestamps)
+                deplist = [d for d in deplist if d not in future_timestamps]
             deps = ' '.join(path.replace(" ", "\\ ") for path in deplist)
             if options.dep_target:
                 targetlist = options.dep_target

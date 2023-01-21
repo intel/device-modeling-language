@@ -13,7 +13,7 @@ missing_templates = set()
 traits = None
 
 # A mapping from each trait to the set of objects instantiating that trait.
-# Trait -> {CompositeObject}
+# {Trait: [CompositeObject]}
 trait_instances = {}
 
 

@@ -18,6 +18,7 @@ from .expr_util import *
 from .messages import *
 from .slotsmeta import auto_init
 from .types import *
+from .set import Set
 import dml.globals
 
 __all__ = (
@@ -266,7 +267,8 @@ def merge_ancestor_vtables(ancestors, site):
 def mktrait(site, tname, ancestors, methods, params, sessions,
             template_symbols):
     '''Produce a trait, possibly reporting errors'''
-    direct_parents = ancestors.difference(*(p.ancestors for p in ancestors))
+    direct_parents = [a for a in ancestors
+                      if not any(a in p.ancestors for p in ancestors)]
     ancestor_method_impls = merge_method_impl_maps(site, direct_parents)
 
     ancestor_vtables = merge_ancestor_vtables(ancestors, site)
@@ -444,7 +446,7 @@ def sort_method_implementations(implementations):
                             impl.name)
         rank_to_method[impl.rank] = impl
 
-    ranks = set(rank_to_method)
+    ranks = Set(rank_to_method)
 
     # The subset of the ancestry graph where implementations of this
     # method can be found
@@ -456,9 +458,10 @@ def sort_method_implementations(implementations):
     ancestry[None] = ranks
 
     # Transitive reduction, naive O(n^3) algorithm.
-    minimal_ancestry = {rank: ancestry[rank].difference(*(
-        ancestry[p] for p in ancestry[rank]))
-                        for rank in ancestry}
+    minimal_ancestry = {
+        rank: parents.difference(*(
+            ancestry[p] for p in parents))
+        for (rank, parents) in ancestry.items()}
 
     if len(minimal_ancestry[None]) > 1:
         # There is no single method implementation that overrides all
@@ -505,10 +508,9 @@ class SubTrait(object):
         # Minimal set of parents from which all other ancestors are
         # reachable. The iteration order is significant for code
         # generation, so we sort the parents (by name, quite
-        # arbitrarily) to generate the same code across platforms.
+        # arbitrarily) to generate code in a predictable manner.
         self.direct_parents = sorted(
-            ancestors.difference(*(p.ancestors for p in ancestors)),
-            key=lambda t: t.name)
+            ancestors.difference(*(p.ancestors for p in ancestors)))
 
         # Map ancestor trait to ordered lists of paths that self inherits
         # that trait E.g., {A: [(B, A), (C, D, A)]} means that this
@@ -535,7 +537,7 @@ class SubTrait(object):
         self.ancestor_vtables = ancestor_vtables
 
     @property
-    def ancestors(self): return set(self.ancestry_paths)
+    def ancestors(self): return self.ancestry_paths.keys()
 
 class ObjTraits(SubTrait):
     '''Keep track of the traits implemented by a DML object'''
@@ -545,7 +547,7 @@ class ObjTraits(SubTrait):
         super(ObjTraits, self).__init__(traits, ancestor_vtables)
 
         self.node = node
-        self.referenced = set()
+        self.referenced = Set()
         # Dictionary, name -> objects.Parameter
         self.param_nodes = param_nodes
         # Dictionary, name -> objects.Method
@@ -650,6 +652,11 @@ class Trait(SubTrait):
 
     def __str__(self):
         return self.name
+
+    def __lt__(self, other):
+        if not isinstance(other, Trait):
+            return NotImplemented
+        return self.name < other.name
 
     def type(self):
         return TTrait(self)
@@ -874,7 +881,7 @@ def required_implicit_traits(traits):
                 raise ICE(t.site, 'no base trait for %s' % (t.name))
 
     # Eliminate duplicates, by picking one representative from each partition
-    representatives = set(partitions[t][0] for t in partitions)
+    representatives = Set(partitions[t][0] for t in partitions)
     # Represent each implicit trait as the set of traits it must inherit
     return [frozenset(partitions[t]) for t in representatives
             # An implicit trait is not needed if one trait is subtrait
