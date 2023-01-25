@@ -502,7 +502,8 @@ class DMLFileTestCase(BaseTestCase):
                      cc_flags=(),
                      dmlc_flags=(),
                      instantiate_manually=False,
-                     compile_only=False):
+                     compile_only=False,
+                     no_cc=False):
             self.exp_warnings = list(exp_warnings)
             self.exp_errors = list(exp_errors)
             self.exp_stdout = list(exp_stdout)
@@ -510,6 +511,7 @@ class DMLFileTestCase(BaseTestCase):
             self.dmlc_flags = list(dmlc_flags)
             self.instantiate_manually = instantiate_manually
             self.compile_only = compile_only
+            self.no_cc = no_cc
     def test_flags(self, filename=None, append_to=None):
         if filename is None:
             filename = self.filename
@@ -566,6 +568,8 @@ class DMLFileTestCase(BaseTestCase):
                 flags.instantiate_manually = True
             elif key == 'COMPILE-ONLY':
                 flags.compile_only = True
+            elif key == 'NO-CC':
+                flags.no_cc = True
             else:
                 raise TestFail('Unexpected key %s' % (key,))
         return flags
@@ -789,6 +793,10 @@ class CTestCase(DMLFileTestCase):
             self.print_logs('dmlc', self.dmlc_stdout, self.dmlc_stderr)
 
         if status != 0: # No use compiling if dmlc failed
+            return
+
+        if flags.no_cc:
+            assert flags.compile_only
             return
 
         # Run the C compiler
