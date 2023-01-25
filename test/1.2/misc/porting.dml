@@ -6,6 +6,7 @@
 /* column numbering works with unicode: ä */ dml 1.2;
 
 /// COMPILE-ONLY
+/// NO-CC
 // ignored
 //
 
