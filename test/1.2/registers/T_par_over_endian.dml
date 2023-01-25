@@ -6,6 +6,9 @@ dml 1.2;
 
 device test;
 
+// reduce compile time
+/// CC-FLAG -O0
+
 template testfield {
     // These register fields simply return for each byte the lowest
     // byte in the offset
