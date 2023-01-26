@@ -57,6 +57,7 @@ Make: dmlc
     $(HOST)/bin/dml/python/dml/output.py
     $(HOST)/bin/dml/python/dml/reginfo.py
     $(HOST)/bin/dml/python/dml/serialize.py
+    $(HOST)/bin/dml/python/dml/set.py
     $(HOST)/bin/dml/python/dml/slotsmeta.py
     $(HOST)/bin/dml/python/dml/structure.py
     $(HOST)/bin/dml/python/dml/symtab.py
