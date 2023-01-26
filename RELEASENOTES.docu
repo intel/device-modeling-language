@@ -1712,4 +1712,10 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
   <build-id value="next"><add-note> The DMLC implementation is now
       shipped as source code, as <tt>.py</tt> files instead
       of <tt>.pyc</tt>.</add-note></build-id>
+  <build-id value="next"><add-note> The C code emitted by DMLC is now
+      identical every time, when given the same DML files as
+      input. Previously, the compiler had nondeterministic behaviour
+      that affected things like in what order C functions are output.
+      Deterministic output allows more efficient use of tools like
+      <tt>ccache</tt>.</add-note></build-id>
 </rn>
