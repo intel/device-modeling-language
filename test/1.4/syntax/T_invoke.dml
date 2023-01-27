@@ -6,8 +6,6 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
-
 // Test the new method invocation syntax of DML 1.4
 
 inline method m1(inline i) -> (int) {
@@ -24,7 +22,7 @@ method m3() -> (int, int, int) {
 
 method m4() {}
 
-method test() throws {
+method init() {
     local int i;
     local int j;
     local int k;

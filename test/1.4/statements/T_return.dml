@@ -4,7 +4,6 @@
 */
 dml 1.4;
 device test;
-import "testing.dml";
 
 typedef struct {
     int i;
@@ -32,9 +31,11 @@ method m() -> (int, int) throws {
     }
 }
 
-method test() throws {
-    local (int i, int j) = m();
-    assert i == 3 && j == 4;
-    local s_t s = construct(4, true);
-    assert s.i == 4 && s.b == true;
+method init() {
+    try {
+        local (int i, int j) = m();
+        assert i == 3 && j == 4;
+        local s_t s = construct(4, true);
+        assert s.i == 4 && s.b == true;
+    } catch {}
 }

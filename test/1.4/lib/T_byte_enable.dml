@@ -5,7 +5,6 @@
 dml 1.4;
 device test;
 
-import "testing.dml";
 import "utility.dml";
 
 bank registers {
@@ -52,7 +51,7 @@ bank registers {
         }
     }
 
-    method test_read() throws {
+    method test_read() {
         local uint64 val;
 
         val = r.read_register(0xff, NULL);
@@ -71,7 +70,7 @@ bank registers {
         assert val == 0xf0000;
     }
 
-    method test_write() throws {
+    method test_write() {
         r.val = 0;
         r.write_register(0x01020304, 0xff, NULL);
         assert r.val == 0x04;
@@ -93,7 +92,7 @@ bank registers {
         assert r2.val == 0x20000;
     }
 
-    method test() throws {
+    method test() {
         test_read();
         test_write();
     }
@@ -122,11 +121,13 @@ bank disabled_field_invoked {
         }
     }
 
-    method test() throws {
-        local uint64 val;
-        val = read(0x0, 0xff00ff, NULL);
-        assert val == 0x0c000a;
-        assert !b_read;
+    method test() {
+        try {
+            local uint64 val;
+            val = read(0x0, 0xff00ff, NULL);
+            assert val == 0x0c000a;
+            assert !b_read;
+        } catch assert false;
     }
 }
 
@@ -151,12 +152,14 @@ bank disabled_register_invoked {
         param init_val = 0x0c;
     }
 
-    method test() throws {
-        local uint64 val;
-        val = read(0x0, 0xff00ff, NULL);
+    method test() {
+        try {
+            local uint64 val;
+            val = read(0x0, 0xff00ff, NULL);
 
-        assert val == 0x0c000a;
-        assert !r2_read;
+            assert val == 0x0c000a;
+            assert !r2_read;
+        } catch assert false;
     }
 }
 
@@ -186,62 +189,66 @@ bank explicit_fields {
         }
     }
 
-    method test_read() throws {
-        local uint64 val;
+    method test_read() {
+        try {
+            local uint64 val;
 
-        val = read(0x0, 0xff, NULL);
-        assert val == 0x0a;
+            val = read(0x0, 0xff, NULL);
+            assert val == 0x0a;
 
-        val = read(0x0, 0xffff, NULL);
-        assert val == 0x0b0a;
+            val = read(0x0, 0xffff, NULL);
+            assert val == 0x0b0a;
 
-        val = read(0x0, 0xffffff, NULL);
-        assert val == 0x0c0b0a;
+            val = read(0x0, 0xffffff, NULL);
+            assert val == 0x0c0b0a;
 
-        val = read(0x0, 0xffffffff, NULL);
-        assert val == 0x0d0c0b0a;
+            val = read(0x0, 0xffffffff, NULL);
+            assert val == 0x0d0c0b0a;
 
-        val = read(0x0, 0x0, NULL);
-        assert val == 0x0;
+            val = read(0x0, 0x0, NULL);
+            assert val == 0x0;
 
-        val = read(0x0, 0xff0000ff, NULL);
-        assert val == 0x0d00000a;
+            val = read(0x0, 0xff0000ff, NULL);
+            assert val == 0x0d00000a;
 
-        val = read(0x0, 0xffff00, NULL);
-        assert val == 0x000c0b00;
+            val = read(0x0, 0xffff00, NULL);
+            assert val == 0x000c0b00;
+        } catch assert false;
     }
 
-    method test_write() throws {
-        r.val = 0;
-        write(0x0, 0x01020304, 0xff, NULL);
-        assert r.val == 0x04;
+    method test_write() {
+        try {
+            r.val = 0;
+            write(0x0, 0x01020304, 0xff, NULL);
+            assert r.val == 0x04;
 
-        r.val = 0;
-        write(0x0, 0x01020304, 0xffff, NULL);
-        assert r.val == 0x0304;
+            r.val = 0;
+            write(0x0, 0x01020304, 0xffff, NULL);
+            assert r.val == 0x0304;
 
-        r.val = 0;
-        write(0x0, 0x01020304, 0xffffff, NULL);
-        assert r.val == 0x020304;
+            r.val = 0;
+            write(0x0, 0x01020304, 0xffffff, NULL);
+            assert r.val == 0x020304;
 
-        r.val = 0;
-        write(0x0, 0x01020304, 0xffffffff, NULL);
-        assert r.val == 0x01020304;
+            r.val = 0;
+            write(0x0, 0x01020304, 0xffffffff, NULL);
+            assert r.val == 0x01020304;
 
-        r.val = 0;
-        write(0x0, 0x01020304, 0x0, NULL);
-        assert r.val == 0x0;
+            r.val = 0;
+            write(0x0, 0x01020304, 0x0, NULL);
+            assert r.val == 0x0;
 
-        r.val = 0;
-        write(0x0, 0x01020304, 0xff0000ff, NULL);
-        assert r.val == 0x01000004;
+            r.val = 0;
+            write(0x0, 0x01020304, 0xff0000ff, NULL);
+            assert r.val == 0x01000004;
 
-        r.val = 0;
-        write(0x0, 0x01020304, 0xffff00, NULL);
-        assert r.val == 0x00020300;
+            r.val = 0;
+            write(0x0, 0x01020304, 0xffff00, NULL);
+            assert r.val == 0x00020300;
+        } catch assert false;
     }
 
-    method test() throws {
+    method test() {
         test_read();
         test_write();
     }
@@ -257,9 +264,11 @@ bank ignored_enabled {
         }
     }
 
-    method test() throws {
+    method test() {
         local uint64 val;
-        val = read(0x0, 0xff00, NULL);
+        try {
+            val = read(0x0, 0xff00, NULL);
+        } catch assert false;
         assert val == 0xff00;
     }
 }
@@ -284,20 +293,22 @@ bank implicit_fields {
         }
     }
 
-    method test_register(uint64 offset) throws {
-        local uint64 val;
+    method test_register(uint64 offset) {
+        try {
+            local uint64 val;
 
-        val = read(offset, 0x0, NULL);
-        assert val == 0x0;
+            val = read(offset, 0x0, NULL);
+            assert val == 0x0;
 
-        val = read(offset, 0xffffffff, NULL);
-        assert val == 0x0d0c0b0a;
+            val = read(offset, 0xffffffff, NULL);
+            assert val == 0x0d0c0b0a;
 
-        val = read(offset, 0xff0000ff, NULL);
-        assert val == 0x0d00000a;
+            val = read(offset, 0xff0000ff, NULL);
+            assert val == 0x0d00000a;
+        } catch assert false;
     }
 
-    method test() throws {
+    method test() {
         test_register(0x0);
         test_register(0x4);
     }
@@ -322,22 +333,25 @@ bank overlapping {
         field a @ [7:0] is (read, write) {}
     }
 
-    method test_read() throws {
+    method test_read() {
         local uint64 val;
-
-        val = read(0x2, 0xffffffff, NULL);
+        try {
+            val = read(0x2, 0xffffffff, NULL);
+        } catch assert false;
         assert val == 0x02010d0c;
     }
 
-    method test_write() throws {
+    method test_write() {
         r1.val = r2.val = 0;
 
-        write(0x2, 0x02010d0c, 0xffffffff, NULL);
+        try {
+            write(0x2, 0x02010d0c, 0xffffffff, NULL);
+        } catch assert false;
         assert r1.val == 0x0d0c0000;
         assert r2.val == 0x0201;
     }
 
-    method test() throws {
+    method test() {
         test_read();
         test_write();
     }
@@ -360,14 +374,16 @@ bank unmapped {
         return 0x000b00;
     }
 
-    method test() throws {
+    method test() {
         local uint64 val;
-        val = read(0x0, 0xffffff, NULL);
+        try {
+            val = read(0x0, 0xffffff, NULL);
+        } catch assert false;
         assert val == 0x0c0b0a;
     }
 }
 
-method test() throws {
+method init() {
     registers.test();
 
     disabled_field_invoked.test();

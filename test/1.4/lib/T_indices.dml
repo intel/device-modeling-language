@@ -6,7 +6,6 @@ dml 1.4;
 device test;
 
 import "utility.dml";
-import "testing.dml";
 
 // This test serves as a general check that we can compile
 // multi-dimensional constructs and that the 'indices' argument
@@ -37,7 +36,7 @@ port p[i < 2][j < 2] {
     }
 }
 
-method test() throws {
+method init() {
     for (local int i = 0; i < 2; i++) {
         for (local int j = 0; j < 2; j++) {
             assert b[i][j].indices[0] == i;

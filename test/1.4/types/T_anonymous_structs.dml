@@ -6,8 +6,6 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
-
 session struct { uint8 c[3]; } v3;
 saved struct { uint8 c[5]; } v5;
 
@@ -21,7 +19,7 @@ typedef struct { struct { uint8 c[11]; } *s[2]; } t11;
 
 typedef struct { layout "big-endian" { uint8 c[13]; } *s[2]; } t13;
 
-method test() throws {
+method init() {
     assert sizeof(v3) == 3;
     assert sizeof(v5) == 5;
     assert sizeof(v7) == 7;

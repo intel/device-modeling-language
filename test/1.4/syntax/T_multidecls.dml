@@ -4,7 +4,6 @@
 */
 dml 1.4;
 device test;
-import "testing.dml";
 
 template t {
     saved   (int i, float j) = (1, 2);
@@ -24,7 +23,7 @@ method wrapper() -> (bool, int) {
     return (false, 4);
 }
 
-method test() throws {
+method init() {
     cast(b, t).q = 9;
     b.r = 10;
     b.s = 11;

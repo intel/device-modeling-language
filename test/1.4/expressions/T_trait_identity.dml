@@ -6,8 +6,6 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
-
 param base1 = base[1];
 
 template t {}
@@ -16,7 +14,7 @@ group base[i < 2] is t {
     group child[l < 5][m < 7] is t;
 }
 
-method test() throws {
+method init() {
     #if (cast(base[0], object) == cast(base1, object)) {
         error "base[0] == base1";
     }

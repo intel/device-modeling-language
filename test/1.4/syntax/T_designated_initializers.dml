@@ -6,8 +6,6 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
-
 typedef struct {
     int32 x;
     struct {
@@ -54,7 +52,7 @@ typedef bitfields 64 {
     } y @[31:0];
 } bitfields_t;
 
-method test() throws {
+method init() {
     local struct_t a = { .y = { .i = 2, .j = 3 }, .x = 1 };
     local ext_struct_t b = { .y = { .i = 2, .j = 3 }, .x = 1 };
     local layout_t c = { .y = { .i = 2, .j = 3 }, .x = 1 };

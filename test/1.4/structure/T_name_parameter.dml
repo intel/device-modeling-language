@@ -6,8 +6,6 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
-
 bank b {
     param name = "BANK_NAME_OVERRIDDEN";
     register r size 1 @ 0 {
@@ -27,7 +25,7 @@ bank c {
 }
 
 
-method test() throws {
+method init() {
     /// GREP .* b_r name is REG_NAME_OVERRIDDEN
     log info: "b_r name is %s", b.r.name;
     /// GREP .* b_r qname is BANK_NAME_OVERRIDDEN.REG_NAME_OVERRIDDEN

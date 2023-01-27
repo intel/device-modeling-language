@@ -6,8 +6,6 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
-
 in each group {
     param target default false;
 }
@@ -18,7 +16,7 @@ group g3[i < 3] {
     param target = i == 1;
 }
 
-method test() throws {
+method init() {
     local object o = cast(dev, object);
     local int miss_count = 0;
     #foreach g in ([g1, g2, g3[0], g3[1], g3[2]]) {

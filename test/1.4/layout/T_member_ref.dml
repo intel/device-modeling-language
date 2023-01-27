@@ -4,7 +4,6 @@
 */
 dml 1.4;
 device test;
-import "testing.dml";
 
 typedef layout "big-endian" {
     uint24 m;
@@ -22,7 +21,7 @@ typedef layout "little-endian" {
     } b;
 } le_l;
 
-method betest() throws
+method betest()
 {
     local be_l b;
     b.m = 10;
@@ -52,7 +51,7 @@ method betest() throws
     assert b.b.m == 0xf0;
 }
 
-method letest() throws
+method letest()
 {
     local le_l l;
     l.m = 10;
@@ -82,7 +81,7 @@ method letest() throws
     assert l.b.m == 0xf0;
 }
 
-method test() throws
+method init()
 {
     betest();
     letest();

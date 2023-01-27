@@ -4,7 +4,6 @@
 */
 dml 1.4;
 device test;
-import "testing.dml";
 
 template AA {
     shared method b() default {
@@ -40,7 +39,7 @@ port x is (BB, CC) {
     }
 }
 port y is (BB, CC);
-method test() throws {
+method init() {
     x.b();
     x.c();
 }

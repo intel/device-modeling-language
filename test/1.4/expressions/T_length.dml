@@ -7,7 +7,6 @@ dml 1.4;
 device test;
 
 import "utility.dml";
-import "testing.dml";
 
 // Marker template to search for
 template t {}
@@ -26,7 +25,7 @@ bank b[i < 2] {
 
 port d[i < 3][j < 6] {}
 
-method test() throws {
+method init() {
     // Sequences
     assert (each t in (a.b[0])).len == 0;
     assert (each t in (a)).len == 3;

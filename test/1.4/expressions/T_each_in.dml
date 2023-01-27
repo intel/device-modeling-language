@@ -6,8 +6,6 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
-
 template indirect {}
 
 template tr is indirect {
@@ -28,7 +26,7 @@ bank a {
     }
 }
 
-method test() throws {
+method init() {
     local bool found = false;
     foreach obj in (each tr in (a.b[0].d)) {
         found = true;

@@ -6,12 +6,11 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
 import "simics/simulator/conf-object.dml";
 
 loggroup lg1;
 
-method test() throws {
+method init() {
     local uint64 i = 7;
     local uint8 j = 5;
     // types of %d and %* args are automatic, regardless of type

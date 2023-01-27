@@ -4,7 +4,6 @@
 */
 dml 1.4;
 device test;
-import "testing.dml";
 
 /// INSTANTIATE-MANUALLY
 
@@ -74,7 +73,7 @@ group g[i < 2][j < 3] {
     group c[k < 5] is t;
 }
 
-method test() throws {
+method init() {
     #foreach obj in ([dev, g[1][2].c[3]]) {
         local int i;
         local double j;

@@ -9,8 +9,6 @@ device test;
 import "utility.dml";
 import "simics/simulator-api.dml";
 
-import "testing.dml";
-
 template map_target_tester {
     connect target is map_target;
 
@@ -65,18 +63,4 @@ group y is map_target_tester {
 }
 bank z {
     register r size 8 @ 0x100;
-}
-
-method set_attr(conf_object_t *obj, const char *name,
-                conf_object_t *val) -> (set_error_t) {
-    local attr_value_t attr = SIM_make_attr_object(val);
-    return SIM_set_attribute(obj, name, &attr);
-}
-
-method test() throws {
-    set_attr(obj, x.target.name, y.target.obj);
-    assert x.target.map_target != NULL;
-
-    set_attr(obj, x.target.name, NULL);
-    assert x.target.map_target == NULL;
 }

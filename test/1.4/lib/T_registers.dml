@@ -6,7 +6,6 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
 import "utility.dml";
 
 bank b {
@@ -30,17 +29,19 @@ bank b {
         param init_val = 0x22222222;
     }
 
-    method test() throws {
-        local uint32 val;
-        val = read(large_offset, 0xffffffff, NULL);
-        assert val == 0xdeadbeef;
-        val = read(large_stride * 3 + 1100, 0xffffffff, NULL);
-        assert val == 0xcafebabe;
-        // bug 9096, can apparently catch a stride calculation bug
-        val = read(16, 0xffffffff, NULL);
-        assert val == 0x22222222;
-        val = read(40, 0xffffffff, NULL);
-        assert val == 0x22222222;
+    method test() {
+        try {
+            local uint32 val;
+            val = read(large_offset, 0xffffffff, NULL);
+            assert val == 0xdeadbeef;
+            val = read(large_stride * 3 + 1100, 0xffffffff, NULL);
+            assert val == 0xcafebabe;
+            // bug 9096, can apparently catch a stride calculation bug
+            val = read(16, 0xffffffff, NULL);
+            assert val == 0x22222222;
+            val = read(40, 0xffffffff, NULL);
+            assert val == 0x22222222;
+        } catch assert false;
     }
 }
 
@@ -77,34 +78,36 @@ bank array[b < 2] {
         }
     }
 
-    method test() throws {
-        local uint32 val;
+    method test() {
+        try {
+            local uint32 val;
 
-        val = read(0x4, 0xffffffff, NULL);
-        assert val == 0x76543210;
+            val = read(0x4, 0xffffffff, NULL);
+            assert val == 0x76543210;
 
-        val = read(0x0, 0xffffffff, NULL);
-        assert val == (b == 0 ? 0xbadc0ffe : 0xdeadbeef);
-        val = read(0x10, 0xffffffff, NULL);
-        assert val == 0x10;
-        val = read(0x14, 0xffffffff, NULL);
-        assert val == 0x14;
-        val = read(0x18, 0xffffffff, NULL);
-        assert val == 0x18;
-        val = read(0x1c, 0xffffffff, NULL);
-        assert val == 0x1c;
-        val = read(0x40, 0xffffffff, NULL);
-        assert val == 0x40;
-        val = read(0x50, 0xffffffff, NULL);
-        assert val == 0x50;
-        val = read(0x44, 0xffffffff, NULL);
-        assert val == 0x44;
-        val = read(0x48, 0xffffffff, NULL);
-        assert val == 0x48;
-        val = read(0x54, 0xffffffff, NULL);
-        assert val == 0x54;
-        val = read(0x58, 0xffffffff, NULL);
-        assert val == 0x58;
+            val = read(0x0, 0xffffffff, NULL);
+            assert val == (b == 0 ? 0xbadc0ffe : 0xdeadbeef);
+            val = read(0x10, 0xffffffff, NULL);
+            assert val == 0x10;
+            val = read(0x14, 0xffffffff, NULL);
+            assert val == 0x14;
+            val = read(0x18, 0xffffffff, NULL);
+            assert val == 0x18;
+            val = read(0x1c, 0xffffffff, NULL);
+            assert val == 0x1c;
+            val = read(0x40, 0xffffffff, NULL);
+            assert val == 0x40;
+            val = read(0x50, 0xffffffff, NULL);
+            assert val == 0x50;
+            val = read(0x44, 0xffffffff, NULL);
+            assert val == 0x44;
+            val = read(0x48, 0xffffffff, NULL);
+            assert val == 0x48;
+            val = read(0x54, 0xffffffff, NULL);
+            assert val == 0x54;
+            val = read(0x58, 0xffffffff, NULL);
+            assert val == 0x58;
+        } catch assert false;
     }
 }
 
@@ -137,23 +140,25 @@ bank sparse_fields {
             }
         }
     }
-    method test() throws {
-        local uint64 val;
-        val = read(0, 0xff, NULL);
-        assert reads == 0b0001;
-        reads = 0;
-        val = read(1, 0xff, NULL);
-        assert reads == 0b0010;
-        reads = 0;
-        val = read(2, 0xff, NULL);
-        assert reads == 0b0100;
-        reads = 0;
-        val = read(3, 0xff, NULL);
-        assert reads == 0b1000;
-        reads = 0;
-        val = read(4, 0xff, NULL);
-        assert reads == 0b1000;
-        reads = 0;
+    method test() {
+        try {
+            local uint64 val;
+            val = read(0, 0xff, NULL);
+            assert reads == 0b0001;
+            reads = 0;
+            val = read(1, 0xff, NULL);
+            assert reads == 0b0010;
+            reads = 0;
+            val = read(2, 0xff, NULL);
+            assert reads == 0b0100;
+            reads = 0;
+            val = read(3, 0xff, NULL);
+            assert reads == 0b1000;
+            reads = 0;
+            val = read(4, 0xff, NULL);
+            assert reads == 0b1000;
+            reads = 0;
+        } catch assert false;
     }
 }
 
@@ -178,7 +183,7 @@ bank field_order {
         session int idx;
         // Test that the access order of fields is deterministic, most
         // significant field first
-        method test() throws {
+        method test() {
             idx = 0;
             this.write_register(0, 0xffffffff, NULL);
             assert idx == 6;
@@ -220,18 +225,20 @@ template misstest {
 }
 
 bank miss is (misstest) {
-   method test() throws {
-        miss_bits = 0;
-        local uint64 val;
-        val = read(0, 0xffffffffffffffff, NULL);
-        assert miss_bits == 0xffff000000ff00ff;
-        assert val == 0x1122010203660088;
-        miss_bits = 0;
-        write(0, 0x1122334455667788, 0xffffffffffffffff, NULL);
-        assert miss_bits == 0xffff000000ff00ff;
+   method test() {
+        try {
+            miss_bits = 0;
+            local uint64 val;
+            val = read(0, 0xffffffffffffffff, NULL);
+            assert miss_bits == 0xffff000000ff00ff;
+            assert val == 0x1122010203660088;
+            miss_bits = 0;
+            write(0, 0x1122334455667788, 0xffffffffffffffff, NULL);
+            assert miss_bits == 0xffff000000ff00ff;
+        } catch assert false;
         local bool ok = false;
         try {
-            val = read(0, 0xffffffffffffffff, &miss_bits);
+            local uint64 val = read(0, 0xffffffffffffffff, &miss_bits);
         } catch ok = true;
         assert ok;
         ok = false;
@@ -244,18 +251,21 @@ bank miss is (misstest) {
 
 bank miss_be is (misstest) {
     param byte_order = "big-endian";
-    method test() throws {
-        miss_bits = 0;
-        local uint64 val;
-        val = read(0, 0xffffffffffffffff, NULL);
-        assert miss_bits == 0xff00ff000000ffff;
-        assert val == 0x1100330203017788;
-        miss_bits = 0;
-        write(0, 0x1122334455667788, 0xffffffffffffffff, NULL);
-        assert miss_bits == 0xff00ff000000ffff;
+    method test() {
+        try {
+            miss_bits = 0;
+            local uint64 val;
+            val = read(0, 0xffffffffffffffff, NULL);
+            assert miss_bits == 0xff00ff000000ffff;
+            assert val == 0x1100330203017788;
+            miss_bits = 0;
+            write(0, 0x1122334455667788, 0xffffffffffffffff, NULL);
+            assert miss_bits == 0xff00ff000000ffff;
+        } catch assert false;
         local bool ok = false;
         try {
-            val = read(0, 0xffffffffffffffff, &miss_bits); } catch ok = true;
+            local uint64 val = read(0, 0xffffffffffffffff, &miss_bits);
+        } catch ok = true;
         assert ok;
         ok = false;
         try {
@@ -275,16 +285,18 @@ bank unmapped {
         return 0x1122334455667788;
     }
 
-    method test() throws {
-        local uint64 val;
-        val = read(unmapped_offset, 0xff, NULL);
-        assert val == 0x88;
-        val = read(unmapped_offset - 1, 0xffff, NULL);
-        assert val == 0x7788;
+    method test() {
+        try {
+            local uint64 val;
+            val = read(unmapped_offset, 0xff, NULL);
+            assert val == 0x88;
+            val = read(unmapped_offset - 1, 0xffff, NULL);
+            assert val == 0x7788;
+        } catch assert false;
     }
 }
 
-method test() throws {
+method init() {
     b.test();
     array[0].test();
     array[1].test();

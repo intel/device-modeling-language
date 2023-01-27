@@ -5,7 +5,6 @@
 dml 1.4;
 device test;
 
-import "testing.dml";
 import "utility.dml";
 
 template partially_mapped_register is (register, unmapped) {
@@ -61,7 +60,7 @@ bank b {
     }
 }
 
-method test() throws {
+method init() {
     // Check regular register semantics
     /// GREP \[obj spec-viol\] .*b.r1, bitranges;.*
     /// GREP .*15:0 .*written = 0b1111111111111111, previous.*= 0b0000111100001111.*

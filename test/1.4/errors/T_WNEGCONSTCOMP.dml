@@ -5,9 +5,8 @@
 dml 1.4;
 
 device test;
-import "testing.dml";
 
-method test() throws {
+method init() {
     local uint64 a = -1;
     /// WARNING WNEGCONSTCOMP
     assert a != -1;

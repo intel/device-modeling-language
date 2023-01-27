@@ -4,7 +4,6 @@
 */
 dml 1.4;
 device test;
-import "testing.dml";
 
 typedef layout "big-endian" {
     uint24 a;
@@ -12,7 +11,7 @@ typedef layout "big-endian" {
     int24_le_t l;
 } lt;
 
-method test() throws
+method init()
 {
     local lt l;
     local uint8 *lp = cast(&l, uint8 *);

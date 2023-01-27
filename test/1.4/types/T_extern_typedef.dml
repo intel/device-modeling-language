@@ -6,14 +6,12 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
-
 header %{ typedef struct { int _; struct { int _; int x; } y; } z_t; %}
 extern    typedef struct {        struct {        int x; } y; } z_t;
 
 session z_t c = {{7}};
 
-method test() throws {
+method init() {
     local z_t a;
     local z_t b = {{5}};
     a.y.x = b.y.x;

@@ -5,9 +5,7 @@
 dml 1.4;
 device test;
 
-import "testing.dml";
-
-method test() throws {
+method init() {
        local uint8 a[2];
        local uint8* aref = &a[0];
        assert aref == &a[0];

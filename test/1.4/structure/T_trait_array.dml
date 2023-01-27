@@ -6,15 +6,13 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
-
 template t { param p : int; }
 
 // HSD-ES 1508585437
 port pa1[i < 2][j < 2] is t { param p = i * 10 + j; }
 port pa2[i < 3][j < 2] is t { param p = i * 10 + j; }
 
-method test() throws {
+method init() {
     #foreach j in ([0, 1]) {
         #foreach i in ([0, 1]) {
             assert cast(pa1[i][j], t).p == i * 10 + j;

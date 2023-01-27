@@ -6,8 +6,6 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
-
 session int s;
 
 method foo(uint64 a) -> (uint64) {
@@ -46,7 +44,7 @@ independent method indie(uint64 i, uint64 j) -> (uint64) {
     return i + j;
 }
 
-method test() throws {
+method init() {
     assert s == 0;
     // trivial method with argument, dev access, and return
     assert (&foo)(dev.obj, 1) == 2;

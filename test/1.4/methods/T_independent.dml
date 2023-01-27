@@ -4,7 +4,6 @@
 */
 dml 1.4;
 device test;
-import "testing.dml";
 
 extern int sprintf(char *str, const char *format, ...);
 
@@ -85,7 +84,7 @@ template u is t {
 is u;
 
 
-method test() throws {
+method init() {
     local char buf[50];
     M(buf);
     assert strcmp(buf, "overridden M;default M") == 0;

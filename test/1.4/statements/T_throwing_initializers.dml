@@ -4,7 +4,6 @@
 */
 dml 1.4;
 device test;
-import "testing.dml";
 
 method demand_a(bool expectation) -> (int) throws {
     if (!expectation) {
@@ -20,7 +19,7 @@ method demand_b(bool expectation) -> (int, int) throws {
     return (3, 5);
 }
 
-method test() throws {
+method init() {
     local int x = 1;
     // Throwing methods may be used as initializers in DML 1.4
     try {

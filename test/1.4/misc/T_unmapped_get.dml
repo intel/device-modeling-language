@@ -6,11 +6,10 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
 import "utility.dml";
 
 bank _default {
-    method test() throws {
+    method test() {
         try {
             local uint64 value;
             value = unmapped_get(4711, 0xdeadbeef);
@@ -41,7 +40,7 @@ bank overload is (test_bank) {
         return 0x0000000cff0bff0a;
     }
 
-    method test() throws {
+    method test() {
         local uint64 val;
         try {
             val = get(17, 5);
@@ -54,7 +53,7 @@ bank overload is (test_bank) {
 bank pattern is (test_bank, miss_pattern_bank) {
     param miss_pattern = 0xff;
 
-    method test() throws {
+    method test() {
         local uint64 val;
         try {
             val = get(17, 5);
@@ -64,7 +63,7 @@ bank pattern is (test_bank, miss_pattern_bank) {
     }
 }
 
-method test() throws {
+method init() {
     _default.test();
     overload.test();
     pattern.test();
