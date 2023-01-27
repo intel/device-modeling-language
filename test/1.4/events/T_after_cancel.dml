@@ -4,7 +4,6 @@
 */
 dml 1.4;
 device test;
-import "testing.dml";
 
 template domain {
     shared method post_single_operator_dbl_shared(bool use_cycles, double t) {
@@ -150,6 +149,6 @@ template operator is (int64_attr) {
 attribute multi_operator[i < 2][j < 2] is (operator);
 attribute single_operator is (operator);
 
-method test() throws {
+method init() {
     return;
 }

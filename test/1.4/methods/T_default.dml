@@ -4,7 +4,6 @@
 */
 dml 1.4;
 device test;
-import "testing.dml";
 
 template mopq {
     method M() default {
@@ -72,7 +71,7 @@ template u is t {
 
 is u;
 
-method test() throws {
+method init() {
     M();
     O(2);
     P(2);

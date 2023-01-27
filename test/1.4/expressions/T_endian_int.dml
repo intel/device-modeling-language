@@ -8,8 +8,6 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
-
 header %{
 bool coerce_vargs(uint64 coerce, ...) {
     va_list varargs;
@@ -69,7 +67,7 @@ method int_arg(int64 arg) -> (int64) {
     return cast(arg, int64_le_t);
 }
 
-method test() throws {
+method init() {
     local int64_be_t int64be   = 0x7f;
     local int64_le_t int64le   = 0x7f;
     local int56_le_t uint56le  = 0x7f;
@@ -183,11 +181,15 @@ method test() throws {
 
     // Trait method call with eint arg
     // indirect, throws
-    tp.s_m_t(var);
+    try {
+        tp.s_m_t(var);
+    } catch {}
     // indirect, nothrow
     assert tp.s_m(var) == 5;
     // direct, throws
-    p.s_m_t(var);
+    try {
+        p.s_m_t(var);
+    } catch {}
     // direct, nothrow
     assert p.s_m(var) == 5;
     // non-shared, throws

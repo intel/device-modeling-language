@@ -6,8 +6,6 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
-
 template base {
     shared method m(int i) -> (int);
     param param: int;
@@ -144,7 +142,7 @@ group dc_nonindexed is deep_const {
     param s_val = sc_val[0];
 }
 
-method test() throws {
+method init() {
     local child c = cast(p[1], child);
     local base pp;
     local base *ppp = &pp;

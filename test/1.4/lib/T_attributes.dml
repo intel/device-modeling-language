@@ -8,8 +8,6 @@ device test;
 
 import "simics/simulator/conf-object.dml";
 
-import "testing.dml";
-
 attribute b is (bool_attr) {
 //    method get() -> (attr_value_t) default { return default(); }
 //    method set(attr_value_t value) throws default { default(value); }
@@ -52,7 +50,7 @@ attribute overridden_init is (bool_attr) {
 }
 
 
-method test() throws {
+method init() {
     b.val = true;
     assert SIM_attr_boolean(SIM_get_attribute(dev.obj, "b"));
     local attr_value_t bool_attr = SIM_make_attr_boolean(false);

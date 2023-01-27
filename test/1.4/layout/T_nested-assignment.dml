@@ -4,7 +4,6 @@
 */
 dml 1.4;
 device test;
-import "testing.dml";
 
 typedef layout "big-endian" {
     uint32 a;
@@ -184,7 +183,7 @@ method test_deeply_nested()
     assert c[5] == 0x78;
 }
 
-method test() throws
+method init()
 {
     test64();
     test_deeply_nested();

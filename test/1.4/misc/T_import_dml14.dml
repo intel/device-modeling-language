@@ -14,8 +14,6 @@ param is_dml_12 = false;
 /// SCAN-FOR-TAGS ../../1.2/misc/dml14.dml
 import "../../1.2/misc/dml14.dml";
 
-import "testing.dml";
-
 template inline_def {
 }
 
@@ -23,7 +21,7 @@ bank len_compat_testbank {
    param mapped_registers = each register in (this);
 }
 
-method test() throws {
+method init() {
     // defined in dml14.dml
     memop_test();
     attribute_test();

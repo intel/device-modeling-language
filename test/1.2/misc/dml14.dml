@@ -430,26 +430,28 @@ method len_test() {
 }
 
 // checks that typed attribute access works
-method attribute_test() throws {
-    cast(ia, int64_attr).set(SIM_make_attr_int64(-16));
-    local attr_value_t ia_get;
-    (ia_get) = cast(ia, int64_attr).get();
-    assert(SIM_attr_integer(ia_get) == -16);
-    cast(ua, uint64_attr).set(SIM_make_attr_uint64(32));
-    local attr_value_t ua_get;
-    (ua_get) = cast(ua, uint64_attr).get();
-    assert(SIM_attr_integer(ua_get) == 32);
-    cast(ba, bool_attr).set(SIM_make_attr_boolean(true));
-    local attr_value_t ba_get;
-    (ba_get) = cast(ba, bool_attr).get();
-    assert(SIM_attr_boolean(ba_get));
-    cast(fa, double_attr).set(SIM_make_attr_floating(4.13));
-    local attr_value_t fa_get;
-    (fa_get) = cast(fa, double_attr).get();
-    assert(SIM_attr_floating(fa_get) == 4.13);
+method attribute_test() {
+    try {
+        cast(ia, int64_attr).set(SIM_make_attr_int64(-16));
+        local attr_value_t ia_get;
+        (ia_get) = cast(ia, int64_attr).get();
+        assert SIM_attr_integer(ia_get) == -16;
+        cast(ua, uint64_attr).set(SIM_make_attr_uint64(32));
+        local attr_value_t ua_get;
+        (ua_get) = cast(ua, uint64_attr).get();
+        assert SIM_attr_integer(ua_get) == 32;
+        cast(ba, bool_attr).set(SIM_make_attr_boolean(true));
+        local attr_value_t ba_get;
+        (ba_get) = cast(ba, bool_attr).get();
+        assert SIM_attr_boolean(ba_get);
+        cast(fa, double_attr).set(SIM_make_attr_floating(4.13));
+        local attr_value_t fa_get;
+        (fa_get) = cast(fa, double_attr).get();
+        assert SIM_attr_floating(fa_get) == 4.13;
+    } catch assert false;
 }
 
-method pseudo_attr_test() throws {
+method pseudo_attr_test() {
     local attr_value_t a = SIM_get_attribute(dev.obj, "woa");
     assert SIM_attr_is_invalid(a);
     assert SIM_clear_exception() != 0;
@@ -459,7 +461,7 @@ method pseudo_attr_test() throws {
 }
 
 // Check that unified hard/soft reset overrides work
-method reset_test() throws {
+method reset_test() {
     // We should already be in post-hard-reset state
     assert dev.regs.r3.state == 1;
     assert overridden_bank.state == 1;

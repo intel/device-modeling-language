@@ -4,7 +4,6 @@
 */
 dml 1.4;
 device test;
-import "testing.dml";
 
 header %{
     #include DMLDIR_T_DMLLIB_H
@@ -12,6 +11,6 @@ header %{
 
 extern void dmllib_test(void);
 
-method test() throws {
+method init() {
     dmllib_test();
 }

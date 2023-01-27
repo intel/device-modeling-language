@@ -6,8 +6,6 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
-
 import "simics/simulator/sim-get-class.dml";
 
 // check that GCC actually performs the aliasing-based optimizations we think
@@ -42,7 +40,7 @@ method good() {
     assert *p1 == 0xaabbccddeeff77;
 }
 
-method test() throws {
+method init() {
     bad();
     good();
 }

@@ -9,9 +9,11 @@ import re
 stest.expect_equal(obj.y_value, 42)
 
 obj.x_target = obj.y.target
+stest.expect_equal(obj.x_target, obj.y.target)
 stest.expect_equal(obj.x_value, 42)
 
 obj.x_target = None
+stest.expect_equal(obj.x_target, None)
 with stest.expect_log_mgr(obj, regex="not set"):
     stest.expect_equal(obj.x_value, None)
 with stest.expect_log_mgr(obj, regex="not set"):

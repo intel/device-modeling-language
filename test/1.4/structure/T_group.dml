@@ -7,7 +7,3 @@ dml 1.4;
 device test;
 
 import "group_hierarchy.dml";
-
-import "testing.dml";
-
-method test() throws { }

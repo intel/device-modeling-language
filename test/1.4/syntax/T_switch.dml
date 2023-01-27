@@ -6,9 +6,7 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
-
-method test() throws {
+method init() {
     switch (4) {
     case 0:
 #if (false) {

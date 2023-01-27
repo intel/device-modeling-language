@@ -15,7 +15,7 @@ def matrix(i):
             [0, 0, 0, 0, 0],
             [0, 0, 0, i, 0]]
 
-stest.expect_true(obj.runtest)
+obj.trigger_test = None
 stest.expect_equal(obj.bank.b[0].bb, matrix(0))
 stest.expect_equal(obj.bank.b[1].bb, matrix(8))
 obj.bank.b[0].bb = matrix(6)

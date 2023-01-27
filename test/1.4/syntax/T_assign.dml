@@ -6,9 +6,7 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
-
-method test() throws {
+method init() {
     local int i;
 
     // right-to-left evaluation of assignment chain

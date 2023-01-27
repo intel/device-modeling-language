@@ -739,7 +739,7 @@ class CTestCase(DMLFileTestCase):
                 "sys.path.append(%r)\n" % join(os.getcwd(), 'common'))
             sc.write("sys.path.append(%r)\n" % os.path.dirname(pyfile))
             sc.write("SIM_source_python(%r)\n" % pyfile)
-        else:
+        elif self.fullname.startswith(('1.2/', 'bugs/')):
             sc.write("if not obj.runtest:\n")
             sc.write("    print('test attribute returned false')\n")
             sc.write("    SIM_quit(1)\n")

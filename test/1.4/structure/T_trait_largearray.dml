@@ -7,8 +7,6 @@ dml 1.4;
 /// INSTANTIATE-MANUALLY
 device test;
 
-import "testing.dml";
-
 // vtable size: 8 bytes
 template t {
     shared method m() default {}
@@ -19,6 +17,6 @@ template t {
 group g[i < 2000000000] is t;
 
 // prevent DCE of vtable
-method test() throws {
+method init() {
     cast(g[0], t).m();
 }

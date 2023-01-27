@@ -6,7 +6,6 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
 import "simics/simulator/conf-object.dml";
 
 bank b[i<2] {
@@ -26,7 +25,7 @@ port x {
     }
 }
 
-method test() throws {
+method init() {
     assert SIM_object_descendant(dev.obj, "bank.b[0]") == b[0].obj;
     assert SIM_object_descendant(dev.obj, "port.p[1]") == p[1].obj;
 

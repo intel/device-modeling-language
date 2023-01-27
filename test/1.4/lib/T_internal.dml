@@ -7,7 +7,6 @@ dml 1.4;
 device test;
 
 import "simics/simulator-api.dml";
-import "testing.dml";
 
 bank b {
     param register_size = 1;
@@ -35,7 +34,7 @@ method get_internal(conf_object_t *cobj, const char *attr) -> (bool) {
             & Sim_Attr_Internal) == Sim_Attr_Internal;
 }
 
-method test() throws {
+method init() {
     assert get_internal(dev.obj, a0.name);
     assert !get_internal(dev.obj, a1.name);
     assert !get_internal(dev.obj, a2.name);

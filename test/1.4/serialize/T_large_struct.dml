@@ -7,7 +7,6 @@ dml 1.4;
 device test;
 
 import "simics/simulator/conf-object.dml";
-import "testing.dml";
 
 // A struct size large enough to make a local variable cause stack overflow.
 // This used to happen in serialization code, HSD-ES 18026246959
@@ -41,6 +40,6 @@ header %{
 %}
 extern void run_test(conf_object_t *obj, int stack_limit);
 
-method test() throws {
+method init() {
     run_test(dev.obj, 100000);
 }

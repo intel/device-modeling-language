@@ -6,8 +6,6 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
-
 // Test that example obscureable template works
 template obscureable is (name, documentation, limitations) {
     param obscured;
@@ -62,7 +60,7 @@ bank b {
     param obscured_name = "secret_bank1";
 }
 
-method test() throws
+method init()
 {
     // check register log name
 

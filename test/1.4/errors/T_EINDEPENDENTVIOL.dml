@@ -6,8 +6,6 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
-
 import "simics/devs/i2c.dml";
 
 connect ifaces {
@@ -85,7 +83,7 @@ inline method increment(inline x) {
     ++*x;
 }
 
-method test() throws {
+method init() {
     local param_typed _p = cast(p, param_typed);
     local int a = q() + p.sm();
     not_truly_independent(dev.obj);

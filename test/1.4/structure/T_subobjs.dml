@@ -7,7 +7,6 @@ dml 1.4;
 device test;
 
 import "simics/simulator/conf-object.dml";
-import "testing.dml";
 
 port p[i < 2] {
     attribute pa is uint64_attr {
@@ -37,7 +36,11 @@ bank b[i < 2] {
     saved int bs;
 }
 
-method test() throws {
+attribute trigger_test is write_only_attr {
+    param type = "n";
+    method set(attr_value_t a) throws { test(); }
+}
+method test() {
     // Attributes are registered on the containing port object and not on the
     // main device (except for legacy attributes).
     p[1].pa.val = 4;

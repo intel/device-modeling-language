@@ -4,7 +4,6 @@
 */
 dml 1.4;
 device test;
-import "testing.dml";
 
 typedef layout "big-endian" {
     bitfields 24 {
@@ -28,7 +27,7 @@ typedef layout "little-endian" {
     } b8;
 } ll_t;
 
-method test() throws {
+method init() {
     local uint8 *ptr;
     local bl_t b;
     local ll_t l;

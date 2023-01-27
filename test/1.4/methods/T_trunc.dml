@@ -6,8 +6,6 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
-
 method a(int5 i) -> (int64) throws {
     return i;
 }
@@ -24,11 +22,15 @@ method d(int64 i) -> (int5) {
     return i;
 }
 
-method test() throws {
+method init() {
     local int64 i;
-    i = a(0x5f);
+    try {
+        i = a(0x5f);
+    } catch {}
     assert i == -1;
-    i = b(0x5f);
+    try {
+        i = b(0x5f);
+    } catch {}
     assert i == -1;
     i = c(0x5f);
     assert i == -1;

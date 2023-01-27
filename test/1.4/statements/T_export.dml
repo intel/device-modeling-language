@@ -6,8 +6,6 @@ dml 1.4;
 
 device test;
 
-import "testing.dml";
-
 // Test that exporting works by going all the way around
 // dml -> exported C -> extern C -> dml
 // TODO: Test exporting methods from interface and implement, as well
@@ -94,7 +92,7 @@ independent method indie(uint64 i, uint64 j) -> (uint64) {
 
 export indie as "indie";
 
-method test() throws {
+method init() {
     assert s == 0;
     // trivial method with argument, dev access, and return
     assert call_foo(this.obj, 1) == 2;
