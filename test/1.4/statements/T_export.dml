@@ -95,22 +95,22 @@ independent method indie(uint64 i, uint64 j) -> (uint64) {
 export indie as "indie";
 
 method test() throws {
-       assert s == 0;
-       expect(call_foo(this.obj, 1) == 2,
-              "trivial method with argument, dev access, and return");
-       assert s == 1;
-       expect(call_bm(this.obj) == 10,
-              "method exported from bank");
-       assert s == 2;
-       expect(call_brm(this.obj) == 5,
-              "method exported from register");
-       assert s == 3;
-       expect(call_brfm(this.obj) == 1,
-              "method exported from field");
-       assert s == 4;
-       expect(call_m(this.obj) == 3,
-              "method accessing template parameters");
-       assert s == 5;
-       expect(call_indie(1, 7) == 8,
-              "independent method with argument and return");
+    assert s == 0;
+    // trivial method with argument, dev access, and return
+    assert call_foo(this.obj, 1) == 2;
+    assert s == 1;
+    // method exported from bank
+    assert call_bm(this.obj) == 10;
+    assert s == 2;
+    // method exported from register
+    assert call_brm(this.obj) == 5;
+    assert s == 3;
+    // method exported from field
+    assert call_brfm(this.obj) == 1;
+    assert s == 4;
+    // method accessing template parameters
+    assert call_m(this.obj) == 3;
+    assert s == 5;
+    // independent method with argument and return
+    assert call_indie(1, 7) == 8;
 }

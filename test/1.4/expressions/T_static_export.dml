@@ -47,22 +47,23 @@ independent method indie(uint64 i, uint64 j) -> (uint64) {
 }
 
 method test() throws {
-       assert s == 0;
-       expect((&foo)(dev.obj, 1) == 2,
-              "trivial method with argument, dev access, and return");
-       assert s == 1;
-       expect((&b.m)(dev.obj) == 10,
-              "method statically exported from bank");
-       assert s == 2;
-       expect((&b.r.m)(dev.obj) == 5,
-              "method statically exported from register");
-       assert s == 3;
-       expect((&b.r.f.m)(dev.obj) == 1,
-              "method statically exported from field");
-       assert s == 4;
-       expect((&m)(dev.obj) == 3,
-              "method accessing template parameters");
-       assert s == 5;
-       expect((&indie)(1, 7) == 8,
-              "independent method with arguments and return");
+    assert s == 0;
+    // trivial method with argument, dev access, and return
+    assert (&foo)(dev.obj, 1) == 2;
+
+    assert s == 1;
+    // method statically exported from bank
+    assert (&b.m)(dev.obj) == 10;
+    assert s == 2;
+    // method statically exported from register
+    assert (&b.r.m)(dev.obj) == 5;
+    assert s == 3;
+    // method statically exported from field
+    assert (&b.r.f.m)(dev.obj) == 1;
+    assert s == 4;
+    // method accessing template parameters
+    assert (&m)(dev.obj) == 3;
+    assert s == 5;
+    // independent method with arguments and return
+    assert (&indie)(1, 7) == 8;
 }

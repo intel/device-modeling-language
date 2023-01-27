@@ -11,18 +11,18 @@ import "testing.dml";
 method test() throws {
     local int i;
 
+    // right-to-left evaluation of assignment chain
     local int a[4];
     local int b[4];
     i = 0;
     a[++i] = b[++i] = ++i;
-    expect(b[2] == 1 && a[3] == 1,
-            "right-to-left evaluation of assignment chain");
+    assert b[2] == 1 && a[3] == 1;
 
+    // truncation of values on multi-assignment
     local int8 byte;
     local float f;
     f = byte = i = 255.1;
-    expect(i == 255 && byte == -1 && f == -1,
-            "truncation of values on multi-assignment");
+    assert i == 255 && byte == -1 && f == -1;
 
     i = 3;
 
@@ -31,31 +31,35 @@ method test() throws {
     for (local int i = 1; i < 10; i++) {
         sum += i;
     }
-    expect(sum == 45 && i == 3, "for with local");
+    assert sum == 45 && i == 3;
 
+    // pre-statement order
     local int j;
     for (j = 0, j += 2; j != 2; ) assert false;
-    expect(j == 2, "pre-statement order");
+    assert j == 2;
 
     for (i = 18; i != 2; --i, i = 2) {
         // if post-statements are not run correctly, a second failing iteration
         // will be reached
-        expect(i == 18, "post-statement execution order");
+        assert i == 18;
         i = 12;
         continue;
     }
 
+    // assignment chain in for-pre
     for (i = j = 3; false;) ;
-    expect(i == 3 && j == 3, "assignment chain in for-pre");
+    assert i == 3 && j == 3;
 
+    // += operands evaluated twice
     local int c[3] = {0, 0, 0};
     j = 0;
     i = 3;
     c[++j] += ++i;
-    expect(c[1] == 4 && j == 1 && i == 4, "+= operands evaluated twice");
+    assert c[1] == 4 && j == 1 && i == 4;
 
+    // multiple simultaneous assignment
     i = 1;
     j = 0;
     (i, j) = (j, i);
-    expect(i == 0 && j == 1, "multiple simultaneous assignment");
+    assert i == 0 && j == 1;
 }

@@ -94,14 +94,14 @@ method test() throws {
     local int i;
     local int j;
     (i, j) = P();
-    expect(i == 2 && j == 1, "P");
-    expect(cast(dev, t).n() == 3, "n");
-    expect(cast(dev, t).m() == 15, "m");
+    assert i == 2 && j == 1;
+    assert cast(dev, t).n() == 3;
+    assert cast(dev, t).m() == 15;
     local int k;
     try {
         k = cast(dev, t).th();
     } catch {
-        fail("unexpected throw");
+        assert false;
     }
-    expect(k == 15, "k");
+    assert k == 15;
 }

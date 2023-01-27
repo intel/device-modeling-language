@@ -22,14 +22,16 @@ typedef layout "big-endian" {
     inner64 a[2];
 } outer;
 
-method m(inner64 x) throws {
-    expect(x.b == 0xabcdef00, "layout argument access");
+method m(inner64 x) {
+    // layout argument access
+    assert x.b == 0xabcdef00;
 }
-method ma(inner64 x) throws {
-    expect(x.b == 0xabcdef00, "layout array argument access");
+method ma(inner64 x) {
+    // layout array argument access
+    assert x.b == 0xabcdef00;
 }
 
-method test64() throws
+method test64()
 {
     local uint32 a = 0x12345678;
     local uint32 b = 0xabcdef00;
@@ -42,47 +44,45 @@ method test64() throws
     x.i64 = v;
 
     log info: "x.i64: 0x%08x 0x%08x", x.i64.a, x.i64.b;
-    expect(x.i64.a == a && x.i64.b == b, "nested set");
+    assert x.i64.a == a && x.i64.b == b;
     // SIMICS-15550 fixed in 1.4
     m(x.i64);
 
-    expect(x.i64.b == 0xabcdef00, "nested set precheck");
+    assert x.i64.b == 0xabcdef00;
     x.a[1] = x.i64;
-    expect(x.a[1].b == 0xabcdef00, "nested array set read check");
+    assert x.a[1].b == 0xabcdef00;
     ma(x.a[1]);
 
+    // nested array set byte check
     local uint8 *c;
     c = cast(&x.i64, uint8 *);
     log info: "x.i64: %02x %02x %02x %02x %02x %02x %02x %02x",
         c[0], c[1], c[2], c[3],
         c[4], c[5], c[6], c[7];
-    expect((c[0] == ((a >> 24) & 0xff)) &&
-           (c[1] == ((a >> 16) & 0xff)) &&
-           (c[2] == ((a >>  8) & 0xff)) &&
-           (c[3] == (a & 0xff)) &&
-           (c[4] == ((b >> 24) & 0xff)) &&
-           (c[5] == ((b >> 16) & 0xff)) &&
-           (c[6] == ((b >>  8) & 0xff)) &&
-           (c[7] == (b & 0xff)),
-           "nested array set byte check");
+    assert c[0] == ((a >> 24) & 0xff);
+    assert c[1] == ((a >> 16) & 0xff);
+    assert c[2] == ((a >>  8) & 0xff);
+    assert c[3] == (a & 0xff);
+    assert c[4] == ((b >> 24) & 0xff);
+    assert c[5] == ((b >> 16) & 0xff);
+    assert c[6] == ((b >>  8) & 0xff);
+    assert c[7] == (b & 0xff);
 
     // nested layout as source
     local inner64 w;
     w = x.i64;
     log info: "w: 0x%08x 0x%08x", w.a, w.b;
-    expect(w.a == a && w.b == b, "set from nested");
+    assert w.a == a && w.b == b;
 
     // nested layout as both target and source
     local outer y;
     y.i64 = x.i64;
-    expect((y.i64.a == x.i64.a) && (y.i64.b == x.i64.b),
-           "set from nested to nested");
+    assert (y.i64.a == x.i64.a) && (y.i64.b == x.i64.b);
 
     // make sure we still can refer layout as whole
     local outer z;
     z = x;
-    expect(z.i64.a == x.i64.a && z.i64.b == x.i64.b,
-           "outermost nested set check");
+    assert z.i64.a == x.i64.a && z.i64.b == x.i64.b;
 }
 
 // method test128() throws
@@ -98,7 +98,7 @@ method test64() throws
 //     x.i128 = v;
 
 //     log info: "x.i128: 0x%16x 0x%16x", x.i128.a, x.i128.b;
-//     expect(x.i128.a == a && x.i128.b == b, "");
+//     assert x.i128.a == a && x.i128.b == b;
 
 //     local uint8 *c;
 //     c = cast(&x.i128, uint8 *);
@@ -156,7 +156,7 @@ typedef layout "big-endian" {
     } p1;
 } t_deeply_nested;
 
-method test_deeply_nested() throws
+method test_deeply_nested()
 {
     local t_deeply_nested x;
     local t_deeply_nested y;
@@ -165,23 +165,23 @@ method test_deeply_nested() throws
     x.p1.p2[1].w = 0x12345678;
     x.p1.b = 0xff;
 
+    // deeply nested assign
     y.p1.p2[1] = x.p1.p2[0];
     y.p1.p2[0] = x.p1.p2[1];
-    expect(y.p1.p2[1].h == 0xabcd
-           && y.p1.p2[0].w == 0x12345678
-           && y.p1.b == 0, "deeply nested assign");
+    assert y.p1.p2[1].h == 0xabcd;
+    assert y.p1.p2[0].w == 0x12345678;
+    assert y.p1.b == 0;
 
     local uint8 *c;
     c = cast(&y.p1.p2, uint8 *);
     log info: "y.p1.p2: %02x %02x %02x %02x %02x %02x",
         c[6], c[7], c[2], c[3], c[4], c[5];
-    expect(c[6] == 0xab
-           && c[7] == 0xcd
-           && c[2] == 0x12
-           && c[3] == 0x34
-           && c[4] == 0x56
-           && c[5] == 0x78,
-           "deeply nested assign, byte check");
+    assert c[6] == 0xab;
+    assert c[7] == 0xcd;
+    assert c[2] == 0x12;
+    assert c[3] == 0x34;
+    assert c[4] == 0x56;
+    assert c[5] == 0x78;
 }
 
 method test() throws

@@ -17,7 +17,7 @@ bank _default {
         } catch {
             return;
         }
-        expect(false, "default should throw");
+        assert false;
     }
 }
 
@@ -47,7 +47,7 @@ bank overload is (test_bank) {
             val = get(17, 5);
         } catch { assert false; }
 
-        expect(val == 0x0c030b010a, "val == 0x0c030b010a");
+        assert val == 0x0c030b010a;
     }
 }
 
@@ -60,7 +60,7 @@ bank pattern is (test_bank, miss_pattern_bank) {
             val = get(17, 5);
         } catch { assert false; }
 
-        expect(val == 0xff03ff01ff, "val == 0xff03ff01ff");
+        assert val == 0xff03ff01ff;
     }
 }
 

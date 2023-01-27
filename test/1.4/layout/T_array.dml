@@ -33,30 +33,27 @@ method test() throws
         log info: "l2[0].a[0] = %#.4x", l2[0].a[0];
         log info: "l2[1].a[0] = %#.4x", l2[1].a[0];
 
-        expect(
-            l1.a[0]    == 0x0001 &&
-            l1.a[1]    == 0x0203 &&
-            l1.b[0][0] == 0x0405 &&
-            l1.b[0][1] == 0x0607 &&
-            l1.b[1][0] == 0x0c0d &&
-            l1.c[0].c  == 0x1514 &&
-            l1.c[1].c  == 0x1716 &&
+        assert l1.a[0]    == 0x0001;
+        assert l1.a[1]    == 0x0203;
+        assert l1.b[0][0] == 0x0405;
+        assert l1.b[0][1] == 0x0607;
+        assert l1.b[1][0] == 0x0c0d;
+        assert l1.c[0].c  == 0x1514;
+        assert l1.c[1].c  == 0x1716;
 
-            l2[0].a[0]    == 0x0001 &&
-            l2[0].a[1]    == 0x0203 &&
-            l2[0].b[0][0] == 0x0405 &&
-            l2[0].b[0][1] == 0x0607 &&
-            l2[0].b[1][0] == 0x0c0d &&
-            l2[0].c[0].c  == 0x1514 &&
-            l2[0].c[1].c  == 0x1716 &&
+        assert l2[0].a[0]    == 0x0001;
+        assert l2[0].a[1]    == 0x0203;
+        assert l2[0].b[0][0] == 0x0405;
+        assert l2[0].b[0][1] == 0x0607;
+        assert l2[0].b[1][0] == 0x0c0d;
+        assert l2[0].c[0].c  == 0x1514;
+        assert l2[0].c[1].c  == 0x1716;
 
-            l2[1].a[0]    == 0x1819 &&
-            l2[1].a[1]    == 0x1a1b &&
-            l2[1].b[0][0] == 0x1c1d &&
-            l2[1].b[0][1] == 0x1e1f &&
-            l2[1].b[1][0] == 0x2425 &&
-            l2[1].c[0].c  == 0x2d2c &&
-            l2[1].c[1].c  == 0x2f2e,
-            "le array values read"
-            );
+        assert l2[1].a[0]    == 0x1819;
+        assert l2[1].a[1]    == 0x1a1b;
+        assert l2[1].b[0][0] == 0x1c1d;
+        assert l2[1].b[0][1] == 0x1e1f;
+        assert l2[1].b[1][0] == 0x2425;
+        assert l2[1].c[0].c  == 0x2d2c;
+        assert l2[1].c[1].c  == 0x2f2e;
 }

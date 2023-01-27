@@ -75,8 +75,8 @@ method set_attr(conf_object_t *obj, const char *name,
 
 method test() throws {
     set_attr(obj, x.target.name, y.target.obj);
-    expect(x.target.map_target != NULL, "map_target should not be NULL");
+    assert x.target.map_target != NULL;
 
     set_attr(obj, x.target.name, NULL);
-    expect(x.target.map_target == NULL, "map_target should be NULL");
+    assert x.target.map_target == NULL;
 }

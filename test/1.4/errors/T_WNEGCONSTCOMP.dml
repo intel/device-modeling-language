@@ -10,23 +10,23 @@ import "testing.dml";
 method test() throws {
     local uint64 a = -1;
     /// WARNING WNEGCONSTCOMP
-    expect(a != -1, "identity compare");
+    assert a != -1;
     /// WARNING WNEGCONSTCOMP
-    expect(a > -1, "greater than");
+    assert a > -1;
     /// WARNING WNEGCONSTCOMP
-    expect(!(a < -1), "smaller than");
+    assert !(a < -1);
     /// WARNING WNEGCONSTCOMP
-    expect(a >= -1, "greater than or equals");
+    assert a >= -1;
     /// WARNING WNEGCONSTCOMP
-    expect(!(a <= -1), "smaller than or equals");
+    assert !(a <= -1);
 
     // Sanity
     local int64 b = -1;
     // No warning
-    expect(b == -1, "int64 identity");
+    assert b == -1;
     // No warning
-    expect(!(b < -1), "int64 lessthan");
+    assert !(b < -1);
 
     // Test workaround
-    expect(a == cast(-1, uint64), "identity compare with cast");
+    assert a == cast(-1, uint64);
 }
