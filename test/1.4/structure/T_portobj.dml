@@ -27,8 +27,8 @@ port x {
 }
 
 method test() throws {
-    expect(SIM_object_descendant(dev.obj, "bank.b[0]") == b[0].obj, "b[0].obj");
-    expect(SIM_object_descendant(dev.obj, "port.p[1]") == p[1].obj, "p[1].obj");
+    assert SIM_object_descendant(dev.obj, "bank.b[0]") == b[0].obj;
+    assert SIM_object_descendant(dev.obj, "port.p[1]") == p[1].obj;
 
     assert SIM_get_attribute_attributes(SIM_object_class(p[1].obj), "a")
         == (Sim_Attr_Optional | Sim_Attr_Legacy);

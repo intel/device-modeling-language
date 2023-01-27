@@ -27,17 +27,6 @@ attribute runtest is (read_only_attr) {
     }
 }
 
-method fail(const char *msg) throws {
-    SIM_attribute_error(msg);
-    throw;
-}
-
-method expect(bool cond, const char *msg) throws {
-    if (!cond) {
-        fail(msg);
-    }
-}
-
 method test() throws default {
     error "test method must be overridden";
 }

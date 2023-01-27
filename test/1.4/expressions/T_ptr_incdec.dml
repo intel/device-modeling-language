@@ -10,9 +10,9 @@ import "testing.dml";
 method test() throws {
        local uint8 a[2];
        local uint8* aref = &a[0];
-       expect(aref == &a[0], "arrey ref address");
+       assert aref == &a[0];
        aref++;
-       expect(aref == &a[1], "incremented array ref address");
+       assert aref == &a[1];
        aref--;
-       expect(aref == &a[0], "decremented array ref address");
+       assert aref == &a[0];
 }

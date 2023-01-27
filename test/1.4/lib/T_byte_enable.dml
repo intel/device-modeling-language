@@ -56,41 +56,41 @@ bank registers {
         local uint64 val;
 
         val = r.read_register(0xff, NULL);
-        expect(val == 0x0a, "val = 0x0a");
+        assert val == 0x0a;
 
         val = r.read_register(0xffff, NULL);
-        expect(val == 0x0b0a, "val = 0x0b0a");
+        assert val == 0x0b0a;
 
         val = r.read_register(0xff00, NULL);
-        expect(val == 0x0b00, "val = 0x0b00");
+        assert val == 0x0b00;
 
         val = r.read_register(0xff00ff, NULL);
-        expect(val == 0x0c000a, "val = 0x0c000a");
+        assert val == 0x0c000a;
 
         val = r2.read_register(0xff0000, NULL);
-        expect(val == 0xf0000, "val = 0xf0000");
+        assert val == 0xf0000;
     }
 
     method test_write() throws {
         r.val = 0;
         r.write_register(0x01020304, 0xff, NULL);
-        expect(r.val == 0x04, "val = 0x04");
+        assert r.val == 0x04;
 
         r.val = 0;
         r.write_register(0x01020304, 0xffff, NULL);
-        expect(r.val == 0x0304, "val = 0x0304");
+        assert r.val == 0x0304;
 
         r.val = 0;
         r.write_register(0x01020304, 0xff00, NULL);
-        expect(r.val == 0x0300, "val = 0x0300");
+        assert r.val == 0x0300;
 
         r.val = 0;
         r.write_register(0x01020304, 0xff00ff, NULL);
-        expect(r.val == 0x020004, "val = 0x020004");
+        assert r.val == 0x020004;
 
         r2.val = 0;
         r2.write_register(0x01020304, 0xff0000, NULL);
-        expect(r2.val == 0x20000, "val = 0x20000");
+        assert r2.val == 0x20000;
     }
 
     method test() throws {
@@ -125,8 +125,8 @@ bank disabled_field_invoked {
     method test() throws {
         local uint64 val;
         val = read(0x0, 0xff00ff, NULL);
-        expect(val == 0x0c000a, "val = 0x0c000a");
-        expect(!b_read, "b was read");
+        assert val == 0x0c000a;
+        assert !b_read;
     }
 }
 
@@ -155,8 +155,8 @@ bank disabled_register_invoked {
         local uint64 val;
         val = read(0x0, 0xff00ff, NULL);
 
-        expect(val == 0x0c000a, "val = 0x0c000a");
-        expect(!r2_read, "r2 was read");
+        assert val == 0x0c000a;
+        assert !r2_read;
     }
 }
 
@@ -190,55 +190,55 @@ bank explicit_fields {
         local uint64 val;
 
         val = read(0x0, 0xff, NULL);
-        expect(val == 0x0a, "val = 0x0a");
+        assert val == 0x0a;
 
         val = read(0x0, 0xffff, NULL);
-        expect(val == 0x0b0a, "val = 0x0b0a");
+        assert val == 0x0b0a;
 
         val = read(0x0, 0xffffff, NULL);
-        expect(val == 0x0c0b0a, "val = 0x0c0b0a");
+        assert val == 0x0c0b0a;
 
         val = read(0x0, 0xffffffff, NULL);
-        expect(val == 0x0d0c0b0a, "val = 0x0d0c0b0a");
+        assert val == 0x0d0c0b0a;
 
         val = read(0x0, 0x0, NULL);
-        expect(val == 0x0, "val = 0x0");
+        assert val == 0x0;
 
         val = read(0x0, 0xff0000ff, NULL);
-        expect(val == 0x0d00000a, "val = 0x0d00000a");
+        assert val == 0x0d00000a;
 
         val = read(0x0, 0xffff00, NULL);
-        expect(val == 0x000c0b00, "val = 0x000c0b00");
+        assert val == 0x000c0b00;
     }
 
     method test_write() throws {
         r.val = 0;
         write(0x0, 0x01020304, 0xff, NULL);
-        expect(r.val == 0x04, "val = 0x04");
+        assert r.val == 0x04;
 
         r.val = 0;
         write(0x0, 0x01020304, 0xffff, NULL);
-        expect(r.val == 0x0304, "val = 0x0304");
+        assert r.val == 0x0304;
 
         r.val = 0;
         write(0x0, 0x01020304, 0xffffff, NULL);
-        expect(r.val == 0x020304, "val = 0x020304");
+        assert r.val == 0x020304;
 
         r.val = 0;
         write(0x0, 0x01020304, 0xffffffff, NULL);
-        expect(r.val == 0x01020304, "val = 0x01020304");
+        assert r.val == 0x01020304;
 
         r.val = 0;
         write(0x0, 0x01020304, 0x0, NULL);
-        expect(r.val == 0x0, "val = 0x0");
+        assert r.val == 0x0;
 
         r.val = 0;
         write(0x0, 0x01020304, 0xff0000ff, NULL);
-        expect(r.val == 0x01000004, "val = 0x01000004");
+        assert r.val == 0x01000004;
 
         r.val = 0;
         write(0x0, 0x01020304, 0xffff00, NULL);
-        expect(r.val == 0x00020300, "val = 0x00020300");
+        assert r.val == 0x00020300;
     }
 
     method test() throws {
@@ -260,7 +260,7 @@ bank ignored_enabled {
     method test() throws {
         local uint64 val;
         val = read(0x0, 0xff00, NULL);
-        expect(val == 0xff00, "val = 0xff00");
+        assert val == 0xff00;
     }
 }
 
@@ -288,13 +288,13 @@ bank implicit_fields {
         local uint64 val;
 
         val = read(offset, 0x0, NULL);
-        expect(val == 0x0, "val = 0x0");
+        assert val == 0x0;
 
         val = read(offset, 0xffffffff, NULL);
-        expect(val == 0x0d0c0b0a, "val = 0x0d0c0b0a");
+        assert val == 0x0d0c0b0a;
 
         val = read(offset, 0xff0000ff, NULL);
-        expect(val == 0x0d00000a, "val = 0x0d00000a");
+        assert val == 0x0d00000a;
     }
 
     method test() throws {
@@ -326,15 +326,15 @@ bank overlapping {
         local uint64 val;
 
         val = read(0x2, 0xffffffff, NULL);
-        expect(val == 0x02010d0c, "val = 0x02010d0c");
+        assert val == 0x02010d0c;
     }
 
     method test_write() throws {
         r1.val = r2.val = 0;
 
         write(0x2, 0x02010d0c, 0xffffffff, NULL);
-        expect(r1.val == 0x0d0c0000, "r1 = 0x0d0c0000");
-        expect(r2.val == 0x0201, "r2 = 0x0102");
+        assert r1.val == 0x0d0c0000;
+        assert r2.val == 0x0201;
     }
 
     method test() throws {
@@ -363,7 +363,7 @@ bank unmapped {
     method test() throws {
         local uint64 val;
         val = read(0x0, 0xffffff, NULL);
-        expect(val == 0x0c0b0a, "val = 0x0c0b0a");
+        assert val == 0x0c0b0a;
     }
 }
 

@@ -27,11 +27,11 @@ method d(int64 i) -> (int5) {
 method test() throws {
     local int64 i;
     i = a(0x5f);
-    expect(i == -1, "a");
+    assert i == -1;
     i = b(0x5f);
-    expect(i == -1, "b");
+    assert i == -1;
     i = c(0x5f);
-    expect(i == -1, "c");
+    assert i == -1;
     i = d(0x5f);
-    expect(i == -1, "d");
+    assert i == -1;
 }

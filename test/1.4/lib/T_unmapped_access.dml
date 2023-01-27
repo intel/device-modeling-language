@@ -75,64 +75,47 @@ method test() throws {
     /// GREP .*3:0 .*written = 0b1111, previous.*= 0b0000.*
     b.r1_2.write_register(0xffffffff, 0x0000ff0f, NULL);
     b.r1_2.write_register(0xf0f0f0f0, 0xffffffff, NULL);
-    expect(b.r1_2.read_register(0xfffffff00, NULL) == 0xf0f0f000,
-           "default read partially mapped reg");
+    assert b.r1_2.read_register(0xfffffff00, NULL) == 0xf0f0f000;
 
     // segmented by field bit range
     /// GREP \[obj spec-viol\] .*b.r2, bitranges;.*
     /// GREP .*15:8 .*written = 0b11110000, previous.*= 0b00001111.*
     /// GREP .*3:0 .*written = 0b1111, previous.*= 0b0000.*
     b.r2.write_register(0x0f0f0f0f, 0xffffffff, NULL);
-    expect(b.r2.read_register(0xfffffffff, NULL) == 0x0f0ff000,
-           "default read segmented partially mapped reg");
+    assert b.r2.read_register(0xfffffffff, NULL) == 0x0f0ff000;
 
     // Check overridden semantics
     b.r3.write_register(0xfffff0ff, 0xfffffff0, cast(11, void*));
-    expect(most_recent_val == 0xf0ff, "simple custom write_unmapped val");
-    expect(most_recent_mask == 0xfff0, "simple custom write_unmapped mask");
-    expect(most_recent_aux == cast(11, void*), "simple custom write_unmapped aux");
+    assert most_recent_val == 0xf0ff;
+    assert most_recent_mask == 0xfff0;
+    assert most_recent_aux == cast(11, void*);
 
     // Not called if no unmapped enabled bits
     b.r3.write_register(0x00000000, 0xffff0000, NULL);
-    expect(most_recent_val == 0xf0ff,
-           "recheck simple custom_write_unmapped val");
-    expect(most_recent_mask == 0xfff0,
-           "recheck simple custom_write_unmapped mask");
-    expect(most_recent_aux == cast(11, void*),
-           "recheck simple custom write_unmapped aux");
+    assert most_recent_val == 0xf0ff;
+    assert most_recent_mask == 0xfff0;
+    assert most_recent_aux == cast(11, void*);
 
-    expect(b.r3.read_register(0xfffffffff, cast(22, void*)) == 0x0000ffff,
-           "custom read full unmapped reg");
-    expect(most_recent_mask == 0xffff, "simple custom read_unmapped mask");
-    expect(most_recent_aux == cast(22, void*),
-           "simple custom read_unmapped aux");
+    assert b.r3.read_register(0xfffffffff, cast(22, void*)) == 0x0000ffff;
+    assert most_recent_mask == 0xffff;
+    assert most_recent_aux == cast(22, void*);
 
-    expect(b.r3.read_register(0xfffffff00, cast(33, void*)) == 0x0000ff00,
-           "custom read partial unmapped reg");
-    expect(most_recent_mask == 0xff00, "partial custom read_unmapped mask");
-    expect(most_recent_aux == cast(33, void*),
-           "partial custom read_unmapped aux");
+    assert b.r3.read_register(0xfffffff00, cast(33, void*)) == 0x0000ff00;
+    assert most_recent_mask == 0xff00;
+    assert most_recent_aux == cast(33, void*);
 
-    expect(b.r3.read_register(0xfffff0000, NULL) == 0x00000000,
-           "custom read no unmapped reg");
-    expect(most_recent_mask == 0xff00,
-           "recheck partial custom read_unmapped mask");
-    expect(most_recent_aux == cast(33, void*),
-           "recheck partial custom read_unmapped aux");
+    assert b.r3.read_register(0xfffff0000, NULL) == 0x00000000;
+    assert most_recent_mask == 0xff00;
+    assert most_recent_aux == cast(33, void*);
 
     // TODO: Is this the expected log object for overridden write_register?
     /// GREP \[obj.bank.b info\] Overridden write_register: 0xfff0fff0
     b.r4.write_register(0xfff0ffff, 0xfffffff0, NULL);
-    expect(b.r4.read_register(0xfffffffff, NULL) == 0x0,
-           "overridden read unmapped reg");
+    assert b.r4.read_register(0xfffffffff, NULL) == 0x0;
 
     b.r5.write_register(0xfff0ffff, 0xfffffff0, NULL);
-    expect(b.r5.read_register(0xfffffffff, NULL) == 0xfff0fff0,
-           "default no field reg");
-    expect(most_recent_val == 0xf0ff,
-           "recheck simple custom_write_unmapped val after no-field");
-    expect(most_recent_mask == 0xff00,
-           "recheck partial custom read_unmapped mask after no-field");
-    expect(most_recent_aux == cast(33, void*),
-           "recheck partial custom read_unmapped aux after no-field");
+    assert b.r5.read_register(0xfffffffff, NULL) == 0xfff0fff0;
+    assert most_recent_val == 0xf0ff;
+    assert most_recent_mask == 0xff00;
+    assert most_recent_aux == cast(33, void*);
 }

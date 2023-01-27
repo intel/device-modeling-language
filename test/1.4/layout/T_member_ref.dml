@@ -36,20 +36,20 @@ method betest() throws
     local uint16_be_t *bb = &b.b;
 
     // Test reading
-    expect(*bm == 10, "be member reference read");
-    expect(*ba0 == 11, "be member array 0 reference read");
-    expect(*ba1 == 12, "be member array 1 reference read");
-    expect(*bb == 0x07f0, "be member bitfield reference read");
+    assert *bm == 10;
+    assert *ba0 == 11;
+    assert *ba1 == 12;
+    assert *bb == 0x07f0;
 
     // Test writing
     *bm = 1;
     *ba0 = 2;
     *ba1 = 3;
     *bb = 0xff00;
-    expect(b.m == 1, "be member reference write");
-    expect(b.a[0] == 2, "be member array 0 reference write");
-    expect(b.a[1] == 3, "be member array 1 reference write");
-    expect(b.b.m == 0xf0, "be member bitfield reference write");
+    assert b.m == 1;
+    assert b.a[0] == 2;
+    assert b.a[1] == 3;
+    assert b.b.m == 0xf0;
 }
 
 method letest() throws
@@ -66,20 +66,20 @@ method letest() throws
     local uint16_le_t *lb = &l.b;
 
     // Test reading
-    expect(*lm == 10, "le member reference read");
-    expect(*la0 == 11, "le member array 0 reference read");
-    expect(*la1 == 12, "le member array 1 reference read");
-    expect(*lb == 0x07f0, "le member bitfield reference read");
+    assert *lm == 10;
+    assert *la0 == 11;
+    assert *la1 == 12;
+    assert *lb == 0x07f0;
 
     // Test writing
     *lm = 1;
     *la0 = 2;
     *la1 = 3;
     *lb = 0xff00;
-    expect(l.m == 1, "le member reference write");
-    expect(l.a[0] == 2, "le member array 0 reference write");
-    expect(l.a[1] == 3, "le member array 1 reference write");
-    expect(l.b.m == 0xf0, "le member bitfield reference write");
+    assert l.m == 1;
+    assert l.a[0] == 2;
+    assert l.a[1] == 3;
+    assert l.b.m == 0xf0;
 }
 
 method test() throws

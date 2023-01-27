@@ -14,13 +14,16 @@ typedef layout "big-endian" {
 
 method test() throws
 {
-        local lt l;
-        local uint8 *lp = cast(&l, uint8 *);
-        local int i;
-        for (i = 0; i < sizeof l; i++)
-            lp[i] = i;
+    local lt l;
+    local uint8 *lp = cast(&l, uint8 *);
+    local int i;
+    for (i = 0; i < sizeof l; i++)
+        lp[i] = i;
 
-        expect(l.a == 0x000102, "implicit big endian");
-        expect(l.b == 0x030405, "explicit big endian");
-        expect(l.l == 0x080706, "explicit little endian");
+    // implicit big endian
+    assert l.a == 0x000102;
+    // explicit big endian
+    assert l.b == 0x030405;
+    // explicit little endian
+    assert l.l == 0x080706;
 }

@@ -152,24 +152,24 @@ method test() throws {
     pp.m(0);
     c.m(0);
     c.o(0);
-    expect(ppp->o(3) == 16, "ppp->o(3) == 16");
-    expect(p[0].o(3) == 12, "p[0].o(3) == 12");;
+    assert ppp->o(3) == 16;
+    assert p[0].o(3) == 12;
     // The parameters value is given as a float value 14.2; the parameter's type
     // causes this to be truncated to an integer when referenced
     // dynamically as a trait parameter.
-    expect(cast(p[1], child).param == 14, "cast(p[1], child).param == 14");
-    expect(p[1].param == 14.2, "p[1].param == 14.2");
+    assert cast(p[1], child).param == 14;
+    assert p[1].param == 14.2;
     p[1].d = 4;
     p[1].e = 5;
     p[0].d = 6;
     count = 0;
-    expect((ppp + side())->d == 4, "ppp->d == 4");
+    assert (ppp + side())->d == 4;
     assert count == 1;
-    expect(ppp->e == 5, "ppp->e == 5");
-    expect(p[1 + side()].traitref_param.d == 6, "p[1].traitref_param.d == 6");
+    assert ppp->e == 5;
+    assert p[1 + side()].traitref_param.d == 6;
     assert count == 2;
-    expect(p[0].traitref_param.e == 5, "p[0].traitref_param.e == 5");
-    expect(p[1].param == 14.2, "p[1].param == 14.2");
+    assert p[0].traitref_param.e == 5;
+    assert p[1].param == 14.2;
     p[1].hello();
 
     assert cast(bytes, byte_params).aa == 3;

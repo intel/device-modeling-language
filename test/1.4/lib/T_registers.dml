@@ -33,14 +33,14 @@ bank b {
     method test() throws {
         local uint32 val;
         val = read(large_offset, 0xffffffff, NULL);
-        expect(val == 0xdeadbeef, "largeoffset");
+        assert val == 0xdeadbeef;
         val = read(large_stride * 3 + 1100, 0xffffffff, NULL);
-        expect(val == 0xcafebabe, "largestride");
+        assert val == 0xcafebabe;
         // bug 9096, can apparently catch a stride calculation bug
         val = read(16, 0xffffffff, NULL);
-        expect(val == 0x22222222, "9096 1");
+        assert val == 0x22222222;
         val = read(40, 0xffffffff, NULL);
-        expect(val == 0x22222222, "9096 2");
+        assert val == 0x22222222;
     }
 }
 
@@ -81,30 +81,30 @@ bank array[b < 2] {
         local uint32 val;
 
         val = read(0x4, 0xffffffff, NULL);
-        expect(val == 0x76543210, "field array");
+        assert val == 0x76543210;
 
         val = read(0x0, 0xffffffff, NULL);
-        expect(val == (b == 0 ? 0xbadc0ffe : 0xdeadbeef), "arr 0");
+        assert val == (b == 0 ? 0xbadc0ffe : 0xdeadbeef);
         val = read(0x10, 0xffffffff, NULL);
-        expect(val == 0x10, "arr 10");
+        assert val == 0x10;
         val = read(0x14, 0xffffffff, NULL);
-        expect(val == 0x14, "arr 14");
+        assert val == 0x14;
         val = read(0x18, 0xffffffff, NULL);
-        expect(val == 0x18, "arr 18");
+        assert val == 0x18;
         val = read(0x1c, 0xffffffff, NULL);
-        expect(val == 0x1c, "arr 22");
+        assert val == 0x1c;
         val = read(0x40, 0xffffffff, NULL);
-        expect(val == 0x40, "arr 40");
+        assert val == 0x40;
         val = read(0x50, 0xffffffff, NULL);
-        expect(val == 0x50, "arr 50");
+        assert val == 0x50;
         val = read(0x44, 0xffffffff, NULL);
-        expect(val == 0x44, "arr 44");
+        assert val == 0x44;
         val = read(0x48, 0xffffffff, NULL);
-        expect(val == 0x48, "arr 48");
+        assert val == 0x48;
         val = read(0x54, 0xffffffff, NULL);
-        expect(val == 0x54, "arr 54");
+        assert val == 0x54;
         val = read(0x58, 0xffffffff, NULL);
-        expect(val == 0x58, "arr 58");
+        assert val == 0x58;
     }
 }
 
@@ -140,19 +140,19 @@ bank sparse_fields {
     method test() throws {
         local uint64 val;
         val = read(0, 0xff, NULL);
-        expect(reads == 0b0001, "fields 0");
+        assert reads == 0b0001;
         reads = 0;
         val = read(1, 0xff, NULL);
-        expect(reads == 0b0010, "fields 1");
+        assert reads == 0b0010;
         reads = 0;
         val = read(2, 0xff, NULL);
-        expect(reads == 0b0100, "fields 2");
+        assert reads == 0b0100;
         reads = 0;
         val = read(3, 0xff, NULL);
-        expect(reads == 0b1000, "fields 3");
+        assert reads == 0b1000;
         reads = 0;
         val = read(4, 0xff, NULL);
-        expect(reads == 0b1000, "fields 4");
+        assert reads == 0b1000;
         reads = 0;
     }
 }
@@ -181,13 +181,13 @@ bank field_order {
         method test() throws {
             idx = 0;
             this.write_register(0, 0xffffffff, NULL);
-            expect(idx == 6, "forder idx");
-            expect(names[0] == 'b' && f_indices[0] == 2, "0");
-            expect(names[1] == 'a' && f_indices[1] == 0, "1");
-            expect(names[2] == 'b' && f_indices[2] == 1, "2");
-            expect(names[3] == 'a' && f_indices[3] == 1, "3");
-            expect(names[4] == 'b' && f_indices[4] == 0, "4");
-            expect(names[5] == 'a' && f_indices[5] == 2, "5");
+            assert idx == 6;
+            assert names[0] == 'b' && f_indices[0] == 2;
+            assert names[1] == 'a' && f_indices[1] == 0;
+            assert names[2] == 'b' && f_indices[2] == 1;
+            assert names[3] == 'a' && f_indices[3] == 1;
+            assert names[4] == 'b' && f_indices[4] == 0;
+            assert names[5] == 'a' && f_indices[5] == 2;
         }
     }
 }
@@ -224,21 +224,21 @@ bank miss is (misstest) {
         miss_bits = 0;
         local uint64 val;
         val = read(0, 0xffffffffffffffff, NULL);
-        expect(miss_bits == 0xffff000000ff00ff, "miss read bits");
-        expect(val == 0x1122010203660088, "miss read val");
+        assert miss_bits == 0xffff000000ff00ff;
+        assert val == 0x1122010203660088;
         miss_bits = 0;
         write(0, 0x1122334455667788, 0xffffffffffffffff, NULL);
-        expect(miss_bits == 0xffff000000ff00ff, "miss bits write");
+        assert miss_bits == 0xffff000000ff00ff;
         local bool ok = false;
         try {
             val = read(0, 0xffffffffffffffff, &miss_bits);
         } catch ok = true;
-        expect(ok, "miss read throw");
+        assert ok;
         ok = false;
         try {
             write(0, 0x1122334455667788, 0xffffffffffffffff, &miss_bits);
         } catch ok = true;
-        expect(ok, "miss read throw");
+        assert ok;
     }
 }
 
@@ -248,20 +248,20 @@ bank miss_be is (misstest) {
         miss_bits = 0;
         local uint64 val;
         val = read(0, 0xffffffffffffffff, NULL);
-        expect(miss_bits == 0xff00ff000000ffff, "be miss read bits");
-        expect(val == 0x1100330203017788, "be miss read val");
+        assert miss_bits == 0xff00ff000000ffff;
+        assert val == 0x1100330203017788;
         miss_bits = 0;
         write(0, 0x1122334455667788, 0xffffffffffffffff, NULL);
-        expect(miss_bits == 0xff00ff000000ffff, "be miss bits write");
+        assert miss_bits == 0xff00ff000000ffff;
         local bool ok = false;
         try {
             val = read(0, 0xffffffffffffffff, &miss_bits); } catch ok = true;
-        expect(ok, "be miss read throw");
+        assert ok;
         ok = false;
         try {
             write(0, 0x1122334455667788, 0xffffffffffffffff, &miss_bits);
         } catch ok = true;
-        expect(ok, "be miss read throw");
+        assert ok;
     }
 }
 
@@ -278,9 +278,9 @@ bank unmapped {
     method test() throws {
         local uint64 val;
         val = read(unmapped_offset, 0xff, NULL);
-        expect(val == 0x88, "unm");
+        assert val == 0x88;
         val = read(unmapped_offset - 1, 0xffff, NULL);
-        expect(val == 0x7788, "unm-1");
+        assert val == 0x7788;
     }
 }
 

@@ -36,14 +36,14 @@ method get_internal(conf_object_t *cobj, const char *attr) -> (bool) {
 }
 
 method test() throws {
-    expect(get_internal(dev.obj, a0.name), "a0 should be internal");
-    expect(!get_internal(dev.obj, a1.name), "a1 should not be internal");
-    expect(!get_internal(dev.obj, a2.name), "a2 should not be internal");
-    expect(!get_internal(dev.obj, a3.name), "a3 should not be internal");
+    assert get_internal(dev.obj, a0.name);
+    assert !get_internal(dev.obj, a1.name);
+    assert !get_internal(dev.obj, a2.name);
+    assert !get_internal(dev.obj, a3.name);
 
-    expect(get_internal(b.obj, b.r0.name), "r0 should be internal");
-    expect(get_internal(b.obj, b.r1.name), "r1 should be internal");
-    expect(get_internal(b.obj, b.r2.name), "r2 should be internal");
-    expect(!get_internal(b.obj, b.r3.name), "r3 should not be internal");
+    assert get_internal(b.obj, b.r0.name);
+    assert get_internal(b.obj, b.r1.name);
+    assert get_internal(b.obj, b.r2.name);
+    assert !get_internal(b.obj, b.r3.name);
 
 }
