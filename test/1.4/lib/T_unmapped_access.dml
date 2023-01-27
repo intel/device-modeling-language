@@ -49,10 +49,10 @@ bank b {
         is (partially_mapped_register,
             unmapped_bits_set,
             log_unmapped_bit_write);
-        method write_register(uint64 enabled_bits, uint64 value, void* aux) {
+        method write_register(uint64 enabled_bits, uint64 value, void *aux) {
             log info, 1: "Overridden write_register: %#x", enabled_bits & value;
         }
-        method read_register(uint64 enabled_bits, void* aux) -> (uint64) {
+        method read_register(uint64 enabled_bits, void *aux) -> (uint64) {
             return 0;
         }
     }
@@ -85,28 +85,28 @@ method test() throws {
     assert b.r2.read_register(0xfffffffff, NULL) == 0x0f0ff000;
 
     // Check overridden semantics
-    b.r3.write_register(0xfffff0ff, 0xfffffff0, cast(11, void*));
+    b.r3.write_register(0xfffff0ff, 0xfffffff0, cast(11, void *));
     assert most_recent_val == 0xf0ff;
     assert most_recent_mask == 0xfff0;
-    assert most_recent_aux == cast(11, void*);
+    assert cast(most_recent_aux, uintptr_t) == 11;
 
     // Not called if no unmapped enabled bits
     b.r3.write_register(0x00000000, 0xffff0000, NULL);
     assert most_recent_val == 0xf0ff;
     assert most_recent_mask == 0xfff0;
-    assert most_recent_aux == cast(11, void*);
+    assert cast(most_recent_aux, uintptr_t) == 11;
 
-    assert b.r3.read_register(0xfffffffff, cast(22, void*)) == 0x0000ffff;
+    assert b.r3.read_register(0xfffffffff, cast(22, void *)) == 0x0000ffff;
     assert most_recent_mask == 0xffff;
-    assert most_recent_aux == cast(22, void*);
+    assert cast(most_recent_aux, uintptr_t) == 22;
 
-    assert b.r3.read_register(0xfffffff00, cast(33, void*)) == 0x0000ff00;
+    assert b.r3.read_register(0xfffffff00, cast(33, void *)) == 0x0000ff00;
     assert most_recent_mask == 0xff00;
-    assert most_recent_aux == cast(33, void*);
+    assert cast(most_recent_aux, uintptr_t) == 33;
 
     assert b.r3.read_register(0xfffff0000, NULL) == 0x00000000;
     assert most_recent_mask == 0xff00;
-    assert most_recent_aux == cast(33, void*);
+    assert cast(most_recent_aux, uintptr_t) == 33;
 
     // TODO: Is this the expected log object for overridden write_register?
     /// GREP \[obj.bank.b info\] Overridden write_register: 0xfff0fff0
@@ -117,5 +117,5 @@ method test() throws {
     assert b.r5.read_register(0xfffffffff, NULL) == 0xfff0fff0;
     assert most_recent_val == 0xf0ff;
     assert most_recent_mask == 0xff00;
-    assert most_recent_aux == cast(33, void*);
+    assert cast(most_recent_aux, uintptr_t) == 33;
 }
