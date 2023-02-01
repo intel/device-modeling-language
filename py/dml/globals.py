@@ -47,6 +47,10 @@ compat_dml12 = None
 
 debuggable = False
 
+coverity = False
+
+coverity_pragmas = {}
+
 illegal_attributes = {
     'access_count',
     'attributes',

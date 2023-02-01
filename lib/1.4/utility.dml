@@ -1328,7 +1328,7 @@ template map_target is (connect, _qname) {
         }
         local map_target_t *tmp = SIM_new_map_target(obj, NULL, NULL);
         if (!tmp) {
-            SIM_clear_exception();
+            local exception_type_t _exc = SIM_clear_exception();
             SIM_attribute_error(SIM_last_error());
             return false;
         }

@@ -6,9 +6,10 @@ import abc
 import dml.globals
 from .logging import *
 from .messages import *
-from .output import out, quote_filename
+from .output import out, quote_filename, FileOutput
 from .types import *
 from .slotsmeta import *
+from . import output
 
 __all__ = (
     'Code',
@@ -19,7 +20,72 @@ __all__ = (
     'mkNullConstant', 'NullConstant',
     'StaticIndex',
     'typecheck_inargs',
+    'reset_line_directive',
+    'site_linemark',
+    'coverity_marker',
+    'coverity_markers',
 )
+
+def site_linemark_nocoverity(site, adjust=0):
+    if isinstance(site, SimpleSite):
+        return
+
+    filename = site.filename()
+    lineno = site.lineno
+
+    if dml.globals.linemarks:
+        if lineno + adjust < 0:
+            raise ICE(
+                site,
+                "linemark can't be created for this line!! This should only "
+                + "happen if you disregard proper formatting and omit a "
+                + "*ridiculous* number of natural linebreaks. If so you "
+                + "probably have no use for linemarks anyway, in which case "
+                + "you can pass '--noline' to DMLC.")
+        out('#line %d "%s"\n' % (lineno + adjust, quote_filename(filename)))
+
+def coverity_marker(event, classification=None, site=None):
+    coverity_markers([(event, classification)], site)
+
+def coverity_markers(markers, site=None):
+    site_with_loc = not (site is None or isinstance(site, SimpleSite))
+    if dml.globals.coverity and site_with_loc:
+        custom_markers = []
+        filename = site.filename()
+        lineno = site.lineno
+
+        while (filename, lineno) in dml.globals.coverity_pragmas:
+            (lineno,
+             inline_markers) = dml.globals.coverity_pragmas[(filename, lineno)]
+            custom_markers.extend(reversed(inline_markers))
+
+        custom_markers.reverse()
+        markers = custom_markers + markers
+
+    if dml.globals.coverity and markers:
+        if dml.globals.linemarks and isinstance(output.current(), FileOutput):
+            out('#ifdef __COVERITY__\n')
+            reset_line_directive()
+            if site_with_loc:
+                out('#else\n')
+                site_linemark_nocoverity(site,
+                                         adjust=-(len(markers) + 1))
+            out('#endif\n')
+        for (event, classification) in markers:
+            classification = f' : {classification}' if classification else ''
+            out(f'/* coverity[{event}{classification}] */\n')
+    elif site is not None:
+        site_linemark_nocoverity(site)
+
+
+def reset_line_directive():
+    if dml.globals.linemarks:
+        o = output.current()
+        output.out('#line %d "%s"\n'
+                   % (o.lineno + 1, quote_filename(o.filename)))
+
+def site_linemark(site):
+    coverity_markers([], site)
 
 # Base type for code blocks
 class Code(object, metaclass=SlotsMeta):
@@ -32,10 +98,7 @@ class Code(object, metaclass=SlotsMeta):
                                     for name in self.init_args[2:]))
 
     def linemark(self):
-        if dml.globals.linemarks and not isinstance(self.site, SimpleSite):
-            # out("/* %s */\n" % repr(self))
-            out('#line %d "%s"\n' % (self.site.lineno,
-                                     quote_filename(self.site.filename())))
+        site_linemark(self.site)
 
 class Expression(Code):
     '''An Expression can represent either:
