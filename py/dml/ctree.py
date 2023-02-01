@@ -11,6 +11,7 @@ import operator
 import itertools
 import math
 from functools import reduce
+from contextlib import nullcontext
 
 from dml import objects, symtab, logging, crep, serialize
 from .logging import *
@@ -20,7 +21,7 @@ from .types import *
 from .expr import *
 from .expr_util import *
 from .slotsmeta import auto_init
-from . import dmlparse
+from . import dmlparse, output
 import dml.globals
 # set from codegen.py
 codegen_call_expr = None
@@ -55,7 +56,9 @@ __all__ = (
     'mkWhile',
     'mkDoWhile',
     'mkFor',
+    'mkForeachSequence', 'ForeachSequence',
     'mkSwitch',
+    'mkSubsequentCases',
     'mkCase',
     'mkDefault',
     'mkVectorForeach',
@@ -367,6 +370,7 @@ class UnrolledLoop(Statement):
         assert isinstance(substatements, list)
 
     def toc(self):
+        self.linemark()
         out('{\n', postindent = 1)
         self.toc_inline()
         out('}\n', preindent = -1)
@@ -375,6 +379,7 @@ class UnrolledLoop(Statement):
         for substatement in self.substatements:
             substatement.toc()
         if self.break_label is not None:
+            self.linemark()
             out(f'{self.break_label}: UNUSED;\n')
 
     def control_flow(self):
@@ -420,10 +425,18 @@ class TryCatch(Statement):
     def __init__(self, site, label, tryblock, catchblock): pass
     def toc_inline(self):
         self.tryblock.toc()
-        out('if (false) {\n')
-        out('%s: ;\n' % (self.label,), postindent=1)
-        self.catchblock.toc_inline()
-        out('}\n', preindent=-1)
+
+        if (dml.globals.dml_version != (1, 2)
+            and not self.tryblock.control_flow().fallthrough):
+            out('%s: ;\n' % (self.label,))
+            self.catchblock.toc()
+        else:
+            # Our fallthrough analysis is more conservative than Coverity's
+            coverity_marker('unreachable', site=self.site)
+            out('if (false) {\n')
+            out('%s: ;\n' % (self.label,), postindent=1)
+            self.catchblock.toc_inline()
+            out('}\n', preindent=-1)
     def toc(self):
         out('{\n', postindent = 1)
         self.toc_inline()
@@ -587,7 +600,6 @@ class If(Statement):
         assert_type(site, falsebranch, (Statement, type(None)))
     def toc(self):
         self.linemark()
-        # out('/* %s */\n' % repr(self))
         out('if ('+self.cond.read()+') {\n', postindent = 1)
         self.truebranch.toc_inline()
         if isinstance(self.falsebranch, If):
@@ -713,6 +725,54 @@ class For(Statement):
 def mkFor(site, pres, expr, posts, stmt):
     return For(site, pres, expr, posts, stmt)
 
+class ForeachSequence(Statement):
+    @staticmethod
+    def itervar_initializer(site, trait):
+        trait_type = TTrait(trait)
+        vtable_init = ExpressionInitializer(mkLit(site, '_list.vtable',
+                                                  trait_type))
+
+        list_id_init = ExpressionInitializer(mkLit(site, '_list.id',
+                                                   TInt(32, False)))
+        inner_idx_init = ExpressionInitializer(mkLit(site, '_inner_idx',
+                                                     TInt(32, False)))
+        obj_ref_init = CompoundInitializer(site,
+                                           [list_id_init, inner_idx_init])
+
+        return CompoundInitializer(site, [vtable_init, obj_ref_init])
+
+    @auto_init
+    def __init__(self, site, trait, each_in_expr, body, break_label): pass
+    def toc(self):
+        self.linemark()
+        out('{\n', postindent=1)
+        self.linemark()
+        out(f'_each_in_t __each_in_expr = {self.each_in_expr.read()};\n')
+        coverity_marker('unreachable', site=self.site)
+        out('for (uint32 _outer_idx = 0; _outer_idx < __each_in_expr.num; '
+            + '++_outer_idx) {\n', postindent=1)
+        out(f'_vtable_list_t _list = {EachIn.array_ident(self.trait)}'
+            + '[__each_in_expr.base_idx + _outer_idx];\n')
+        out('uint32 _num = _list.num / __each_in_expr.array_size;\n')
+        out('uint32 _start = _num * __each_in_expr.array_idx;\n')
+        coverity_marker('unreachable', site=self.site)
+        out('for (uint32 _inner_idx = _start; _inner_idx < _start + _num; '
+            + '++_inner_idx) {\n', postindent=1)
+        self.body.toc_inline()
+        out('}\n', preindent=-1)
+        out('}\n', preindent=-1)
+        if self.break_label is not None:
+            self.linemark()
+            out(f'{self.break_label}: UNUSED;\n', preindent=-1, postindent = 1)
+        out('}\n', preindent=-1)
+
+    def control_flow(self):
+        bodyflow = self.body.control_flow()
+        # fallthrough is possible if the sequence is empty
+        return bodyflow.replace(fallthrough=True, br=False)
+
+mkForeachSequence = ForeachSequence
+
 class Switch(Statement):
     @auto_init
     def __init__(self, site, expr, stmt):
@@ -734,9 +794,11 @@ class Switch(Statement):
         # processed so far
         flow = ControlFlow(fallthrough=True)
         for stmt in self.stmt.substatements:
-            if isinstance(stmt, Default):
+            if (isinstance(stmt, Default)
+                or (isinstance(stmt, SubsequentCases)
+                    and stmt.has_default)):
                 found_default = True
-            if isinstance(stmt, (Default, Case)):
+            if isinstance(stmt, (Default, Case, SubsequentCases)):
                 flow = flow.replace(fallthrough=True)
             elif flow.fallthrough:
                 f = stmt.control_flow()
@@ -747,6 +809,23 @@ class Switch(Statement):
 
 def mkSwitch(site, expr, stmt):
     return Switch(site, as_int(expr), stmt)
+
+class SubsequentCases(Statement):
+    @auto_init
+    def __init__(self, site, cases, has_default):
+        assert len(self.cases) > 0
+    def toc(self):
+        for (i, case) in enumerate(self.cases):
+            assert isinstance(case, (Case, Default))
+            site_linemark(case.site)
+            semi = ';' * (i == len(self.cases) - 1)
+            if isinstance(case, Case):
+                out(f'case {case.expr.read()}:{semi}\n', preindent = -1,
+                    postindent = 1)
+            else:
+                out(f'default:{semi}\n', preindent = -1, postindent = 1)
+
+mkSubsequentCases = SubsequentCases
 
 class Case(Statement):
     @auto_init

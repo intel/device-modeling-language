@@ -110,6 +110,13 @@ This generates a DML debug file leveraged by debug-simics, and
 causes generated C code to follow the DML code more closely.
 </dd><dt>
 
+--coverity
+</dt><dd>
+
+Adds Synopsys® Coverity® analysis annotations to suppress common false positives
+in generated C code created from DML 1.4 device models.
+</dd><dt>
+
 --warn=*tag*
 </dt><dd>
 
@@ -167,6 +174,5 @@ Use Simics API version *version*.
 
 Limit the number of error messages to *N*.
 </dd></dl>
-
 
 

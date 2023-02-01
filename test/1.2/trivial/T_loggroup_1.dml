@@ -6,11 +6,11 @@ dml 1.2;
 device test;
 import "testing.dml";
 
-loggroup log1;
-loggroup log2;
-loggroup log3;
-loggroup log4;
+loggroup lg1;
+loggroup lg2;
+loggroup lg3;
+loggroup lg4;
 
 method test -> (bool result) {
-    result = ((log1 == 1) && (log2 == 2) && (log3 == 4) && (log4 == 8));
+    result = ((lg1 == 1) && (lg2 == 2) && (lg3 == 4) && (lg4 == 8));
 }

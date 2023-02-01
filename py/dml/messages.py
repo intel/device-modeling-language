@@ -1799,6 +1799,13 @@ class WTTYPEC(DMLWarning):
     fmt = ("the time value of type '%s' is implicitly converted "
            + "to the type '%s' expected by the specified time unit '%s'.")
 
+# TODO this should exist once pragmas are officially supported
+# class WPRAGMA(DMLWarning):
+#     """
+#     An unknown pragma was specified
+#     """
+#     fmt = "Unknown pragma: %s"
+
 class PSHA1(PortingMessage):
     """The `port-dml` script requires that the DML file has not been
     changed since the tag file was generated. This is verified by a
