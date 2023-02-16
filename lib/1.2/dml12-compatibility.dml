@@ -23,75 +23,26 @@ template bool_attr is (attribute, _banned_init_val) {
     param val = this;
     // Since we are by definition backed by 1.2 builtins, get throws
     shared method get() -> (attr_value_t);
-    method get() -> (attr_value_t) default {
-        return SIM_make_attr_boolean(get_val());
-    }
     shared method set(attr_value_t val) throws;
-    method set(attr_value_t val) throws default {
-        set_val(SIM_attr_boolean(val));
-    }
-    shared method get_val() -> (bool);
-    method get_val() -> (bool) default {
-        return this;
-    }
-    shared method set_val(bool val) throws;
-    method set_val(bool val) throws default {
-        this = val;
-    }
 }
 
 template uint64_attr is (attribute, _banned_init_val) {
     param allocate_type = "uint64";
     param val = this;
     shared method get() -> (attr_value_t);
-    method get() -> (attr_value_t) default {
-        return SIM_make_attr_uint64(get_val());
-    }
     shared method set(attr_value_t val) throws;
-    method set(attr_value_t val) throws default {
-        if (!SIM_attr_is_uint64(val)) {
-            SIM_c_attribute_error("negative integer value: %lld",
-                                  cast(SIM_attr_integer(val), int64));
-            throw;
-        }
-        set_val(SIM_attr_integer(val));
-    }
-    shared method set_val(uint64 val) throws;
-    method set_val(uint64 val) throws default {
-        this = val;
-    }
-    shared method get_val() -> (uint64);
-    method get_val() -> (uint64) default {
-        return this;
-    }
 }
 
 template int64_attr is (attribute, _banned_init_val) {
     param allocate_type = "int64";
     param val = this;
-    // Note: 1.4 attribute returns signed int but 1.2 does not,
-    // hence the override here is not only to make use of get_val(), but
-    // also to always return signed
     shared method get() -> (attr_value_t);
-    method get() -> (attr_value_t) default {
-        return SIM_make_attr_int64(get_val());
-    }
     shared method set(attr_value_t val) throws;
-    method set(attr_value_t val) throws default {
-        if (!SIM_attr_is_int64(val)) {
-            SIM_c_attribute_error("integer value too large: %llu",
-                                  cast(SIM_attr_integer(val), uint64));
-            throw;
-        }
-        set_val(SIM_attr_integer(val));
-    }
-    shared method get_val() -> (int64);
-    method get_val() -> (int64) default {
-        return this;
-    }
-    shared method set_val(int64 val) throws;
-    method set_val(int64 val) throws default {
-        this = val;
+    // 1.4 attribute returns signed int, but 1.2 does not,
+    // hence we need to override get here to always return
+    // signed
+    method get() -> (attr_value_t) default {
+        return SIM_make_attr_int64(val);
     }
 }
 
@@ -99,21 +50,7 @@ template double_attr is (attribute, _banned_init_val) {
     param allocate_type = "double";
     param val = this;
     shared method get() -> (attr_value_t);
-    method get() -> (attr_value_t) default {
-        return SIM_make_attr_floating(get_val());
-    }
     shared method set(attr_value_t val) throws;
-    method set(attr_value_t val) throws default {
-        set_val(SIM_attr_floating(val));
-    }
-    shared method get_val() -> (double);
-    method get_val() -> (double) default {
-        return this;
-    }
-    shared method set_val(double val) throws;
-    method set_val(double val) throws default {
-        this = val;
-    }
 }
 
 template pseudo_attr is attribute {
