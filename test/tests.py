@@ -1009,6 +1009,10 @@ all_tests.append(CTestCase(
          ["debuggable-compile-connect"],
          join(testdir, "1.2", "structure", "T_connect_obj.dml"),
          dmlc_extraargs = ["-g"]))
+all_tests.append(CTestCase(
+         ["debuggable-compile-inlined_param"],
+         join(testdir, "1.4", "expressions", "T_inlined_param.dml"),
+         dmlc_extraargs = ["-g"]))
 
 class SplitTestCase(CTestCase):
     __slots__ = ()

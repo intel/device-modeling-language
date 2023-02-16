@@ -1,0 +1,24 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+// This test is also run with -g (debuggable-compile-inlined_param)
+
+inline method m(inline x, void *y) {
+    // no error
+    #if (x != NULL) {
+        error "x is not NULL when it should be";
+    }
+
+    /// ERROR ENCONST
+    #if (y == NULL) {
+        error "#if accepted by DMLC when it shouldn't have been";
+    }
+}
+
+method init() {
+    m(NULL, NULL);
+}

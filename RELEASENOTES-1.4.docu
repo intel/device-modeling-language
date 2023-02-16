@@ -457,4 +457,11 @@
       overriding them is an alternate way of specifying custom get/set logic for
       attributes making use of these templates <bug number="SIMICS-17951"/>.
   </add-note></build-id>
+  <build-id value="next"><add-note> Fixed an ICE caused by constant inlined
+      method parameters being used in constant equalities
+      <bug number="16019548195"/>.</add-note></build-id>
+  <build-id value="next"><add-note> Fixed an issue with debuggable compilation
+      (<tt>-g</tt>) that caused <tt>inline</tt> method calls to inline constant
+      arguments even for parameters not declared <tt>inline</tt>
+      <bug number="16019548195"/>.</add-note></build-id>
 </rn>
