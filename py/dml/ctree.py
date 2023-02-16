@@ -1332,28 +1332,31 @@ class Equals(BinOp):
         rhtype = realtype(rh.ctype())
 
         if lh.constant and rh.constant:
+            (lhc, rhc) = tuple(e.expr if isinstance(e, InlinedParam) else e
+                               for e in (lh, rh))
             if lhtype.is_arith and rhtype.is_arith:
-                return mkBoolConstant(site, lh.value == rh.value)
-            if isinstance(lh, BoolConstant) and isinstance(rh, BoolConstant):
-                return mkBoolConstant(site, lh.value == rh.value)
+                return mkBoolConstant(site, lhc.value == rhc.value)
+            if isinstance(lhc, BoolConstant) and isinstance(rhc, BoolConstant):
+                return mkBoolConstant(site, lhc.value == rhc.value)
             # This is probably the single weirdest widely used feature
             # of DML. Preserved because of use cases for which we
             # don't have a good replacement yet.
-            if (isinstance(lh, StringConstant)
-                and isinstance(rh, StringConstant)):
-                return mkBoolConstant(site, lh.value == rh.value)
-            if (isinstance(lh, ObjTraitRef) and isinstance(rh, ObjTraitRef)
-                and lh.trait is rh.trait):
-                lh_indices = [idx.value for idx in lh.indices]
-                rh_indices = [idx.value for idx in rh.indices]
-                return mkBoolConstant(site, (lh.node is rh.node
-                                             and lh_indices == rh_indices))
-            if isinstance(lh, NullConstant) or isinstance(rh, NullConstant):
-                if isinstance(lh, NullConstant) and isinstance(rh, NullConstant):
+            if (isinstance(lhc, StringConstant)
+                and isinstance(rhc, StringConstant)):
+                return mkBoolConstant(site, lhc.value == rhc.value)
+            if (isinstance(lhc, ObjTraitRef) and isinstance(rhc, ObjTraitRef)
+                and lhc.trait is rhc.trait):
+                lhc_indices = [idx.value for idx in lhc.indices]
+                rhc_indices = [idx.value for idx in rhc.indices]
+                return mkBoolConstant(site, (lhc.node is rhc.node
+                                             and lhc_indices == rhc_indices))
+            if isinstance(lhc, NullConstant) or isinstance(rhc, NullConstant):
+                if (isinstance(lhc, NullConstant)
+                    and isinstance(rhc, NullConstant)):
                     return mkBoolConstant(site, True)
                 elif (isinstance(lhtype, (TPtr, TArray))
                       and isinstance(rhtype, (TPtr, TArray))):
-                    for expr in (lh, rh):
+                    for expr in (lhc, rhc):
                         assert isinstance(expr, (NullConstant, StringConstant,
                                                  AddressOfMethod))
                     return mkBoolConstant(site, False)

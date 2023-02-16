@@ -2506,7 +2506,8 @@ def common_inline(site, method, indices, inargs, outargs):
         else:
             # create a specialized method instance based on parameter
             # types, and call that
-            intypes = tuple(arg if arg.constant or undefined(arg)
+            intypes = tuple(arg if ((ptype is None or dml.globals.compat_dml12)
+                                    and (arg.constant or undefined(arg)))
                             else methfunc_param(ptype, arg)
                             for ((pname, ptype), arg)
                             in zip(method.inp, inargs))
