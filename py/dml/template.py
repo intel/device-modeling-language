@@ -136,9 +136,9 @@ class Template(object):
     def traits(self):
         '''Return a set of all traits implemented by this template'''
         if self.trait:
-            return {self.trait} | self.trait.ancestors
+            return Set((self.trait, *self.trait.ancestors))
         else:
-            return set().union(
+            return Set().union(
                 *[sup.traits() for (_, sup) in self.spec.templates])
 
 def flatten_ifs(stmts, preconds):
