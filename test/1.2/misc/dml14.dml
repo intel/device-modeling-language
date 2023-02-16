@@ -358,44 +358,6 @@ attribute woa is (write_only_attr) {
     method set(attr_value_t val) throws {}
 }
 
-attribute ia2 is (int64_attr) {
-    method get_val() -> (int64) {
-        return this.val + 1;
-    }
-
-    method set_val(int64 val) throws {
-        this.val = val - 1;
-    }
-}
-
-attribute ua2 is (uint64_attr) {
-    method get_val() -> (uint64) {
-        return this.val + 1;
-    }
-
-    method set_val(uint64 val) throws {
-        this.val = val - 1;
-    }
-}
-attribute ba2 is (bool_attr) {
-    method get_val() -> (bool) {
-        return !this.val;
-    }
-
-    method set_val(bool val) throws {
-        this.val = !val;
-    }
-}
-attribute fa2 is (double_attr) {
-    method get_val() -> (double) {
-        return -this.val;
-    }
-
-    method set_val(double val) throws {
-        this.val = -val;
-    }
-}
-
 param global_sym = 14;
 
 /// WARNING WEXPERIMENTAL
@@ -470,34 +432,21 @@ method len_test() {
 // checks that typed attribute access works
 method attribute_test() throws {
     cast(ia, int64_attr).set(SIM_make_attr_int64(-16));
-    local attr_value_t ia_get = cast(ia, int64_attr).get();
-    assert SIM_attr_integer(ia_get) == -16;
+    local attr_value_t ia_get;
+    (ia_get) = cast(ia, int64_attr).get();
+    assert(SIM_attr_integer(ia_get) == -16);
     cast(ua, uint64_attr).set(SIM_make_attr_uint64(32));
-    local attr_value_t ua_get = cast(ua, uint64_attr).get();
-    assert SIM_attr_integer(ua_get) == 32;
+    local attr_value_t ua_get;
+    (ua_get) = cast(ua, uint64_attr).get();
+    assert(SIM_attr_integer(ua_get) == 32);
     cast(ba, bool_attr).set(SIM_make_attr_boolean(true));
-    local attr_value_t ba_get = cast(ba, bool_attr).get();
-    assert SIM_attr_boolean(ba_get);
+    local attr_value_t ba_get;
+    (ba_get) = cast(ba, bool_attr).get();
+    assert(SIM_attr_boolean(ba_get));
     cast(fa, double_attr).set(SIM_make_attr_floating(4.13));
-    local attr_value_t fa_get = cast(fa, double_attr).get();
-    assert SIM_attr_floating(fa_get) == 4.13;
-
-    cast(ia2, int64_attr).set(SIM_make_attr_int64(-16));
-    local attr_value_t ia2_get = cast(ia2, int64_attr).get();
-    assert SIM_attr_integer(ia2_get) == -16;
-    assert ia2.val == -17;
-    cast(ua2, uint64_attr).set(SIM_make_attr_uint64(32));
-    local attr_value_t ua2_get = cast(ua2, uint64_attr).get();
-    assert SIM_attr_integer(ua2_get) == 32;
-    assert ua2.val == 31;
-    cast(ba2, bool_attr).set(SIM_make_attr_boolean(true));
-    local attr_value_t ba2_get = cast(ba2, bool_attr).get();
-    assert SIM_attr_boolean(ba2_get);
-    assert !ba2.val;
-    cast(fa2, double_attr).set(SIM_make_attr_floating(4.13));
-    local attr_value_t fa2_get = cast(fa2, double_attr).get();
-    assert SIM_attr_floating(fa2_get) == 4.13;
-    assert fa2.val == -4.13;
+    local attr_value_t fa_get;
+    (fa_get) = cast(fa, double_attr).get();
+    assert(SIM_attr_floating(fa_get) == 4.13);
 }
 
 method pseudo_attr_test() throws {

@@ -448,15 +448,6 @@
       option to DMLC. When used, DMLC will generate Synopsys® Coverity® analysis
       annotations to suppress common false positives in generated C code created
       from DML 1.4 devices.</add-note></build-id>
-  <build-id value="next"><add-note>Two new overridable methods
-      <tt>get_val() -> (<em>type</em>)</tt> and
-      <tt>set_val(<em>type</em> val) throws</tt> have been introduced to the
-      attribute templates <tt>bool_attr</tt>, <tt>uint64_attr</tt>,
-      <tt>int64_attr</tt> and <tt>double_attr</tt>. These methods are used by
-      the default implementations of <tt>get</tt> and <tt>set</tt>, and
-      overriding them is an alternate way of specifying custom get/set logic for
-      attributes making use of these templates <bug number="SIMICS-17951"/>.
-  </add-note></build-id>
   <build-id value="next"><add-note> Fixed an ICE caused by constant inlined
       method parameters being used in constant equalities
       <bug number="16019548195"/>.</add-note></build-id>

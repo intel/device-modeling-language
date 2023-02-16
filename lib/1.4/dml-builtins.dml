@@ -1040,14 +1040,7 @@ standard types. Each store the attribute value in a member `val`,
 provide default implementations of methods `get` and `set` according to the
 type, and provide a default implementation of `init` that initializes
 `val` using the `init_val` parameter also provided by the template (whose
-default definition simply zero-initializes `val`.)
-The default implementations of `get` and `set` make use of corresponding
-methods <tt>get_val() -> (<em>type</em>)</tt> and
-<tt>set_val(<em>type</em> val) throws</tt>, which can be overridden in order to
-provide custom get/set logic in a more ergonomic way compared to overriding
-`get`/`set` directly.
-
-The four templates are:
+default definition simply zero-initializes `val`.) These four templates are:
 
 <dl><dt>
 
@@ -1117,16 +1110,10 @@ template bool_attr is (attribute, init) {
         val = init_val;
     }
     shared method get() -> (attr_value_t) default {
-        return SIM_make_attr_boolean(get_val());
+        return SIM_make_attr_boolean(val);
     }
     shared method set(attr_value_t val) throws default {
-        set_val(SIM_attr_boolean(val));
-    }
-    shared method set_val(bool val) throws default {
-        this.val = val;
-    }
-    shared method get_val() -> (bool) default {
-        return this.val;
+        this.val = SIM_attr_boolean(val);
     }
 }
 
@@ -1139,7 +1126,7 @@ template uint64_attr is (attribute, init) {
         val = init_val;
     }
     shared method get() -> (attr_value_t) default {
-        return SIM_make_attr_uint64(get_val());
+        return SIM_make_attr_uint64(val);
     }
     shared method set(attr_value_t val) throws default {
         if (!SIM_attr_is_uint64(val)) {
@@ -1147,13 +1134,7 @@ template uint64_attr is (attribute, init) {
                                   cast(SIM_attr_integer(val), int64));
             throw;
         }
-        set_val(SIM_attr_integer(val));
-    }
-    shared method set_val(uint64 val) throws default {
-        this.val = val;
-    }
-    shared method get_val() -> (uint64) default {
-        return this.val;
+        this.val = SIM_attr_integer(val);
     }
 }
 
@@ -1166,7 +1147,7 @@ template int64_attr is (attribute, init) {
         val = init_val;
     }
     shared method get() -> (attr_value_t) default {
-        return SIM_make_attr_int64(get_val());
+        return SIM_make_attr_int64(val);
     }
     shared method set(attr_value_t val) throws default {
         if (!SIM_attr_is_int64(val)) {
@@ -1174,13 +1155,7 @@ template int64_attr is (attribute, init) {
                                   cast(SIM_attr_integer(val), uint64));
             throw;
         }
-        set_val(SIM_attr_integer(val));
-    }
-    shared method set_val(int64 val) throws default {
-        this.val = val;
-    }
-    shared method get_val() -> (int64) default {
-        return this.val;
+        this.val = SIM_attr_integer(val);
     }
 }
 
@@ -1193,16 +1168,10 @@ template double_attr is (attribute, init) {
         val = init_val;
     }
     shared method get() -> (attr_value_t) default {
-        return SIM_make_attr_floating(get_val());
+        return SIM_make_attr_floating(val);
     }
     shared method set(attr_value_t val) throws default {
-        set_val(SIM_attr_floating(val));
-    }
-    shared method set_val(double val) throws default {
-        this.val = val;
-    }
-    shared method get_val() -> (double) default {
-        return this.val;
+        this.val = SIM_attr_floating(val);
     }
 }
 

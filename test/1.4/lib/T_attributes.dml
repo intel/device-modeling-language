@@ -51,41 +51,6 @@ attribute overridden_init is (bool_attr) {
     method init() { }
 }
 
-attribute b3 is (bool_attr) {
-    method get_val() -> (bool) {
-        return !this.val;
-    }
-    method set_val(bool val) throws {
-        this.val = !val;
-    }
-}
-
-attribute u3 is (uint64_attr) {
-    method get_val() -> (uint64) {
-        return this.val + 1;
-    }
-    method set_val(uint64 val) throws {
-        this.val = val - 1;
-    }
-}
-
-attribute i3 is (int64_attr) {
-    method get_val() -> (int64) {
-        return this.val + 1;
-    }
-    method set_val(int64 val) throws {
-        this.val = val - 1;
-    }
-}
-
-attribute f3 is (double_attr) {
-    method get_val() -> (double) {
-        return -this.val;
-    }
-    method set_val(double val) throws {
-        this.val = -val;
-    }
-}
 
 method test() throws {
     b.val = true;
@@ -129,26 +94,4 @@ method test() throws {
     assert i2.val == -33;
     assert f2.val == 3.3;
     assert !overridden_init.val;
-
-    // local attr_value_t bool_attr = SIM_make_attr_boolean(false);
-    SIM_set_attribute(dev.obj, "b3", &bool_attr);
-    assert b3.val;
-    assert !SIM_attr_boolean(SIM_get_attribute(dev.obj, "b3"));
-
-    local attr_value_t uint_attr = SIM_make_attr_uint64(134);
-    SIM_set_attribute(dev.obj, "u3", &uint_attr);
-    assert u3.val == 133;
-    assert cast(SIM_attr_integer(SIM_get_attribute(dev.obj, "u3")), uint64)
-        == 134;
-
-    local attr_value_t int_attr = SIM_make_attr_int64(-134);
-    SIM_set_attribute(dev.obj, "i3", &int_attr);
-    assert i3.val == -135;
-    assert SIM_attr_integer(SIM_get_attribute(dev.obj, "i3")) == -134;
-
-    // local attr_value_t float_attr = SIM_make_attr_floating(1.414);
-    SIM_set_attribute(dev.obj, "f3", &float_attr);
-    assert f3.val == -1.414;
-    assert SIM_attr_floating(SIM_get_attribute(dev.obj, "f3"))
-        == 1.414;
 }
