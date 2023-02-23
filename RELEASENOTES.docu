@@ -1718,7 +1718,7 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
       that affected things like in what order C functions are output.
       Deterministic output allows more efficient use of tools like
       <tt>ccache</tt>.</add-note></build-id>
-  <build-id value="next"><add-note> Fixed a bug with how template types were
+  <build-id value="6205"><add-note> Fixed a bug with how template types were
       handled by DMLC that could cause the compiler to still exhibit
       nondeterministic behaviour.</add-note></build-id>
 </rn>

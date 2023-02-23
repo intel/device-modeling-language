@@ -444,14 +444,14 @@
       variables that caused stack overflow during checkpoint restore
       for huge (multi-megabyte) struct types
       <bug number="18026246959"/>.</add-note></build-id>
-  <build-id value="next"><add-note> <tt>--coverity</tt> has been added as an
+  <build-id value="6205"><add-note> <tt>--coverity</tt> has been added as an
       option to DMLC. When used, DMLC will generate Synopsys® Coverity® analysis
       annotations to suppress common false positives in generated C code created
       from DML 1.4 devices.</add-note></build-id>
-  <build-id value="next"><add-note> Fixed an ICE caused by constant inlined
+  <build-id value="6205"><add-note> Fixed an ICE caused by constant inlined
       method parameters being used in constant equalities
       <bug number="16019548195"/>.</add-note></build-id>
-  <build-id value="next"><add-note> Fixed an issue with debuggable compilation
+  <build-id value="6205"><add-note> Fixed an issue with debuggable compilation
       (<tt>-g</tt>) that caused <tt>inline</tt> method calls to inline constant
       arguments even for parameters not declared <tt>inline</tt>
       <bug number="16019548195"/>.</add-note></build-id>
