@@ -2120,12 +2120,16 @@ def stmt_after(stmt, location, scope):
     site = stmt.site
 
     if callexpr[0] == 'apply':
-        method = callexpr[2]
+        method_ast = callexpr[2]
         inargs = callexpr[3]
     else:
-        assert dml.globals.dml_version == (1, 2), repr(callexpr)
-        method = callexpr
-        inargs = []
+        if dml.globals.dml_version == (1, 2):
+            method_ast = callexpr
+            inargs = []
+        else:
+            raise ESYNTAX(site, None,
+                          'callback expression to after statement must be a '
+                          + 'function application')
 
     delay = codegen_expression(delay, location, scope)
     old_delay_type = delay.ctype()
@@ -2136,7 +2140,7 @@ def stmt_after(stmt, location, scope):
         api_unit = 'cycle'
         unit_type = TInt(64, True)
     else:
-        raise ICE(self.site, f"Unsupported unit of time: '{unit}'")
+        raise ICE(site, f"Unsupported unit of time: '{unit}'")
 
     try:
         delay = source_for_assignment(site, unit_type, delay)
@@ -2153,7 +2157,7 @@ def stmt_after(stmt, location, scope):
     else:
         domains = [TraitObjIdentity(site, lookup_var(site, scope, "this"))]
 
-    method = codegen_expression_maybe_nonvalue(method, location, scope)
+    method = codegen_expression_maybe_nonvalue(method_ast, location, scope)
 
     if not isinstance(method, NodeRef):
         raise ENMETH(site, method)
