@@ -1533,7 +1533,7 @@ def stmt_session(stmt, location, scope):
         (struct_decls, etype) = eval_type(asttype, stmt.site, location,
                                           global_scope)
         etype = etype.resolve()
-        TStruct.late_global_struct_defs.extend(struct_decls)
+        add_late_global_struct_defs(struct_decls)
         if init:
             try:
                 init = eval_initializer(
@@ -1618,7 +1618,7 @@ def stmt_saved(stmt, location, scope):
     for (decl_ast, init) in zip(decls, inits):
         (name, asttype) = decl_ast.args
         (struct_decls, etype) = eval_type(asttype, stmt.site, location, scope)
-        TStruct.late_global_struct_defs.extend(struct_decls)
+        add_late_global_struct_defs(struct_decls)
         etype.resolve()
         if init:
             try:

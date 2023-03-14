@@ -75,7 +75,7 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                     (sname, type_ast) = decl_ast.args
                     (struct_defs, stype) = eval_type(
                         type_ast, ast.site, None, global_scope)
-                    TStruct.late_global_struct_defs.extend(struct_defs)
+                    add_late_global_struct_defs(struct_defs)
                     check_namecoll(sname, ast.site)
                     sessions[sname] = (ast.site, stype)
             elif ast.kind == 'typedparam':
