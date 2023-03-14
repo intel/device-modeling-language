@@ -785,7 +785,7 @@ def mkdata(spec, parent):
     (struct_defs, dtype) = eval_type(
         typ, site, parent_scope, global_scope)
     dtype = dtype.resolve()
-    TStruct.late_global_struct_defs.extend(struct_defs)
+    add_late_global_struct_defs(struct_defs)
     obj = objects.Session(name, dtype, astinit, site, parent)
     if astinit:
         dml.globals.device.add_init_data(obj)
@@ -800,7 +800,7 @@ def mksaved(spec, parent):
 
     parent_scope = Location(parent, static_indices(parent))
     (struct_defs, dtype) = eval_type(typ, site, parent_scope, global_scope)
-    TStruct.late_global_struct_defs.extend(struct_defs)
+    add_late_global_struct_defs(struct_defs)
     dtype.resolve()
     if deep_const(dtype):
         raise ESAVEDCONST(site, dtype)

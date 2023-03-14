@@ -18,6 +18,7 @@ __all__ = (
     'typedefs',
     'global_type_declaration_order',
     'global_anonymous_structs',
+    'add_late_global_struct_defs',
     'DMLType',
     'TVoid',
     'TUnknown',
@@ -898,8 +899,12 @@ class TExternStruct(StructType):
     def clone(self):
         return TExternStruct(self.members, self.id, self.typename, self.const)
 
+def add_late_global_struct_defs(decls):
+    TStruct.late_global_struct_defs.extend((site, t.resolve())
+                                           for (site, t) in decls)
+
 class TStruct(StructType):
-    __slots__ = ('label',)
+    __slots__ = ('label', 'anonymous',)
     # Anonymous struct types defined in global scope, but outside typedef
     # declarations, e.g. 'session struct { int x; } y;'.
     # These types can depend on typedefs, but typedefs cannot depend on them.
@@ -907,7 +912,8 @@ class TStruct(StructType):
     num_anon_structs = 0
     def __init__(self, members, label = None, const = False):
         assert members is None or members
-        if label is None:
+        self.anonymous = label is None
+        if self.anonymous:
             label = '_anon_struct_%d' % (TStruct.num_anon_structs,)
             TStruct.num_anon_structs += 1
         self.label = label
