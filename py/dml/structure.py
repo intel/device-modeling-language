@@ -807,12 +807,13 @@ def mksaved(spec, parent):
     obj = objects.Saved(name, dtype, astinit, site, parent)
     if astinit:
         dml.globals.device.add_init_data(obj)
+    typ = crep.node_storage_type(obj)
     try:
-        typ = realtype(crep.node_storage_type(obj))
+        realtype(typ)
     except DMLUnknownType as e:
         raise ETYPE(obj, e.type)
-    else:
-        serialize.mark_for_serialization(site, typ)
+
+    serialize.mark_for_serialization(site, typ)
 
     return obj
 

@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from . import structure, logging, messages, ctree, ast, expr_util, toplevel
+from . import serialize
 from . import dmlparse
 from . import output
 
@@ -559,6 +560,7 @@ def main(argv):
     logtime("startup")
 
     try:
+        dml.globals.serialized_traits = serialize.SerializedTraits()
         (dml_version, devname, headers, footers, global_defs,
          top_tpl, imported) = toplevel.parse_main_file(
              inputfilename, options.import_path, options.strict)

@@ -11,6 +11,7 @@ __all__ = (
     'realtype',
     'safe_realtype_shallow',
     'safe_realtype',
+    'conv_const',
     'deep_const',
     'type_union',
     'compatible_types',

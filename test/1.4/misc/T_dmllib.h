@@ -192,13 +192,13 @@ void deserialize_simple_event_indices_tests(void) {
 }
 
 
-set_error_t stub_deserializer(attr_value_t *val, void *dest) {
-    ASSERT(SIM_attr_is_list(*val));
-    if (!(SIM_attr_list_size(*val) == 1
-          && SIM_attr_is_string(SIM_attr_list_item(*val, 0)))) {
+set_error_t stub_deserializer(attr_value_t val, void *dest) {
+    ASSERT(SIM_attr_is_list(val));
+    if (!(SIM_attr_list_size(val) == 1
+          && SIM_attr_is_string(SIM_attr_list_item(val, 0)))) {
         return Sim_Set_Illegal_Type;
     }
-    strncpy(dest, SIM_attr_string(SIM_attr_list_item(*val, 0)), 511);
+    strncpy(dest, SIM_attr_string(SIM_attr_list_item(val, 0)), 511);
     ((char *)dest)[511] = '\0';
     return Sim_Set_Ok;
 }
@@ -296,13 +296,13 @@ void deserialize_simple_event_domains_tests(void) {
     ht_delete_str_table(&ht, false);
 }
 
-void stub_serializer(const void *src, attr_value_t *dst) {
+attr_value_t stub_serializer(const void *src) {
     if (!src) {
-        *dst = SIM_make_attr_nil();
+        return SIM_make_attr_nil();
     } else {
         char buf[512] = {0};
         strncpy(buf, src, 511);
-        *dst = SIM_make_attr_list(1, SIM_make_attr_string(buf));
+        return SIM_make_attr_list(1, SIM_make_attr_string(buf));
     }
 }
 

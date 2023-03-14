@@ -36,6 +36,10 @@ static_vars = []
 # A reference to the 'object' trait
 object_trait = None
 
+# Set of template types which get serialized
+# serialize.SerializedTraits
+serialized_traits = None
+
 # 1.4 style integer operations in 1.2, --strict-dml12-int
 strict_int_flag = None
 def compat_dml12_int(site):
