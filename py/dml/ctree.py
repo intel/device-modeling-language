@@ -541,6 +541,12 @@ def mkExpressionStatement(site, expr):
         return mkNull(site)
     return ExpressionStatement(site, expr)
 
+def toc_constsafe_pointer_assignment(site, source, target, typ):
+    target_val = mkDereference(site,
+        Cast(site, mkLit(site, target, TPtr(void)), TPtr(typ)))
+    mkAssignStatement(site, target_val,
+                      ExpressionInitializer(mkLit(site, source, typ))).toc()
+
 class After(Statement):
     @auto_init
     def __init__(self, site, unit, delay, domains, method, eventinfo, indices,
@@ -572,7 +578,10 @@ class After(Statement):
                        ', '.join(arg.read() for arg in self.inargs)))
                 out('_data->args = MM_MALLOC(1, '
                     + f'{args_struct});\n')
-                out(f'*({args_struct} *)_data->args = _event_args;\n')
+                toc_constsafe_pointer_assignment(self.site,
+                                                 '_event_args',
+                                                 '_data->args',
+                                                 self.eventinfo['args_type'])
 
             if self.domains:
                 out('_identity_t *_event_domains = '
@@ -960,7 +969,7 @@ class LValue(Expression):
         rt = realtype(self.ctype())
         if isinstance(rt, TEndianInt):
             return (f'{rt.dmllib_fun("copy")}(&{self.read()},'
-                    + f' {source.read()})\n')
+                    + f' {source.read()})')
         return '%s = %s' % (self.read(), source.read())
 
 class IfExpr(Expression):
