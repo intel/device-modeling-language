@@ -6,7 +6,7 @@ import abc
 
 from .logging import *
 from .messages import *
-from . import serialize
+from .set import Set
 import dml.globals
 
 __all__ = (
@@ -292,8 +292,8 @@ class CompositeObject(DMLObject):
         self.traits = traits
         for t in itertools.chain(*([t] + list(t.ancestors)
                                    for t in traits.ancestors)):
-            dml.globals.trait_instances.setdefault(t, []).append(self)
-            if t in serialize.serialized_traits.traits:
+            dml.globals.trait_instances.setdefault(t, Set()).add(self)
+            if t in dml.globals.serialized_traits.traits:
                 traits.mark_referenced(t)
 
 class Device(CompositeObject):

@@ -12,6 +12,7 @@ import dml.ctree
 from dml import crep
 from dml import types
 from dml import traits
+from dml import serialize
 
 class Test_traits(unittest.TestCase):
     def setUp(self):
@@ -20,6 +21,7 @@ class Test_traits(unittest.TestCase):
         dev.name = 'dev'
         self.prev_device = dml.globals.device
         dml.globals.device = dev
+        dml.globals.serialized_traits = serialize.SerializedTraits()
         self.dev = dev
 
     def tearDown(self):

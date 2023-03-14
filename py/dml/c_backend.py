@@ -165,10 +165,17 @@ def print_device_substruct(node):
                            arraywrap(node, crep.node_storage_type(node)))
                 for sub in node.get_components():
                     if not sub.ident:
-                        # implicit field: Don't add anything, storage
-                        # is inherited from the parent register
+                        # implicit field
                         assert sub.objtype == 'field'
+
+                        if not sub.simple_storage:
+                            raise ICE(sub.site,
+                                      'implicit fields may not contain '
+                                      + 'data/saved variables')
+
+                        # storage is inherited from the parent register
                         continue
+
                     yield (crep.cname(sub), print_device_substruct(sub))
             return composite_ctype(node, members)
 
@@ -1863,7 +1870,7 @@ def generate_each_in_tables():
 def generate_trait_deserialization_hashtables(device):
     inserts = []
     assert dml.globals.object_trait
-    for trait in serialize.serialized_traits.traits:
+    for trait in dml.globals.serialized_traits.traits:
         if trait.empty() or trait is dml.globals.object_trait:
             continue
         add_variable_declaration('ht_int_table_t '
@@ -2565,68 +2572,88 @@ def generate_saved_userdata(node, dimensions, prefix):
                         report(e)
         elif (isinstance(child, objects.CompositeObject)
               and child.objtype not in ('bank', 'port', 'subdevice')):
-            yield from generate_saved_userdata(
-                child, dimensions + child.arraylens(),
-                prefix + param_str(child, "name") + "_")
+            if child.ident is None:
+                assert (dml.globals.dml_version == (1, 2)
+                        and child.objtype == 'field')
+                if (child.get_recursive_components('saved')
+                    or any(meth in saved_method_variables
+                           for meth in
+                           child.get_recursive_components('method'))):
+                    raise ICE(child.site,
+                              'implicit fields may not contain saved variables'
+                               + ' or methods with saved variables')
+            else:
+                yield from generate_saved_userdata(
+                    child, dimensions + child.arraylens(),
+                    prefix + child.name_anonymized + "_")
 
-def register_saved_attributes(initcode, node):
-    if node is dml.globals.device:
-        for port in node.get_recursive_components('bank', 'port', 'subdevice'):
-            register_saved_attributes(initcode, port)
-        cls = 'class'
-        getter = '_get_saved_variable'
-        setter = '_set_saved_variable'
-    else:
-        if dml.globals.dml_version == (1, 2) and not node.name:
+def register_saved_attributes(initcode, dev):
+    ports = [dev]
+    ports.extend(dev.get_recursive_components('bank', 'port', 'subdevice'))
+    for node in ports:
+        saved_userdata = list(generate_saved_userdata(node, (), ''))
+        if not saved_userdata:
+            continue
+
+        if not node.name:
             # anonymous bank
-            return
-        cls = port_class_ident(node)
-        getter = '_get_port_saved_variable'
-        setter = '_set_port_saved_variable'
+            assert dml.globals.dml_version == (1, 2) and node.objtype == "bank"
+            raise ICE(node.site,
+                      'anonymous banks may not (indirectly) contain saved '
+                      + 'variables')
 
-    saved_userdata = list(generate_saved_userdata(node, (), ''))
-    if not saved_userdata:
-        return
+        if node is dev:
+            cls = 'class'
+            getter = '_get_saved_variable'
+            setter = '_set_saved_variable'
+        else:
+            cls = port_class_ident(node)
+            getter = '_get_port_saved_variable'
+            setter = '_set_port_saved_variable'
 
-    initcode.out('{\n', postindent=1)
-    initcode.out("const struct {\n")
-    initcode.out("  const char *name;\n")
-    initcode.out("  const char *type;\n")
-    initcode.out("} saved_attrinfo[%d] = {\n" % (len(saved_userdata),),
-                 postindent=1)
-    for (site, attr_name, attr_type, relative_offset, dimsizes,
-         dimension_strides, deserialize_name, serialize_name) in saved_userdata:
-        register_attribute(
-            site, None if node is dml.globals.device else node, attr_name)
-        initcode.out('{"%s", "%s"},\n' % (attr_name, attr_type))
-    initcode.out('};\n', preindent=-1)
-    initcode.out('static const _saved_userdata_t saved_userdata[%d] = {\n'
-                 % (len(saved_userdata),), postindent=1)
-    for (site, attr_name, attr_type, relative_offset, dimsizes,
-         dimension_strides, deserialize_name, serialize_name) in saved_userdata:
-        initcode.out('{%s, %d, %s, %s, %s, %s},\n' % (
-            relative_offset, len(dimsizes),
-            tuple_as_uint32_array(site, dimsizes, 'dims_' + attr_name).read(),
-            tuple_as_uint32_array(site, dimension_strides,
-                                  'strides_' + attr_name).read(),
-            deserialize_name,
-            serialize_name))
-    initcode.out('};\n', preindent = -1)
+        initcode.out('{\n', postindent=1)
+        initcode.out("const struct {\n")
+        initcode.out("  const char *name;\n")
+        initcode.out("  const char *type;\n")
+        initcode.out("} saved_attrinfo[%d] = {\n" % (len(saved_userdata),),
+                     postindent=1)
+        for (site, attr_name, attr_type, relative_offset, dimsizes,
+             dimension_strides, deserialize_name,
+             serialize_name) in saved_userdata:
+            register_attribute(
+                site, None if node is dml.globals.device else node, attr_name)
+            initcode.out('{"%s", "%s"},\n' % (attr_name, attr_type))
+        initcode.out('};\n', preindent=-1)
+        initcode.out('static const _saved_userdata_t saved_userdata[%d] = {\n'
+                     % (len(saved_userdata),), postindent=1)
+        for (site, attr_name, attr_type, relative_offset, dimsizes,
+             dimension_strides, deserialize_name,
+             serialize_name) in saved_userdata:
+            initcode.out('{%s, %d, %s, %s, %s, %s},\n' % (
+                relative_offset, len(dimsizes),
+                tuple_as_uint32_array(site, dimsizes,
+                                      'dims_' + attr_name).read(),
+                tuple_as_uint32_array(site, dimension_strides,
+                                      'strides_' + attr_name).read(),
+                deserialize_name,
+                serialize_name))
+        initcode.out('};\n', preindent = -1)
 
-    initcode.out("for (unsigned int idx = 0;"
-                 + " idx < %d;" % (len(saved_userdata),)
-                 + " ++idx) {\n", postindent = 1)
-    # Reasonably, all saved variables are optional, inside the model
-    # they will be initialized to 0-bit values by DML
-    initcode.out('SIM_register_typed_attribute(%s, ' % (cls,)
-                 + 'saved_attrinfo[idx].name,\n', postindent = 1)
-    initcode.out('%s, (lang_void *)&saved_userdata[idx],\n' % (getter,))
-    initcode.out('%s, (lang_void *)&saved_userdata[idx],\n' % (setter,))
-    initcode.out('Sim_Attr_Optional | Sim_Attr_Internal,\n')
-    initcode.out('saved_attrinfo[idx].type, NULL, "saved variable");\n',
-                 postindent = -1)
-    initcode.out('}\n', preindent=-1)
-    initcode.out('}\n', preindent=-1)
+        initcode.out("for (unsigned int idx = 0;"
+                     + " idx < %d;" % (len(saved_userdata),)
+                     + " ++idx) {\n", postindent = 1)
+        # Reasonably, all saved variables are optional, inside the model
+        # they will be initialized to 0-bit values by DML
+        initcode.out('SIM_register_typed_attribute(%s, ' % (cls,)
+                     + 'saved_attrinfo[idx].name,\n', postindent = 1)
+        initcode.out('%s, (lang_void *)&saved_userdata[idx],\n' % (getter,))
+        initcode.out('%s, (lang_void *)&saved_userdata[idx],\n' % (setter,))
+        initcode.out('Sim_Attr_Optional | Sim_Attr_Internal,\n')
+        initcode.out('saved_attrinfo[idx].type, NULL, "saved variable");\n',
+                     postindent = -1)
+        initcode.out('}\n', preindent=-1)
+        initcode.out('}\n', preindent=-1)
+
 def generate_startup_call_loops(startup_methods):
     by_dims = {}
     for (method_data_tuple, dims) in startup_methods:

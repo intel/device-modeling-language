@@ -782,8 +782,8 @@ _identity_eq(const _identity_t a, const _identity_t b) {
 }
 
 
-typedef set_error_t (*_deserializer_t)(attr_value_t *val, void *addr);
-typedef void (*_serializer_t)(const void *addr, attr_value_t *val);
+typedef set_error_t (*_deserializer_t)(attr_value_t val, void *dest);
+typedef attr_value_t (*_serializer_t)(const void *addr);
 
 typedef struct {
     uint32      *indices;
@@ -918,8 +918,7 @@ _serialize_simple_event_data(
     }
 
     if (args_serializer) {
-        attr_value_t args_attr;
-        args_serializer(data->args, &args_attr);
+        attr_value_t args_attr = args_serializer(data->args);
         entries_buf[entry_index++] = SIM_make_attr_list(
             2, SIM_make_attr_string("arguments"), args_attr);
 
@@ -1076,8 +1075,9 @@ _deserialize_simple_event_arguments(
             *out_args = NULL;
             return Sim_Set_Ok;
         } else {
-            void *temp_out_args = MM_MALLOC(args_size, uint8);
-            set_error_t error = args_deserializer(arguments_attr,
+            void *temp_out_args =
+                args_size ? MM_MALLOC(args_size, uint8) : NULL;
+            set_error_t error = args_deserializer(*arguments_attr,
                                                   temp_out_args);
             if (error != Sim_Set_Ok) {
                 MM_FREE(temp_out_args);
@@ -1106,7 +1106,7 @@ _deserialize_simple_event_domains(
         if (!SIM_attr_is_list(*domains_attr)) {
             SIM_attribute_error(
                 "Invalid serialized representation of after event data: "
-                "specified domains is not a list.");
+                "specified domains value is not a list.");
             return Sim_Set_Illegal_Type;
         }
         uint32 temp_out_no_domains = SIM_attr_list_size(*domains_attr);
@@ -2366,9 +2366,11 @@ _set_device_member(attr_value_t val,
                    const uint32 *dimension_sizes,
                    const uint32 *dimension_strides,
                    unsigned int remaining_dimensions,
-                   _deserializer_t setter) {
+                   set_error_t (*setter)(attr_value_t val, void *member,
+                                         uintptr_t aux),
+                   uintptr_t aux) {
         if (remaining_dimensions == 0) {
-                return setter(&val, (void*)ptr);
+                return setter(val, (void*)ptr, aux);
         } else {
                 for (unsigned i = 0; i < dimension_sizes[0]; ++i) {
                         set_error_t status = _set_device_member(
@@ -2377,7 +2379,7 @@ _set_device_member(attr_value_t val,
                             &dimension_sizes[1],
                             &dimension_strides[1],
                             remaining_dimensions-1,
-                            setter);
+                            setter, aux);
                         // If deserialization fails, bail out.
                         if (unlikely(status != Sim_Set_Ok)) {
                             return status;
@@ -2392,10 +2394,11 @@ _get_device_member(char *ptr,
                    const uint32 *dimension_sizes,
                    const uint32 *dimension_strides,
                    unsigned int remaining_dimensions,
-                   _serializer_t getter) {
+                   attr_value_t (*getter)(void *member, uintptr_t aux),
+                   uintptr_t aux) {
         attr_value_t to_return;
         if (remaining_dimensions == 0) {
-                getter((const void *)ptr, &to_return);
+                to_return = getter(ptr, aux);
         } else {
                 to_return = SIM_alloc_attr_list(dimension_sizes[0]);
                 attr_value_t im_attr;
@@ -2405,7 +2408,7 @@ _get_device_member(char *ptr,
                             &dimension_sizes[1],
                             &dimension_strides[1],
                             remaining_dimensions-1,
-                            getter);
+                            getter, aux);
                         SIM_attr_list_set_item(&to_return, i, im_attr);
                 }
         }
@@ -2425,15 +2428,30 @@ typedef struct {
 } _saved_userdata_t;
 
 UNUSED static set_error_t
+_saved_device_member_setter(attr_value_t val, void *dest,
+                            uintptr_t acc) {
+    return ((_saved_userdata_t *)acc)->setter(val, dest);
+}
+
+UNUSED static attr_value_t
+_saved_device_member_getter(void *val, uintptr_t acc) {
+    return ((_saved_userdata_t *)acc)->getter(val);
+}
+
+
+
+UNUSED static set_error_t
 _set_saved_variable(lang_void *saved_access, conf_object_t *obj,
                     attr_value_t *val, attr_value_t *_) {
         _saved_userdata_t *acc = (_saved_userdata_t *) saved_access;
+
         return _set_device_member(*val,
                                   (char *)obj + acc->relative_base,
                                   acc->dimension_sizes,
                                   acc->dimension_strides,
                                   acc->ndims,
-                                  acc->setter);
+                                  _saved_device_member_setter,
+                                  (uintptr_t) acc);
 }
 
 UNUSED static attr_value_t
@@ -2444,7 +2462,8 @@ _get_saved_variable(lang_void *saved_access, conf_object_t *obj,
                                   acc->dimension_sizes,
                                   acc->dimension_strides,
                                   acc->ndims,
-                                  acc->getter);
+                                  _saved_device_member_getter,
+                                  (uintptr_t) acc);
 }
 
 UNUSED static set_error_t
@@ -2462,7 +2481,8 @@ _set_port_saved_variable(lang_void *saved_access, conf_object_t *_portobj,
                                   acc->dimension_sizes,
                                   acc->dimension_strides + portobj->ndims,
                                   acc->ndims,
-                                  acc->setter);
+                                  _saved_device_member_setter,
+                                  (uintptr_t) acc);
 }
 
 UNUSED static attr_value_t
@@ -2479,7 +2499,8 @@ _get_port_saved_variable(lang_void *saved_access, conf_object_t *_portobj,
                                   acc->dimension_sizes,
                                   acc->dimension_strides + portobj->ndims,
                                   acc->ndims,
-                                  acc->getter);
+                                  _saved_device_member_getter,
+                                  (uintptr_t) acc);
 }
 
 
@@ -2505,7 +2526,7 @@ _serialize_array_aux(const uint8 *data, size_t elem_size,
 
     for (uint32 i = 0; i < len; ++i) {
         if (dims == 1) {
-            serialize_elem(&data[i*elem_size], &items[i]);
+            items[i] = serialize_elem(&data[i*elem_size]);
         } else {
             items[i] = _serialize_array_aux(
                 data + children_elem_count * elem_size * i, elem_size,
@@ -2570,7 +2591,7 @@ _deserialize_array_aux(attr_value_t val, uint8 *data, size_t elem_size,
     for (uint32 i = 0; i < len; ++i) {
         set_error_t error;
         if (dims == 1) {
-            error = deserialize_elem(&items[i], &data[i*elem_size]);
+            error = deserialize_elem(items[i], &data[i*elem_size]);
         } else {
             error = _deserialize_array_aux(
                 items[i], &data[i*children_elem_count*elem_size], elem_size,
