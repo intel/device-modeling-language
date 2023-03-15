@@ -960,6 +960,7 @@ tags = {
     'PNO_WUNUSED': PNO_WUNUSED,
     'PRENAME_TEMPLATE': Replace,
     'PUNDEFOFFS': replace_const('undefined', 'unmapped_offset'),
+    'PINT1': replace_const('int1', 'uint1'),
 }
 
 def is_device_file(path):

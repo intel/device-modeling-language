@@ -1205,13 +1205,24 @@ def cdecl_const(t):
     info = [t[2], 'const'] + t[3][:-1]
     t[0] = ast.cdecl(site(t), name, info)
 
-@prod
+@prod_dml14
 def basetype(t):
     '''basetype : typeident
                 | struct
                 | layout
                 | bitfields
                 | typeof'''
+    t[0] = t[1]
+
+@prod_dml12
+def basetype(t):
+    '''basetype : typeident
+                | struct
+                | layout
+                | bitfields
+                | typeof'''
+    if logging.show_porting and t[1] == 'int1':
+        report(PINT1(site(t)))
     t[0] = t[1]
 
 @prod_dml14

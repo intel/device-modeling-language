@@ -1390,6 +1390,7 @@ all_tests.append(PortingConvert(
         'PNO_WUNUSED',
         'PRENAME_TEMPLATE',
         'PUNDEFOFFS',
+        'PINT1',
     ]]
     + [('dml-builtins.dml', None, 'PRETURNARGS'),
        ('porting-import.dml', None, 'PSHA1',),
