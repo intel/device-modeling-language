@@ -13,6 +13,7 @@ PATTRIBUTE      *
 PEVENT          *
 PVERSION        *
 PINVOKE         *
+PINT            *
 POVERRIDE       *
 PABSTRACT       *
 PCHANGE         *
