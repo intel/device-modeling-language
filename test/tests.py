@@ -1589,8 +1589,9 @@ SPDX-License-Identifier: MPL-2.0
             'test/1.2/misc/T_dos_newline.dml',
             # empty
             'test/SUITEINFO',
-            # data file
+            # data files
             'test/XFAIL',
+            'spelling-passlist',
             # config files
             '.github/workflows/dependent-issues.yml',
             '.gitignore',
