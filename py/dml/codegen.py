@@ -1576,6 +1576,8 @@ def make_static_var(site, location, static_sym_type, name, init=None,
         assert isinstance(init, Initializer)
         init_code = output.StrOutput()
         with init_code:
+            if deep_const(static_sym_type):
+                coverity_marker('store_writes_const_field', 'FALSE')
             init.assign_to(mkStaticVariable(site, static_sym),
                            static_sym_type)
         c_init = init_code.buf
@@ -2237,49 +2239,18 @@ def stmt_select(stmt, location, scope):
 
 def foreach_each_in(site, itername, trait, each_in,
                     body_ast, location, scope):
-    scope = Symtab(scope)
-    each_in_sym = scope.add_variable(
-        '_each_in_expr', type=TTraitList(trait.name),
-        init=ExpressionInitializer(each_in), stmt=True, site=site)
-    ident = each_in_sym.value
     inner_scope = Symtab(scope)
     trait_type = TTrait(trait)
-    trait_ptr = (f'(struct _{cident(trait.name)} *) _list.vtable')
-    obj_ref = '(_identity_t) { .id = _list.id, .encoded_index = _inner_idx}'
     inner_scope.add_variable(
         itername, type=trait_type, site=site,
-        init=ExpressionInitializer(
-            mkLit(site,
-                  ('((%s) {%s, %s})' % (trait_type.declaration(''),
-                                        trait_ptr, obj_ref)),
-                  trait_type
-                  )))
+        init=ForeachSequence.itervar_initializer(site, trait))
     context = GotoLoopContext()
     with context:
         inner_body = mkCompound(site, declarations(inner_scope)
             + codegen_statements([body_ast], location, inner_scope))
-    loop = mkFor(
-        site,
-        [mkLit(site, 'int _outer_idx = 0', TVoid())],
-        mkLit(site, f'_outer_idx < {ident}.num', TBool()),
-        [mkExpressionStatement(
-            site, mkLit(site, '++_outer_idx', TInt(32, True)))],
-        mkCompound(
-            site,
-            [mkInline(
-                site, f'_vtable_list_t _list = {EachIn.array_ident(trait)}['
-                f'{ident}.base_idx + _outer_idx];'),
-             mkInline(site, 'uint64 _num = _list.num / %s.array_size;' % (ident,)),
-             mkInline(site, 'uint64 _start = _num * %s.array_idx;' % (ident,)),
-             mkFor(site,
-                   [mkLit(site, 'uint64 _inner_idx = _start', TVoid())],
-                   mkLit(site, '_inner_idx < _start + _num', TBool()),
-                   [mkExpressionStatement(
-                       site, mkLit(site, '++_inner_idx', TVoid()))],
-                   inner_body)]))
 
-    label = [mkLabel(site, context.label, True)] if context.used else []
-    return [mkCompound(site, [sym_declaration(each_in_sym), loop] + label)]
+    break_label = context.label if context.used else None
+    return [mkForeachSequence(site, trait, each_in, inner_body, break_label)]
 
 @expression_dispatcher
 def expr_each_in(ast, location, scope):
@@ -2438,7 +2409,29 @@ def stmt_switch(stmt, location, scope):
                     if isinstance(sub, ctree.Case):
                         raise ESWITCH(sub.site,
                                       "case label after default label")
-            body = ctree.Compound(body_ast.site, stmts)
+            body_stmts = []
+            default_found = False
+            subsequent_cases = []
+            for body_stmt in stmts:
+                if isinstance(body_stmt, (ctree.Case, ctree.Default)):
+                    default_found = (default_found
+                                     or isinstance(body_stmt, ctree.Default))
+
+                    subsequent_cases.append(body_stmt)
+                else:
+                    if subsequent_cases:
+                        body_stmts.append(mkSubsequentCases(
+                            subsequent_cases[0].site, subsequent_cases,
+                            default_found))
+                        subsequent_cases = []
+                        default_found = False
+                    body_stmts.append(body_stmt)
+
+            if subsequent_cases:
+                body_stmts.append(mkSubsequentCases(
+                    subsequent_cases[0].site, subsequent_cases, default_found))
+
+            body = ctree.Compound(body_ast.site, body_stmts)
         else:
             body = codegen_statement(body_ast, location, scope)
 
@@ -2513,7 +2506,8 @@ def common_inline(site, method, indices, inargs, outargs):
         else:
             # create a specialized method instance based on parameter
             # types, and call that
-            intypes = tuple(arg if arg.constant or undefined(arg)
+            intypes = tuple(arg if ((ptype is None or dml.globals.compat_dml12)
+                                    and (arg.constant or undefined(arg)))
                             else methfunc_param(ptype, arg)
                             for ((pname, ptype), arg)
                             in zip(method.inp, inargs))

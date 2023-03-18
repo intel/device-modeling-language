@@ -373,6 +373,15 @@ def main(argv):
                       + ' when compiling DML 1.2 files. Implied by'
                       + ' --strict-dml12.')
 
+    # <dt>--coverity</dt>
+    # <dd> Adds Synopsys® Coverity® analysis annotations to suppress common
+    # false positives in generated C code created from DML 1.4 device models.
+    # </dd>
+    optpar.add_option(
+        '--coverity', dest = 'coverity', action = 'store_true',
+        help = ('Adds Synopsys® Coverity® analysis annotations to suppress '
+                + 'common false positives in generated C code created from '
+                + 'DML 1.4 device models.'))
     # <dt>--noline</dt>
     # <dd>Suppress line directives for the C preprocessor so
     # that the C code can be debugged.</dd>
@@ -489,6 +498,8 @@ def main(argv):
         prerr("dmlc: Expected positive integer for --split-c-file, got %r"
               % (options.split_c_file,))
         sys.exit(1)
+
+    dml.globals.coverity = options.coverity
 
     dml.globals.linemarks = not options.noline
 

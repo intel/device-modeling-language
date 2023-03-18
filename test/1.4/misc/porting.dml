@@ -416,6 +416,8 @@ event ev2 is (custom_time_event, evt) {
 }
 
 method init() {
+    local uint1 i1;
+
     c2.x(0);
     p();
     m();

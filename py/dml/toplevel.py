@@ -178,6 +178,33 @@ def scan_statements(filename, site, stmts):
 bidi_re = re.compile(
     '[\u2066-\u2069\u202a-\u202e]')
 
+# For the moment, we ban usages of * inside pragmas to not make multiple usages
+# of pragmas ruin everything. In the future if we introduce pragmas that may
+# want to contain * we need to be smarter about this.
+pragma_re = re.compile(r'/\*%\s*([^\s*]+)\s*(?:\s([^*\s][^*]*))?%\*/')
+pragma_coverity_data_re = re.compile(r'^(\S+)\s*(?:\s(\S[\s\S]*))?$')
+
+def process_pragma(filename, start_lineno, end_lineno, pragma, data):
+    pragma = pragma.upper()
+    data = data and data.strip().replace('\n', ' ').replace('\r', '')
+    if pragma == 'COVERITY':
+        data = data and pragma_coverity_data_re.match(data)
+        if data is None:
+            report(ESYNTAX(SimpleSite(f"{filename}:{start_lineno}"),
+                           None,
+                           "COVERITY pragma must specify event to suppress, "
+                           + "and optionally classification"))
+        else:
+            # The first COVERITY pragma we encounter for a given end_lineno is
+            # the only one whose starting line may differ.
+            (dml.globals.coverity_pragmas
+             .setdefault((filename, end_lineno + 1), (start_lineno, []))
+             [1].append(data.groups()))
+
+    # TODO should be reported once pragmas are officially supported
+    # else:
+    #     report(WPRAGMA(SimpleSite(f"{filename}:{start_lineno}"), pragma))
+
 def parse_file(dml_filename):
     try:
         with open(dml_filename, 'r') as f:
@@ -204,6 +231,11 @@ def parse_file(dml_filename):
         report(ESYNTAX(SimpleSite(f"{dml_filename}:{lineno}:{col}"),
                        repr(m.group())[1:-1],
                        "Unicode BiDi character not allowed"))
+    for m in pragma_re.finditer(filestr):
+        start_lineno = filestr[:m.start()].count('\n') + 1
+        end_lineno = start_lineno + filestr[m.start():m.end()].count('\n')
+        process_pragma(dml_filename, start_lineno, end_lineno, *m.groups())
+
     version, contents = determine_version(filestr, dml_filename)
     file_info = logging.FileInfo(dml_filename, version, None)
     if version == (1, 2) and logging.show_porting:

@@ -8,7 +8,6 @@ device test;
 import "utility.dml";
 // Check that dml 1.4 utility construct usage still works with
 // dml 1.2 utility constructs
-/// WARNING WEXPERIMENTAL dml12-compatibility.dml
 import "../../1.4/lib/utility_12_common.dml";
 
 method init() {

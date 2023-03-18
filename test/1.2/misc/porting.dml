@@ -382,6 +382,8 @@ event ev2 is (evt) {
 }
 
 method init() {
+    local int1 i1;
+
     inline $c2.x(0);
     call $p();
     call $m();

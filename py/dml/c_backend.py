@@ -211,11 +211,6 @@ def print_device_substruct(node):
     else:
         raise Exception("Unknown group node " + repr(node))
 
-def reset_line_directive():
-    if dml.globals.linemarks:
-        o = output.current()
-        out('#line %d "%s"\n' % (o.lineno + 1, quote_filename(o.filename)))
-
 def make_guard_sym(filename):
     guard = re.compile(r'[^_A-Z0-9]').sub('_', filename.upper())
     if not guard[0].isalpha() and guard[0] != '_':
@@ -1654,6 +1649,10 @@ def generate_init_data_objs(device):
                     except DMLError as e:
                         report(e)
                     else:
+                        if deep_const(node._type):
+                            coverity_marker('store_writes_const_field',
+                                            'FALSE',
+                                            node.site)
                         init.assign_to(nref, node._type)
             else:
                 index_exprs = ()
@@ -1664,6 +1663,8 @@ def generate_init_data_objs(device):
                         postindent=1)
                     index_exprs += (mkLit(node.site, var, TInt(64, True)),)
                 nref = mkNodeRef(node.site, node, index_exprs)
+                if deep_const(node._type):
+                    coverity_marker('store_writes_const_field', 'FALSE', node.site)
                 init.assign_to(nref, node._type)
                 for _ in range(node.dimensions):
                     out('}\n', postindent=-1)

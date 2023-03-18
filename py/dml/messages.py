@@ -1799,6 +1799,13 @@ class WTTYPEC(DMLWarning):
     fmt = ("the time value of type '%s' is implicitly converted "
            + "to the type '%s' expected by the specified time unit '%s'.")
 
+# TODO this should exist once pragmas are officially supported
+# class WPRAGMA(DMLWarning):
+#     """
+#     An unknown pragma was specified
+#     """
+#     fmt = "Unknown pragma: %s"
+
 class PSHA1(PortingMessage):
     """The `port-dml` script requires that the DML file has not been
     changed since the tag file was generated. This is verified by a
@@ -2216,3 +2223,12 @@ class PUNDEFOFFS(PortingMessage):
     should be used instead.
     """
     fmt = "Use 'unmapped_offset' instead of 'undefined'"
+
+class PINT1(PortingMessage):
+    """Integer types have different semantics in DML 1.2 and DML 1.4;
+    the `int1` type in DML 1.2 is converted to `uint1` in DML 1.4
+    because that is a better match for some common operations. In
+    particular, if the value 1 is assigned to variables of these
+    types, then the value of the variable becomes 1, whereas for
+    `int1` in DML 1.4 the value is -1."""
+    fmt = "Change int1 to uint1"

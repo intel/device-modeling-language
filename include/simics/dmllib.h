@@ -2536,6 +2536,7 @@ _deserialize_array_aux(attr_value_t val, uint8 *data, size_t elem_size,
                        _deserializer_t deserialize_elem,
                        bool elems_are_bytes) {
     uint32 len = *dimsizes;
+    ASSERT(len != 0);
 
     // Allow the final dimension to be represented as data if elems_are_bytes
     bool data_allowed = elems_are_bytes && dims == 1;

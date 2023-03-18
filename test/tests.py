@@ -1009,6 +1009,10 @@ all_tests.append(CTestCase(
          ["debuggable-compile-connect"],
          join(testdir, "1.2", "structure", "T_connect_obj.dml"),
          dmlc_extraargs = ["-g"]))
+all_tests.append(CTestCase(
+         ["debuggable-compile-inlined_param"],
+         join(testdir, "1.4", "expressions", "T_inlined_param.dml"),
+         dmlc_extraargs = ["-g"]))
 
 class SplitTestCase(CTestCase):
     __slots__ = ()
@@ -1386,6 +1390,7 @@ all_tests.append(PortingConvert(
         'PNO_WUNUSED',
         'PRENAME_TEMPLATE',
         'PUNDEFOFFS',
+        'PINT1',
     ]]
     + [('dml-builtins.dml', None, 'PRETURNARGS'),
        ('porting-import.dml', None, 'PSHA1',),
@@ -1585,8 +1590,9 @@ SPDX-License-Identifier: MPL-2.0
             'test/1.2/misc/T_dos_newline.dml',
             # empty
             'test/SUITEINFO',
-            # data file
+            # data files
             'test/XFAIL',
+            'spelling-passlist',
             # config files
             '.github/workflows/dependent-issues.yml',
             '.gitignore',
