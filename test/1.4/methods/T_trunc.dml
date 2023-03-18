@@ -26,11 +26,11 @@ method init() {
     local int64 i;
     try {
         i = a(0x5f);
-    } catch {}
+    } catch { assert false; }
     assert i == -1;
     try {
         i = b(0x5f);
-    } catch {}
+    } catch { assert false; }
     assert i == -1;
     i = c(0x5f);
     assert i == -1;

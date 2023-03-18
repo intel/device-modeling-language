@@ -46,5 +46,5 @@ method init() {
         local int a = mt();
         local (int b, int c) = m2();
         assert a == 1 && b == 1 && c == 2;
-    } catch {}
+    } catch { assert false; }
 }
