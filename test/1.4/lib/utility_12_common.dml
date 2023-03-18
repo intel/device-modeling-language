@@ -88,7 +88,7 @@ template unified_hard_reset is hard_reset {
         try {
             default();
             log info, 1: "%s has hard reset", name;
-        } catch {}
+        } catch { assert false; }
     }
 }
 
@@ -97,7 +97,7 @@ template unified_soft_reset is soft_reset {
         try {
             default();
             log info, 1: "%s has soft reset", name;
-        } catch {}
+        } catch { assert false; }
     }
 }
 
