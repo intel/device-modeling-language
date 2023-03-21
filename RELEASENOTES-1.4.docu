@@ -445,7 +445,7 @@
       for huge (multi-megabyte) struct types
       <bug number="18026246959"/>.</add-note></build-id>
   <build-id value="6205"><add-note> <tt>--coverity</tt> has been added as an
-      option to DMLC. When used, DMLC will generate Synopsys® Coverity® analysis
+      option to DMLC. When used, DMLC will generate Synopsys* Coverity* analysis
       annotations to suppress common false positives in generated C code created
       from DML 1.4 devices.</add-note></build-id>
   <build-id value="6205"><add-note> Fixed an ICE caused by constant inlined

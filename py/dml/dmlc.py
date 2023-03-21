@@ -374,12 +374,12 @@ def main(argv):
                       + ' --strict-dml12.')
 
     # <dt>--coverity</dt>
-    # <dd> Adds Synopsys® Coverity® analysis annotations to suppress common
+    # <dd> Adds Synopsys* Coverity* analysis annotations to suppress common
     # false positives in generated C code created from DML 1.4 device models.
     # </dd>
     optpar.add_option(
         '--coverity', dest = 'coverity', action = 'store_true',
-        help = ('Adds Synopsys® Coverity® analysis annotations to suppress '
+        help = ('Adds Synopsys* Coverity* analysis annotations to suppress '
                 + 'common false positives in generated C code created from '
                 + 'DML 1.4 device models.'))
     # <dt>--noline</dt>
