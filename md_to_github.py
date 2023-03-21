@@ -53,6 +53,11 @@ copyright = '''<!--
 -->
 '''
 
+acknowledgement = r'''
+***
+<sub>\* Other names and brands may be claimed as the property of others.</sub>
+'''
+
 frontpage_links = []
 
 filename_map = {}
@@ -93,6 +98,9 @@ with tarfile.open(outfile, "w:gz") as tgz:
             end = match.end(1)
             if end > start:
                 body = body[:start] + filename_map[match[1]] + body[end:]
+
+        if validate_md_links.third_party_trademark_re.search(body) is not None:
+            body += acknowledgement
         add_to_tar(tgz, path, copyright + body)
 
     head = [copyright,
