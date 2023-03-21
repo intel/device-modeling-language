@@ -37,5 +37,5 @@ method init() {
         assert i == 3 && j == 4;
         local s_t s = construct(4, true);
         assert s.i == 4 && s.b == true;
-    } catch { assert false; }
+    } catch assert false;
 }
