@@ -148,7 +148,3 @@ template operator is (int64_attr) {
 
 attribute multi_operator[i < 2][j < 2] is (operator);
 attribute single_operator is (operator);
-
-method init() {
-    return;
-}

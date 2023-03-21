@@ -44,7 +44,7 @@ bank overload is (test_bank) {
         local uint64 val;
         try {
             val = get(17, 5);
-        } catch { assert false; }
+        } catch assert false;
 
         assert val == 0x0c030b010a;
     }
@@ -57,7 +57,7 @@ bank pattern is (test_bank, miss_pattern_bank) {
         local uint64 val;
         try {
             val = get(17, 5);
-        } catch { assert false; }
+        } catch assert false;
 
         assert val == 0xff03ff01ff;
     }
