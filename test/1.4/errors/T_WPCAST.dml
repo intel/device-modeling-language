@@ -1,0 +1,107 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// COMPILE-ONLY
+
+typedef layout "little-endian" {
+    uint32 x;
+} layout_a_t;
+
+typedef layout "little-endian" {
+    uint8 x;
+    uint24 y;
+} layout_b_t;
+
+method init() {
+    local void *p;
+    local layout_a_t l;
+    /// WARNING WPCAST
+    p = cast(&l, uint32 *);
+    /// WARNING WPCAST
+    p = cast(&l, int32 *);
+    /// WARNING WPCAST
+    p = cast(&l, uint16 *);
+    /// WARNING WPCAST
+    p = cast(&l, int16 *);
+
+    // no warning
+    p = cast(cast(&l, void *), int16 *);
+    p = cast(&l, uint8 *);
+    p = cast(&l, int8 *);
+    p = cast(&l, uint32_le_t *);
+    p = cast(&l, int32_le_t *);
+    p = cast(&l, uint32_be_t *);
+    p = cast(&l, uint8_le_t *);
+    p = cast(&l, layout_b_t *);
+
+    local uint32_le_t i;
+    /// WARNING WPCAST
+    p = cast(&i, uint32 *);
+    /// WARNING WPCAST
+    p = cast(&i, int32 *);
+    /// WARNING WPCAST
+    p = cast(&i, uint16 *);
+    /// WARNING WPCAST
+    p = cast(&i, int16 *);
+
+    // no warning
+    p = cast(cast(&i, void *), int16 *);
+    p = cast(&i, uint8 *);
+    p = cast(&i, int8 *);
+    p = cast(&i, uint32_le_t *);
+    p = cast(&i, int32_le_t *);
+    p = cast(&i, uint32_be_t *);
+    p = cast(&i, uint8_le_t *);
+    p = cast(&i, layout_b_t *);
+
+    local layout_a_t larr[2][3][5];
+    /// WARNING WPCAST
+    p = cast(larr, uint32 *);
+    /// WARNING WPCAST
+    p = cast(larr, int32 *);
+    /// WARNING WPCAST
+    p = cast(larr, uint16 *);
+    /// WARNING WPCAST
+    p = cast(larr, int16 *);
+
+    // no warning
+    p = cast(cast(larr, void *), int16 *);
+    p = cast(larr, uint8 *);
+    p = cast(larr, int8 *);
+    p = cast(larr, uint32_le_t *);
+    p = cast(larr, int32_le_t *);
+    p = cast(larr, uint32_be_t *);
+    p = cast(larr, uint8_le_t *);
+    p = cast(larr, layout_b_t *);
+
+    local uint32_le_t iarr[2][3][5];
+    /// WARNING WPCAST
+    p = cast(iarr, uint32 *);
+    /// WARNING WPCAST
+    p = cast(iarr, int32 *);
+    /// WARNING WPCAST
+    p = cast(iarr, uint16 *);
+    /// WARNING WPCAST
+    p = cast(iarr, int16 *);
+
+    // no warning
+    p = cast(cast(iarr, void *), int16 *);
+    p = cast(iarr, uint8 *);
+    p = cast(iarr, int8 *);
+    p = cast(iarr, uint32_le_t *);
+    p = cast(iarr, int32_le_t *);
+    p = cast(iarr, uint32_be_t *);
+    p = cast(iarr, uint8_le_t *);
+    p = cast(iarr, layout_b_t *);
+
+    local uint8_le_t bmatrix[2][4];
+    // no warning
+    p = cast(bmatrix, uint32 *);
+    p = cast(bmatrix[0], uint32 *);
+    p = cast(&bmatrix[0][0], uint32 *);
+}
