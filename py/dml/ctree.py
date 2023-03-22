@@ -4135,11 +4135,32 @@ def mkCast(site, expr, new_type):
         assert (not (real.is_int and real.is_endian)
                 and not (old_type.is_int and old_type.is_endian))
         return Cast(site, expr, new_type)
-    if ((isinstance(real, TPtr) or real.is_int or isinstance(real, TBool))
-        and (isinstance(old_type, (TPtr, TArray, TFunction))
-             or old_type.is_int or isinstance(old_type, TBool))):
+    if ((isinstance(real, (TBool, TPtr)) or real.is_int)
+        and (isinstance(old_type, (TBool, TPtr, TArray, TFunction))
+             or old_type.is_int)):
         assert (not (real.is_int and real.is_endian)
                 and not (old_type.is_int and old_type.is_endian))
+        if isinstance(old_type, (TPtr, TArray)) and isinstance(real, TPtr):
+            old_base = old_type.base
+            new_base = real.base
+            old_base_deep = old_base
+            while isinstance(old_base_deep, TArray):
+                old_base_deep = old_base_deep.base
+
+            if (not dml.globals.compat_dml12_int(site)
+                and isinstance(old_base_deep, (TLayout, TEndianInt))
+                and new_base.is_int and not new_base.is_endian
+                and not new_base.bits == 8
+                and not (old_base_deep.is_int and old_base_deep.bits == 8)):
+                byte_order = (old_base_deep.byte_order
+                              if old_base_deep.is_int
+                              else old_base_deep.endian)
+                likely_intended = TEndianInt(new_base.bits,
+                                             new_base.signed,
+                                             byte_order,
+                                             const=new_base.const)
+                report(WPCAST(site, old_base, new_base, likely_intended))
+
         return Cast(site, expr, new_type)
 
     # Allow unsafe casts from method references to function pointers in DML 1.2

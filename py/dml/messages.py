@@ -1801,6 +1801,29 @@ class WTTYPEC(DMLWarning):
     fmt = ("the time value of type '%s' is implicitly converted "
            + "to the type '%s' expected by the specified time unit '%s'.")
 
+class WPCAST(DMLWarning):
+    """
+    A pointer is cast to a base type which has incompatible representation
+    compared to the original. Accessing the pointed-to object via the new
+    pointer type will almost certainly constitute undefined behavior.
+
+    This warning is extremely limited in scope: don't rely on it to catch every
+    bad pointer cast.
+
+    To silence this warning, first cast the pointer to `void *`, then cast it
+    to the desired type.
+    """
+    fmt = ("very suspect pointer-to-pointer cast: the new base type has "
+           + "incompatible representation. This could lead to your code "
+           + "getting mangled by the C compiler, with unpredictable results.\n"
+           + "old base type: %s\n"
+           + "new base type: %s%s")
+    def __init__(self, site, old, new, maybe_intended):
+        suggestion = ('\nperhaps you meant the new base type to be '
+                      + maybe_intended.describe()
+                      if maybe_intended else '')
+        DMLWarning.__init__(self, site, old, new, suggestion)
+
 # TODO this should exist once pragmas are officially supported
 # class WPRAGMA(DMLWarning):
 #     """
