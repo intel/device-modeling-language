@@ -455,7 +455,7 @@
       (<tt>-g</tt>) that caused <tt>inline</tt> method calls to inline constant
       arguments even for parameters not declared <tt>inline</tt>
       <bug number="16019548195"/>.</add-note></build-id>
-  <build-id value="next"><add-note> Compound initializer syntax can now be used
+  <build-id value="6213"><add-note> Compound initializer syntax can now be used
       to construct arguments of a method or function call, e.g:
       <pre>
       method callee(buffer_t buf, bool b) {

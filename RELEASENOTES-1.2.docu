@@ -157,7 +157,7 @@
   <build-id value="6160"><add-note> Fixed issue where certain parameters defined
       in DML 1.4 modules couldn't be referenced within DML 1.2 modules without
       the use of <tt>$</tt>.</add-note></build-id>
-  <build-id value="next"><add-note> Add porting rule to convert the
+  <build-id value="6213"><add-note> Add porting rule to convert the
       <tt>int1</tt> type into <tt>uint1</tt> in DML 1.4, which better resembles
       how the type works in 1.2.</add-note></build-id>
 </rn>
