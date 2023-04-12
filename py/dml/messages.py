@@ -1888,6 +1888,27 @@ class PRETURNARGS(PortingMessage):
     ```"""
     fmt = "add arguments to return statement"
 
+class POUTARGRETURN(PortingMessage):
+    """An assignment to an output argument directly followed by a
+    return statement is more concisely written as a single return
+    statement, without an intermediate assignment. For instance,
+    ```
+    dml 1.2;
+    method four() -> (int x) {
+       x = 4;
+       return;
+    }
+    ```
+    can be expressed as:
+    ```
+    dml 1.4;
+    method four() -> (int) {
+       return 4;
+    }
+    ```
+    """
+    fmt = "merge outarg assignment with return statement"
+
 class PTYPEDOUTPARAM(PortingMessage):
     """Method output parameters must have explicit types in DML 1.4. The
     automatic conversion script will convert untyped output parameters

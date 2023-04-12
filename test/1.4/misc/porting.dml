@@ -42,8 +42,7 @@ bank b {
             method read() -> (uint64) {
                 local uint64 val;
                 local int r2;
-                val = this.val + r6.val;
-                return val;
+                return this.val + r6.val;
             }
             is write;
             method write(uint64 val) {
@@ -82,8 +81,7 @@ bank b {
         method read() -> (uint64) {
             local uint64 val;
             val = get();
-            val = this.val;
-            return val;
+            return this.val;
         }
         is write;
         method write(uint64 val) {
@@ -273,11 +271,23 @@ method mo() -> (int, int) /* i, e */ default {
     return (i, e);
 }
 
+method is_zero_or_three(int x) -> (bool) {
+    local bool zero_or_three;
+    if ((x & 1) == 1) {
+        return (x >> 1) == 1;
+    }
+    return (x >> 1) == 0;
+}
+
+method five() -> (int) {
+    local int val;
+    return 5;
+}
+
 connect c {
     method cond(conf_object_t *obj) -> (bool) {
         local bool eq;
-        eq = obj == this.obj;
-        return eq;
+        return obj == this.obj;
     }
 }
 
@@ -387,8 +397,7 @@ param some_other_string = stringify((b.r6.offset));
 event ev is custom_cycle_event {
     method get_event_info(void *data) -> (attr_value_t) {
         local attr_value_t attr;
-        attr = SIM_make_attr_nil();
-        return attr;
+        return SIM_make_attr_nil();
     }
     method set_event_info(attr_value_t attr) -> (void *) {
         local void *data;
@@ -401,8 +410,7 @@ event ev is custom_cycle_event {
 template evt is event {
     method get_event_info(void *data) -> (attr_value_t) {
         local attr_value_t attr;
-        attr = SIM_make_attr_nil();
-        return attr;
+        return SIM_make_attr_nil();
     }
     method set_event_info(attr_value_t attr) -> (void *) {
         local void *data;

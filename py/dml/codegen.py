@@ -1392,6 +1392,20 @@ def codegen_statement(tree, *args):
 @statement_dispatcher
 def stmt_compound(stmt, location, scope):
     [stmt_asts] = stmt.args
+    if (logging.show_porting and stmt.site.dml_version() == (1, 2)
+        and not stmt.site.filename().endswith('dml-builtins.dml')):
+        method = location.method()
+        if method is not None and len(method.outp) == 1 and len(stmt_asts) >= 2:
+            [(outarg, _)] = method.outp
+            (assign, ret) = stmt_asts[-2:]
+            if (ret.kind == 'return_dml12'
+                and assign.kind == 'expression'
+                and assign.args[0].kind == 'set'):
+                (lh, rh) = assign.args[0].args
+                if lh.kind == 'variable_dml12' and lh.args[0] == outarg:
+                    report(POUTARGRETURN(lh.site,
+                                         dmlparse.start_site(rh.site),
+                                         ret.site))
     lscope = Symtab(scope)
     statements = codegen_statements(stmt_asts, location, lscope)
     return [mkCompound(stmt.site, declarations(lscope) + statements)]

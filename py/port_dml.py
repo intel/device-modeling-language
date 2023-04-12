@@ -509,6 +509,35 @@ class PRETURNARGS(Transformation):
             ret_expr = '(%s)' % ret_expr
         f.edit(offs, 'return', 'return ' + ret_expr)
 
+class POUTARGRETURN(Transformation):
+    # after PRETURNARGS
+    phase = 1
+    def apply(self, f):
+        offs = self.offset(f)
+        (expr_start, return_start) = self.params
+        expr_offs = self.offset(f, expr_start)
+        # First, remove '\n    return outarg;'
+        if return_start is not None:
+            return_offs = self.offset(f, return_start)
+            ret_prefix = '\n' + f.read_line_up_to(return_offs)
+            if not ret_prefix.isspace():
+                ret_prefix = ret_prefix[len(ret_prefix.rstrip()):]
+            ret_chars = len(ret_prefix)
+            ret_tokens = f.read_tokens(return_offs)
+            (skip, tok, kind) = next(ret_tokens)
+            assert kind == 'RETURN', kind
+            ret_chars += skip + len(tok)
+            (skip, tok, kind) = next(ret_tokens)
+            assert kind == 'ID', kind
+            ret_chars += skip + len(tok)
+            (skip, tok, kind) = next(ret_tokens)
+            assert kind == 'SEMI', kind
+            ret_chars += skip + len(tok)
+            f.edit(return_offs - len(ret_prefix), ret_chars, '')
+
+        # Second, change 'outarg = f();' to 'return f();'
+        f.edit(offs, expr_offs - offs, 'return ')
+
 class PSOFT_RESET_VALUE(Transformation):
     def apply(self, f):
         offs = self.offset(f)
@@ -928,6 +957,7 @@ tags = {
     'PAUTO': replace_const('auto', 'local'),
     'PRETVAL': PRETVAL,
     'PRETURNARGS': PRETURNARGS,
+    'POUTARGRETURN': POUTARGRETURN,
     'PSESSION': Replace,
     'PHARD_RESET_VALUE': replace_const('hard_reset_value', 'init_val'),
     'PSOFT_RESET_VALUE': PSOFT_RESET_VALUE,
