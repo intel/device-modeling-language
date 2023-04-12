@@ -4,14 +4,12 @@
 import os
 import sys
 import argparse
-import locale
 import ast
 import abc
 import re
 import hashlib
 import unittest
 import tempfile
-from collections import OrderedDict
 import itertools
 import traceback
 from pathlib import Path
