@@ -4610,7 +4610,7 @@ def log_statement(site, node, indices, logtype, level, groups, fmt, *args):
         groups = mkIntegerLiteral(site, 0)
 
     inargtypes = (([TInt(32, True)] if lvl else [])
-                  + [TPtr(TNamed("conf_object_t")), TInt(32, True),
+                  + [TPtr(TNamed("conf_object_t")), TInt(64, False),
                      TPtr(TInt(8, True, const=True))])
     fun = mkLit(site, logfunc, TFunction(inargtypes, TVoid(), varargs=True))
 

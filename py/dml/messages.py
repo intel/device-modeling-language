@@ -816,7 +816,7 @@ class EREF(DMLError):
     """
     fmt = "reference to unknown object '%s'"
     def __init__(self, site, name, obj = None):
-        if obj == None:
+        if obj is None:
             place = name
         else:
             place = "%s.%s" % (obj, name)
