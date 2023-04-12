@@ -1880,10 +1880,10 @@ class PRETURNARGS(PortingMessage):
     """In methods with return values, return statements now take arguments:
     ```
     method m() -> (int, int) {
-    return (1, 4);
+        return (1, 4);
     }
     method n() -> (int) {
-    return 3;
+        return 3;
     }
     ```"""
     fmt = "add arguments to return statement"
