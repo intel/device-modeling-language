@@ -245,6 +245,18 @@ method mo() -> (int i, int e) default {
         return;
 }
 
+method is_zero_or_three(int x) -> (bool zero_or_three) {
+    if ((x & 1) == 1) {
+        zero_or_three = (x >> 1) == 1;
+        return;
+    }
+    zero_or_three = (x >> 1) == 0;
+}
+
+method five -> (int val) {
+    val = 5;
+}
+
 connect c {
     method cond(conf_object_t *obj) -> (bool eq) nothrow {
         eq = obj == $obj;

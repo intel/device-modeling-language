@@ -479,6 +479,28 @@ def maybe_default_no(t):
     '''maybe_default :'''
     t[0] = False
 
+
+def report_pretval(site, file_info, start, end, rparen, outp, stmts):
+    ends_with_return = stmts and stmts[-1].kind == 'return'
+    if (len(outp) == 1
+        and not ends_with_return
+        and stmts
+        and stmts[-1].kind == 'expression'
+        and stmts[-1].args[0].kind == 'set'):
+        (lh, rh) = stmts[-1].args[0].args
+        if lh.kind == 'variable_dml12' and lh.args[0] == outp[0][2]:
+            report(POUTARGRETURN(lh.site, start_site(rh.site), None))
+            # suppress PRETVAL's insertion of return statement
+            ends_with_return = True
+    report(PRETVAL(
+        site,
+        DumpableSite(file_info, start),
+        DumpableSite(file_info, end),
+        DumpableSite(file_info, rparen),
+        [(psite.loc(), pname) for (_, psite, pname, _) in outp],
+        ends_with_return))
+
+
 @prod_dml12
 def object_method_noinparams(t):
     '''method : METHOD maybe_extern objident method_outparams maybe_default compound_statement'''
@@ -490,19 +512,42 @@ def object_method_noinparams(t):
     if logging.show_porting and outp:
         (start, end) = t.lexspan(6)
         [stmts] = t[6].args
-        ends_with_return = stmts and stmts[-1].kind == 'return'
         (_, rparen) = t.lexspan(4)
-        report(PRETVAL(
-            site(t), DumpableSite(t.parser.file_info, start),
-            DumpableSite(t.parser.file_info, end),
-            DumpableSite(t.parser.file_info, rparen),
-            [(psite.loc(), pname) for (_, psite, pname, _) in outp],
-            ends_with_return))
+        report_pretval(
+            site(t), t.parser.file_info, start, end, rparen, outp, stmts)
 
     body = t[6]
     t[0] = ast.method(site(t), name,
                       (inp, outp, throws, [], body),
                       t[5], t[2], lex_end_site(t, -1))
+
+
+@prod_dml12
+def object_method(t):
+    '''method : METHOD maybe_extern objident LPAREN cdecl_or_ident_list RPAREN method_outparams maybe_nothrow maybe_default compound_statement'''
+    name = t[3]
+    inp = t[5]
+    outp = t[7]
+    throws = t[8]
+    if logging.show_porting and any(not typ for (_, _, name, typ) in inp):
+        # some standard methods are assigned a type later on
+        if name not in ['set', 'write']:
+            report(PINLINEDECL(site(t), 'method', 'inline method'))
+        for (_, decl_site, argname, typ) in inp:
+            if not typ:
+                report(PINLINEDECL(decl_site, argname, 'inline ' + argname))
+    if logging.show_porting and outp:
+        (start, end) = t.lexspan(10)
+        [stmts] = t[10].args
+        (_, rparen) = t.lexspan(7)
+        report_pretval(
+            site(t), t.parser.file_info, start, end, rparen, outp, stmts)
+
+    body = t[10]
+    t[0] = ast.method(site(t), name,
+                      (inp, outp, throws, [], body),
+                      t[9], t[2], lex_end_site(t, -1))
+
 
 def method_qualifiers_check(site, qualifiers, inp, outp, throws, default):
     startup = 'startup' in qualifiers
@@ -554,36 +599,6 @@ def object_inline_method(t):
                       (inp, outp, throws, [], body),
                       t[5], False, lex_end_site(t, -1))
 
-@prod_dml12
-def object_method(t):
-    '''method : METHOD maybe_extern objident LPAREN cdecl_or_ident_list RPAREN method_outparams maybe_nothrow maybe_default compound_statement'''
-    name = t[3]
-    inp = t[5]
-    outp = t[7]
-    throws = t[8]
-    if logging.show_porting and any(not typ for (_, _, name, typ) in inp):
-        # some standard methods are assigned a type later on
-        if name not in ['set', 'write']:
-            report(PINLINEDECL(site(t), 'method', 'inline method'))
-        for (_, decl_site, argname, typ) in inp:
-            if not typ:
-                report(PINLINEDECL(decl_site, argname, 'inline ' + argname))
-    if logging.show_porting and outp:
-        (start, end) = t.lexspan(10)
-        [stmts] = t[10].args
-        ends_with_return = stmts and stmts[-1].kind == 'return'
-        (_, rparen) = t.lexspan(7)
-        report(PRETVAL(
-            site(t), DumpableSite(t.parser.file_info, start),
-            DumpableSite(t.parser.file_info, end),
-            DumpableSite(t.parser.file_info, rparen),
-            [(psite.loc(), pname) for (_, psite, pname, _) in outp],
-            ends_with_return))
-
-    body = t[10]
-    t[0] = ast.method(site(t), name,
-                      (inp, outp, throws, [], body),
-                      t[9], t[2], lex_end_site(t, -1))
 
 @prod_dml12
 def arraydef1(t):

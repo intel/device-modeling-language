@@ -175,8 +175,7 @@ bank miss {
 
     method old_miss_write_access(uint64 offset, uint64 value) -> (bool) {
         local bool success;
-        success = value == 5;
-        return success;
+        return value == 5;
     }
 }
 
