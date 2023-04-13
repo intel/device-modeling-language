@@ -272,7 +272,6 @@ method mo() -> (int, int) /* i, e */ default {
 }
 
 method is_zero_or_three(int x) -> (bool) {
-    local bool zero_or_three;
     if ((x & 1) == 1) {
         return (x >> 1) == 1;
     }
@@ -280,13 +279,11 @@ method is_zero_or_three(int x) -> (bool) {
 }
 
 method five() -> (int) {
-    local int val;
     return 5;
 }
 
 connect c {
     method cond(conf_object_t *obj) -> (bool) {
-        local bool eq;
         return obj == this.obj;
     }
 }
@@ -396,7 +393,6 @@ param some_other_string = stringify((b.r6.offset));
 
 event ev is custom_cycle_event {
     method get_event_info(void *data) -> (attr_value_t) {
-        local attr_value_t attr;
         return SIM_make_attr_nil();
     }
     method set_event_info(attr_value_t attr) -> (void *) {
@@ -409,7 +405,6 @@ event ev is custom_cycle_event {
 
 template evt is event {
     method get_event_info(void *data) -> (attr_value_t) {
-        local attr_value_t attr;
         return SIM_make_attr_nil();
     }
     method set_event_info(attr_value_t attr) -> (void *) {
