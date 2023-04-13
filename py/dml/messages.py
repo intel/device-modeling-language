@@ -1873,8 +1873,15 @@ class PRETVAL(PortingMessage):
     }
     ```
 
-    See also PRETURNARGS."""
+    See also `PRETURNARGS`."""
     fmt = "remove name from method output parameter"
+
+class PRETVAL_END(PortingMessage):
+    """Methods with output arguments must end with an explicit return
+    statement in DML 1.4; in DML 1.2, the method would return whatever
+    value the output argument had upon exit. See also `PRETVAL`.
+    """
+    fmt = "add return statement to end of method"
 
 class PRETURNARGS(PortingMessage):
     """In methods with return values, return statements now take arguments:

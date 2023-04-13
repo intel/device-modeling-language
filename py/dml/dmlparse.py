@@ -497,8 +497,12 @@ def report_pretval(site, file_info, start, end, rparen, outp, stmts):
         DumpableSite(file_info, start),
         DumpableSite(file_info, end),
         DumpableSite(file_info, rparen),
-        [(psite.loc(), pname) for (_, psite, pname, _) in outp],
-        ends_with_return))
+        [(psite.loc(), pname) for (_, psite, pname, _) in outp]))
+    if not ends_with_return:
+        report(PRETVAL_END(
+            site,
+            DumpableSite(file_info, end),
+            [pname for (_, psite, pname, _) in outp]))
 
 
 @prod_dml12

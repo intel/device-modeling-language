@@ -121,12 +121,12 @@ class SourceFile(object):
             return None
         return rest[:match.end()]
 
-    def read_tokens(self, offset):
+    def read_tokens(self, offset, end_offset=None):
         '''Generates pairs (pad, string, kind) of lexer tokens'''
         lexer = init_lexer(self.path, self.contents[:offset].count('\n') + 1)
         lexer.input(self.contents)
         lexer.lexpos = offset
-        while True:
+        while end_offset is None or lexer.lexpos <= end_offset:
             prev_lexpos = lexer.lexpos
             t = lexer.token()
             if t is None:
@@ -458,8 +458,10 @@ class PAFTER(Transformation):
                else ' ')
 
 class PRETVAL(Transformation):
+    # after POUTARGRETURN, PRETVAL_END, PDOLLAR_QUALIFY, PVAL
+    phase = 2
     def apply(self, f):
-        (body_start, body_end, rparen, outargs, ends_with_return) = self.params
+        (body_start, body_end, rparen, outargs) = self.params
         body = str(f.read_chunk(self.offset(f, body_start),
                                 self.offset(f, body_end)))
         assert body.startswith('{')
@@ -468,6 +470,27 @@ class PRETVAL(Transformation):
         end_brace_indent = rspace(body)
         linesep = end_brace_indent + '    '
         names = []
+        # If there is only one outarg, then chances are that
+        # POUTARGRETURN removed all references to it. Detect this by
+        # lexing the body: any identifier 'val' is likely a reference
+        # to outarg 'val'. An identifier preceded by '.' does not
+        # count; this covers the common case when a 1.2 method returns
+        # `val = $this`, which in this phase is translated to `return
+        # this.val`, which should not trigger a declaration.
+        if len(outargs) == 1:
+            [(_, name)] = outargs
+            # e.g., an outarg named `data` is lexed as a 'DATA' token
+            from dml import dmllex12
+            kind = (name.upper() if name.upper() in dmllex12.reserved_idents
+                    else 'ID')
+            tokens = list(f.read_tokens(self.offset(f, body_start),
+                                        self.offset(f, body_end)))
+            add_locals = any(
+                (kind2, tok2) == (kind, name) and kind1 != 'DOT'
+                for ((_, _, kind1), (_, tok2, kind2))
+                in zip(tokens, tokens[1:]))
+        else:
+            add_locals = True
         # Process arguments from right to left. This happens to make
         # some location calculations easier.
         for [(start, name), (end, _)] in reversed(list(zip(
@@ -485,20 +508,30 @@ class PRETVAL(Transformation):
             cutlen = len(name) + name_idx - cutstart_idx
             f.edit(start + cutstart_idx, cutlen, '')
             # Second, add temporary local variable
-            f.edit(self.offset(f, body_start), '{',
-                   '{%slocal %s;' % (linesep, decl))
+            if add_locals:
+                f.edit(self.offset(f, body_start), '{',
+                       '{%slocal %s;' % (linesep, decl))
         if len(names) > 1:
             f.edit(self.offset(f, rparen) + 1, 0,
                    ' /* %s */' % (', '.join(reversed(names))))
-        if not ends_with_return:
-            if len(outargs) == 1:
-                [(_, ret_expr)] = outargs
-            else:
-                ret_expr = '(%s)' % (', '.join(n for (_, n) in outargs),)
-            f.edit(self.offset(f, body_end), 0,
-                   '    return %s;%s' % (ret_expr, end_brace_indent))
+
+class PRETVAL_END(Transformation):
+    # before PRETVAL
+    phase = 0
+    def apply(self, f):
+        (body_end, outargs) = self.params
+        body_end_offs = self.offset(f, body_end)
+        end_brace_indent = f.read_line_up_to(body_end_offs)
+        if len(outargs) == 1:
+            [ret_expr] = outargs
+        else:
+            ret_expr = '(%s)' % (', '.join(outargs))
+        f.edit(body_end_offs, 0,
+               '    return %s;\n%s' % (ret_expr, end_brace_indent))
 
 class PRETURNARGS(Transformation):
+    # before POUTARGRETURN and PRETVAL
+    phase = 0
     def apply(self, f):
         offs = self.offset(f)
         (names,) = self.params
@@ -510,7 +543,7 @@ class PRETURNARGS(Transformation):
         f.edit(offs, 'return', 'return ' + ret_expr)
 
 class POUTARGRETURN(Transformation):
-    # after PRETURNARGS
+    # after PRETURNARGS and PRETVAL_END
     phase = 1
     def apply(self, f):
         offs = self.offset(f)
@@ -956,6 +989,7 @@ tags = {
     'PAFTER': PAFTER,
     'PAUTO': replace_const('auto', 'local'),
     'PRETVAL': PRETVAL,
+    'PRETVAL_END': PRETVAL_END,
     'PRETURNARGS': PRETURNARGS,
     'POUTARGRETURN': POUTARGRETURN,
     'PSESSION': Replace,
