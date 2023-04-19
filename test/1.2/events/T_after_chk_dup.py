@@ -13,9 +13,8 @@ SIM_write_configuration_to_file(testname + ".chkp", Sim_Save_Nobundle)
 
 subprocess.check_call(
     [f'{conf.sim.project}/bin/simics{batch_suffix()}'] +
-    ["-batch-mode", "-quiet", "-no-copyright", "-core", "-werror",
-     '-py3k-warnings',
-     '-project', conf.sim.project,
-     "-L", scratchdir,
-     "-c", testname + ".chkp",
-     "-p", join(basedir, "T_"+testname+".cont.py")])
+    ["--batch-mode", "--quiet", "--no-copyright", "--dump-core", "--werror",
+     '--project', conf.sim.project,
+     "--module-path", scratchdir,
+     "-e", f'read-configuration {testname + ".chkp"}',
+     join(basedir, "T_"+testname+".cont.py")])

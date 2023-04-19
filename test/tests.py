@@ -748,11 +748,10 @@ class CTestCase(DMLFileTestCase):
 
         self.pr("Running Simics")
         args = [join(simics_root_path(), "bin", "simics" + bat_sfx),
-                "-batch-mode", "-quiet", "-no-copyright", "-no-settings",
-                "-core", "-werror",
-                '-py3k-warnings',
-                "-project", testparams.project_path(),
-                "-p", self.scriptname]
+                "--batch-mode", "--quiet", "--no-copyright", "--no-settings",
+                "--dump-core", "--werror",
+                "--project", testparams.project_path(),
+                self.scriptname]
         env = os.environ.copy()
         env.update(self.extraenv)
         env['SIMICS_HOST'] = os.path.basename(host_path())
@@ -1452,10 +1451,10 @@ class CompareIllegalAttrs(BaseTestCase):
         sl = {x[5:].strip()
               for x in subprocess.run(
                       [join(simics_root_path(), "bin", "simics" + bat_sfx),
-                       "-batch-mode", "-quiet", "-no-copyright", "-no-settings",
-                       "-core", "-werror",
-                       "-L", join(testparams.sandbox_path(), "scratch",
-                                  "minimal"),
+                       "--batch-mode", "--quiet", "--no-copyright",
+                       "--no-settings", "--dump-core", "--werror",
+                       "--module-path", join(testparams.sandbox_path(),
+                                             "scratch", "minimal"),
                        "-e", "@SIM_create_object('test', 'o', [])",
                        "-e", "@for n in conf.o.attributes: print('ATTR', end=' '), print(n[0])"],
                       capture_output=True,
