@@ -101,3 +101,14 @@ bank e {
             throw;
     }
 }
+
+bank f {
+    is function_mapped_bank;
+    param function = 0xf;
+    param use_io_memory = false;
+    method read(uint64 address, uint64 enabled_bytes, void *user)
+        -> (uint64) throws {
+        assert address == 0x100;
+        return 0xff;
+    }
+}
