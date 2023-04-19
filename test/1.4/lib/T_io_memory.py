@@ -13,6 +13,10 @@ stest.expect_equal(dev_util.Register_LE((obj, 0x10, 0), size=1).read(), 0x0)
 stest.expect_equal(dev_util.Register_LE((obj, 0x11, 0), size=1).read(), 0x1)
 stest.expect_equal(dev_util.Register_LE((obj, 0x12, 0), size=1).read(), 0x10)
 stest.expect_equal(dev_util.Register_LE((obj, 0x13, 0), size=1).read(), 0x11)
+stest.expect_equal(dev_util.Register_LE((obj, 0xf, 0x100), size=1).read(), 0xff)
+# accessing 0x10 hits address 0x100 in the bank
+ms = SIM_create_object('memory-space', 'ms', map=[[0x10, obj, 0xf, 0x100, 1]])
+ms.iface.memory_space.read(None, 0x10, 1, False)
 # .. and incorrect function numbers are handled somewhat gracefully
 with stest.expect_log_mgr(obj, 'error'), stest.expect_exception_mgr(
         dev_util.MemoryError):
