@@ -3,30 +3,14 @@
 
 import stest
 
-try:
+with stest.expect_exception_mgr(SimExc_IllegalValue):
     obj.a = None
-except SimExc_IllegalValue as e:
-    pass
-else:
-    stest.fail('expected exception')
 
-try:
-    _ = obj.a
-except SimExc_Attribute as e:
-    pass
-else:
-    stest.fail('expected exception')
+with stest.expect_exception_mgr(SimExc_General):
+    SIM_get_attribute(obj, "a")
 
-try:
+with stest.expect_exception_mgr(SimExc_IllegalValue):
     obj.b = None
-except SimExc_IllegalValue as e:
-    pass
-else:
-    stest.fail('expected exception')
 
-try:
-    _ = obj.b
-except SimExc_Attribute as e:
-    pass
-else:
-    stest.fail('expected exception')
+with stest.expect_exception_mgr(SimExc_General):
+    SIM_get_attribute(obj, "b")
