@@ -160,7 +160,7 @@
   <build-id value="6213"><add-note> Add porting rule to convert the
       <tt>int1</tt> type into <tt>uint1</tt> in DML 1.4, which better resembles
       how the type works in 1.2.</add-note></build-id>
-  <build-id value="next"><add-note> Improve porting rules for method
+  <build-id value="6215"><add-note> Improve porting rules for method
       return values: In some simple cases, avoid storing the method's
       return value in an intermediate local variable.</add-note></build-id>
 </rn>
