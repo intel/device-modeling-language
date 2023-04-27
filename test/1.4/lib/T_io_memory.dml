@@ -22,6 +22,7 @@ port bare {
 }
 
 bank a {
+    param use_io_memory = true; // needed by the redirect from `bare`
     param mappable = false;
     method read(uint64 address, uint64 enabled_bytes, void *user)
         -> (uint64) throws {
@@ -54,9 +55,10 @@ bank d[i < 2][j < 2] {
 }
 
 bank e {
-    method io_memory_access(generic_transaction_t *memop, uint64 offset,
-                            void *aux) -> (bool) {
-        return default(memop, offset, cast(1234, void *));
+    param use_io_memory = false;
+    method transaction_access(transaction_t *t, uint64 offset,
+                              void *aux) -> (exception_type_t) {
+        return default(t, offset, cast(1234, void *));
     }
     method get(uint64 offset_, uint64 size_) -> (uint64) throws {
         saved uint64 offset;
