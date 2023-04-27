@@ -145,6 +145,7 @@ bank regs {
 }
 
 bank field_regs {
+    param use_io_memory = true;
     param partial = true;
     register r4 size 4 @ 16 is (read_field) {
         is dml12_compat_read_field;
@@ -226,6 +227,7 @@ bank field_regs {
 }
 
 bank io_memory_access_bank {
+    param use_io_memory = true;
     method io_memory_access(generic_transaction_t *memop, uint64 offset,
                             void *aux) -> (bool) {
         SIM_set_mem_op_value_le(memop, 0xdeadbeef);
@@ -274,6 +276,7 @@ template function_shared is function_mapped_bank {
 }
 
 bank testbank is (miss_pattern_bank, function_mapped_bank) {
+    param use_io_memory = true;
     param function = 14;
     param overlapping = true;
     param miss_pattern = 0xee;
