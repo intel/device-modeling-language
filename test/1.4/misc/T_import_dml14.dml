@@ -31,6 +31,9 @@ method init() {
     pseudo_attr_test();
     field_regs.test();
     io_memory_access_bank.test();
+    transaction_access_bank_compat.test();
+    io_memory_access_bank.test();
+    transaction_access_bank_compat.test();
     test_bank_obj_get();
     len_test();
     /// GREP .*Once logging
