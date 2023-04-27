@@ -17,7 +17,7 @@ import glob
 import json
 from fnmatch import fnmatch
 from simicsutils.host import host_type, is_windows, batch_suffix
-from simicsutils.internal import package_path
+from simicsutils.internal import package_path, get_simics_major
 import testparams
 from testparams import simics_root_path
 import traceback
@@ -119,7 +119,7 @@ os.environ['DMLC_DEBUG'] = 't'
 
 latest_api_version = "6"
 
-special_versions = {"T_WREF.dml": "5"}
+special_versions = {}
 
 def simics_api_version(filename):
     base = os.path.basename(filename)
@@ -1075,6 +1075,12 @@ all_tests.append(CTestCase(
          join(testdir, "1.2", "werror", "T_WUNUSEDDEFAULT.dml"),
          status = 2,
          dmlc_extraargs = ["--werror"]))
+
+if get_simics_major() == "6":
+    all_tests.append(CTestCase(
+        ["1.2", "errors", "T_WREF"],
+        join(testdir, "1.2", "errors", "WREF.dml"),
+        api_version="5"))
 
 class DebuggableCheck(BaseTestCase):
     __slots__ = ()
