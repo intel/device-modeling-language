@@ -158,6 +158,9 @@ method test() -> (bool ok) {
     call $pseudo_attr_test();
     call $field_regs.test();
     call $io_memory_access_bank.test();
+    call $transaction_access_bank_compat.test();
+    call $io_memory_access_bank.test();
+    call $transaction_access_bank_compat.test();
     local conf_object_t *bo;
     call $test_bank_obj_get();
     call $len_test();

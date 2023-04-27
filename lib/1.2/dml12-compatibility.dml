@@ -63,39 +63,130 @@ template write_only_attr is pseudo_attr {
     param readable = false;
 }
 
-// If a bank in a DML 1.4 file overrides io_memory_access, then
+// If a bank in a DML 1.4 file overrides io_memory_access
+// or transaction_access, then
 // this template can be instantiated to make the override effective when
 // imported from a DML 1.2 device.
 template dml12_compat_io_memory_access is bank {
-    method access(generic_transaction_t *memop, physical_address_t offset,
+    param _have_dml12_compat_io_memory_access = true;
+    method access(generic_transaction_t *mop, physical_address_t offset,
                   physical_address_t size) throws {
-        if (!this.io_memory_access(memop, offset, NULL))
+        if (!this.io_memory_access(mop, offset, NULL))
             throw;
     }
 }
 
-in each bank {
+template dml12_compat_access_override {
+    // 'in each':ed in all banks to permit calls to the otherwise DML
+    // 1.4-specific functions io_memory_access and transaction_access.
+    // Can be instantiated explicitly to avoid rank ambiguities.
     method io_memory_access(generic_transaction_t *memop, uint64 offset,
                             void *aux) -> (bool) default {
-        local uint64 size = SIM_get_mem_op_size(memop);
+        log info, 4: "entering compatibility wrapper"
+            + " for io_memory_access overrides";
+        local atom_t list[7];
+        if (memop->transaction == NULL) {
+            log info, 4: "io_memory_access: wrapping memop in transaction";
+            local mem_op_type_t type = memop->type;
+
+            local transaction_flags_t flags = 0
+                | ((type & Sim_Trn_Instr) == 0 ? 0 : Sim_Transaction_Fetch)
+                | ((type & Sim_Trn_Write) == 0 ? 0 : Sim_Transaction_Write)
+                | ((type & Sim_Trn_Control) == 0 ? 0
+                   : Sim_Transaction_Control)
+                | (memop->inquiry ? Sim_Transaction_Inquiry : 0)
+                | (memop->atomic ? Sim_Transaction_Atomic : 0)
+                | (memop->non_coherent ? Sim_Transaction_Incoherent : 0);
+
+            list = {
+                ATOM_completion(NULL),
+                ATOM_flags(flags),
+                ATOM_size(memop->size),
+                ATOM_data(memop->real_address),
+                ATOM_initiator(memop->ini_ptr),
+                ATOM_memop(memop),
+                ATOM_list_end(0),
+            };
+
+            if (memop->inverse_endian) {
+                // reverse endian is hard to fully translate outside core,
+                // but this should not be a problem in practice
+                log unimpl: "transaction support for inverse endian memops";
+            }
+        } else {
+            log info, 4: "Reusing memop's existing transaction";
+            // still need to chain the transaction, to ensure
+            // transaction_access will get the memop back untouched
+            // through ATOM_get_transaction_memop
+            list = {
+                ATOM_memop(memop),
+                ATOM_list_end(0),
+                ATOM_list_end(0),
+                ATOM_list_end(0),
+                ATOM_list_end(0),
+                ATOM_list_end(0),
+                ATOM_list_end(0),
+            };
+        }
+        local transaction_t t = {
+            .atoms = list, .prev = memop->transaction, ... };
+        memop->transaction = &t;
+        local bool ret = this.transaction_access(&t, offset, NULL)
+            == Sim_PE_No_Exception;
+        memop->transaction = t.prev;
+        return ret;
+    }
+
+    method transaction_access(transaction_t *t, uint64 offset,
+                              void *aux) -> (exception_type_t) default {
+        log info, 4: "entering compatibility wrapper"
+            + " for transaction_access overrides";
+        local generic_transaction_t *memop = ATOM_get_transaction_memop(t);
+        local generic_transaction_t mop;
+        local bool is_read = SIM_transaction_is_read(t);
+        local uint64 size = SIM_transaction_size(t);
+        local uint8 buf[size];
+        local bool wrap = memop == NULL;
+        if (wrap) {
+            log info, 4: "transaction_access: wrapping transaction in memop";
+            local bool inquiry = SIM_transaction_is_inquiry(t);
+            local conf_object_t *initiator = SIM_transaction_initiator(t);
+            if (is_read) {
+                mop = SIM_make_mem_op_read(
+                    offset, {.data=buf, .len=size}, inquiry, initiator);
+            } else {
+                SIM_get_transaction_bytes(t, {.data=buf, .len=size});
+                mop = SIM_make_mem_op_write(
+                    offset, {.data=buf, .len=size}, inquiry, initiator);
+            }
+            mop.transaction = t;
+            memop = &mop;
+        }
+
         if (size > 8) {
             log error: "Oversized access to %s", name;
-            return false;
+            return Sim_PE_IO_Not_Taken;
         }
         try {
-            if (SIM_mem_op_is_read(memop)) {
+            if (is_read) {
                 this.read_access_memop(memop, offset, size);
+                if (wrap) {
+                    SIM_set_transaction_bytes(
+                        t, {.data=memop->real_address, .len=size});
+                }
             } else {
                 local uint64 writeval;
                 writeval = this.get_write_value(memop);
                 this.write_access_memop(memop, offset, size, writeval);
             }
-            return true;
+            return Sim_PE_No_Exception;
         } catch {
-            return false;
+            return Sim_PE_IO_Not_Taken;
         }
     }
 }
+
+in each bank { is dml12_compat_access_override; }
 
 template read_field {
     // Imitate the default behaviour of field.read_access()

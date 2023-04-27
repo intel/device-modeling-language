@@ -145,7 +145,6 @@ bank regs {
 }
 
 bank field_regs {
-    param use_io_memory = true;
     param partial = true;
     register r4 size 4 @ 16 is (read_field) {
         is dml12_compat_read_field;
@@ -226,23 +225,147 @@ bank field_regs {
     }
 }
 
-bank io_memory_access_bank {
+template io_memory_access_bank is bank {
     param use_io_memory = true;
+    #if (dml_1_2) {
+        method miss_access(generic_transaction_t *memop,
+                           physical_address_t offset,
+                           physical_address_t size) throws {
+            throw; // suppress spec-viol
+        }
+    }
     method io_memory_access(generic_transaction_t *memop, uint64 offset,
                             void *aux) -> (bool) {
-        SIM_set_mem_op_value_le(memop, 0xdeadbeef);
-        return true;
+        if (offset == 13) {
+            SIM_set_mem_op_value_le(memop, 0xdeadbeef);
+            return true;
+        } else {
+            return default(memop, offset, aux);
+        }
     }
-    method test() {
-        local uint32 value;
+    register r size 4 @ 4 { param init_val = 0xc0ffee; }
+    method test() default {
+        local uint32_le_t value;
         local buffer_t buf;
         buf.len = 4;
         buf.data = cast(&value, uint8 *);
         local generic_transaction_t read_memop = SIM_make_mem_op_read(
             0, buf, false, NULL);
-        io_memory_access(&read_memop, 13, NULL);
-        // assuming little-endian host
+        assert io_memory_access(&read_memop, 13, NULL);
         assert value == 0xdeadbeef;
+        assert io_memory_access(&read_memop, 4, NULL);
+        assert value == 0xc0ffee;
+        assert !io_memory_access(&read_memop, 3, NULL);
+    }
+}
+
+bank io_memory_access_bank is io_memory_access_bank;
+
+bank io_memory_access_bank_compat is (
+    io_memory_access_bank, dml12_compat_io_memory_access) {
+    method test() {
+        default();
+        local uint32_le_t value;
+        local buffer_t buf;
+        buf.len = 4;
+        buf.data = cast(&value, uint8 *);
+        local generic_transaction_t read_memop = SIM_make_mem_op_read(
+            4, buf, false, NULL);
+        local exception_type_t exc
+            = io_memory.operation(&read_memop, {.base=0, ...});
+        assert exc == Sim_PE_No_Exception;
+        assert value == 0xc0ffee;
+        SIM_set_mem_op_physical_address(&read_memop, 13);
+        exc = io_memory.operation(&read_memop, {.base=0, ...});
+        assert exc == Sim_PE_No_Exception;
+        assert value == 0xdeadbeef;
+        SIM_set_mem_op_physical_address(&read_memop, 3);
+        exc = io_memory.operation(&read_memop, {.base=0, ...});
+        assert exc == Sim_PE_IO_Not_Taken;
+    }
+}
+
+template transaction_access_bank is bank {
+    param use_io_memory = false;
+    #if (dml_1_2) {
+        method miss_access(generic_transaction_t *memop,
+                           physical_address_t offset,
+                           physical_address_t size) throws {
+            throw; // suppress spec-viol
+        }
+    }
+    method transaction_access(transaction_t *t, uint64 offset,
+                            void *aux) -> (exception_type_t) {
+        if (offset == 13) {
+            SIM_set_transaction_value_le(t, 0xdeadbeef);
+            return Sim_PE_No_Exception;
+        } else {
+            return default(t, offset, aux);
+        }
+    }
+    register r size 4 @ 4 { param init_val = 0xc0ffee; }
+    method test() default {
+        local uint8 val[4];
+        local atom_t atoms[3] = {
+            ATOM_data(val),
+            ATOM_size(4),
+            ATOM_list_end(0)
+        };
+        // the override is honored if sending a transaction to the bank.
+        local transaction_t t;
+        t.atoms = atoms;
+        assert transaction_access(&t, 13, NULL) == Sim_PE_No_Exception;
+        assert SIM_get_transaction_value_le(&t) == 0xdeadbeef;
+        assert transaction_access(&t, 4, NULL) == Sim_PE_No_Exception;
+        assert SIM_get_transaction_value_le(&t) == r.init_val;
+        assert transaction_access(&t, 3, NULL) == Sim_PE_IO_Not_Taken;
+    }
+}
+
+bank transaction_access_bank is transaction_access_bank;
+bank transaction_access_bank_compat is (
+    transaction_access_bank, dml12_compat_io_memory_access)  {
+    method test() {
+        default();
+        local uint8 val[4];
+        local atom_t atoms[3] = {
+            ATOM_data(val),
+            ATOM_size(4),
+            ATOM_list_end(0)
+        };
+        local transaction_t t;
+        t.atoms = atoms;
+        local map_target_t *map_target = SIM_new_map_target(
+            SIM_object_descendant(
+                dev.obj, "bank.transaction_access_bank_compat"),
+            NULL, NULL);
+        assert SIM_issue_transaction(map_target, &t, 13) == Sim_PE_No_Exception;
+        assert SIM_get_transaction_value_le(&t) == 0xdeadbeef;
+        assert SIM_issue_transaction(map_target, &t, 4) == Sim_PE_No_Exception;
+        assert SIM_get_transaction_value_le(&t) == r.init_val;
+        assert SIM_issue_transaction(map_target, &t, 3) == Sim_PE_IO_Not_Taken;
+        SIM_free_map_target(map_target);
+        #if (dml_1_2) {
+            // a DML 1.2 bank with use_io_memory=false still implements
+            // io_memory
+            local uint32_le_t value;
+            local buffer_t buf;
+            buf.len = 4;
+            buf.data = cast(&value, uint8 *);
+            local generic_transaction_t read_memop = SIM_make_mem_op_read(
+                4, buf, false, NULL);
+            local exception_type_t exc
+                = io_memory.operation(&read_memop, {.base=0, ...});
+            assert exc == Sim_PE_No_Exception;
+            assert value == 0xc0ffee;
+            SIM_set_mem_op_physical_address(&read_memop, 13);
+            exc = io_memory.operation(&read_memop, {.base=0, ...});
+            assert exc == Sim_PE_No_Exception;
+            assert value == 0xdeadbeef;
+            SIM_set_mem_op_physical_address(&read_memop, 3);
+            exc = io_memory.operation(&read_memop, {.base=0, ...});
+            assert exc == Sim_PE_IO_Not_Taken;
+        }
     }
 }
 
@@ -276,7 +399,6 @@ template function_shared is function_mapped_bank {
 }
 
 bank testbank is (miss_pattern_bank, function_mapped_bank) {
-    param use_io_memory = true;
     param function = 14;
     param overlapping = true;
     param miss_pattern = 0xee;
