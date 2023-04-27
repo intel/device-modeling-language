@@ -29,7 +29,7 @@ def expect_attributes(write_val = 0, read_called = False, write_called = False,
 
 for offs in range(8):
     for size in range(1, 8 - offs + 1):
-        r = Register_LE((obj, 'b', offs), size=size)
+        r = Register_LE(obj.bank.b, offs, size=size)
         r.read_transaction.inquiry = True
         r.write_transaction.inquiry = True
         val = 0x8877665544332211 & ((1 << size * 8) - 1)

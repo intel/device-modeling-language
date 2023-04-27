@@ -5,7 +5,7 @@ import stest
 import dev_util
 
 # bank_io_memory works
-stest.expect_equal(dev_util.Register_LE((obj, 'bare', 0), size=1).read(), 0xaa)
+stest.expect_equal(dev_util.Register_LE(obj.port.bare, 0, size=1).read(), 0xaa)
 # function_io_memory works ..
 stest.expect_equal(dev_util.Register_LE((obj, 0xb, 0), size=1).read(), 0xbb)
 stest.expect_equal(dev_util.Register_LE((obj, 0xc, 0), size=1).read(), 0xcc)
