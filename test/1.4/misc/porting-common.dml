@@ -86,6 +86,7 @@ bank b2 {
 }
 
 bank access {
+    param use_io_memory = true;
     method io_memory_access(generic_transaction_t *memop, uint64 offset, void *aux) -> (bool) {
         // TODO: further conversion likely needed; probably move
         // old_access implementation into this method
@@ -133,6 +134,7 @@ bank miss {
 }
 
 bank read_access_memop {
+    param use_io_memory = true;
     method io_memory_access(generic_transaction_t *memop, uint64 offset, void *aux) -> (bool) {
         // TODO: further conversion likely needed; probably move
         // old_read_access_memop implementation into this method
@@ -150,6 +152,7 @@ bank read_access_memop {
 }
 
 bank write_access_memop {
+    param use_io_memory = true;
     method io_memory_access(generic_transaction_t *memop, uint64 offset, void *aux) -> (bool) {
         // TODO: further conversion likely needed; probably move
         // old_write_access_memop implementation into this method

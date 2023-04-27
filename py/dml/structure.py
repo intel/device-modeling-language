@@ -2748,6 +2748,7 @@ def port_builtin_method_overrides(name, site, inp_ast, parent_obj):
     trampolines = {
         'bank': {
             'access': ('''\
+param use_io_memory = true;
 method io_memory_access(generic_transaction_t *memop, uint64 offset, void *aux) -> (bool) {
     // TODO: further conversion likely needed; probably move
     // old_access implementation into this method
@@ -2836,6 +2837,7 @@ method read_access(generic_transaction_t *memop, physical_address_t offset,
     }
 }'''),
             'read_access_memop': ('''\
+param use_io_memory = true;
 method io_memory_access(generic_transaction_t *memop, uint64 offset, void *aux) -> (bool) {
     // TODO: further conversion likely needed; probably move
     // old_read_access_memop implementation into this method
@@ -2864,6 +2866,7 @@ method write_access(generic_transaction_t *memop, physical_address_t offset,
     }
 }'''),
             'write_access_memop': ('''\
+param use_io_memory = true;
 method io_memory_access(generic_transaction_t *memop, uint64 offset, void *aux) -> (bool) {
     // TODO: further conversion likely needed; probably move
     // old_write_access_memop implementation into this method
