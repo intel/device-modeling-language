@@ -21,7 +21,7 @@ import contextlib
  undocumented0,
  undocumented1,
 ] = [
-    dev_util.Register_LE((obj, 'b', offs), size=4)
+    dev_util.Register_LE(obj.bank.b, offs, size=4)
     for offs in [4, 8, 12, 16, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88]]
 
 # TODO: Currently DML 1.2 logs on bank objects and DML 1.4 logs on conf_objects
@@ -159,7 +159,7 @@ stest.expect_equal(obj.b_fields0, 0xf)
 
 # In 1.4, write_1_clears supports partial access, but not in 1.2
 [write_1_clears, clear_on_read, write_1_only, write_0_only] = [
-     dev_util.Register_LE((obj, 'b', offs), size=4)
+     dev_util.Register_LE(obj.bank.b, offs, size=4)
      for offs in [20, 24, 28, 32]]
 
 obj.b_write_1_clears = 0x12345678
@@ -205,7 +205,7 @@ stest.expect_equal(fields1.read(), 0x55)
 # clear_on_read field cleared!
 stest.expect_equal(fields1.read(), 0x51)
 
-write_only = dev_util.Register_LE((obj, 'b', 100), size=4)
+write_only = dev_util.Register_LE(obj.bank.b, 100, size=4)
 write_only.write(0xdeadbeef)
 stest.expect_equal(obj.b_write_only, 0xdeadbeef)
 

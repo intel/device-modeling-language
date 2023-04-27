@@ -23,7 +23,7 @@ import contextlib
  read_constant,
  read_constant_field,
 ] = [
-    dev_util.Register_LE((obj, 'b', offs), size=4)
+    dev_util.Register_LE(obj.bank.b, offs, size=4)
     for offs in [4, 8, 12, 16, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88,
                  92, 96]]
 
@@ -72,7 +72,7 @@ obj.b_read_only = 0xdeadbeef
 obj.log_level = 1
 stest.expect_equal(read_only.read(), 0xdeadbeef)
 # partial access, second byte of register
-read_only_1 = dev_util.Register_LE((obj, 'b', 17), size=1)
+read_only_1 = dev_util.Register_LE(obj.bank.b, 17, size=1)
 with LogCapture() as capture, stest.allow_log_mgr(obj, 'spec-viol'):
     read_only.write(0xdeadbeef)
     # remaining on log-level 2
@@ -113,7 +113,7 @@ with LogCapture() as capture, stest.allow_log_mgr(obj, 'spec-viol'):
 obj.log_level = 1
 
 fields0 = dev_util.Register_LE(
-    (obj, 'b', 0), size=1, bitfield=dev_util.Bitfield_LE({
+    obj.bank.b, 0, size=1, bitfield=dev_util.Bitfield_LE({
         'read_write': 0,
         'ignore_write': 1,
         'read_zero': 2,
@@ -159,7 +159,7 @@ obj.b_fields0 = 0xf
 stest.expect_equal(obj.b_fields0, 0xf)
 
 [write_1_clears, clear_on_read, write_1_only, write_0_only] = [
-     dev_util.Register_LE((obj, 'b', offs + 1), size=2)
+     dev_util.Register_LE(obj.bank.b, offs + 1, size=2)
      for offs in [20, 24, 28, 32]]
 
 obj.b_write_1_clears = 0x12345678
@@ -195,7 +195,7 @@ stest.expect_equal(read_constant.read(), 0x44)
 stest.expect_equal(read_constant_field.read(), 0x44)
 
 fields1 = dev_util.Register_LE(
-    (obj, 'b', 1), size=1, bitfield=dev_util.Bitfield_LE({
+    obj.bank.b, 1, size=1, bitfield=dev_util.Bitfield_LE({
         'write_0_only': (7, 6),
         'write_1_only': (5, 4),
         'clear_on_read': (3, 2),
@@ -214,7 +214,7 @@ stest.expect_equal(fields1.read(), 0x55)
 # clear_on_read field cleared!
 stest.expect_equal(fields1.read(), 0x51)
 
-write_only = dev_util.Register_LE((obj, 'b', 100), size=4)
+write_only = dev_util.Register_LE(obj.bank.b, 100, size=4)
 write_only.write(0xdeadbeef)
 stest.expect_equal(obj.b_write_only, 0xdeadbeef)
 
@@ -233,7 +233,7 @@ obj.log_level = 1
 
 # Access outside fields
 (fields3_0, fields3_2_0, fields3_2_1) = (dev_util.Register_LE(
-    (obj, 'b', offset), size=1, bitfield=dev_util.Bitfield_LE({
+    obj.bank.b, offset, size=1, bitfield=dev_util.Bitfield_LE({
         'f76': (7, 6), 'y': 5, 'f43': (4, 3), 'x': 2, 'f10': (1, 0)}))
                                      for offset in (3, 128, 129))
 with LogCapture() as capture, stest.allow_log_mgr(obj, 'spec-viol'):
@@ -266,10 +266,10 @@ with LogCapture() as capture, stest.allow_log_mgr(obj, 'spec-viol'):
              for (bits, val) in [("7:6", "10"), ("1:0", "01")]])])
 
 [unimpl, read_unimpl, write_unimpl, silent_unimpl] = [
-     dev_util.Register_LE((obj, 'b', offs), size=4)
+     dev_util.Register_LE(obj.bank.b, offs, size=4)
      for offs in [36, 40, 44, 48]]
 fields = dev_util.Register_LE(
-    (obj, 'b', 2), size=1, bitfield=dev_util.Bitfield_LE({
+    obj.bank.b, 2, size=1, bitfield=dev_util.Bitfield_LE({
         'unimpl': 0, 'read_unimpl': 1, 'write_unimpl': 2, 'silent_unimpl': 3}))
 with LogCapture('unimpl') as capture:
     unimpl.write(5)
@@ -330,12 +330,12 @@ with LogCapture('unimpl') as capture:
     del capture.messages[:]
 
 fields4 = dev_util.Register_LE(
-    (obj, 'b', 104), size=1, bitfield=dev_util.Bitfield_LE({
+    obj.bank.b, 104, size=1, bitfield=dev_util.Bitfield_LE({
         'constant0': 0,
         'constant1': (2, 1)}))
 
 fields5 = dev_util.Register_LE(
-    (obj, 'b', 108), size=1, bitfield=dev_util.Bitfield_LE({
+    obj.bank.b, 108, size=1, bitfield=dev_util.Bitfield_LE({
         'constant0': 0,
         'constant1': (2, 1)}))
 
@@ -439,7 +439,7 @@ with LogCapture() as capture, stest.allow_log_mgr(obj, "spec-viol"):
     del capture.messages[:]
 
 fields6 = dev_util.Register_LE(
-    (obj, 'b', 112), size=1, bitfield=dev_util.Bitfield_LE({
+    obj.bank.b, 112, size=1, bitfield=dev_util.Bitfield_LE({
         'zeros': 0,
         'ones': 1,
         'many_ones' : (5, 2)}))
@@ -473,7 +473,7 @@ with LogCapture() as capture, stest.allow_log_mgr(obj, "spec-viol"):
     del capture.messages[:]
 
 fields7 = dev_util.Register_LE(
-    (obj, 'b', 116), size=1, bitfield=dev_util.Bitfield_LE({
+    obj.bank.b, 116, size=1, bitfield=dev_util.Bitfield_LE({
         'ignore': 0}))
 
 # No logs from ignore
@@ -495,7 +495,7 @@ with LogCapture() as capture:
     stest.expect_equal(capture.messages, [])
 
 fields8 = dev_util.Register_LE(
-    (obj, 'b', 120), size=1, bitfield=dev_util.Bitfield_LE({
+    obj.bank.b, 120, size=1, bitfield=dev_util.Bitfield_LE({
         'undocumented': 0}))
 
 with LogCapture() as capture, stest.allow_log_mgr(obj, "spec-viol"):

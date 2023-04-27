@@ -3,8 +3,7 @@
 
 import dev_util
 
-from simics import *
-from stest import expect_equal, expect_true
+from stest import expect_equal
 
 def test_description(b, expected_desc):
     expect_equal(b.description(), expected_desc)
@@ -94,8 +93,8 @@ def test(obj):
     test_array_names(obj.bank.bg.iface.register_view)
 
     test_register_value(obj.bank.le.iface.register_view,
-                        dev_util.Register_LE((obj, 'le', 0x0), 4))
+                        dev_util.Register_LE(obj.bank.le, 0x0, 4))
     test_register_value(obj.bank.be.iface.register_view,
-                        dev_util.Register_BE((obj, 'be', 0x0), 4))
+                        dev_util.Register_BE(obj.bank.be, 0x0, 4))
     expect_equal(obj.bank.le.iface.register_view.register_info(0)[5], False)
     expect_equal(obj.bank.be.iface.register_view.register_info(0)[5], True)
