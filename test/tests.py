@@ -1082,6 +1082,12 @@ if get_simics_major() == "6":
         join(testdir, "1.2", "errors", "WREF.dml"),
         api_version="5"))
 
+if get_simics_major() == "7":
+    all_tests.append(CTestCase(
+        ["1.4", "errors", "T_ETYPE_integer_t"],
+        join(testdir, "1.4", "errors", "ETYPE_integer_t.dml"),
+        api_version="7"))
+
 class DebuggableCheck(BaseTestCase):
     __slots__ = ()
     def test(self):
