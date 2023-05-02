@@ -1,0 +1,12 @@
+/*
+  © 2021-2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// DMLC-FLAG --simics-api=6
+
+extern uinteger_t undef_uval;
+extern integer_t undef_val;
