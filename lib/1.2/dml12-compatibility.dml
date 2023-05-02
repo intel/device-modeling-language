@@ -68,10 +68,9 @@ template write_only_attr is pseudo_attr {
 // this template can be instantiated to make the override effective when
 // imported from a DML 1.2 device.
 template dml12_compat_io_memory_access is bank {
-    param _have_dml12_compat_io_memory_access = true;
-    method access(generic_transaction_t *mop, physical_address_t offset,
+    method access(generic_transaction_t *memop, physical_address_t offset,
                   physical_address_t size) throws {
-        if (!this.io_memory_access(mop, offset, NULL))
+        if (!this.io_memory_access(memop, offset, NULL))
             throw;
     }
 }
@@ -118,15 +117,8 @@ template dml12_compat_access_override {
             // still need to chain the transaction, to ensure
             // transaction_access will get the memop back untouched
             // through ATOM_get_transaction_memop
-            list = {
-                ATOM_memop(memop),
-                ATOM_list_end(0),
-                ATOM_list_end(0),
-                ATOM_list_end(0),
-                ATOM_list_end(0),
-                ATOM_list_end(0),
-                ATOM_list_end(0),
-            };
+            list[0] = ATOM_memop(memop);
+            list[1] = ATOM_list_end(0);
         }
         local transaction_t t = {
             .atoms = list, .prev = memop->transaction, ... };
@@ -145,6 +137,11 @@ template dml12_compat_access_override {
         local generic_transaction_t mop;
         local bool is_read = SIM_transaction_is_read(t);
         local uint64 size = SIM_transaction_size(t);
+        if (size > 8) {
+            log error: "Oversized access to %s", name;
+            return Sim_PE_IO_Not_Taken;
+        }
+
         local uint8 buf[size];
         local bool wrap = memop == NULL;
         if (wrap) {
@@ -163,10 +160,6 @@ template dml12_compat_access_override {
             memop = &mop;
         }
 
-        if (size > 8) {
-            log error: "Oversized access to %s", name;
-            return Sim_PE_IO_Not_Taken;
-        }
         try {
             if (is_read) {
                 this.read_access_memop(memop, offset, size);

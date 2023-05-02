@@ -192,9 +192,7 @@ bank field_regs {
 
     method test() {
         local uint16 value;
-        local buffer_t buf;
-        buf.len = 2;
-        buf.data = cast(&value, uint8 *);
+        local buffer_t buf = {.len=2, .data=cast(&value, uint8 *)};
         local generic_transaction_t read_memop = SIM_make_mem_op_read(
             0, buf, false, NULL);
         local generic_transaction_t write_memop = SIM_make_mem_op_write(
@@ -246,9 +244,7 @@ template io_memory_access_bank is bank {
     register r size 4 @ 4 { param init_val = 0xc0ffee; }
     method test() default {
         local uint32_le_t value;
-        local buffer_t buf;
-        buf.len = 4;
-        buf.data = cast(&value, uint8 *);
+        local buffer_t buf = {.len=4, .data=cast(&value, uint8 *)};
         local generic_transaction_t read_memop = SIM_make_mem_op_read(
             0, buf, false, NULL);
         assert io_memory_access(&read_memop, 13, NULL);
@@ -266,9 +262,7 @@ bank io_memory_access_bank_compat is (
     method test() {
         default();
         local uint32_le_t value;
-        local buffer_t buf;
-        buf.len = 4;
-        buf.data = cast(&value, uint8 *);
+        local buffer_t buf = {.len=4, .data=cast(&value, uint8 *)};
         local generic_transaction_t read_memop = SIM_make_mem_op_read(
             4, buf, false, NULL);
         local exception_type_t exc
@@ -349,9 +343,7 @@ bank transaction_access_bank_compat is (
             // a DML 1.2 bank with use_io_memory=false still implements
             // io_memory
             local uint32_le_t value;
-            local buffer_t buf;
-            buf.len = 4;
-            buf.data = cast(&value, uint8 *);
+            local buffer_t buf = {.len=4, .data=cast(&value, uint8 *)};
             local generic_transaction_t read_memop = SIM_make_mem_op_read(
                 4, buf, false, NULL);
             local exception_type_t exc
@@ -418,9 +410,7 @@ bank overridden_bank is (unified_hard_reset, unified_soft_reset);
 
 method memop_test() {
     local uint8 value;
-    local buffer_t buf;
-    buf.len = 1;
-    buf.data = &value;
+    local buffer_t buf = {.len=1, .data = &value};
     local generic_transaction_t memop = SIM_make_mem_op_read(
         0, buf, false, NULL);
     local map_info_t info;
