@@ -168,7 +168,7 @@
       a DML 1.2 device, using the `dml12-compatibility.dml` library,
       then a call to the <tt>transaction_access</tt> method will now
       trigger a proper bank access. Also, if a bank uses the
-      `adml12_compat_io_memory_access` template, then overrides of
+      <tt>dml12_compat_io_memory_access</tt> template, then overrides of
       the <tt>transaction_access</tt> method will be honored. This
       simplifies future transition to the Simics 7
       API.</add-note></build-id>
