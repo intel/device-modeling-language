@@ -469,4 +469,9 @@
       This syntax can't be used for variadic arguments or any argument
       corresponding to a method parameter declared `inline`
       <bug number="SIMICS-20473"/>.</add-note></build-id>
+  <build-id value="next"><add-note>Fixed a bug where a top-level
+      object named the same as the device object could result in
+      invalid generated C when both objects are targets of <tt>each
+      .. in ..</tt> expressions
+      <bug number="SIMICS-21044"/>.</add-note></build-id>
 </rn>

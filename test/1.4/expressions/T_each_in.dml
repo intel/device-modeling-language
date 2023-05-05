@@ -26,6 +26,11 @@ bank a {
     }
 }
 
+template t2 { }
+group test is t2 {
+    group sub is t2;
+}
+
 method init() {
     local bool found = false;
     foreach obj in (each tr in (a.b[0].d)) {
@@ -64,4 +69,10 @@ method init() {
         if (i == 2) break;
     }
     assert i == 2;
+
+    // SIMICS-21044: 'each in' used to generate broken code for objects whose
+    // .qname == dev.name
+    assert test.name == dev.name;
+    assert (each t2 in (test)).len == 1;
+    assert (each t2 in (dev)).len == 1;
 }
