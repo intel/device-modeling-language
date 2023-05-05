@@ -10,3 +10,4 @@ import "./y.dml";
 import "../misc/rel/z.dml";
 // interpreted relative main file
 import "rel/z.dml";
+import "rel/a/y.dml";
