@@ -177,7 +177,8 @@ def dump_input_files(outputbase, imported):
     # sufficiently deep in a directory hierarchy _/_/.../, so that the
     # .. path can be resolved within the archive.
     prefix = '/'.join(['_'] * max_dotdot)
-    basenames = set()
+    # map basename to one of its absolute paths
+    basenames: dict[str, str] = {}
     with tarfile.open(outputbase + ".tar.xz", 'w:xz') as tf:
         # HACK: if two different files foo.dml are imported, where one is
         # imported as "foo.dml" or "./foo.dml" and the other is only
@@ -188,18 +189,24 @@ def dump_input_files(outputbase, imported):
             paths = imported[f]
             base = os.path.basename(f)
             while base in basenames:
-                # HACK: all DML files end up in the same directory; if two
-                # have the same name, then dodge that by renaming. In
-                # this case we may need to change some import directive
-                # manually in order for all files to be imported.
+                if Path(f).read_bytes() == Path(basenames[base]).read_bytes():
+                    # One file imported using two different paths.
+                    # Keep one copy only.
+                    break
+                # HACK: all DML files end up in the same directory; if
+                # two different files have the same name, then dodge
+                # that by renaming. In this case we may need to change
+                # some import directive manually in order for all
+                # files to be imported.
                 base = '_' + base
-            basenames.add(base)
-            path_in_tar = f'{prefix}/{base}'
-            tf.add(f, path_in_tar)
-            (_, hfile) = ctree.dmldir_macro(f)
-            if os.path.exists(hfile):
-                (_, h_path_in_tar) = ctree.dmldir_macro(path_in_tar)
-                tf.add(hfile, h_path_in_tar)
+            else:
+                basenames[base] = f
+                path_in_tar = f'{prefix}/{base}'
+                tf.add(f, path_in_tar)
+                (_, hfile) = ctree.dmldir_macro(f)
+                if os.path.exists(hfile):
+                    (_, h_path_in_tar) = ctree.dmldir_macro(path_in_tar)
+                    tf.add(hfile, h_path_in_tar)
             for path in paths:
                 symlink = os.path.normpath(os.path.join(prefix, path))
                 if (os.path.normpath(os.path.dirname(symlink))
