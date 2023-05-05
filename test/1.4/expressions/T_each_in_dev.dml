@@ -1,0 +1,17 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+group test {
+    group g1;
+    group g2;
+}
+
+method init() {
+    assert (each group in (dev)).len == 1;
+    assert (each group in (test)).len == 2;
+}
