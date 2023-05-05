@@ -2970,7 +2970,9 @@ class EachIn(Expression):
     @staticmethod
     def index_ident(node, trait):
         '''C identifier name for vtable_list_t instance'''
-        return f'_each__{trait.name}__in__{node.attrname() or node.name}'
+        # 'dev' is guaranteed not to clash with the name of another object
+        name = 'dev' if node is dml.globals.device else node.attrname()
+        return f'_each__{trait.name}__in__{name}'
 
     @staticmethod
     def array_ident(trait):
