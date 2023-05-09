@@ -75,10 +75,19 @@ template dml12_compat_io_memory_access is bank {
     }
 }
 
-template dml12_compat_access_override {
-    // 'in each':ed in all banks to permit calls to the otherwise DML
-    // 1.4-specific functions io_memory_access and transaction_access.
-    // Can be instantiated explicitly to avoid rank ambiguities.
+in each bank {
+    // Permit calls to the otherwise DML 1.4-specific functions
+    // io_memory_access and transaction_access. Note how the API differs
+    // between 1.2 and 1.4: In 1.4 only one of these methods is valid, while in
+    // 1.2 they are chained. This is because 1.4 supports the transaction
+    // interface, and thus can honour the use_io_memory parameter; in 1.2, the
+    // bank ignores use_io_memory and always implements io_memory. To make this
+    // work with overrides from DML 1.4, io_memory_access actually calls
+    // transaction_access which in turn calls
+    // read_access_memop/write_access_memop. We rely on some undocumented
+    // features, like memop->transaction, to ensure the memop instance
+    // (potentially including PCI metadata etc) is retained over the
+    // transaction-based indirection.
     method io_memory_access(generic_transaction_t *memop, uint64 offset,
                             void *aux) -> (bool) default {
         log info, 4: "entering compatibility wrapper"
@@ -178,8 +187,6 @@ template dml12_compat_access_override {
         }
     }
 }
-
-in each bank { is dml12_compat_access_override; }
 
 template read_field {
     // Imitate the default behaviour of field.read_access()
