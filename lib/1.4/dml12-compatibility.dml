@@ -8,7 +8,6 @@ dml 1.4;
 // NOOP if device is 1.4
 
 template dml12_compat_io_memory_access { }
-template dml12_compat_access_override { }
 template dml12_compat_read_register { }
 template dml12_compat_write_register { }
 template dml12_compat_read_field { }
