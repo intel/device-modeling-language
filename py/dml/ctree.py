@@ -4058,16 +4058,22 @@ def mkCast(site, expr, new_type):
             return mkTraitUpcast(site, expr, real.trait)
     old_type = safe_realtype(expr.ctype())
     if (dml.globals.compat_dml12_int(site)
-        and (isinstance(old_type, (TStruct, TVector, TLayout))
-             or isinstance(real, (TStruct, TVector, TLayout)))):
+        and (isinstance(old_type, (TStruct, TVector))
+             or isinstance(real, (TStruct, TVector)))):
         # these casts are permitted by C only if old and new are
         # the same type, which is useless
         return Cast(site, expr, new_type)
-    if isinstance(real, (TVoid, TStruct, TArray, TVector, TTraitList,
-                         TLayout, TFunction)):
+    if isinstance(real, TStruct):
+        if isinstance(old_type, TStruct) and old_type.label == real.label:
+            return expr
         raise ECAST(site, expr, new_type)
-    if isinstance(old_type, (TVoid, TStruct, TVector, TTraitList, TLayout,
-                             TTrait)):
+    if isinstance(real, TExternStruct):
+        if isinstance(old_type, TExternStruct) and old_type.id == real.id:
+            return expr
+        raise ECAST(site, expr, new_type)
+    if isinstance(real, (TVoid, TArray, TVector, TTraitList, TFunction)):
+        raise ECAST(site, expr, new_type)
+    if isinstance(old_type, (TVoid, TStruct, TVector, TTraitList, TTrait)):
         raise ECAST(site, expr, new_type)
     if old_type.is_int and old_type.is_endian:
         expr = as_int(expr)
