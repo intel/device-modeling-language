@@ -1026,7 +1026,14 @@ class TLayout(TStruct):
         return self.size
 
     def clone(self):
-        return TLayout(self.endian, self.member_decls, self.label, self.const)
+        cloned = TLayout(self.endian, self.member_decls, self.label,
+                         self.const)
+        if self.members is not None:
+            cloned.members = self.members
+            cloned.size = self.size
+        return cloned
+
+
 
 class TFunction(DMLType):
     __slots__ = ('input_types', 'output_type', 'varargs')
