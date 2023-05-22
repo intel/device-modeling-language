@@ -1,0 +1,32 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+header %{
+    typedef struct {
+        int x;
+    } ext_t;
+%}
+
+typedef struct {
+    int32 x;
+} s_t;
+
+typedef layout "little-endian" {
+    int32 x;
+} l_t;
+
+extern typedef struct {
+    int x;
+} ext_t;
+
+method init() {
+    local (s_t s, l_t l, ext_t ext) = ({1}, {1}, {1});
+    s = cast(s, s_t);
+    l = cast(l, l_t);
+    ext = cast(ext, ext_t);
+    assert s.x == 1 && l.x == 1 && ext.x == 1;
+}

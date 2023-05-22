@@ -27,14 +27,18 @@ method init() {
     cast(s, uint32);
     /// ERROR ECAST
     cast(i, s_t);
-    /// ERROR ECAST
+    // no error
     cast(s, s_t);
+    /// ERROR ECAST
+    cast(s, l_t);
     /// ERROR ECAST
     cast(l, uint32);
     /// ERROR ECAST
     cast(i, l_t);
-    /// ERROR ECAST
+    // no error
     cast(l, l_t);
+    /// ERROR ECAST
+    cast(l, s_t);
     /// ERROR ECAST
     cast(v, uint32);
     /// ERROR ECAST
