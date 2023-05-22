@@ -27,6 +27,6 @@ stest.expect_equal(obj.single_operator, 3)
 
 obj.trigger_constig = None
 SIM_continue(99999)
-stest.expect_equal(obj.constig_res, 0)
+stest.expect_equal(obj.constig_res, [0, 0])
 SIM_continue(2)
-stest.expect_equal(obj.constig_res, 4)
+stest.expect_equal(obj.constig_res, [4, 7 << 32 | 11])
