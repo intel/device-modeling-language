@@ -221,7 +221,7 @@ def deserialize(real_type, current_expr, target_expr, error_out):
     def addressof_target_unconst():
         base = ctree.mkAddressOf(current_site, target_expr)
         if deep_const(real_type):
-            base = ctree.mkCast(current_site, target_expr, TPtr(void))
+            base = ctree.mkCast(current_site, base, TPtr(void))
         return base
 
     def construct_subcall(apply_expr):
@@ -564,7 +564,9 @@ def generate_deserialize(real_type):
             (tmp_out_decl, tmp_out_ref) = declare_variable(
                 site, "_tmp_out", TPtr(real_type),
                 ctree.mkNew(site, real_type))
-            cleanup.append(ctree.mkDelete(site, tmp_out_ref))
+            cleanup_ref = (tmp_out_ref if not deep_const(real_type)
+                           else ctree.mkCast(site, tmp_out_ref, TPtr(void)))
+            cleanup.append(ctree.mkDelete(site, cleanup_ref))
             tmp_out_decl.toc()
             targets = tuple((ctree.mkSubRef(site, tmp_out_ref, name, "->"),
                              conv_const(real_type.const, safe_realtype(typ)))

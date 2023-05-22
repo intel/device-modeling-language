@@ -44,3 +44,18 @@ template operator is (int64_attr) {
 
 attribute multi_operator[i < 2][j < 2] is (operator);
 attribute single_operator is (operator);
+
+// Test methods with const-qualified parameters
+
+attribute constig_res is uint64_attr;
+
+method constig(const uint64 i) {
+    constig_res.val = i;
+}
+
+attribute trigger_constig is (write_only_attr) {
+    param type = "n";
+    method set(attr_value_t val) throws {
+        after 0.1 s: constig(4);
+    }
+}
