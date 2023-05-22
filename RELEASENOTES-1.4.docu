@@ -479,4 +479,7 @@
       <tt>dml-builtins.dml</tt>.</add-note></build-id>
   <build-id value="next"><add-note>It's now allowed to cast an expression
       of a struct type to that same struct type.</add-note></build-id>
+  <build-id value="next"><add-note>Fixed an error where const method parameters
+      would cause an internal error if that method is used as the callback of
+      an `after` statement.</add-note></build-id>
 </rn>
