@@ -184,7 +184,25 @@ bidi_re = re.compile(
 pragma_re = re.compile(r'/\*%\s*([^\s*]+)\s*(?:\s([^*\s][^*]*))?%\*/')
 pragma_coverity_data_re = re.compile(r'^(\S+)\s*(?:\s(\S[\s\S]*))?$')
 
-def process_pragma(filename, start_lineno, end_lineno, pragma, data):
+def check_bidi(filename, filestr):
+    for m in bidi_re.finditer(filestr):
+        lineno = filestr[:m.start()].count('\n') + 1
+        col = m.start() - filestr.rfind('\n', 0, m.start())
+        report(ESYNTAX(SimpleSite(f"{filename}:{lineno}:{col}"),
+                       repr(m.group())[1:-1],
+                       "Unicode BiDi character not allowed"))
+
+def parse_pragmas(filename, filestr):
+    pragmas = []
+    for m in pragma_re.finditer(filestr):
+        start_lineno = filestr[:m.start()].count('\n') + 1
+        end_lineno = start_lineno + filestr[m.start():m.end()].count('\n')
+        pragma = parse_pragma(filename, start_lineno, end_lineno, *m.groups())
+        if pragma is not None:
+            pragmas.append(pragma)
+    return pragmas
+
+def parse_pragma(filename, start_lineno, end_lineno, pragma, data):
     pragma = pragma.upper()
     data = data and data.strip().replace('\n', ' ').replace('\r', '')
     if pragma == 'COVERITY':
@@ -195,15 +213,25 @@ def process_pragma(filename, start_lineno, end_lineno, pragma, data):
                            "COVERITY pragma must specify event to suppress, "
                            + "and optionally classification"))
         else:
-            # The first COVERITY pragma we encounter for a given end_lineno is
-            # the only one whose starting line may differ.
-            (dml.globals.coverity_pragmas
-             .setdefault((filename, end_lineno + 1), (start_lineno, []))
-             [1].append(data.groups()))
+            return ('COVERITY',
+                    (filename, start_lineno, end_lineno + 1, data.groups()))
+    else:
+        # TODO should be reported once pragmas are officially supported
+        # report(WPRAGMA(SimpleSite(f"{filename}:{start_lineno}"), pragma))
+        return None
 
-    # TODO should be reported once pragmas are officially supported
-    # else:
-    #     report(WPRAGMA(SimpleSite(f"{filename}:{start_lineno}"), pragma))
+def process_pragma(t):
+    (pragma, data) = t
+    if pragma == 'COVERITY':
+        (filename, start_lineno, end_lineno, data) = data
+        # The first COVERITY pragma we encounter for a given end_lineno is
+        # the only one whose starting line may differ.
+        (dml.globals.coverity_pragmas
+         .setdefault((filename, end_lineno), (start_lineno, []))
+         [1].append(data))
+    else:
+        raise ICE(f'unknown pragma: {pragma}')
+
 
 def parse_file(dml_filename):
     try:
@@ -225,16 +253,9 @@ def parse_file(dml_filename):
         # should not happen
         raise
     # Plug "Trojan Source" attack by completely disallowing BiDi characters
-    for m in bidi_re.finditer(filestr):
-        lineno = filestr[:m.start()].count('\n') + 1
-        col = m.start() - filestr.rfind('\n', 0, m.start())
-        report(ESYNTAX(SimpleSite(f"{dml_filename}:{lineno}:{col}"),
-                       repr(m.group())[1:-1],
-                       "Unicode BiDi character not allowed"))
-    for m in pragma_re.finditer(filestr):
-        start_lineno = filestr[:m.start()].count('\n') + 1
-        end_lineno = start_lineno + filestr[m.start():m.end()].count('\n')
-        process_pragma(dml_filename, start_lineno, end_lineno, *m.groups())
+    check_bidi(dml_filename, filestr)
+    for pragma in parse_pragmas(dml_filename, filestr):
+        process_pragma(pragma)
 
     version, contents = determine_version(filestr, dml_filename)
     file_info = logging.FileInfo(dml_filename, version, None)
@@ -262,6 +283,9 @@ def produce_dmlast(dml_file):
     version, body = determine_version(full_contents, dml_file)
     file_info = logging.FileInfo(dml_file.resolve(), version)
     try:
+        check_bidi(file_info.name or '<unknown>', full_contents)
+        pragmas = (parse_pragmas(file_info.name, full_contents)
+                   if file_info.name is not None else [])
         parsedata = parse(body, file_info, dml_file, version)
     except logging.DMLError as e:
         report(e)
@@ -269,7 +293,8 @@ def produce_dmlast(dml_file):
     if logging.failure:
         sys.exit(2)
     file_info.set_name(None)
-    save_dmlast((file_info, parsedata), dml_file.with_suffix('.dmlast'))
+    save_dmlast((file_info, pragmas, parsedata),
+                dml_file.with_suffix('.dmlast'))
 
 def parse_dmlast_or_dml(dml_filename):
     ast_filename = dml_filename + 'ast'
@@ -282,9 +307,11 @@ def parse_dmlast_or_dml(dml_filename):
             # copy in [host]/bin/dml/, instead of the one in the repo.
             report(WOLDAST(dml_filename))
         else:
-            file_info, parsedata = load_dmlast(ast_filename)
+            file_info, pragmas, parsedata = load_dmlast(ast_filename)
             if file_info.name is None:
                 file_info.set_name(dml_filename)
+            for pragma in pragmas:
+                process_pragma(pragma)
             return parsedata
     return parse_file(dml_filename)
 
