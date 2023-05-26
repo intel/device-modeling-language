@@ -474,4 +474,7 @@
       invalid generated C when both objects are targets of <tt>each
       .. in ..</tt> expressions
       <bug number="SIMICS-21044"/>.</add-note></build-id>
+  <build-id value="next"><add-note><tt>--coverity</tt> now suppresses a false
+      positive that the <tt>COPY_PASTE_ERROR</tt> checker reports in
+      <tt>dml-builtins.dml</tt>.</add-note></build-id>
 </rn>

@@ -974,6 +974,7 @@ method _set_attribute_attr(const _dml_attr_getset_info_t *_conf_info,
                                              ? SIM_attr_list(items[j])
                                              : NULL;
                 for (local int k = 0; k < subfrag_size; ++k) {
+                    /*% COVERITY copy_paste_error FALSE %*/
                     new_items[j * frag_size + k] = subfrags[k];
                 }
                 for (local int k = subfrag_size; k < frag_size; ++k) {
