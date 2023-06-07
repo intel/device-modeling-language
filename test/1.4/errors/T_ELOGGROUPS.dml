@@ -1,0 +1,24 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+/// ERROR ELOGGROUPS dml-builtins.dml
+
+loggroup lg1;  loggroup lg2;  loggroup lg3;  loggroup lg4;  loggroup lg5;
+loggroup lg6;  loggroup lg7;  loggroup lg8;  loggroup lg9;  loggroup lg10;
+loggroup lg11; loggroup lg12; loggroup lg13; loggroup lg14; loggroup lg15;
+loggroup lg16; loggroup lg17; loggroup lg18; loggroup lg19; loggroup lg20;
+loggroup lg21; loggroup lg22; loggroup lg23; loggroup lg24; loggroup lg25;
+loggroup lg26; loggroup lg27; loggroup lg28; loggroup lg29; loggroup lg30;
+loggroup lg31; loggroup lg32; loggroup lg33; loggroup lg34; loggroup lg35;
+loggroup lg36; loggroup lg37; loggroup lg38; loggroup lg39; loggroup lg40;
+loggroup lg41; loggroup lg42; loggroup lg43; loggroup lg44; loggroup lg45;
+loggroup lg46; loggroup lg47; loggroup lg48; loggroup lg49; loggroup lg50;
+loggroup lg51; loggroup lg52; loggroup lg53; loggroup lg54; loggroup lg55;
+loggroup lg56; loggroup lg57; loggroup lg58; loggroup lg59; loggroup lg60;
+loggroup lg61; loggroup lg62; loggroup lg63;
+/// ERROR ELOGGROUPS
+loggroup lg64;
