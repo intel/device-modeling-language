@@ -1536,6 +1536,15 @@ class EIDENTSIZEOF(DMLError):
     def __init__(self, site, identifier):
         DMLError.__init__(self, site, identifier, identifier)
 
+class ELOGGROUPS(DMLError):
+    """
+    Too many log groups were declared. A device may have a maximum of 63
+    `loggroup` declarations (61 excluding the built-in `Register_Read` and
+    `Register_Write` loggroups).
+    """
+    fmt = ("Too many loggroup declarations. A maximum of 63 log groups (61 "
+           + "excluding builtins) may be declared per device.")
+
 #
 # WARNINGS (keep these as few as possible)
 #
