@@ -2468,6 +2468,9 @@ is similar to a `constant` declaration, but the value is
 allocated automatically so that all log groups are represented by
 distinct powers of 2 and can be combined with bitwise *or*.
 
+A maximum of 63 log groups may be declared per device (61 excluding the built-in
+`Register_Read` and `Register_Write` log groups.)
+
 ### Typedef Declarations
 
 <pre>
