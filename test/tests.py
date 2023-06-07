@@ -563,7 +563,9 @@ class DMLFileTestCase(BaseTestCase):
             elif key == 'CC-FLAG':
                 flags.cc_flags.append(data)
             elif key == 'GREP':
-                flags.exp_stdout.append(data)
+                flags.exp_stdout.append((True, data))
+            elif key == 'NO-GREP':
+                flags.exp_stdout.append((False, data))
             elif key == 'INSTANTIATE-MANUALLY':
                 flags.instantiate_manually = True
             elif key == 'COMPILE-ONLY':
@@ -834,18 +836,20 @@ class CTestCase(DMLFileTestCase):
             raise TestFail("simics status=%d" % status)
 
         if flags.exp_stdout:
-            rxs = [(r, re.compile(r)) for r in flags.exp_stdout]
+            rxs = [(shouldfind, r, re.compile(r))
+                   for (shouldfind, r) in flags.exp_stdout]
             found = set()
             self.pr("Grepping simics output")
             for l in open(self.simics_stdout, "r"):
-                for s,r in rxs:
+                for _,s,r in rxs:
                     if r.match(l):
                         self.pr("Found %r" % s)
                         found.add(r)
-            for s,r in rxs:
-                if not r in found:
-                    self.pr(self.simics_stdout + ":0: Didn't find %r" % s)
-                    raise TestFail("grep miss")
+            for shouldfind,s,r in rxs:
+                if (r in found) != shouldfind:
+                    failure = "Didn't find" if shouldfind else "Found"
+                    self.pr(self.simics_stdout + ":0: %s %r" % (failure, s))
+                    raise TestFail("grep failure")
 
         self.pr("Everything seems OK")
 

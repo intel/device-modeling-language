@@ -340,13 +340,11 @@ def generate_hfile(device, headers, filename):
     print_device_substruct(device)
 
     if dml.globals.log_groups:
-        out('typedef enum %s_log_group {\n' % crep.cname(device),
-            postindent = 1)
         i = 1
         for g in dml.globals.log_groups:
-            out('%s = %d,\n' % (crep.cloggroup(g), i))
+            out('static const uint64 %s UNUSED = %dULL;\n'
+                % (crep.cloggroup(g), i))
             i <<= 1
-        out('} %s_log_group_t;\n' % crep.cname(device), preindent = -1)
         out('\n')
 
     out('void hard_reset_'+crep.cname(device)

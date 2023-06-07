@@ -485,4 +485,9 @@
   <build-id value="next"><add-note>Fixed an issue where having a const-qualified
       layout type could lead to internal compiler errors in certain
       scenarios.</add-note></build-id>
+  <build-id value="next"><add-note>Fixed an issue where <tt>loggroup</tt>
+      declarations in a device would erroneously and silently cause the 32:nd
+      log group and beyond to not function properly. A DML device may now have
+      up to 63 log groups (61 excluding built-in log groups) without issue
+      <bug number="22018374443"/>.</add-note></build-id>
 </rn>
