@@ -185,11 +185,9 @@ def mkglobals(stmts):
                 new_typedefs.add(name)
             elif stmt[0] == 'loggroup':
                 _, site, name = stmt
-                if len(dml.globals.log_groups) >= 63:
-                    report(ELOGGROUPS(site))
                 dml.globals.log_groups.append(name)
                 new_symbols.append(LiteralSymbol(
-                    name, TInt(64, False, const=True), site,
+                    name, TNamed('int', const=True), site,
                     crep.cloggroup(name)))
             elif stmt.kind != 'constant': # handled above
                 raise ICE(stmt.site, 'bad AST kind: %s' % (stmt.kind,))

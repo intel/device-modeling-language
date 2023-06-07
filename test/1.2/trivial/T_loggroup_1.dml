@@ -5,18 +5,12 @@
 dml 1.2;
 device test;
 import "testing.dml";
-import "dml12-compatibility.dml";
-import "simics/simulator/conf-object.dml";
 
-loggroup lg1;  loggroup lg2;  loggroup lg3;  loggroup lg4;  loggroup lg5;
-loggroup lg6;  loggroup lg7;  loggroup lg8;  loggroup lg9;  loggroup lg10;
-loggroup lg11; loggroup lg12; loggroup lg13; loggroup lg14; loggroup lg15;
-loggroup lg16; loggroup lg17; loggroup lg18; loggroup lg19; loggroup lg20;
-loggroup lg21; loggroup lg22; loggroup lg23; loggroup lg24; loggroup lg25;
-loggroup lg26; loggroup lg27; loggroup lg28; loggroup lg29; loggroup lg30;
-loggroup lg31; loggroup lg32; loggroup lg33;
+loggroup lg1;
+loggroup lg2;
+loggroup lg3;
+loggroup lg4;
 
 method test -> (bool result) {
-    result = ((lg1 == 1) && (lg2 == 2) && (lg3 == 4) && (lg4 == 8)
-              && (lg33 == cast(1 << 32, uint64)));
+    result = ((lg1 == 1) && (lg2 == 2) && (lg3 == 4) && (lg4 == 8));
 }
