@@ -698,15 +698,7 @@ class CTestCase(DMLFileTestCase):
                                  env = env)
         if status != 0:
             self.pr("LD: %r" % args)
-            return status
-
-        self.pr("Signing module")
-        args = [join(host_path(), "bin", "simics-common"), "-core",
-                "-sign-module", os.path.abspath(modfile)]
-        return subprocess.call(args,
-                               stdout = open(self.ld_stdout, "a"),
-                               stderr = open(self.ld_stderr, "a"),
-                               env = env)
+        return status
 
     def run_simics(self, pyfile=None, auto_instantiate=True):
         name = self.shortname
