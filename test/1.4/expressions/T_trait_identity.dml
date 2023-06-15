@@ -60,3 +60,11 @@ method init() {
     }
     assert found == 1;
 }
+
+attribute test_bad_eq is write_only_attr {
+    param type = "n";
+    method set(attr_value_t val) throws {
+        local t nullref;
+        assert nullref != nullref;
+    }
+}
