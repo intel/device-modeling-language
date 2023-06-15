@@ -7,11 +7,12 @@
 #include <float.h>
 #include <simics/util/help-macros.h>
 
-// Hack: juggle with macros to capture DMLC-generated assert failures without
-// crashing
+// Hack: juggle with macros and function prototypes to capture DMLC-generated
+// assert failures and critical errors without crashing
 #define assert_error capture_assert_error
 static void capture_assert_error(int line, const char *file,
                                  const char *mod_date, const char *message);
+static void VT_critical_error(const char *short_msg, const char *long_msg);
 
 #include <simics/base-types.h>
 #include <simics/dmllib.h>
@@ -49,6 +50,17 @@ capture_assert_error(int line, const char *file,
                 fprintf(stderr, "%s\n%s:%d: error: assertion failed: %s\n",
                         py_context, file, line, message);
                 exit(1);
+        }
+}
+
+static void
+VT_critical_error(const char *short_msg, const char *long_msg)
+{
+        if (capturing_assert_errors) {
+            ++captured_assert_errors;
+        } else {
+            fprintf(stderr, "%s\ncritical error: %s\n", py_context, long_msg);
+            exit(1);
         }
 }
 

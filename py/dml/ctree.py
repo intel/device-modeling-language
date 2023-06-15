@@ -1443,19 +1443,11 @@ class Equals(BinOp):
 
         if (isinstance(lhtype, TTrait) and isinstance(rhtype, TTrait)
             and lhtype.trait is rhtype.trait):
-            return mkApply(site,
-                           mkLit(site, '_identity_eq',
-                                 TFunction([TNamed('_identity_t'),
-                                            TNamed('_identity_t')],
-                                           TBool())),
-                           [TraitObjIdentity(lh.site, lh),
-                            TraitObjIdentity(rh.site, rh)])
+            return IdentityEq(site, TraitObjIdentity(lh.site, lh),
+                              TraitObjIdentity(rh.site, rh))
         if (isinstance(lhtype, THook) and isinstance(rhtype, THook)
             and lhtype.cmp(rhtype) == 0):
-            return mkApply(site,
-                           mkLit(site, '_identity_eq',
-                                 TFunction([lhtype, rhtype], TBool())),
-                           [lh, rh])
+            return IdentityEq(site, lh, rh)
 
         raise EILLCOMP(site, lh, lhtype, rh, rhtype)
 
@@ -1464,6 +1456,31 @@ def mkEquals(site, lh, rh):
         return Equals_dml12.make(site, lh, rh)
     else:
         return Equals.make(site, lh, rh)
+
+class IdentityEq(Expression):
+    priority = dml.expr.Apply.priority
+    type = TBool()
+
+    @auto_init
+    def __init__(self, site, lh, rh): pass
+
+    def __str__(self):
+        lh = str(self.lh)
+        rh = str(self.rh)
+        if self.lh.priority <= Equals.priority:
+            lh = f'({lh})'
+        if self.rh.priority <= Equals.priority:
+            rh = f'({rh})'
+        return f'{lh} == {rh}'
+
+    def read(self):
+        if self.site is None:
+            return f'_identity_eq({self.lh.read()}, {self.rh.read()})'
+        else:
+            return (f'_identity_eq_at_site({self.lh.read()}, {self.rh.read()}'
+                    + f', "{quote_filename(self.site.filename())}", '
+                    + f'{self.site.lineno})')
+
 
 class NotEquals_dml12(Compare_dml12):
     priority = 70

@@ -40,22 +40,20 @@ static inline uint64 DML_shlu(uint64 a, uint64 b)
         return b > 63 ? 0 : a << b;
 }
 
+PRINTF_FORMAT(1, 2) UNUSED static void
+_signal_critical_error(const char *restrict format, ...) {
+    va_list va;
+    va_start(va, format);
+    char msg[512];
+    vsnprintf(msg, 512, format, va);
+    va_end(va);
+    VT_critical_error(msg, msg);
+}
+
 UNUSED static void
 _DML_fault(const char *filename, int lineno, const char *msg)
 {
-        // Need SIM_get_api_function indirection to work with old 6 base
-        // packages.
-        // TODO: use VT_critical_error directly in simics 7
-        void (*critical_error)(const char *, const char *)
-                = (void (*)(const char *, const char *))SIM_get_api_function(
-                        "VT_critical_error");
-        if (critical_error) {
-                char long_msg[256];
-                snprintf(long_msg, 256, "%s:%d: %s", filename, lineno, msg);
-                critical_error(msg, long_msg);
-        } else {
-                assert_error(lineno, filename, "", msg);
-        }
+    _signal_critical_error("%s:%d: %s", filename, lineno, msg);
 }
 
 static inline int64 DML_shl(int64 a, int64 b, const char *filename, int lineno)
@@ -774,11 +772,30 @@ _deserialize_object_trait_reference(ht_str_table_t *id_info_ht,
     return Sim_Set_Ok;
 }
 
-UNUSED __attribute__((const)) static inline bool
+UNUSED static inline bool
 _identity_eq(const _identity_t a, const _identity_t b) {
+    if (unlikely(a.id == 0 || b.id == 0)) {
+        _signal_critical_error(
+            "DML object identity equality check where one or both operands "
+            "are not explicitly initialized. This is considered undefined "
+            "behavior.");
+        return false;
+    }
     return a.id == b.id && a.encoded_index == b.encoded_index;
 }
 
+UNUSED static inline bool
+_identity_eq_at_site(const _identity_t a, const _identity_t b,
+                     const char *filename, int lineno) {
+    if (unlikely(a.id == 0 || b.id == 0)) {
+        _DML_fault(filename, lineno,
+                   "object identity equality check where one or both operands "
+                   "are not explicitly initialized. This is considered "
+                   "undefined behavior.");
+        return false;
+    }
+    return a.id == b.id && a.encoded_index == b.encoded_index;
+}
 
 typedef set_error_t (*_deserializer_t)(attr_value_t val, void *dest);
 typedef attr_value_t (*_serializer_t)(const void *addr);
@@ -3155,15 +3172,6 @@ UNUSED static int _free_sub_table(ht_int_table_t *table,
 UNUSED static void _free_table(ht_int_table_t *table) {
         ht_for_each_entry_int(table, _free_sub_table, NULL);
         ht_clear_int_table(table, true);
-}
-
-UNUSED static void _signal_critical_error(const char *restrict format, ...) {
-    va_list va;
-    va_start(va, format);
-    char msg[512];
-    vsnprintf(msg, 512, format, va);
-    va_end(va);
-    VT_critical_error(msg, msg);
 }
 
 UNUSED static void _memoized_recursion(const char *name) {
