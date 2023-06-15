@@ -8,8 +8,6 @@ import sys
 from pathlib import Path
 import re
 import json
-import functools
-import traceback
 import validate_md_links
 import tarfile
 from io import BytesIO
@@ -81,8 +79,10 @@ def add_to_tar(tf, path, contents):
 
 # Detect the current Simics version.
 # Currently this only works when run as part of a Simics build.
-pkgs = json.loads(Path(package_specs).read_bytes())
-version = pkgs['Simics-Base-linux64']['version']
+[base_pkg] = [pkg for pkg in json.loads(Path(package_specs).read_bytes())
+              if pkg['package-name'] == 'Simics-Base'
+              and pkg['host'] == 'linux64']
+version = base_pkg['version']
 
 with tarfile.open(outfile, "w:gz") as tgz:
     for (path, body) in bodies:
