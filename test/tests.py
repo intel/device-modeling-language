@@ -1739,7 +1739,8 @@ limited_api_testing = {
 
 def api_files(dml_version, api_version):
     files = []
-    basedir = join(project_host_path(), "bin", "dml", "api", api_version,
+    basedir = join(testparams.simics_base_path(), host_type(),
+                   "bin", "dml", "api", api_version,
                    dml_version)
 
     for (root, dname, fnames) in os.walk(basedir):
