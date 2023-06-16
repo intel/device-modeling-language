@@ -14,7 +14,6 @@ import itertools
 import traceback
 from pathlib import Path
 import ply.lex
-from simicsutils.internal import is_same_file
 from simicsutils.host import host_type
 
 class PortingFailure(Exception):
@@ -1079,7 +1078,7 @@ def main(argv):
                 # sometimes happens for libs like utility.dml
                 continue
             (path, row, col) = loc.rsplit(':', 2)
-            if not is_same_file(path, args.src):
+            if not os.path.samefile(path, args.src):
                 continue
             key = (row, col, tag, params)
             # avoid duplicate transformations
