@@ -474,15 +474,15 @@
       invalid generated C when both objects are targets of <tt>each
       .. in ..</tt> expressions
       <bug number="SIMICS-21044"/>.</add-note></build-id>
-  <build-id value="next"><add-note><tt>--coverity</tt> now suppresses a false
+  <build-id value="6223"><add-note><tt>--coverity</tt> now suppresses a false
       positive that the <tt>COPY_PASTE_ERROR</tt> checker reports in
       <tt>dml-builtins.dml</tt>.</add-note></build-id>
-  <build-id value="next"><add-note>It's now allowed to cast an expression
+  <build-id value="6223"><add-note>It's now allowed to cast an expression
       of a struct type to that same struct type.</add-note></build-id>
-  <build-id value="next"><add-note>Fixed an error where const method parameters
+  <build-id value="6223"><add-note>Fixed an error where const method parameters
       would cause an internal error if that method is used as the callback of
       an `after` statement.</add-note></build-id>
-  <build-id value="next"><add-note>Fixed an issue where having a const-qualified
+  <build-id value="6223"><add-note>Fixed an issue where having a const-qualified
       layout type could lead to internal compiler errors in certain
       scenarios.</add-note></build-id>
 </rn>
