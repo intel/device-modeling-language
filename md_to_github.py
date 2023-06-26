@@ -79,7 +79,9 @@ def add_to_tar(tf, path, contents):
 
 # Detect the current Simics version.
 # Currently this only works when run as part of a Simics build.
-[base_pkg] = [pkg for pkg in json.loads(Path(package_specs).read_bytes())
+specs = json.loads(Path(package_specs).read_bytes())
+[base_pkg] = [pkg for pkg in (specs if isinstance(specs, list)
+                              else specs.values())
               if pkg['package-name'] == 'Simics-Base'
               and pkg['host'] == 'linux64']
 version = base_pkg['version']
