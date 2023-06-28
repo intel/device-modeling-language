@@ -481,6 +481,25 @@ def main(argv):
         else:
             defs[name] = value
 
+    if options.api_version not in api_versions():
+        prerr("dmlc: the version '%s' is not a valid API version" % (
+                options.api_version))
+        sys.exit(1)
+
+    if options.full_module and options.api_version not in ['4.8']:
+        prerr("dmlc: the -m option is only valid together with --api=4.8"
+              " or older")
+        sys.exit(1)
+
+    # This warning is disabled by default below Simics 7 due to sheer
+    # prominence of the issue it warns about in existing code.
+    # By only enabling the warning in Simics 7, we allow existing codebases
+    # to handle the bugs as part of migration, instead of suddenly
+    # overwhelming them with a truly massive amount of warnings in an
+    # intermediate release.
+    if options.api_version in {'4.8', '5', '6'}:
+        ignore_warning('WLOGMIXUP')
+
     for w in options.disabled_warnings:
         if not is_warning_tag(w):
             prerr("dmlc: the tag '%s' is not a valid warning tag" % w)
@@ -527,16 +546,6 @@ def main(argv):
               + "form. They are COMPLETELY UNSUPPORTED. "
               + "The DMLC developers WILL NOT respect their use. "
               + "NEVER enable this flag for any kind of production code!!!***")
-
-    if options.api_version not in api_versions():
-        prerr("dmlc: the version '%s' is not a valid API version" % (
-                options.api_version))
-        sys.exit(1)
-
-    if options.full_module and options.api_version not in ['4.8']:
-        prerr("dmlc: the -m option is only valid together with --api=4.8"
-              " or older")
-        sys.exit(1)
 
     dml.globals.api_version = options.api_version
 
