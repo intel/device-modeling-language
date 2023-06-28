@@ -2581,6 +2581,43 @@ def stmt_delete(stmt, location, scope):
     expr = codegen_expression(expr, location, scope)
     return [mkDelete(stmt.site, expr)]
 
+def probable_loggroups_specification(expr):
+    subexprs = [expr]
+    while subexprs:
+        expr = subexprs.pop()
+
+        if (isinstance(expr, LogGroup)
+            or (expr.constant and expr.value == 0)):
+            return True
+
+        if isinstance(expr, Cast):
+            subexprs.append(expr.expr)
+        elif isinstance(expr, (BitOr, BitOr_dml12)):
+            subexprs.extend((expr.lh, expr.rh))
+        elif isinstance(expr, IfExpr):
+            subexprs.extend((expr.texpr, expr.fexpr))
+
+    return False
+
+def probable_loglevel_specification(expr):
+    subexprs = [expr]
+    probable = False
+    while subexprs:
+        expr = subexprs.pop()
+
+        if (isinstance(expr, LogGroup)
+            or (expr.constant and expr.value == 0)):
+            return False
+
+        if expr.constant and 1 <= expr.value <= 5:
+            probable = True
+        elif isinstance(expr, Cast):
+            subexprs.append(expr.expr)
+        elif isinstance(expr, IfExpr):
+            subexprs.extend((expr.texpr, expr.fexpr))
+
+    return probable
+
 log_index = 0
 @statement_dispatcher
 def stmt_log(stmt, location, scope):
@@ -2591,20 +2628,27 @@ def stmt_log(stmt, location, scope):
 
     site = stmt.site
 
-    level = ctree.as_int(codegen_expression(level, location, scope))
+    warn_mixup = False
+
+    adjusted_level = level = ctree.as_int(
+        codegen_expression(level, location, scope))
     if level.constant and not (1 <= level.value <= 4):
         report(ELLEV(level.site, 4))
-        level = mkIntegerLiteral(site, 1)
+        adjusted_level = mkIntegerLiteral(site, 1)
+    else:
+        warn_mixup = probable_loggroups_specification(level)
 
     if later_level is not None:
-        later_level = ctree.as_int(codegen_expression(
+        adjusted_later_level = later_level = ctree.as_int(codegen_expression(
             later_level, location, scope))
         if (later_level.constant and level.constant and
             later_level.value == level.value):
             report(WREDUNDANTLEVEL(site))
         if later_level.constant and not (1 <= later_level.value <= 5):
             report(ELLEV(later_level.site, 5))
-            later_level = mkIntegerLiteral(site, 4)
+            adjusted_later_level = mkIntegerLiteral(site, 4)
+        elif not warn_mixup:
+            warn_mixup = probable_loggroups_specification(later_level)
         global log_index
         table_ptr = TPtr(TNamed("ht_int_table_t"))
         table = mkLit(site, '&(_dev->_subsequent_log_ht)', table_ptr)
@@ -2625,24 +2669,27 @@ def stmt_log(stmt, location, scope):
                       TInt(64, False)))
         level_expr = mkApply(site, once_lookup,
                              [table, key, mkIntegerLiteral(site, log_index),
-                              level, later_level])
+                              adjusted_level, adjusted_later_level])
         log_index += 1
         pre_statements = [mkDeclaration(site, "_calculated_level",
                                         TInt(64, False),
                                         ExpressionInitializer(level_expr))]
-        level = mkLocalVariable(site, LocalSymbol("_calculated_level",
-                                                  "_calculated_level",
-                                                  TInt(64, False), site=site))
+        adjusted_level = mkLocalVariable(site, LocalSymbol("_calculated_level",
+                                                           "_calculated_level",
+                                                           TInt(64, False),
+                                                           site=site))
 
     else:
         pre_statements = []
+
+    groups = ctree.as_int(codegen_expression(groups, location, scope))
+    warn_mixup = warn_mixup or probable_loglevel_specification(groups)
+    if warn_mixup:
+        report(WLOGMIXUP(site, logkind, level, later_level, groups))
     fmt, args = fix_printf(fmt, args, argsites, site)
     return [mkCompound(site, pre_statements + [
         log_statement(site, location.node, location.indices,
-                      logkind, level,
-                      codegen_expression(groups, location, scope),
-                      fmt, *args)])]
-
+                      logkind, adjusted_level, groups, fmt, *args)])]
 @statement_dispatcher
 def stmt_try(stmt, location, scope):
     [tryblock, excblock] = stmt.args

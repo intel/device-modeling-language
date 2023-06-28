@@ -1,0 +1,56 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+/// COMPILE-ONLY
+
+loggroup lg;
+
+session bool b;
+session int i;
+
+method init() {
+    /// WARNING WLOGMIXUP
+    log info, lg: "log";
+    /// WARNING WLOGMIXUP
+    log info, lg, i: "log";
+    /// WARNING WLOGMIXUP
+    log info, (lg | 0): "log";
+    /// WARNING WLOGMIXUP
+    log info, b ? (cast(lg | i, uint32) | i) : i: "log";
+    /// WARNING WLOGMIXUP
+    log info, b ? (cast(i | i, uint32) | i) : 0: "log";
+
+    // no warning
+    log info, b ? (cast(1 | i, uint32) | i) : i: "log";
+    log info, lg + 0: "log";
+    local uint64 lg_ = lg;
+    log info, lg_: "log";
+
+    /// WARNING WLOGMIXUP
+    log info, i, 1: "log";
+    /// WARNING WLOGMIXUP
+    log info, i, 5: "log";
+    /// WARNING WLOGMIXUP
+    log info, i, b ? cast(1, uint32) : i: "log";
+
+    // no warning
+    log info, i, lg: "log";
+    log info, i, 6: "log";
+    log info, i, b ? cast(1, uint32) : 0: "log";
+    log info, i, b ? cast(1, uint32) : lg: "log";
+    log info, i, b ? cast(i, uint32) : i: "log";
+    log info, i, 1 + i: "log";
+    local uint64 ll_ = 1;
+    log info, i, ll_: "log";
+
+    /// WARNING WLOGMIXUP
+    log info, 2, 3: "log";
+    /// WARNING WLOGMIXUP
+    log info, i then lg: "log";
+    /// WARNING WLOGMIXUP
+    log info, lg then 3: "log";
+}

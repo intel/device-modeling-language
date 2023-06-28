@@ -68,7 +68,7 @@ __all__ = (
     'mkContinue',
     'mkAssignStatement',
     'mkCopyData',
-    'mkIfExpr',
+    'mkIfExpr', 'IfExpr',
     #'BinOp',
     #'Test',
     #'Flag',
@@ -84,7 +84,7 @@ __all__ = (
     'mkNotEquals',
     #'BitBinOp',
     'mkBitAnd',
-    'mkBitOr',
+    'mkBitOr', 'BitOr', 'BitOr_dml12',
     'mkBitXOr',
     'BitShift',
     'mkShL',
@@ -153,6 +153,7 @@ __all__ = (
     'InvalidSymbol',
     'mkQName', 'QName',
     'mkDeviceObject',
+    'LogGroup',
     'mkStructDefinition',
     'mkDeclaration',
     'mkCText',
@@ -202,6 +203,9 @@ class ExpressionSymbol(symtab.Symbol):
     """A symbol that corresponds to an expression."""
     def __init__(self, name, expr, site):
         super(ExpressionSymbol, self).__init__(name, value = expr, site = site)
+    @property
+    def type(self):
+        return self.value.ctype()
     def expr(self, site):
         expr = self.value.copy(site)
         expr.incref()
@@ -4709,6 +4713,19 @@ class DeviceObject(Expression):
         return "&_dev->obj"
 
 mkDeviceObject = DeviceObject
+
+class LogGroup(Expression):
+    type = TInt(64, False, const=True)
+    slots = ('name',)
+    priority = 1000
+    @auto_init
+    def __init__(self, site, name): pass
+
+    def __str__(self):
+        return self.name
+
+    def read(self):
+        return crep.cloggroup(self.name)
 
 class Initializer(object):
     """An initializer is either an expression, or a

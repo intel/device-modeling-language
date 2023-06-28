@@ -191,9 +191,8 @@ def mkglobals(stmts):
                 if len(dml.globals.log_groups) >= 63:
                     report(ELOGGROUPS(site))
                 dml.globals.log_groups.append(name)
-                new_symbols.append(LiteralSymbol(
-                    name, TInt(64, False, const=True), site,
-                    crep.cloggroup(name)))
+                new_symbols.append(ExpressionSymbol(
+                    name, LogGroup(site, name), site))
             elif stmt.kind != 'constant': # handled above
                 raise ICE(stmt.site, 'bad AST kind: %s' % (stmt.kind,))
         except DMLError as e:

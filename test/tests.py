@@ -1070,14 +1070,22 @@ all_tests.append(CTestCase(
 
 if get_simics_major() == "6":
     all_tests.append(CTestCase(
-        ["1.2", "errors", "T_WREF"],
+        ["1.2", "errors", "WREF"],
         join(testdir, "1.2", "errors", "WREF.dml"),
         api_version="5"))
+    all_tests.append(CTestCase(
+        ["1.4", "errors", "WLOGMIXUP"],
+        join(testdir, "1.4", "errors", "WLOGMIXUP.dml"),
+        dmlc_extraargs = ["--warn=WLOGMIXUP"]))
 
 if get_simics_major() == "7":
     all_tests.append(CTestCase(
-        ["1.4", "errors", "T_ETYPE_integer_t"],
+        ["1.4", "errors", "ETYPE_integer_t"],
         join(testdir, "1.4", "errors", "ETYPE_integer_t.dml"),
+        api_version="7"))
+    all_tests.append(CTestCase(
+        ["1.4", "errors", "WLOGMIXUP"],
+        join(testdir, "1.4", "errors", "WLOGMIXUP.dml"),
         api_version="7"))
 
 class DebuggableCheck(BaseTestCase):

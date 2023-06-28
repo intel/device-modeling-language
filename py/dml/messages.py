@@ -1895,6 +1895,80 @@ class WPCAST(DMLWarning):
                       if maybe_intended else '')
         DMLWarning.__init__(self, site, old, new, suggestion)
 
+class WLOGMIXUP(DMLWarning):
+    """
+    A specified log level of a `log` looks as though you meant to specify the
+    log groups instead, and/or vice versa. For example:
+    ```
+    // Log group used as log level, when the intention is instead to
+    // specify log groups and implicitly use log level 1
+    log spec_viol, some_log_group: ...;
+
+    // Log groups and log level mistakenly specified in reverse order
+    log info, (some_log_group | another_log_group), 2: ...;
+
+    // Log level used as log groups, when the intention is instead to
+    // specify the subsequent log level
+    log info, 2, 3: ...;
+    ```
+    If you want to specify log groups, make sure to (explicitly) specify the
+    log level beforehand. If you want to specify the subsequent log level, use
+    `then` syntax.
+    ```
+    log spec_viol, 1, some_log_group: ...;
+    log info, 2, (some_log_group | another_log_group): ...;
+    log info, 2 then 3: ...;
+    ```
+
+    This warning is only enabled by default with Simics API version 7 or above.
+    """
+    fmt = ("log statement with likely misspecified log level(s) and log "
+           + "groups: %s")
+    def __init__(self, site, kind, level, later_level, groups):
+        suggestions = []
+        from .codegen import probable_loggroups_specification, \
+            probable_loglevel_specification
+        # There are three main scenarios for which we want to offer suggestions
+        # -- those covered in the docstring. All other scenarios either involve
+        # subsequent log levels -- at which point it's too difficult to guess
+        # what the user actually wanted to do -- or have no obvious fix that is
+        # not blatantly incorrect.
+        if probable_loggroups_specification(level):
+            if (not later_level
+                and not (groups.constant and not (1 <= groups.value <= 4))):
+                # Scenario 2: 'log info, 2, some_log_groups: ...;'
+                details = ("the specified log level and log groups look as "
+                           + "though they are meant to be reversed.")
+                suggestions.append(f"log {kind}, {groups}, {level}: ...;")
+            else:
+                details = ("log group(s) and/or constant 0 are used as log "
+                           + "level.")
+                if not later_level and groups.constant and groups.value == 0:
+                    # Scenario 1: 'log info, some_log_groups: ...;'
+                    suggestions.append(f"log {kind}, 1, {level}: ...;")
+        elif later_level and probable_loggroups_specification(later_level):
+            details = ("log group(s) and/or constant 0 are used as subsequent "
+                       + "log level.")
+        else:
+            assert probable_loglevel_specification(groups)
+            details = "non-zero integer constant used as log groups."
+            if not later_level:
+                if site is None or site.dml_version != (1, 2):
+                    # Scenario 3: 'log info, 2, 3: ...;'
+                    suggestions.append(
+                        f"log {kind}, {level} then {groups}: ...;")
+                if (not probable_loglevel_specification(level)
+                    and not (groups.constant and groups.value == 5)):
+                    # Scenario 2: 'log info, nonconstant, 3: ...;'
+                    suggestions.append(f"log {kind}, {groups}, {level}: ...;")
+
+        if suggestions:
+            details += (" Perhaps you meant%s:\n%s"
+                        % (" one of the below"*(len(suggestions) > 1),
+                           '\n'.join(suggestions)))
+
+        DMLWarning.__init__(self, site, details)
+
 # TODO this should exist once pragmas are officially supported
 # class WPRAGMA(DMLWarning):
 #     """
