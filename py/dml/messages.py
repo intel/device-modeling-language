@@ -1833,6 +1833,44 @@ class WPCAST(DMLWarning):
                       if maybe_intended else '')
         DMLWarning.__init__(self, site, old, new, suggestion)
 
+class WLGROUPSASLEV(DMLWarning):
+    """
+    The specified log level of a `log` looks as though you meant to specify the
+    log groups instead. For example:
+    ```
+    log info, some_log_group: ...;
+    log info, (some_log_group | another_log_group), 1: ...;
+    ```
+    If you indeed wanted to specify the log groups, make sure to also
+    explicitly specify the log level, and specify it first.
+    ```
+    log info, 1, some_log_group: ...;
+    log info, 1, (some_log_group | another_log_group): ...;
+    ```
+    """
+    fmt = ("the specified log level is likely intended to instead be a log "
+           + "groups specification. "
+           + "In order to specify log groups, the log level must be "
+           + "(explicitly) specified beforehand.")
+
+class WLLEVASGROUPS(DMLWarning):
+    """
+    The specified log groups of a `log` looks as though you meant to specify
+    the log level instead. For example:
+    ```
+    log info, some_variable, 2: ...;
+    ```
+    If you indeed wanted to specify the log level, specify it before the log
+    groups.
+    ```
+    log info, 2, some_variable: ...;
+    ```
+    """
+    fmt = ("the specified log groups are likely intended to instead be a log "
+           + "level specification. "
+           + "If so, reorder the specifications: the log level must be "
+           + "specified before the log groups.")
+
 # TODO this should exist once pragmas are officially supported
 # class WPRAGMA(DMLWarning):
 #     """

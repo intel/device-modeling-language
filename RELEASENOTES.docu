@@ -1724,4 +1724,8 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
   <build-id value="next"><add-note> Added an error if a device declares
       more than 63 log groups (including the two built-in log groups.)
   </add-note></build-id>
+  <build-id value="next"><add-note> Added a pair of warnings for if the
+      specified log level of a log statement is likely intended to instead
+      specify the log groups, or vice versa <bug number="22018374443"/>.
+  </add-note></build-id>
 </rn>
