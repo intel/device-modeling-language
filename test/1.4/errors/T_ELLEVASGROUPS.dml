@@ -16,11 +16,11 @@ method init() {
     // no warning
     log info, i, lg: "log";
 
-    /// WARNING WLLEVASGROUPS
+    /// ERROR ELLEVASGROUPS
     log info, i, 1: "log";
-    /// WARNING WLLEVASGROUPS
+    /// ERROR ELLEVASGROUPS
     log info, i, 5: "log";
-    /// WARNING WLLEVASGROUPS
+    /// ERROR ELLEVASGROUPS
     log info, i, b ? cast(1, uint32) : i: "log";
 
     // no warning

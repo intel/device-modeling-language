@@ -2099,7 +2099,7 @@ def stmt_log(stmt, location, scope):
         report(ELLEV(level.site, 4))
         level = mkIntegerLiteral(site, 1)
     elif probable_loggroups_specification(level):
-        report(WLGROUPSASLEV(level.site))
+        report(ELGROUPSASLEV(level.site))
 
     if later_level is not None:
         later_level = ctree.as_int(codegen_expression(
@@ -2111,7 +2111,7 @@ def stmt_log(stmt, location, scope):
             report(ELLEV(later_level.site, 5))
             later_level = mkIntegerLiteral(site, 4)
         elif probable_loggroups_specification(later_level):
-            report(WLGROUPSASLEV(later_level.site))
+            report(ELGROUPSASLEV(later_level.site))
         global log_index
         table_ptr = TPtr(TNamed("ht_int_table_t"))
         table = mkLit(site, '&(_dev->_subsequent_log_ht)', table_ptr)
@@ -2146,7 +2146,7 @@ def stmt_log(stmt, location, scope):
 
     groups = ctree.as_int(codegen_expression(groups, location, scope))
     if probable_loglevel_specification(groups):
-        report(WLLEVASGROUPS(groups.site))
+        report(ELLEVASGROUPS(groups.site))
     fmt, args = fix_printf(fmt, args, argsites, site)
     return [mkCompound(site, pre_statements + [
         log_statement(site, location.node, location.indices,

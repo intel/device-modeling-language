@@ -13,15 +13,15 @@ session bool b;
 session int i;
 
 method init() {
-    /// WARNING WLGROUPSASLEV
+    /// ERROR ELGROUPSASLEV
     log info, lg: "log";
-    /// WARNING WLGROUPSASLEV
+    /// ERROR ELGROUPSASLEV
     log info, lg, i: "log";
-    /// WARNING WLGROUPSASLEV
+    /// ERROR ELGROUPSASLEV
     log info, (lg | 0): "log";
-    /// WARNING WLGROUPSASLEV
+    /// ERROR ELGROUPSASLEV
     log info, b ? (cast(lg | i, uint32) | i) : i: "log";
-    /// WARNING WLGROUPSASLEV
+    /// ERROR ELGROUPSASLEV
     log info, b ? (cast(i | i, uint32) | i) : 0: "log";
 
     // no warning
