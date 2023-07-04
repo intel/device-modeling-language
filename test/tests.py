@@ -19,7 +19,7 @@ from fnmatch import fnmatch
 from simicsutils.host import host_type, is_windows, batch_suffix
 from simicsutils.internal import package_path, get_simics_major
 import testparams
-from testparams import simics_root_path
+from testparams import simics_base_path
 import traceback
 from depfile import parse_depfile
 import pstats
@@ -30,11 +30,11 @@ class TestFail(Exception):
         Exception.__init__(self)
         self.reason = reason
 
-sys.path.append(join(simics_root_path(), "scripts", "build"))
+sys.path.append(join(simics_base_path(), "scripts", "build"))
 import module_id
 
 def host_path():
-    return join(testparams.simics_root_path(),
+    return join(testparams.simics_base_path(),
                         testparams.host_platform())
 
 def project_host_path():
@@ -62,7 +62,7 @@ else:
 bat_sfx = batch_suffix()
 exe_sfx = '.exe' if is_windows() else ""
 
-mini_python = [join(simics_root_path(), host_type(), "bin",
+mini_python = [join(simics_base_path(), host_type(), "bin",
                     "mini-python" + exe_sfx)]
 dmlc_py = [join(project_host_path(), "bin", "dml", "python")]
 main_dmlc = mini_python + dmlc_py
@@ -76,7 +76,7 @@ line_directives = {None: True, 'yes': True, 'no': False}[
 
 if not is_windows():
     dmlc_lib_path = ":".join(
-        [join(simics_root_path(), host_type(), p) for p in ('bin', 'sys/lib')]
+        [join(simics_base_path(), host_type(), p) for p in ('bin', 'sys/lib')]
         + [os.environ.get('LD_LIBRARY_PATH', '')])
 
 # map from test fullname (subtest name) to timeout multiplier
@@ -613,7 +613,7 @@ class CTestCase(DMLFileTestCase):
         args = (
             cc + cflags + [
                 "-c", f"-I{self.scratchdir}",
-                f"-I{Path(simics_root_path()) / 'src' / 'include'}",
+                f"-I{Path(simics_base_path()) / 'src' / 'include'}",
                 f"-I{Path(project_host_path()) / 'bin' / 'dml' / 'include'}"]
             + list(self.cc_extraargs) + cc_extraargs + [
                 "-o", self.cfilename + ".o", self.cfilename + ".c"])
@@ -669,7 +669,7 @@ class CTestCase(DMLFileTestCase):
         args = cc + cflags + \
                ["-c",
                 "-I" + self.scratchdir,
-                "-I" + join(simics_root_path(), "src", "include"),
+                "-I" + join(simics_base_path(), "src", "include"),
                 "-o", module_id_base + ".o",
                 module_id_base + ".c"]
 
@@ -739,7 +739,7 @@ class CTestCase(DMLFileTestCase):
         sc.close()
 
         self.pr("Running Simics")
-        args = [join(simics_root_path(), "bin", "simics" + bat_sfx),
+        args = [join(simics_base_path(), "bin", "simics" + bat_sfx),
                 "--batch-mode", "--quiet", "--no-copyright", "--no-settings",
                 "--dump-core", "--werror",
                 "--project", testparams.project_path(),
@@ -747,7 +747,7 @@ class CTestCase(DMLFileTestCase):
         env = os.environ.copy()
         env.update(self.extraenv)
         env['SIMICS_HOST'] = os.path.basename(host_path())
-        env['SIMICS_ROOT'] = simics_root_path()
+        env['SIMICS_ROOT'] = simics_base_path()
         # self.pr("ARGS: %r" % args)
         ret = subprocess.call(args,
                               stdout = open(self.simics_stdout, "w"),
@@ -1023,7 +1023,7 @@ class SplitTestCase(CTestCase):
             self.cc_stderr = join(self.scratchdir, fn + '.cc_stderr')
             args = (cc + cflags + [
                 "-c",  f"-I{self.scratchdir}",
-                f"-I{Path(simics_root_path()) / 'src' / 'include'}",
+                f"-I{Path(simics_base_path()) / 'src' / 'include'}",
                 f"-I{Path(project_host_path()) / 'bin' / 'dml' / 'include'}"]
                     + self.cc_extraargs + ["-o", fn[:-2] + ".o", fn])
 
@@ -1110,7 +1110,7 @@ class DmlDepBase(CTestCase):
             cc + cflags + [
                 self.cfilename + '-cdep.c',
                 f"-I{self.scratchdir}",
-                f"-I{Path(simics_root_path()) / 'src' / 'include'}",
+                f"-I{Path(simics_base_path()) / 'src' / 'include'}",
                 f"-I{Path(project_host_path()) / 'bin' / 'dml' / 'include'}",
                 '-M', '-MP', '-MF', self.cfilename + '.d',
                 '-MT', self.cfilename + '.c'])
@@ -1174,7 +1174,7 @@ class DmlDep(DmlDepBase):
         prereqs = target_prereqs[self.cfilename + '.c']
         expected_subset = [
             self.cfilename + '-cdep.c',
-            os.path.join(simics_root_path(), 'src', 'include',
+            os.path.join(simics_base_path(), 'src', 'include',
                          'simics', 'base-types.h'),
             join(testdir, '1.2', 'misc', 'rel', 'a', 'x.h'),
             join(testdir, '1.2', 'misc', 'rel', 'a', 'y.h')]
@@ -1454,7 +1454,7 @@ class CompareIllegalAttrs(BaseTestCase):
        # Extract list of automatic attributes from Simics
         sl = {x[5:].strip()
               for x in subprocess.run(
-                      [join(simics_root_path(), "bin", "simics" + bat_sfx),
+                      [join(simics_base_path(), "bin", "simics" + bat_sfx),
                        "--batch-mode", "--quiet", "--no-copyright",
                        "--no-settings", "--dump-core", "--werror",
                        "--module-path", join(testparams.sandbox_path(),
@@ -1469,7 +1469,7 @@ class CompareIllegalAttrs(BaseTestCase):
         # Extract list of illegal attributes from dmlc
         dl = {x.strip()
               for x in subprocess.run(
-                      [join(simics_root_path(), "bin", "dmlc" + bat_sfx),
+                      [join(simics_base_path(), "bin", "dmlc" + bat_sfx),
                        "--illegal-attributes"],
                       capture_output=True,
                       encoding='utf-8').stdout.splitlines()}
