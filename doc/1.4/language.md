@@ -1979,9 +1979,7 @@ message component types <tt><em>msgtype1</em></tt> through
 <tt>hook(<em>msgtype1</em>, ... <em>msgtypeN</em>)</tt>. This means hook
 references can be stored in variables, and can be passed around as method
 arguments or return values. In fact, hook references are even
-[serializable](#serializable-types). Note, however, that references to
-hook arrays are *not* valid run-time values unless fully indexed in order to
-reference a single hook.
+[serializable](#serializable-types).
 
 Two hook references of the same hook reference type can be compared for
 equality, and are considered equal when they both reference the same hook.
