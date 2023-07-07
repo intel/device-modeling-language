@@ -1,0 +1,47 @@
+/*
+  © 2010-2023 Intel Corporation
+  SPDX-License-Identifier: 0BSD
+*/
+
+// This module contains types needed when implementing ethernet
+// devices.
+
+dml 1.4;
+
+import "simics/devs/ethernet.dml";
+
+constant ETHERTYPE_PUP = 0x0200;      /* Xerox PUP */
+constant ETHERTYPE_IP = 0x0800;       /* IPv4 */
+constant ETHERTYPE_IPV6 = 0x86dd;     /* IPv6 */
+constant ETHERTYPE_ARP = 0x0806;      /* Address resolution */
+constant ETHERTYPE_REVARP = 0x8035;   /* Reverse ARP */
+
+// The ethernet_connect template is useful to declare a connector that
+// will be connected directly to an ethernet-link.
+//
+// Use it like this:
+//
+//   connect link is (ethernet_connect) {
+//       param documentation = "...";
+//       method update_mac_info {
+//           ... code to register MAC addresses with the link ...
+//       }
+//   }
+//
+// To send a frame, the send_frame method can be used instead of
+// calling the interface function directly:
+//
+//   link.send_frame(frame, false)
+//
+template ethernet_connect {
+    interface ethernet_common;
+
+    // Wrapper around the interface function
+    method send_frame(dbuffer_t *frame, bool crc_calculated) {
+        local frags_t f;
+        frags_init_add(&f, dbuffer_read_all(frame), dbuffer_len(frame));
+        ethernet_common.frame(&f,
+                              (crc_calculated) ? Eth_Frame_CRC_Unknown
+                              : Eth_Frame_CRC_Match);
+    }
+}
