@@ -1727,11 +1727,16 @@ pci_hotplug = "parameter pci_hotplug = true;"
 rapidio_bank = "bank regs;"
 for dmlver in ['1.2', '1.4']:
     basedir = join(project_host_path(), "bin", "dml", dmlver, "*.dml")
-    lib_files = list(map(os.path.basename, glob.glob(basedir)))
+    lib_files = set(map(os.path.basename, glob.glob(basedir)))
+    if int(get_simics_major()) > 6:
+        lib_files -= {"mil-std-1553.dml", "rapidio.dml",
+                      "rapidio-device.dml"}
+
     all_tests.append(ImportTest(
         'lib-dml-%s-api-%s' % (dmlver, latest_api_version),
-        dmlver, latest_api_version, lib_files,
-        rapidio_bank if dmlver == '1.2' else ''))
+        dmlver, latest_api_version, sorted(lib_files),
+        rapidio_bank if (dmlver == '1.2'
+                         and int(get_simics_major()) <= 6) else ''))
 
 # header files that should not be tested with all API versions
 limited_api_testing = {
