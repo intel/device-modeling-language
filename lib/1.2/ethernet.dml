@@ -6,7 +6,7 @@
 // This module contains types needed when implementing ethernet
 // devices.
 
-dml 1.4;
+dml 1.2;
 
 import "simics/devs/ethernet.dml";
 
@@ -22,7 +22,7 @@ constant ETHERTYPE_REVARP = 0x8035;   /* Reverse ARP */
 // Use it like this:
 //
 //   connect link is (ethernet_connect) {
-//       param documentation = "...";
+//       parameter documentation = "...";
 //       method update_mac_info {
 //           ... code to register MAC addresses with the link ...
 //       }
@@ -31,7 +31,7 @@ constant ETHERTYPE_REVARP = 0x8035;   /* Reverse ARP */
 // To send a frame, the send_frame method can be used instead of
 // calling the interface function directly:
 //
-//   link.send_frame(frame, false)
+//   call $link.send_frame(frame, false)
 //
 template ethernet_connect {
     interface ethernet_common;
@@ -40,8 +40,8 @@ template ethernet_connect {
     method send_frame(dbuffer_t *frame, bool crc_calculated) {
         local frags_t f;
         frags_init_add(&f, dbuffer_read_all(frame), dbuffer_len(frame));
-        ethernet_common.frame(&f,
-                              (crc_calculated) ? Eth_Frame_CRC_Unknown
-                              : Eth_Frame_CRC_Match);
+        $ethernet_common.frame(&f,
+                               (crc_calculated) ? Eth_Frame_CRC_Unknown
+                                                : Eth_Frame_CRC_Match);
     }
 }

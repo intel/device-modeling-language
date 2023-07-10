@@ -1721,6 +1721,4 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
   <build-id value="6205"><add-note> Fixed a bug with how template types were
       handled by DMLC that could cause the compiler to still exhibit
       nondeterministic behaviour.</add-note></build-id>
-  <build-id value="next"><add-note> Ported the ethernet.dml lib file to
-      DML 1.4, no functionality change for 1.2 users.</add-note></build-id>
 </rn>
