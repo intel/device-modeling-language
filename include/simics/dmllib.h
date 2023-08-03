@@ -1976,8 +1976,8 @@ _register_port_legacy_proxy_attr(conf_class_t *devcls, conf_class_t *portcls,
                 is_bank ? "bank" : "port", portname, attrname);
         SIM_register_typed_attribute(
                 devcls, name,
-                getter ? _get_legacy_proxy_attr : NULL, data,
-                setter ? _set_legacy_proxy_attr : NULL, data,
+                getter ? _get_legacy_proxy_attr : NULL, getter ? data : NULL,
+                setter ? _set_legacy_proxy_attr : NULL, setter ? data : NULL,
                 (attr_attr_t)(Sim_Attr_Pseudo | Sim_Attr_Internal),
                 type, NULL, sb_str(&proxy_desc));
         sb_free(&proxy_desc);
