@@ -5,28 +5,29 @@
 dml 1.4;
 device test;
 
-attribute read_register_called is (bool_attr);
-attribute write_register_called is (bool_attr);
-attribute set_called is (bool_attr);
-
-attribute write_val is (uint64_attr);
+saved bool set_called;
+saved bool get_called;
 
 bank b {
     register r size 8 @ 0 {
         method read_register(uint64 enabled_bytes, void *aux) -> (uint64) {
-            read_register_called.val = true;
-            return 0xdeadbeefbaadc0de;
-
+            assert false;
         }
 
         method write_register(uint64 val, uint64 enabled_bytes, void *aux) {
-            write_register_called.val = true;
-            write_val.val = val;
+            assert false;
         }
 
         method set(uint64 val) {
-            set_called.val = true;
+            set_called = true;
             default(val);
         }
+        method get() -> (uint64) {
+            get_called = true;
+            return default();
+        }
+    }
+    register overflow size 8 @ 8 {
+        param init_val = 0xaaaa_aaaa_aaaa_aaaa;
     }
 }

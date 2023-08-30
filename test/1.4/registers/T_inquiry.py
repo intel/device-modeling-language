@@ -2,45 +2,36 @@
 # SPDX-License-Identifier: MPL-2.0
 
 from dev_util import Register_LE
-from functools import reduce
-from stest import expect_equal
+from stest import expect_equal, expect_true, expect_false
 
 SIM_run_command("log-level 4")
 
-def reset_dev(d, r_val):
-    d.b_r = r_val
-    d.read_register_called = False
-    d.write_register_called = False
-    d.set_called = False
-    d.write_val = 0
+aaaa = 0xaaaaaaaaaaaaaaaa
+bbbb = 0xbbbbbbbbbbbbbbbb
 
-def expected_int(bytes, offs):
-    """Return the integer expected from writing the bytes at offs"""
-    bytes = list(bytes)
-    bytes.reverse()
-    return reduce(lambda val, x: val << 8 | x, bytes, 0) << (offs * 8)
+def test(offs, data, expected_r, expected_overflow=bbbb, get_called=True):
+    obj.bank.b.r = aaaa
+    obj.bank.b.overflow = bbbb
+    r = Register_LE(obj.bank.b, offs, size=len(data))
+    r.read_transaction.inquiry = True
+    r.write_transaction.inquiry = True
+    val = int.from_bytes(data, 'little')
+    r.write(val)
+    expect_true(obj.set_called)
+    expect_equal(obj.get_called, get_called)
+    obj.set_called = obj.get_called = False
+    expect_equal(obj.bank.b.r, expected_r)
+    expect_equal(obj.bank.b.overflow, expected_overflow)
+    expect_equal(r.read(), val)
+    expect_false(obj.set_called)
+    expect_true(obj.get_called)
+    obj.get_called = False
 
-def expect_attributes(write_val = 0, read_called = False, write_called = False,
-                      set_called = False):
-    expect_equal(obj.read_register_called, read_called)
-    expect_equal(obj.write_register_called, write_called)
-    expect_equal(obj.set_called, set_called)
-    expect_equal(obj.write_val, write_val)
-
-for offs in range(8):
-    for size in range(1, 8 - offs + 1):
-        r = Register_LE(obj.bank.b, offs, size=size)
-        r.read_transaction.inquiry = True
-        r.write_transaction.inquiry = True
-        val = 0x8877665544332211 & ((1 << size * 8) - 1)
-
-        reset_dev(obj, 0)
-        r.write(val)
-        expect_equal(obj.b_r, val << offs * 8)
-        expect_attributes(set_called = True)
-
-        reset_dev(obj, val << offs * 8)
-        ret = r.read()
-        expect_equal(ret, val)
-        expect_equal(obj.b_r, val << offs * 8)
-        expect_attributes()
+test(0, b'\x11',     0xaaaaaaaaaaaaaa11)
+test(7, b'\x11',     0x11aaaaaaaaaaaaaa)
+test(1, b'\x11\x22', 0xaaaaaaaaaa2211aa)
+test(7, b'\x11\x22', 0x11aaaaaaaaaaaaaa, 0xbbbbbbbbbbbbbb22)
+test(0, b'\x11\x22\x33\x44\x55\x66\x77\x88', 0x8877665544332211,
+     get_called=False)
+test(3, b'\x11\x22\x33\x44\x55\x66\x77\x88', 0x5544332211aaaaaa,
+     0xbbbbbbbbbb887766)

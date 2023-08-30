@@ -2157,7 +2157,8 @@ template bank is (object, shown_desc) {
             (start, end) = this._intersect(
                 offset, size, hits[r].offset, hits[r]._size(), true);
 
-            local uint64 r_value = 0;
+            local uint64 r_value = (r_start == 0 && r_end == hits[r]._size())
+                ? 0 : hits[r].get();
             r_value[r_end * 8 - 1 : r_start * 8]
                 = value[end * 8 - 1 : start * 8];
             if (r_end - r_start == hits[r]._size()) {
