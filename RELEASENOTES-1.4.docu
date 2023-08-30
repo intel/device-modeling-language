@@ -494,4 +494,7 @@
       Currently, the only form of computations that can be suspended on hooks
       are single method calls. This is done via the <tt>after</tt> statement,
       which has been extended to permit this.</add-note></build-id>
+  <build-id value="next"><add-note>Fixed a bug where partial inquiry
+      writes to a bank would incorrectly clear register bits
+      <bug number="SIMICS-21382"/>.</add-note></build-id>
 </rn>
