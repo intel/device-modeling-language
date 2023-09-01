@@ -1,0 +1,32 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+/// COMPILE-ONLY
+
+loggroup lg;
+
+session bool b;
+session int i;
+
+method init() {
+    /// ERROR ELGROUPSASLEV
+    log info, lg: "log";
+    /// ERROR ELGROUPSASLEV
+    log info, lg, i: "log";
+    /// ERROR ELGROUPSASLEV
+    log info, (lg | 0): "log";
+    /// ERROR ELGROUPSASLEV
+    log info, b ? (cast(lg | i, uint32) | i) : i: "log";
+    /// ERROR ELGROUPSASLEV
+    log info, b ? (cast(i | i, uint32) | i) : 0: "log";
+
+    // no warning
+    log info, b ? (cast(1 | i, uint32) | i) : i: "log";
+    log info, lg + 0: "log";
+    local uint64 lg_ = lg;
+    log info, lg_: "log";
+}

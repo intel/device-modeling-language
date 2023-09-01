@@ -2497,6 +2497,43 @@ def stmt_delete(stmt, location, scope):
     expr = codegen_expression(expr, location, scope)
     return [mkDelete(stmt.site, expr)]
 
+def probable_loggroups_specification(expr):
+    subexprs = [expr]
+    while subexprs:
+        expr = subexprs.pop()
+
+        if (isinstance(expr, LogGroup)
+            or (expr.constant and expr.value == 0)):
+            return True
+
+        if isinstance(expr, Cast):
+            subexprs.append(expr.expr)
+        elif isinstance(expr, (BitOr, BitOr_dml12)):
+            subexprs.extend((expr.lh, expr.rh))
+        elif isinstance(expr, IfExpr):
+            subexprs.extend((expr.texpr, expr.fexpr))
+
+    return False
+
+def probable_loglevel_specification(expr):
+    subexprs = [expr]
+    probable = False
+    while subexprs:
+        expr = subexprs.pop()
+
+        if (isinstance(expr, LogGroup)
+            or (expr.constant and expr.value == 0)):
+            return False
+
+        if expr.constant and 1 <= expr.value <= 5:
+            probable = True
+        elif isinstance(expr, Cast):
+            subexprs.append(expr.expr)
+        elif isinstance(expr, IfExpr):
+            subexprs.extend((expr.texpr, expr.fexpr))
+
+    return probable
+
 log_index = 0
 @statement_dispatcher
 def stmt_log(stmt, location, scope):
@@ -2511,6 +2548,8 @@ def stmt_log(stmt, location, scope):
     if level.constant and not (1 <= level.value <= 4):
         report(ELLEV(level.site, 4))
         level = mkIntegerLiteral(site, 1)
+    elif probable_loggroups_specification(level):
+        report(ELGROUPSASLEV(level.site))
 
     if later_level is not None:
         later_level = ctree.as_int(codegen_expression(
@@ -2521,6 +2560,8 @@ def stmt_log(stmt, location, scope):
         if later_level.constant and not (1 <= later_level.value <= 5):
             report(ELLEV(later_level.site, 5))
             later_level = mkIntegerLiteral(site, 4)
+        elif probable_loggroups_specification(later_level):
+            report(ELGROUPSASLEV(later_level.site))
         global log_index
         table_ptr = TPtr(TNamed("ht_int_table_t"))
         table = mkLit(site, '&(_dev->_subsequent_log_ht)', table_ptr)
@@ -2552,13 +2593,14 @@ def stmt_log(stmt, location, scope):
 
     else:
         pre_statements = []
+
+    groups = ctree.as_int(codegen_expression(groups, location, scope))
+    if probable_loglevel_specification(groups):
+        report(ELLEVASGROUPS(groups.site))
     fmt, args = fix_printf(fmt, args, argsites, site)
     return [mkCompound(site, pre_statements + [
         log_statement(site, location.node, location.indices,
-                      logkind, level,
-                      codegen_expression(groups, location, scope),
-                      fmt, *args)])]
-
+                      logkind, level, groups, fmt, *args)])]
 @statement_dispatcher
 def stmt_try(stmt, location, scope):
     [tryblock, excblock] = stmt.args
