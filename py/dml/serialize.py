@@ -404,6 +404,10 @@ def mark_for_serialization(site, dmltype):
 # Trait references are an example of such a type.
 def type_signature(dmltype, is_for_serialization):
     dmltype = realtype(dmltype)
+    if isinstance(dmltype, TLong):
+        return f'IL{"s" if dmltype.signed else "u"}'
+    if isinstance(dmltype, TSize):
+        return f'IS{"s" if dmltype.signed else "u"}'
     if isinstance(dmltype, IntegerType):
         return 'I%d%s%s' % (dmltype.bits,
                             dmltype.byte_order[0] if dmltype.is_endian else "h",

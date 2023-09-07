@@ -30,6 +30,8 @@ __all__ = (
     'TBool',
     'TInt',
     'TEndianInt',
+    'TLong',
+    'TSize',
     'TFloat',
     'TArray',
     'TPtr',
