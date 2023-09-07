@@ -1657,7 +1657,7 @@ def generate_deinit(device):
                 # any exceptions. But we don't want to force them to insert
                 # try-catch in the init method.
                 with LogFailure(device.site, event, indices):
-                    codegen_inline(device.site, method, indices, [], []).toc()
+                    codegen_inline(method.site, method, indices, [], []).toc()
             for i in range(len(dims)):
                 out('}\n', preindent=-1)
 
@@ -3104,17 +3104,17 @@ def generate_startup_trait_calls(data, idxvars):
         ref = ObjTraitRef(site, node, trait, indices)
         out(f'_tref = {ref.read()};\n')
         for method in trait_methods:
-            outargs = [mkLit(site,
+            outargs = [mkLit(method.site,
                              ('*((%s) {0})'
-                              % ((TArray(t, mkIntegerLiteral(site, 1))
+                              % ((TArray(t, mkIntegerLiteral(method.site, 1))
                                   .declaration('')),)),
                              t)
                        for (_, t) in method.outp]
 
             method_ref = TraitMethodDirect(
-                site, mkLit(site, '_tref', TTrait(trait)), method)
+                method.site, mkLit(method.site, '_tref', TTrait(trait)), method)
             with IgnoreFailure(site):
-                codegen_call_traitmethod(site, method_ref, [],
+                codegen_call_traitmethod(method.site, method_ref, [],
                                          outargs) .toc()
     out('}\n', preindent=-1)
 
