@@ -118,28 +118,27 @@ def serialize(real_type, current_expr, target_expr):
                                  [current_expr], attr_value_t)
         return ctree.mkAssignStatement(current_site, target_expr,
                                        ctree.ExpressionInitializer(apply_expr))
-    if isinstance(real_type, TInt):
-        if real_type.signed:
-            return construct_assign_apply("SIM_make_attr_int64", real_type)
-        else:
-            return construct_assign_apply("SIM_make_attr_uint64", real_type)
-    if isinstance(real_type, TEndianInt):
+    if real_type.is_int:
         if real_type.signed:
             funname = "SIM_make_attr_int64"
         else:
             funname = "SIM_make_attr_uint64"
-        converted_arg = ctree.as_int(current_expr)
-        function_type = TFunction([converted_arg.ctype], attr_value_t)
-        apply_expr = expr.Apply(current_site,
-                                expr.mkLit(current_site,
-                                           funname,
-                                           function_type),
-                                [converted_arg],
-                                function_type)
-        return ctree.mkCompound(current_site,
-                                [ctree.mkAssignStatement(
-                                    current_site, target_expr,
-                                    ctree.ExpressionInitializer(apply_expr))])
+        if real_type.is_endian:
+            converted_arg = ctree.as_int(current_expr)
+            function_type = TFunction([converted_arg.ctype], attr_value_t)
+            apply_expr = expr.Apply(current_site,
+                                    expr.mkLit(current_site,
+                                               funname,
+                                               function_type),
+                                    [converted_arg],
+                                    function_type)
+            return ctree.mkCompound(current_site,
+                                    [ctree.mkAssignStatement(
+                                        current_site, target_expr,
+                                        ctree.ExpressionInitializer(
+                                            apply_expr))])
+        else:
+            return construct_assign_apply(funname, real_type)
     elif isinstance(real_type, TBool):
         return construct_assign_apply("SIM_make_attr_boolean", real_type)
     elif isinstance(real_type, TFloat):
@@ -252,7 +251,7 @@ def deserialize(real_type, current_expr, target_expr, error_out):
                                           error_out(sub_success_arg.read(),
                                                     None)))])
 
-    if isinstance(real_type, IntegerType):
+    if real_type.is_int:
         if real_type.is_endian:
             real_type = TInt(real_type.bits, real_type.signed)
         return construct_assign_apply("integer", real_type)

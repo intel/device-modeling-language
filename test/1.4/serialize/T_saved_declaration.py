@@ -15,6 +15,10 @@ obj.saved_bool = False
 stest.expect_equal(obj.saved_bool, False)
 obj.saved_float = -0.5
 stest.expect_equal(obj.saved_float, -0.5)
+obj.saved_size = 4
+stest.expect_equal(obj.saved_size, 4)
+obj.saved_long = -8388608
+stest.expect_equal(obj.saved_long, -8388608)
 obj.saved_array = [3, 2, 1, 0]
 stest.expect_equal(obj.saved_array, [3, 2, 1, 0])
 # uint8 arrays are serialized as data instead of list, and can be

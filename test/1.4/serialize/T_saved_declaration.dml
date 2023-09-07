@@ -19,6 +19,10 @@ saved bool saved_bool = true;
 
 saved float saved_float = 0.5;
 
+saved size_t saved_size = 2;
+
+saved long saved_long = -5;
+
 // Storage types
 typedef struct {
     int i;
@@ -206,6 +210,8 @@ attribute test_initial is write_only_attr {
         assert saved_int24 == -5;
         assert saved_bool == true;
         assert saved_float == 0.5;
+        assert saved_size == 2;
+        assert saved_long == -5;
         // No initial test for the struct or array
         for (local int i = 0; i < 4; i++) {
             assert port_array[i].v == i;
@@ -261,6 +267,8 @@ attribute test_later is write_only_attr {
         assert saved_int24 == -8388608;
         assert saved_bool == false;
         assert saved_float == -0.5;
+        assert saved_size == 4;
+        assert saved_long == -8388608;
 
         assert saved_struct.i == 4;
         assert saved_struct.v0.i == 0;
