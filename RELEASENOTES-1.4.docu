@@ -481,7 +481,7 @@
       of a struct type to that same struct type.</add-note></build-id>
   <build-id value="6223"><add-note>Fixed an error where const method parameters
       would cause an internal error if that method is used as the callback of
-      an `after` statement.</add-note></build-id>
+      an <tt>after</tt> statement.</add-note></build-id>
   <build-id value="6223"><add-note>Fixed an issue where having a const-qualified
       layout type could lead to internal compiler errors in certain
       scenarios.</add-note></build-id>
@@ -497,4 +497,9 @@
   <build-id value="next"><add-note>Fixed a bug where partial inquiry
       writes to a bank would incorrectly clear register bits
       <bug number="SIMICS-21382"/>.</add-note></build-id>
+  <build-id value="next"><add-note>Fixed a bug where trying to serialize
+      values of <tt>long</tt> or <tt>size_t</tt> type (via <tt>saved</tt>
+      variables or arguments of <tt>after</tt> statements) would lead
+      to an internal compiler error
+      <bug number="SIMICS-21424"/>.</add-note></build-id>
 </rn>
