@@ -77,6 +77,7 @@ Make: dmlc
     $(HOST)/bin/dml/python/dml/dml14_parsetab.py
     $(HOST)/bin/dml/python/LICENSE
     $(HOST)/bin/dml/python/port_dml.py
+    $(HOST)/bin/dml/python/dead_dml_methods.py
 
 Group: dmlc/6
 Require-tokens: public

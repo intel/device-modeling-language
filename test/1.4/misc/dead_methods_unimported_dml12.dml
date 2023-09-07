@@ -1,0 +1,11 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+// No warnings are reported for DML 1.2 files. If this wouldn't be DML 1.2,
+// this we would have a warning reported on this method, see
+// dead_methods_unimported.dml
+method dead_dml12() {
+}
