@@ -1,0 +1,48 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+/// DEAD
+method dead_imported() -> (int) {
+    return 0;
+}
+
+template t {
+    // no problem
+    shared method dead_abstract();
+    // TODO: this one is apparently dead, but C code is still generated
+    shared method dead_shared() default {
+    }
+    // no problem
+    method dead_unconditional_error() {
+        error;
+    }
+    // DEAD
+    method dead_conditional_error() {
+        #if (true) {
+            error;
+        }
+    }
+
+    in each field {
+        group g {
+            #if (false) {
+                // DEAD
+                method dead_nested() {
+                }
+            } #else {
+                // DEAD
+                method dead_nested_false() {
+                }
+            }
+        }
+    }
+}
+
+#if (true) {
+// DEAD
+method dead_toplevel_if() {
+}
+}

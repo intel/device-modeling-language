@@ -1,0 +1,38 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+/// COMPILE-ONLY
+
+device test;
+
+// for the dead_dml_methods.py script
+
+import "dead_methods_imported.dml";
+
+// DEAD
+method dead() { }
+
+// DEAD
+method dead_long() -> (int)
+{
+    return 0;
+}
+
+// not dead
+method live() -> (int) {
+    return 0;
+}
+
+// not dead: inline methods are excluded from analysis
+inline method inline_dead(inline x) -> (int) {
+    return x;
+}
+
+// not dead
+method init() {
+    live();
+}

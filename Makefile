@@ -78,7 +78,7 @@ OLD_DMLFILES_SRC_4_8 := $(subst $(OLD_DMLLIB_SRC_4_8)/,,$(OLD_DMLFILES_4_8))
 DMLFILES := $(subst $(DMLLIB_SRC)/,,$(DMLFILES))
 OLD_DMLFILES_4_8 := $(addprefix $(OLD_DMLLIB_DEST_4_8)/,$(DMLFILES) $(OLD_DMLFILES_SRC_4_8))
 DMLFILES := $(addprefix $(DMLLIB_DEST)/,$(DMLFILES))
-SCRIPTS := $(PYTHONPATH)/port_dml.py
+SCRIPTS := $(addprefix $(PYTHONPATH)/,port_dml.py dead_dml_methods.py)
 MPL_LICENSE := $(PYTHONPATH)/LICENSE
 BSD0_LICENSES := $(addsuffix /LICENSE,$(DMLLIB_DESTDIRS) $(OLD_DMLLIB_DESTDIRS_4_8) $(DMLLIB_DEST)/include/simics)
 

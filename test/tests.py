@@ -29,6 +29,7 @@ def project_host_path():
 
 sys.path.append(join(project_host_path(), 'bin', 'dml', 'python'))
 import dml.globals
+import dead_dml_methods
 
 class TestFail(Exception):
     def __init__(self, reason):
@@ -1476,6 +1477,36 @@ all_tests.append(PortingConvertFail(
     + [('dml-builtins.dml', None, 'PRETURNARGS'),
        ('dml-builtins.dml', None, 'PWUNUSED'),
        ('dml-builtins.dml', None, 'PNO_WUNUSED')]))
+
+
+class DeadMethods(CTestCase):
+    __slots__ = ()
+    def test(self):
+        super().test()
+        c_file = Path(f'{self.cfilename}.c').resolve()
+        dml_sources = dead_dml_methods.dml_sources(c_file)
+        base_file = Path(self.filename).resolve()
+        imported_file = (
+            Path(self.filename).parent / 'dead_methods_imported.dml').resolve()
+        unimported_file = base_file.parent / 'dead_methods_unimported.dml'
+        dml12_file = base_file.parent / 'dead_methods_unimported_dml12.dml'
+        assert {base_file, imported_file}.issubset(dml_sources), str(
+            dml_sources)
+        (dead, skipped) = dead_dml_methods.find_dead_methods(
+            {c_file}, {base_file, imported_file, unimported_file, dml12_file})
+        assert [p.name for p in skipped] == ['dml-builtins.dml'], f'{skipped}'
+        assert set(dead) == {base_file, imported_file, unimported_file,
+                             dml12_file}, dead
+        for (path, lines) in dead.items():
+            blob = path.read_text()
+            expected = [blob[:match.start()].count('\n') + 2
+                             for match in re.finditer('// DEAD', blob)]
+            assert expected == [line for (line, name) in lines], str(
+                (expected, lines))
+
+all_tests.append(DeadMethods(["dead_methods"],
+                             join(testdir, "1.4", "misc", "dead_methods.dml")))
+
 
 class CompareIllegalAttrs(BaseTestCase):
     __slots__ = ()
