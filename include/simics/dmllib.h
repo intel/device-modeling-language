@@ -1249,6 +1249,7 @@ _DML_create_simple_event_data(
         }
     }
     if (args_size) {
+        ASSERT(args);
         data.args = MM_MALLOC(args_size, uint8);
         memcpy(data.args, args, args_size);
     }
