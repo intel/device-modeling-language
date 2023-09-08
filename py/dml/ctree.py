@@ -4085,6 +4085,7 @@ class HookSendNowApply(Expression):
     '''Application of the send_now pseudomethod with valid arguments'''
     slots = ('msg_struct',)
     type = TInt(64, False)
+    priority = dml.expr.Apply.priority
     @auto_init
     def __init__(self, site, hookref_expr, args):
         crep.require_dev(site)
@@ -4133,6 +4134,7 @@ mkHookSendRef = HookSendRef
 class HookSendApply(Expression):
     '''Application of the send pseudomethod with valid arguments'''
     type = void
+    priority = dml.expr.Apply.priority
     @auto_init
     def __init__(self, site, hookref_expr, args, info):
         crep.require_dev(site)
@@ -4155,7 +4157,7 @@ class HookSendApply(Expression):
         return ('_DML_post_immediate_after('
                 + '&_dev->obj, _dev->_immediate_after_state, '
                 + f'{self.info.cident_callback}, NULL, 0, {args}, '
-                + f'{args_size}, NULL, 0);\n')
+                + f'{args_size}, NULL, 0)')
 
 mkHookSendApply = HookSendApply
 
