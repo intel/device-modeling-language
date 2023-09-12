@@ -15,7 +15,7 @@ from pathlib import Path
 from . import objects, logging, crep, output, ctree, serialize, structure
 from . import traits
 import dml.globals
-from .structure import get_attr_name, port_class_ident, port_should_get_proxies
+from .structure import get_attr_name, port_class_ident, need_port_proxy_attrs
 from .logging import *
 from .messages import *
 from .output import *
@@ -510,7 +510,7 @@ def check_attribute(node, port, prefix):
             report(WNDOC(node, node.logname()))
     attrname = get_attr_name(prefix, node)
     register_attribute(node.site, port, attrname)
-    if port and port_should_get_proxies(port):
+    if port and need_port_proxy_attrs(port):
         register_attribute(node.site, None, "%s_%s" % (port.name, attrname))
 
 # dimsizes, loopvars, prefix are relative to port.
