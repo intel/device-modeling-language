@@ -1,0 +1,17 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+import "simics/simulator/conf-object.dml";
+
+port p {
+    attribute a is uint64_attr;
+}
+
+method test(bool proxies_deprecated) {
+    assert _deprecate_port_proxy_attrs == proxies_deprecated;
+    assert SIM_class_has_attribute(SIM_object_class(dev.obj), "p_a")
+        == !proxies_deprecated;
+}
