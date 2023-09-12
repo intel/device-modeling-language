@@ -528,6 +528,17 @@ The `device` template contains the following parameters:
   this device, as specified by the `--simics-api` command-line argument;
   e.g. `"6"` for the Simics 6 API.
 
+* `_compat_proxy_port_ifaces`: Version 5 and earlier of Simics relied on
+  interface ports (as registered by the `SIM_register_port_interface` API
+  function) for exposing the interfaces of ports and banks. In newer versions
+  of Simics, interfaces are instead exposed on separate configuration objects.
+  When this parameter is set to `true`, such ports are registered in addition
+  to the port objects, for compatibility with scripts written for Simics 5.
+  For arrays with thousands of ports, this can add a significant compile-time
+  overhead. The default is `true` if `simics_api_version` parameter is `"6"` or
+  older. Note that proxy interface ports are not created for all banks and
+  ports; e.g., banks inside groups or subdevices were not allowed in Simics 5;
+  therefore there's no old scripts that need the proxies for compatibility.
 */
 template device {
     is object;
@@ -542,6 +553,15 @@ template device {
     param _api_5_or_older = simics_api_version == "5"
         || simics_api_version == "4.8";
     param _api_6_or_older = simics_api_version == "6" || _api_5_or_older;
+
+    param _compat_proxy_port_ifaces default _api_6_or_older;
+
+    // Compatibility proxies are not part of new API versions; thus, the only
+    // allowed override is from 'true' to 'false' within an old API
+    // version.
+    #if (_compat_proxy_port_ifaces && !_api_6_or_older) {
+        error;
+    }
 
     // automatic parameters
     param obj                       auto;

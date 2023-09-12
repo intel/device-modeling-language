@@ -206,6 +206,18 @@ template device {
 
     parameter simics_api_version auto;
 
+    // see documentation in DML 1.4
+    parameter _api_6_or_older = $simics_api_version == "6"
+        || $simics_api_version == "5" || $simics_api_version == "4.8";
+    parameter _compat_proxy_port_ifaces default $_api_6_or_older;
+
+    // Compatibility proxies are not part of new API versions; thus, the only
+    // allowed override is from 'true' to 'false' within an old API
+    // version.
+    if ($_compat_proxy_port_ifaces && !$_api_6_or_older) {
+        error;
+    }
+
     // automatic parameters
     parameter obj                       auto;
     parameter logobj                    = $obj;
