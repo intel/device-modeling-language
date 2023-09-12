@@ -539,6 +539,9 @@ template device {
     param objtype = "device";
 
     param simics_api_version auto;
+    param _api_5_or_older = simics_api_version == "5"
+        || simics_api_version == "4.8";
+    param _api_6_or_older = simics_api_version == "6" || _api_5_or_older;
 
     // automatic parameters
     param obj                       auto;
@@ -551,8 +554,7 @@ template device {
     param be_bitorder             default _be_bitorder;
     param log_group                 = undefined;
 
-    param use_io_memory             default simics_api_version == "6"
-        || simics_api_version == "5" || simics_api_version == "4.8";
+    param use_io_memory             default _api_6_or_older;
     // this was available in DML 1.2; defensively reserved in 1.4
     param banks                     = undefined;
     // this carried semantics in DML 1.2; deprecated in 1.4
@@ -1437,8 +1439,7 @@ template port is object {
     param objtype = "port";
     // limitations for ports are not recognized
     param limitations = undefined;
-    param obj = (simics_api_version == "5" || simics_api_version == "4.8")
-        #? dev.obj #: _port_obj();
+    param obj = dev._api_5_or_older #? dev.obj #: _port_obj();
 
     session conf_object_t *_cached_port_obj;
     shared method _port_obj() -> (conf_object_t *) {
@@ -1768,8 +1769,7 @@ template bank is (object, shown_desc) {
     // compatibility: referencing 'obj' in a bank method must evaluate to
     // dev.obj in code that can compile on both 5 and 6
     // TODO: we should probably make obj an immutable session variable
-    param obj = (simics_api_version == "5" || simics_api_version == "4.8")
-        #? dev.obj #: _bank_obj();
+    param obj = dev._api_5_or_older #? dev.obj #: _bank_obj();
     param partial : bool;
     param overlapping : bool;
     param _le_byte_order : bool;
