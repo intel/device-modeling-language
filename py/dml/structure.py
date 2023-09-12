@@ -2598,7 +2598,7 @@ class ConfAttrParentObjectClassParamExpr(objects.ParamExpr):
         self.cached = mkLit(self.site, lit, TPtr(TPtr(TNamed('conf_class_t'))))
         return self.cached
 
-def port_should_get_proxies(port):
+def need_port_proxy_attrs(port):
     assert port.objtype in {'port', 'bank', 'subdevice'}
     return (port.objtype in {'port', 'bank'}
             and port.dimensions <= 1
@@ -2622,7 +2622,7 @@ class ConfAttrParentObjectProxyInfoParamExpr(objects.ParamExpr):
             return self.cached
         object_parent = self.node.object_parent
         if (object_parent is not dml.globals.device
-            and port_should_get_proxies(object_parent)):
+            and need_port_proxy_attrs(object_parent)):
             is_bank = 'true' if object_parent.objtype == 'bank' else 'false'
             is_array = 'true' if object_parent.dimensions == 1 else 'false'
             indices = ((mkLit(self.site, '0', TInt(32, False)),)
