@@ -539,6 +539,14 @@ The `device` template contains the following parameters:
   older. Note that proxy interface ports are not created for all banks and
   ports; e.g., banks inside groups or subdevices were not allowed in Simics 5;
   therefore there's no old scripts that need the proxies for compatibility.
+
+* `_compat_proxy_port_attrs`: In Simics 5, configuration attributes for
+  `connect`, `attribute` and `register` objects inside banks and ports were
+  register on the device object, named like
+  <code><em>bankname</em>_<em>attrname</em></code>. This parameter controls, in
+  a similar to the `_compat_proxy_port_ifaces` parameter, whether such proxy
+  attribute should be created for compatibility. The default is `true` if the
+  `simics_api_version` parameter is `"6"` or older.
 */
 template device {
     is object;
@@ -555,11 +563,15 @@ template device {
     param _api_6_or_older = simics_api_version == "6" || _api_5_or_older;
 
     param _compat_proxy_port_ifaces default _api_6_or_older;
+    param _compat_proxy_port_attrs default _api_6_or_older;
 
     // Compatibility proxies are not part of new API versions; thus, the only
     // allowed override is from 'true' to 'false' within an old API
     // version.
     #if (_compat_proxy_port_ifaces && !_api_6_or_older) {
+        error;
+    }
+    #if (_compat_proxy_port_attrs && !_api_6_or_older) {
         error;
     }
 
