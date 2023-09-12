@@ -580,32 +580,37 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
 
     register_attribute(node.site, port, attrname)
     if port:
-        if port.dimensions == 0 and port.objtype in {'port', 'bank'}:
-            register_attribute(node.site, None, "%s_%s" % (port.name, attrname))
-            initcode.out(
-                '_register_port_attr(class, %s, offsetof(%s, %s), %s,'
-                % (port_class_ident(port),
-                   crep.structtype(dml.globals.device),
-                   crep.cref_portobj(port, ()),
-                   'true' if port.objtype == "bank" else 'false')
-                + ' "%s", "%s", %s, %s, %s, "%s", %s);\n'
-                % (port.name, attrname, getter, setter,
-                   attr_flag, attr_type, doc.read()))
-        elif port.dimensions == 1 and port.objtype in {'port', 'bank'}:
-            # Generate an accessor attribute for legacy reasons
-            register_attribute(node.site, None, "%s_%s" % (port.name, attrname))
-            member = crep.cref_portobj(
-                port, (mkLit(port.site, '0', TInt(32, False)),))
-            (dimsize,) = port.dimsizes
-            initcode.out(
-                '_register_port_array_attr(class, %s, offsetof(%s, %s),'
-                % (port_class_ident(port),
-                   crep.structtype(dml.globals.device),
-                   member)
-                + ' %d, %s, "%s", "%s", %s, %s, %s, "%s",'
-                % (dimsize, 'true' if port.objtype == "bank" else 'false',
-                   port.name, attrname, getter, setter, attr_flag, attr_type)
-                + ' %s);\n' % (doc.read(),))
+        if need_port_proxy_attrs(port):
+            if port.dimensions == 0:
+                register_attribute(
+                    node.site, None, "%s_%s" % (port.name, attrname))
+                initcode.out(
+                    '_register_port_attr(class, %s, offsetof(%s, %s), %s,'
+                    % (port_class_ident(port),
+                       crep.structtype(dml.globals.device),
+                       crep.cref_portobj(port, ()),
+                       'true' if port.objtype == "bank" else 'false')
+                    + ' "%s", "%s", %s, %s, %s, "%s", %s);\n'
+                    % (port.name, attrname, getter, setter,
+                       attr_flag, attr_type, doc.read()))
+            else:
+                assert port.dimensions == 1
+                # Generate an accessor attribute for legacy reasons
+                register_attribute(
+                    node.site, None, "%s_%s" % (port.name, attrname))
+                member = crep.cref_portobj(
+                    port, (mkLit(port.site, '0', TInt(32, False)),))
+                (dimsize,) = port.dimsizes
+                initcode.out(
+                    '_register_port_array_attr(class, %s, offsetof(%s, %s),'
+                    % (port_class_ident(port),
+                       crep.structtype(dml.globals.device),
+                       member)
+                    + ' %d, %s, "%s", "%s", %s, %s, %s, "%s",'
+                    % (dimsize, 'true' if port.objtype == "bank" else 'false',
+                       port.name, attrname, getter, setter, attr_flag,
+                       attr_type)
+                    + ' %s);\n' % (doc.read(),))
         else:
             initcode.out(
                 '_register_port_attr_no_aux(%s,'
@@ -613,7 +618,6 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
                 % (port_class_ident(port),
                    attrname, getter, setter,
                    attr_flag, attr_type, doc.read()))
-
     else:
         initcode.out('SIM_register_typed_attribute(class, "'+attrname+'",'+
                      '\n                             '+
