@@ -2585,7 +2585,9 @@ def need_port_proxy_attrs(port):
     assert port.objtype in {'port', 'bank', 'subdevice'}
     return (port.objtype in {'port', 'bank'}
             and port.dimensions <= 1
-            and port.parent is dml.globals.device)
+            and port.parent is dml.globals.device
+            and (deprecations.port_proxy_attrs
+                 not in dml.globals.enabled_deprecations))
 
 class ConfAttrParentObjectProxyInfoParamExpr(objects.ParamExpr):
     '''The _parent_obj_proxy_info parameter of a attribute, register, or

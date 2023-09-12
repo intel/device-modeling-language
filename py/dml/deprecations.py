@@ -46,3 +46,18 @@ class port_proxy_ifaces(DeprecatedFeature):
     '''
     short = "Don't generate proxy port interfaces for banks and ports"
     last_api_version = "6"
+
+
+@deprecation
+class port_proxy_attrs(DeprecatedFeature):
+    r'''In Simics 5, configuration attributes for `connect`,
+    `attribute` and `register` objects inside banks and ports were
+    registered on the device object, named like
+    <code><em>bankname</em>\_<em>attrname</em></code>. Such proxy
+    attributes are only created When this deprecation is not enabled.
+    Proxy attributes are not created for all banks and ports, in the
+    same manner as documented in the `port_proxy_ifaces` deprecation.
+    '''
+    short = ("Don't generate top-level proxy attributes"
+             + " for attributes in banks and ports")
+    last_api_version = "6"
