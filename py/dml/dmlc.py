@@ -440,17 +440,6 @@ def main(argv):
         help="""Append messages to file with tags for automatic porting
         to DML 1.4""")
 
-    def show_illegal_attributes(option, opt, value, parser):
-        for n in dml.globals.illegal_attributes:
-            print(n)
-        sys.exit(0)
-
-    # Not documented
-    optpar.add_option(
-        '--illegal-attributes', dest = 'illegal_attributes',
-        action = 'callback',
-        callback = show_illegal_attributes,
-        help = optparse.SUPPRESS_HELP)
     optpar.add_option(
         '--state-change-dml12', action='store_true',
         help=optparse.SUPPRESS_HELP)
