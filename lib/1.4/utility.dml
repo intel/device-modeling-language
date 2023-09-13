@@ -196,108 +196,6 @@ template _init_val_power_on_reset is (init_val, power_on_reset) {
     }
 }
 
-/**
-### signal_port
-
-<section>
-
-#### Description
-
-Implements a signal interface with saved state. The current state of the signal
-is stored in the saved boolean `high`, and a spec-violation message is logged
-on level 2 if the signal is raised or lowered when already high or low. The
-methods `signal_raise` and `signal_lower` can be overridden to add additional
-side effects.
-
-</section>
-*/
-template signal_port {
-    implement signal {
-        saved bool high;
-        method signal_raise() default {
-            if (high)
-                log spec_viol, 2: "%s raised when already high", qname;
-            else
-                high = true;
-        }
-        method signal_lower() default {
-            if (!high)
-                log spec_viol, 2: "%s lowered when already low", qname;
-            else
-                high = false;
-        }
-    }
-}
-
-/**
-### signal_connect
-
-<section>
-
-#### Description
-
-Implements a connect with a signal interface, with saved state. The current
-state of the signal is stored in the saved boolean `signal.high`. If the
-connect is changed while `signal.high` is `true` and the device is configured,
-the `signal_lower` method will be called on the old object, and the
-`signal_raise` method will be called on the new object. Similarly, if the
-device is created with `signal.high` set to `true`, the `signal_raise` method
-will be called on the connected object in the finalize phase. This behaviour
-can be changed by overriding the `set` method and/or the `post_init`
-method. The template defines the following method:
-
-* `set_level(uint1 high)`: Sets the level of the signal, by calling
-   `signal_raise` or `signal_lower`, as required. Also sets `signal.high`
-   to `high`.
-
-#### Related Templates
-
-[`signal_port`](#signal_port)
-
-</section>
-*/
-template signal_connect is (connect, post_init) {
-    interface signal {
-        saved bool high;
-    }
-
-    method post_init() default {
-        if (!SIM_is_restoring_state(dev.obj) && signal.val && signal.high)
-            signal.signal_raise();
-    }
-
-    method set(conf_object_t *obj) default {
-        // this method is only called if the attribute actually changes
-        // We are either:
-        // * initializing the configuration, i.e. objects are not finalized and
-        //   we shouldn't do interface calls yet, if the signal is initialized
-        //   as high this will be handled in post_init above.
-        // * hotplugging the connect, i.e. if the signal is currently high we
-        //   should lower it on the old target and raise it on the new one.
-        // * reverse executing a hotplug (quite unlikely), i.e. the signal is
-        //   currently high but the effects of the hotplug has already taken
-        //   place so we should NOT treat it as a hotplug.
-        local bool hotplug = SIM_object_is_configured(dev.obj)
-            && !SIM_is_restoring_state(dev.obj);
-        if (hotplug && signal.val && signal.high)
-            signal.signal_lower();
-        default(obj);
-        if (hotplug && signal.val && signal.high)
-            signal.signal_raise();
-    }
-
-    method set_level(uint1 high) {
-        if (signal.high != (high ? true : false)) {
-            signal.high = high;
-            if (signal.val) {
-                if (high)
-                    signal.signal_raise();
-                else
-                    signal.signal_lower();
-            }
-        }
-    }
-}
 
 // Instantiate this on top level to support power-on reset.
 template poreset is power_on_reset {
@@ -1482,5 +1380,100 @@ template map_target is (connect, _qname) {
             SIM_transaction_is_read(t) ? "read" : fail ? "write" : "wrote",
             SIM_transaction_size(t), addr, SIM_object_name(obj);
         return exc;
+    }
+}
+
+/**
+## Signal related templates
+
+### signal_port
+
+Implements a signal interface with saved state. The current state of the signal
+is stored in the saved boolean `high`, and a spec-violation message is logged
+on level 2 if the signal is raised or lowered when already high or low. The
+methods `signal_raise` and `signal_lower` can be overridden to add additional
+side effects.
+
+*/
+template signal_port {
+    implement signal {
+        saved bool high;
+        method signal_raise() default {
+            if (high)
+                log spec_viol, 2: "%s raised when already high", qname;
+            else
+                high = true;
+        }
+        method signal_lower() default {
+            if (!high)
+                log spec_viol, 2: "%s lowered when already low", qname;
+            else
+                high = false;
+        }
+    }
+}
+
+/**
+### signal_connect
+
+Implements a connect with a signal interface, with saved state. The current
+state of the signal is stored in the saved boolean `signal.high`. If the
+connect is changed while `signal.high` is `true` and the device is configured,
+the `signal_lower` method will be called on the old object, and the
+`signal_raise` method will be called on the new object. Similarly, if the
+device is created with `signal.high` set to `true`, the `signal_raise` method
+will be called on the connected object in the finalize phase. This behaviour
+can be changed by overriding the `set` method and/or the `post_init`
+method. The template defines the following method:
+
+* `set_level(uint1 high)`: Sets the level of the signal, by calling
+   `signal_raise` or `signal_lower`, as required. Also sets `signal.high`
+   to `high`.
+
+#### Related Templates
+
+[`signal_port`](#signal_port)
+
+*/
+template signal_connect is (connect, post_init) {
+    interface signal {
+        saved bool high;
+    }
+
+    method post_init() default {
+        if (!SIM_is_restoring_state(dev.obj) && signal.val && signal.high)
+            signal.signal_raise();
+    }
+
+    method set(conf_object_t *obj) default {
+        // this method is only called if the attribute actually changes
+        // We are either:
+        // * initializing the configuration, i.e. objects are not finalized and
+        //   we shouldn't do interface calls yet, if the signal is initialized
+        //   as high this will be handled in post_init above.
+        // * hotplugging the connect, i.e. if the signal is currently high we
+        //   should lower it on the old target and raise it on the new one.
+        // * reverse executing a hotplug (quite unlikely), i.e. the signal is
+        //   currently high but the effects of the hotplug has already taken
+        //   place so we should NOT treat it as a hotplug.
+        local bool hotplug = SIM_object_is_configured(dev.obj)
+            && !SIM_is_restoring_state(dev.obj);
+        if (hotplug && signal.val && signal.high)
+            signal.signal_lower();
+        default(obj);
+        if (hotplug && signal.val && signal.high)
+            signal.signal_raise();
+    }
+
+    method set_level(uint1 high) {
+        if (signal.high != (high ? true : false)) {
+            signal.high = high;
+            if (signal.val) {
+                if (high)
+                    signal.signal_raise();
+                else
+                    signal.signal_lower();
+            }
+        }
     }
 }
