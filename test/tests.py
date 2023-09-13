@@ -23,6 +23,13 @@ from depfile import parse_depfile
 import pstats
 import tarfile
 
+def project_host_path():
+    return join(testparams.project_path(),
+                        testparams.host_platform())
+
+sys.path.append(join(project_host_path(), 'bin', 'dml', 'python'))
+import dml.globals
+
 class TestFail(Exception):
     def __init__(self, reason):
         Exception.__init__(self)
@@ -33,10 +40,6 @@ import module_id
 
 def host_path():
     return join(testparams.simics_base_path(),
-                        testparams.host_platform())
-
-def project_host_path():
-    return join(testparams.project_path(),
                         testparams.host_platform())
 
 # Matches "/// (ANNOTATION) (details)", used for annotating error
@@ -1470,16 +1473,9 @@ class CompareIllegalAttrs(BaseTestCase):
                       capture_output=True,
                       encoding='utf-8').stdout.splitlines()
               if x.startswith('ATTR ')}
-        #self.pr("Automatic attributes: %r" % sl)
 
         # Extract list of illegal attributes from dmlc
-        dl = {x.strip()
-              for x in subprocess.run(
-                      [join(simics_base_path(), "bin", "dmlc" + bat_sfx),
-                       "--illegal-attributes"],
-                      capture_output=True,
-                      encoding='utf-8').stdout.splitlines()}
-        #self.pr("Illegal attributes: %r" % dl)
+        dl = dml.globals.illegal_attributes
 
         if dl != sl:
             for n in dl - sl:
