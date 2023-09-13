@@ -2,14 +2,14 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import sys, os, traceback, re
-import optparse
+import argparse
 import tempfile
 import shutil
 import time
 from pathlib import Path
 
 from . import structure, logging, messages, ctree, ast, expr_util, toplevel
-from . import codegen, serialize
+from . import serialize
 from . import dmlparse
 from . import output
 
@@ -265,9 +265,7 @@ def main(argv):
     # DML files must be utf8, but are generally opened without specifying
     # the 'encoding' arg. This works only if utf8_mode is enabled.
     assert sys.flags.utf8_mode
-    optpar = optparse.OptionParser(
-        """
-  dmlc [flags] <file> [output-base]""")
+    parser = argparse.ArgumentParser()
 
     # <add id="dmlc options">
     # <name>Command Line Options</name>
@@ -281,102 +279,96 @@ def main(argv):
     # <dt>-I <i>path</i></dt>
     # <dd>Add <arg>path</arg> to the search path for imported
     # modules.</dd>
-    optpar.add_option(
-        '-I', dest = 'import_path', action = 'append',
-        metavar = 'PATH',
-        default = [],
-        help = 'add PATH to import search path')
+    parser.add_argument(
+        '-I', dest='import_path', action='append',
+        metavar='PATH',
+        default=[],
+        help='add PATH to import search path')
 
     # <dt>-D <i>name</i>=<i>definition</i></dt>
     # <dd>Define a compile-time parameter.  The definition
     # must be a literal expression, and can be a quoted
     # string, a boolean, an integer, or a floating point
     # constant. The parameter will appear in the top-level scope.</dd>
-    optpar.add_option(
-        '-D', dest = 'defines', action = 'append',
-        metavar = 'NAME=VALUE',
-        default = [],
-        help = 'set compile time constant NAME to VALUE')
+    parser.add_argument(
+        '-D', dest='defines', action='append',
+        metavar='NAME=VALUE',
+        default=[],
+        help='set compile time constant NAME to VALUE')
 
     # <dt>--dep</dt>
     # <dd>Output makefile rules describing dependencies.</dd>
-    optpar.add_option(
-        '--dep', dest = "makedep", action = 'store',
-        help = 'generate makefile dependencies')
+    parser.add_argument(
+        '--dep', action='store',
+        help='generate makefile dependencies')
 
     # <dt>--no-dep-phony</dt>
     # <dd>With --dep, avoid addition of a phony target for each dependency
     # other than the main file.</dd>
-    optpar.add_option(
-        '--no-dep-phony', dest = "no_dep_phony", action = 'store_true',
-        help = 'With --dep, avoid addition of a phony target for each'
+    parser.add_argument(
+        '--no-dep-phony', action='store_true',
+        help='With --dep, avoid addition of a phony target for each'
         + ' dependency other than the main file.')
 
     # <dt>--dep-target</dt>
     # <dd>With --dep, change the target of the rule emitted by dependency
     # generation. Specify multiple times to have multiple targets.</dd>
-    optpar.add_option(
-        '--dep-target', dest = "dep_target", action = 'append',
-        metavar = 'TARGET',
-        default = [],
-        help = 'With --dep, change the target of the rule emitted by'
+    parser.add_argument(
+        '--dep-target', action='append', metavar='TARGET', default=[],
+        help='With --dep, change the target of the rule emitted by'
         + ' dependency generation. Specify multiple times to have multiple'
         + ' targets.')
 
     # <dt>-T</dt>
     # <dd>Show tags on warning messages. The tags can be used with
     # the <tt>--nowarn</tt> and <tt>--warn</tt> options.</dd>
-    optpar.add_option(
-        '-T', dest = 'include_tag', action = 'callback',
-        callback = lambda *args: set_include_tag(True),
-        help = 'show tags on warning messages')
+    parser.add_argument(
+        '-T', dest='include_tag', action='store_true',
+        help='show tags on warning messages')
 
     # Deprecated with SIMICS_API > 4.8
-    optpar.add_option(
-        '-m', dest = 'full_module', action = 'store_true',
-        help = optparse.SUPPRESS_HELP)
+    parser.add_argument(
+        '-m', dest='full_module', action='store_true',
+        help=argparse.SUPPRESS)
 
     # <dt>-g</dt>
     # <dd>Generate artifacts that allow for easier source-level debugging.
     # This generates a DML debug file leveraged by debug-simics, and
     # causes generated C code to follow the DML code more closely.</dd>
-    def set_debuggable(option, opt, value, parser):
-        dml.globals.debuggable = True
-    optpar.add_option(
-        '-g', dest = 'debuggable', action = 'callback',
-        callback = set_debuggable,
-        help = 'generate artifacts and C code that allow for easier debugging')
+    parser.add_argument(
+        '-g', dest='debuggable', action='store_true',
+        help='generate artifacts and C code that allow for easier debugging')
 
     # <dt>--warn=<i>tag</i></dt>
     # <dd>Enable selected warnings. The tags can be found using
     # the <tt>-T</tt> option.</dd>
-    optpar.add_option(
-        '--warn', dest = 'enabled_warnings', action = 'append',
-        metavar = 'TAG',
-        default = [],
-        help = 'enable warning TAG')
+    parser.add_argument(
+        '--warn', dest='enabled_warnings', action='append',
+        metavar='TAG',
+        default=[],
+        help='enable warning TAG')
 
     # <dt>--nowarn=<i>tag</i></dt>
     # <dd>Suppress selected warnings. The tags can be found using
     # the <tt>-T</tt> option.</dd>
-    optpar.add_option(
-        '--nowarn', dest = 'disabled_warnings', action = 'append',
-        metavar = 'TAG',
-        default = [],
-        help = 'disable warning TAG')
+    parser.add_argument(
+        '--nowarn', dest='disabled_warnings', action='append',
+        metavar='TAG',
+        default=[],
+        help='disable warning TAG')
 
     # <dt>--werror</dt>
     # <dd>Turn all warnings into errors.</dd>
-    optpar.add_option('--werror', dest='werror', action='store_true',
+    parser.add_argument('--werror', action='store_true',
                       help='Turn all warnings into errors')
 
     # <dt>--strict</dt>
     # <dd>Report errors for some constructs that will be forbidden in
     # future versions of the DML language</dd>
-    optpar.add_option('--strict-dml12', dest='strict', action='store_true',
+    parser.add_argument('--strict-dml12', action='store_true',
                       help='Report errors for some constructs that will be'
                       + ' forbidden in future versions of the DML language')
-    optpar.add_option('--strict-int', dest='strict_int', action='store_true',
+    parser.add_argument('--strict-int', action='store_true',
                       help='Use DML 1.4 style integer arithmetic semantics'
                       + ' when compiling DML 1.2 files. Implied by'
                       + ' --strict-dml12.')
@@ -385,28 +377,28 @@ def main(argv):
     # <dd> Adds Synopsys® Coverity® analysis annotations to suppress common
     # false positives in generated C code created from DML 1.4 device models.
     # </dd>
-    optpar.add_option(
-        '--coverity', dest = 'coverity', action = 'store_true',
-        help = ('Adds Synopsys® Coverity® analysis annotations to suppress '
+    parser.add_argument(
+        '--coverity', action='store_true',
+        help=('Adds Synopsys® Coverity® analysis annotations to suppress '
                 + 'common false positives in generated C code created from '
                 + 'DML 1.4 device models.'))
     # <dt>--noline</dt>
     # <dd>Suppress line directives for the C preprocessor so
     # that the C code can be debugged.</dd>
-    optpar.add_option(
-        '--noline', dest = 'noline', action = 'store_true',
-        help = 'suppress line directives in generated C code')
+    parser.add_argument(
+        '--noline', action='store_true',
+        help='suppress line directives in generated C code')
 
     # <dt>--info</dt>
     # <dd>Enable the output of an XML file describing register layout.</dd>
-    optpar.add_option(
-        '--info', dest = 'output_info', action = 'store_true',
-        help = 'generate XML file describing register layout')
+    parser.add_argument(
+        '--info', action='store_true',
+        help='generate XML file describing register layout')
 
     # <dt>--simics-api=<i>version</i></dt>
     # <dd>Use Simics API version <i>version</i>.</dd>
-    optpar.add_option(
-        '--simics-api', dest = 'api_version', action = 'store',
+    parser.add_argument(
+        '--simics-api', action='store',
         metavar='VERSION',
         default=default_api_version(),
         help=('specify Simics API version (default %s)'
@@ -414,46 +406,59 @@ def main(argv):
 
     # <dt>--max-errors=<i>N</i></dt>
     # <dd>Limit the number of error messages to <i>N</i>.</dd>
-    optpar.add_option(
-        '--max-errors', dest = 'max_errors', action = 'store',
-        metavar = 'N',
-        default = "0",
-        help = ('Limit the number of error messages to N'))
+    parser.add_argument(
+        '--max-errors', action='store',
+        metavar='N',
+        default="0",
+        help=('Limit the number of error messages to N'))
 
     # </dl>
     # </add>
 
     # Legacy: write deps to stdout, and assume it's redirected to <file>.dmldep
     # Should be removed in 6
-    optpar.add_option(
-        '-M', dest = "makedep_old", action = 'store_true',
-        help = optparse.SUPPRESS_HELP)
+    parser.add_argument(
+        '-M', dest="makedep_old", action='store_true',
+        help=argparse.SUPPRESS)
 
-    optpar.add_option(
+    parser.add_argument(
         '-P', dest='porting_filename', action='store',
         help="""Append messages to file with tags for automatic porting
         to DML 1.4""")
 
-    optpar.add_option(
+    parser.add_argument(
         '--state-change-dml12', action='store_true',
-        help=optparse.SUPPRESS_HELP)
+        help=argparse.SUPPRESS)
 
     # Generate multiple C files, splitting at the specified file size
-    optpar.add_option(
-        '--split-c-file', dest = 'split_c_file',
-        action = 'store',
-        default = '0',
-        help = optparse.SUPPRESS_HELP)
+    parser.add_argument(
+        '--split-c-file', action='store', default='0',
+        help=argparse.SUPPRESS)
 
     # Enable features for internal testing
-    optpar.add_option(
+    parser.add_argument(
         '--enable-features-for-internal-testing-dont-use-this',
-        dest = 'enable_testing_features', action = 'store_true',
-        help = optparse.SUPPRESS_HELP)
+        dest='enable_testing_features', action='store_true',
+        help=argparse.SUPPRESS)
 
-    (options, args) = optpar.parse_args(argv[1:])
+    parser.add_argument(
+        'input_filename',
+        help="Main DML file to compile. Must have a `device` statement"
+        " on top level.")
+    parser.add_argument(
+        'output_base', nargs="?",
+        help="Prefix for names of generated files. '.c' is appended to the"
+        " name of the main C file. Defaults to input_filename with the"
+        " '.dml' suffix stripped.")
+    options = parser.parse_args(argv[1:])
 
     global outputbase, output_c
+
+    if options.include_tag:
+        set_include_tag(True)
+
+    if options.debuggable:
+        dml.globals.debuggable = True
 
     defs = {}
     for d in options.defines:
@@ -464,12 +469,12 @@ def main(argv):
         else:
             defs[name] = value
 
-    if options.api_version not in api_versions():
+    if options.simics_api not in api_versions():
         prerr("dmlc: the version '%s' is not a valid API version" % (
-                options.api_version))
+                options.simics_api))
         sys.exit(1)
 
-    if options.full_module and options.api_version not in ['4.8']:
+    if options.full_module and options.simics_api not in ['4.8']:
         prerr("dmlc: the -m option is only valid together with --api=4.8"
               " or older")
         sys.exit(1)
@@ -480,7 +485,7 @@ def main(argv):
     # to handle the bugs as part of migration, instead of suddenly
     # overwhelming them with a truly massive amount of warnings in an
     # intermediate release.
-    if options.api_version in {'4.8', '5', '6'}:
+    if options.simics_api in {'4.8', '5', '6'}:
         ignore_warning('WLOGMIXUP')
 
     for w in options.disabled_warnings:
@@ -530,16 +535,14 @@ def main(argv):
               + "The DMLC developers WILL NOT respect their use. "
               + "NEVER enable this flag for any kind of production code!!!***")
 
-    dml.globals.api_version = options.api_version
+    dml.globals.api_version = options.simics_api
 
-    if len(args) not in [1, 2]:
-        optpar.error('wrong number of arguments')
 
-    inputfilename = args[0]
+    inputfilename = options.input_filename
 
     if options.makedep_old:
-        options.makedep = os.path.basename(inputfilename) + 'dep'
-    if options.makedep and options.porting_filename:
+        options.dep = os.path.basename(inputfilename) + 'dep'
+    if options.dep and options.porting_filename:
         prerr("dmlc: the -P flag cannot be used together with --dep")
         sys.exit(1)
     if options.debuggable and options.porting_filename:
@@ -556,15 +559,14 @@ def main(argv):
         # track additional position information
         dmlparse.track_lexspan()
 
-    if len(args) == 2:
-        outputbase = args[1]
-    else:
+    outputbase = options.output_base
+    if outputbase is None:
         outputbase = os.path.basename(inputfilename)
         if outputbase.endswith('.dml'):
             outputbase = outputbase[:-4]
 
     # Profiling setup
-    if os.getenv('DMLC_PROFILE') and not options.makedep:
+    if os.getenv('DMLC_PROFILE') and not options.dep:
         import cProfile, pstats
         dmlc_profiler = cProfile.Profile()
         dmlc_profiler.enable()
@@ -577,18 +579,18 @@ def main(argv):
         dml.globals.serialized_traits = serialize.SerializedTraits()
         (dml_version, devname, headers, footers, global_defs,
          top_tpl, imported) = toplevel.parse_main_file(
-             inputfilename, options.import_path, options.strict)
+             inputfilename, options.import_path, options.strict_dml12)
         logtime("parsing")
 
         if dml_version != (1, 2):
             logging.show_porting = False
 
-        dml.globals.strict_int_flag = options.strict or options.strict_int
+        dml.globals.strict_int_flag = options.strict_dml12 or options.strict_int
 
         if 'DMLC_DUMP_INPUT_FILES' in os.environ:
             dump_input_files(outputbase, dict(
                 imported, **{inputfilename: [os.path.basename(inputfilename)]}))
-        if options.makedep:
+        if options.dep:
             print_cdep(outputbase, headers, footers)
             if logging.failure:
                 sys.exit(2)
@@ -612,12 +614,12 @@ def main(argv):
             if options.dep_target:
                 targetlist = options.dep_target
             else:
-                targetlist = [options.makedep, f"{outputbase}.c"]
+                targetlist = [options.dep, f"{outputbase}.c"]
             targets = ' '.join(path.replace(" ", "\\ ") for path in targetlist)
             if options.makedep_old:
                 f = sys.stdout
             else:
-                f = open(options.makedep, 'w')
+                f = open(options.dep, 'w')
             with f:
                 f.write('%s : %s\n' % (targets, deps))
                 # By default generate phony targets similar to -MP GCC
@@ -630,7 +632,7 @@ def main(argv):
         dev = process(devname, global_defs, top_tpl, defs)
         logtime("process")
 
-        if options.output_info:
+        if options.info:
             dml.info_backend.generate(dev, outputbase + '.xml')
             logtime("info")
 
