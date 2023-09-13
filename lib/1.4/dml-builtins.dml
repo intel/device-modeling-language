@@ -543,6 +543,8 @@ template device {
         || simics_api_version == "4.8";
     param _api_6_or_older = simics_api_version == "6" || _api_5_or_older;
 
+    param _deprecate_port_proxy_ifaces auto;
+
     // automatic parameters
     param obj                       auto;
     param classname                 default name;

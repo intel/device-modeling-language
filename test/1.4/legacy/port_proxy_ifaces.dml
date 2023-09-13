@@ -1,0 +1,23 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+import "simics/devs/signal.dml";
+
+saved bool raised = false;
+
+port p {
+    implement signal {
+        method signal_raise() {
+            raised = true;
+        }
+    }
+}
+
+method test(bool proxies_deprecated) {
+    assert _deprecate_port_proxy_ifaces == proxies_deprecated;
+    assert (SIM_c_get_port_interface(dev.obj, "signal", "p") == NULL)
+        == proxies_deprecated;
+}

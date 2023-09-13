@@ -20,6 +20,7 @@ PYFILES := dml/__init__.py			\
           dml/topsort.py			\
           dml/traits.py				\
           dml/types.py				\
+          dml/deprecations.py			\
           dml/dmllex.py				\
           dml/dmllex12.py			\
           dml/dmllex14.py			\
