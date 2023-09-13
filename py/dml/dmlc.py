@@ -403,12 +403,6 @@ def main(argv):
         '--info', dest = 'output_info', action = 'store_true',
         help = 'generate XML file describing register layout')
 
-    # <dt>--version</dt>
-    # <dd>Print version information.</dd>
-    optpar.add_option(
-        '--version', dest = 'handled_in_c', action = 'store_true',
-        help = 'print version information')
-
     # <dt>--simics-api=<i>version</i></dt>
     # <dd>Use Simics API version <i>version</i>.</dd>
     optpar.add_option(
