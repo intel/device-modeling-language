@@ -261,6 +261,27 @@ def flush_porting_log(tmpfile, porting_filename):
         # (so retrying compile will succeed)
         os.rmdir(lockfile)
 
+class HelpAction(argparse.Action):
+    def __init__(self, option_strings, dest, **kwargs):
+        super().__init__(option_strings, dest, nargs=0, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        self.print_help()
+        parser.exit()
+
+class WarnHelpAction(HelpAction):
+    def print_help(self):
+        print('''Tags accepted by --warn and --nowarn:''')
+        by_ignored = {True: [], False: []}
+        for tag in sorted(messages.warnings):
+            by_ignored[warning_is_ignored(tag)].append(tag)
+        print('  Enabled by default:')
+        for tag in by_ignored[False]:
+            print(f'    {tag}')
+        print('  Disabled by default:')
+        for tag in by_ignored[True]:
+            print(f'    {tag}')
+
 def main(argv):
     # DML files must be utf8, but are generally opened without specifying
     # the 'encoding' arg. This works only if utf8_mode is enabled.
@@ -357,6 +378,8 @@ def main(argv):
         default=[],
         help='disable warning TAG')
 
+    parser.add_argument('--help-warn', action=WarnHelpAction,
+                        help='List warning tags available for --warn/--nowarn')
     # <dt>--werror</dt>
     # <dd>Turn all warnings into errors.</dd>
     parser.add_argument('--werror', action='store_true',

@@ -2466,3 +2466,7 @@ class PINT1(PortingMessage):
     types, then the value of the variable becomes 1, whereas for
     `int1` in DML 1.4 the value is -1."""
     fmt = "Change int1 to uint1"
+
+warnings = {name: cls for (name, cls) in globals().items()
+            if isinstance(cls, type) and issubclass(cls, DMLWarning)
+            and cls is not DMLWarning}
