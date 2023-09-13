@@ -4,7 +4,6 @@
 import sys, time
 import os, os.path
 import re
-import functools
 import itertools
 import queue
 import threading
@@ -12,10 +11,9 @@ import random
 import subprocess
 import difflib
 from pathlib import Path
-from os.path import join, isdir, isfile, exists
+from os.path import join, isdir, exists
 import glob
 import json
-from fnmatch import fnmatch
 from simicsutils.host import host_type, is_windows, batch_suffix
 from simicsutils.internal import package_path, get_simics_major
 import testparams
@@ -205,7 +203,7 @@ class DMLFileTestCase(BaseTestCase):
         # Override defaults
         for k,v in info.items():
             setattr(self, k, v)
-        if self.includepath == None:
+        if self.includepath is None:
             assert self.api_version
             if self.api_version == "4.8":
                 libdir = "dml-old-4.8"
@@ -835,7 +833,7 @@ class CTestCase(DMLFileTestCase):
                         self.pr("Found %r" % s)
                         found.add(r)
             for s,r in rxs:
-                if not r in found:
+                if r not in found:
                     self.pr(self.simics_stdout + ":0: Didn't find %r" % s)
                     raise TestFail("grep miss")
 
@@ -863,9 +861,9 @@ class DMLCProfileTestCase(CTestCase):
                 # Check the validity of profiling data
                 pstats.Stats(stats_file_name)
             except:
-                raise TestFail(f'cannot load profile data')
+                raise TestFail('cannot load profile data')
         else:
-            raise TestFail(f'stats file not generated')
+            raise TestFail('stats file not generated')
 
 
 class SizeStatsTestCase(CTestCase):
@@ -1094,8 +1092,8 @@ class DebuggableCheck(BaseTestCase):
         lines = open(join(testparams.sandbox_path(), "scratch",
                           "debuggable-compile", "T_debuggable-compile.c"),
                      "r").readlines()
-        if not ("static bool _DML_M_mmm(test_t *_dev, int x, int *y)\n"
-                in lines):
+        if ("static bool _DML_M_mmm(test_t *_dev, int x, int *y)\n"
+            not in lines):
             raise TestFail("didn't find expected code")
     prereqs = ['debuggable-compile']
 
@@ -1459,7 +1457,7 @@ class CompareIllegalAttrs(BaseTestCase):
     __slots__ = ()
     prereqs = ['minimal']
     def test(self):
-       # Extract list of automatic attributes from Simics
+        # Extract list of automatic attributes from Simics
         sl = {x[5:].strip()
               for x in subprocess.run(
                       [join(simics_base_path(), "bin", "simics" + bat_sfx),
@@ -1561,11 +1559,11 @@ class CopyrightTestCase(BaseTestCase):
             return f'strange copyright year: {start}'
         return None
     def test(self):
-        mpl_lines = f'''\
+        mpl_lines = '''\
 © (2[0-9]*)(?:-(2[0-9]*))? Intel Corporation
 SPDX-License-Identifier: MPL-2.0
 '''.encode('utf-8').splitlines()
-        bsd0_copyright_re = re.compile(f'''/[*]
+        bsd0_copyright_re = re.compile('''/[*]
   © (2[0-9]*)(?:-(2[0-9]*))? Intel Corporation
   SPDX-License-Identifier: 0BSD
 [*]/'''.encode('utf-8'))
