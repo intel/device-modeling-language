@@ -45,6 +45,7 @@ Make: dmlc
     $(HOST)/bin/dml/python/dml/codegen.py
     $(HOST)/bin/dml/python/dml/crep.py
     $(HOST)/bin/dml/python/dml/ctree.py
+    $(HOST)/bin/dml/python/dml/deprecations.py
     $(HOST)/bin/dml/python/dml/dmllex.py
     $(HOST)/bin/dml/python/dml/dmllex12.py
     $(HOST)/bin/dml/python/dml/dmllex14.py

@@ -58,6 +58,8 @@ immediate_after_infos = {}
 # types.TypeSequence -> codegen.TypeSequenceInfo
 type_sequence_infos = {}
 
+enabled_deprecations = set()
+
 # 1.4 style integer operations in 1.2, --strict-dml12-int
 strict_int_flag = None
 def compat_dml12_int(site):
