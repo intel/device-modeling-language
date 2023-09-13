@@ -31,6 +31,7 @@ from .template import Rank, RankDesc, ObjectSpec
 from .reginfo import explode_registers
 from . import dmlparse
 from .set import Set
+from . import deprecations
 
 __all__ = (
     'mkglobals', 'mkdev'
@@ -1030,7 +1031,9 @@ def make_autoparams(obj, index_vars, index_var_sites):
             autoparams['NULL'] = NullParamExpr(site)
         autoparams['simics_api_version'] = SimpleParamExpr(
             mkStringConstant(site, dml.globals.api_version))
-
+        for (tag, dep) in deprecations.deprecations.items():
+            autoparams[f'_deprecate_{tag}'] = SimpleParamExpr(
+                mkBoolConstant(site, dep in dml.globals.enabled_deprecations))
         dml.globals.device = obj
 
     elif obj.objtype == 'bank':

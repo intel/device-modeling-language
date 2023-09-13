@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 
 from . import objects, logging, crep, output, ctree, serialize, structure
-from . import traits
+from . import traits, deprecations
 import dml.globals
 from .structure import get_attr_name, port_class_ident, need_port_proxy_attrs
 from .logging import *
@@ -886,36 +886,38 @@ def generate_implement(code, device, impl):
         # Legacy interface ports are only added for ports and banks that were
         # available in Simics 5, i.e. zero or one dimensional direct
         # descendants of the device object
-        if (port.local_dimensions() == 0 and port.parent.parent is None
-            and port.objtype != 'subdevice'):
-            code.out("static const %s = %s;\n" % (
-                ifacetype.declaration('port_iface'),
-                interface_block(device, ifacestruct, methods, ())))
-            code.out('SIM_register_port_interface'
-                     '(class, "%s", &port_iface, "%s", %s);\n'
-                     % (impl.name, crep.cname(port), desc))
-        elif (port.local_dimensions() == 1 and port.parent.parent is None
-              and port.objtype != 'subdevice'):
-            [arrlen] = port.arraylens()
-            code.out("static const %s%s = %s;\n" %
-                     (ifacetype.declaration("ifaces"),
-                      "[%s]" % (arrlen,),
-                      "{%s\n}" % ",\n".join(
-                          "%s" % interface_block(device, ifacestruct,
-                                                 methods, (i, ))
-                          for i in range(arrlen))))
-            code.out("interface_array_t iface_vect = VNULL;\n")
-            idxvar = "i0"
-            code.out("for (int %s = 0; %s < %d; %s++)\n" %
-                     (idxvar, idxvar, arrlen, idxvar),
-                     postindent = 1)
-            access = "[%s]" % idxvar
-            code.out("VADD(iface_vect, &ifaces%s);\n" % access,
-                     postindent = -1)
-            code.out('VT_register_port_array_interface'
-                     '(class, "%s", &iface_vect, "%s", %s);\n'
-                     % (impl.name, crep.cname(port), desc))
-            code.out('VFREE(iface_vect);\n')
+        if (port.parent is dml.globals.device
+            and port.objtype in {'port', 'bank'}
+            and (deprecations.port_proxy_ifaces
+                 not in dml.globals.enabled_deprecations)):
+            if port.local_dimensions() == 0:
+                code.out("static const %s = %s;\n" % (
+                    ifacetype.declaration('port_iface'),
+                    interface_block(device, ifacestruct, methods, ())))
+                code.out('SIM_register_port_interface'
+                         '(class, "%s", &port_iface, "%s", %s);\n'
+                         % (impl.name, crep.cname(port), desc))
+            elif port.local_dimensions() == 1:
+                [arrlen] = port.arraylens()
+                code.out("static const %s%s = %s;\n" %
+                         (ifacetype.declaration("ifaces"),
+                          "[%s]" % (arrlen,),
+                          "{%s\n}" % ",\n".join(
+                              "%s" % interface_block(device, ifacestruct,
+                                                     methods, (i, ))
+                              for i in range(arrlen))))
+                code.out("interface_array_t iface_vect = VNULL;\n")
+                idxvar = "i0"
+                code.out("for (int %s = 0; %s < %d; %s++)\n" %
+                         (idxvar, idxvar, arrlen, idxvar),
+                         postindent = 1)
+                access = "[%s]" % idxvar
+                code.out("VADD(iface_vect, &ifaces%s);\n" % access,
+                         postindent = -1)
+                code.out('VT_register_port_array_interface'
+                         '(class, "%s", &iface_vect, "%s", %s);\n'
+                         % (impl.name, crep.cname(port), desc))
+                code.out('VFREE(iface_vect);\n')
     code.out("}\n", preindent = -1)
 
 def port_prefix(port):

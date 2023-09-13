@@ -12,6 +12,7 @@ from . import structure, logging, messages, ctree, ast, expr_util, toplevel
 from . import serialize
 from . import dmlparse
 from . import output
+from . import deprecations
 
 import dml.c_backend
 import dml.info_backend
@@ -282,6 +283,20 @@ class WarnHelpAction(HelpAction):
         for tag in by_ignored[True]:
             print(f'    {tag}')
 
+class DeprecateHelpAction(HelpAction):
+    def print_help(self):
+        print('''\
+Tags accepted by --deprecate. Each of these represents a deprecated
+compatibility feature that will be unavailable in all API versions
+newer than a particular version.  The --deprecate=TAG flag disables a
+feature also when an older API version is used. This allows migration
+to a new API version in smaller steps, and can also allow early access
+to deprecations in a yet unreleased API version.''')
+        for (version, deps) in deprecations.deprecations.items():
+            print(f'  Features available with --simics-api={version} or older:')
+            for (tag, dep) in deps.items():
+                print(f'    {tag:20s} {dep.short}')
+
 def main(argv):
     # DML files must be utf8, but are generally opened without specifying
     # the 'encoding' arg. This works only if utf8_mode is enabled.
@@ -438,6 +453,19 @@ def main(argv):
     # </dl>
     # </add>
 
+    # <dt>--deprecate=<i>TAG</i></dt>
+    # <dd></dd>
+    parser.add_argument(
+        '--deprecate', action='append', default=[],
+        help='Disable a compatibility feature')
+
+    parser.add_argument(
+        '--help-deprecate', action=DeprecateHelpAction,
+        help='List the available tags for --deprecate')
+
+    # </dl>
+    # </add>
+
     # Legacy: write deps to stdout, and assume it's redirected to <file>.dmldep
     # Should be removed in 6
     parser.add_argument(
@@ -560,6 +588,20 @@ def main(argv):
 
     dml.globals.api_version = options.simics_api
 
+    for api in api_versions()[api_versions().index(options.simics_api):]:
+        features = {tag for (tag, dep) in deprecations.deprecations.items()
+                    if dep.last_api_version in apis}
+    for flag in options.deprecate:
+        for tag in flag.split(','):
+            if any(tag in tags for tags in deprecations.deprecations.values()):
+                features.discard(tag)
+            else:
+                options.error(f'invalid tag {tag} for --deprecate.'
+                              ' Try --help-deprecate.')
+    dml.globals.enabled_deprecations = {
+        dep for deps in deprecations.deprecations.values()
+        for (tag, dep) in deps.items()
+        if tag not in features}
 
     inputfilename = options.input_filename
 
