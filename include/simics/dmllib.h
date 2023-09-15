@@ -3308,7 +3308,7 @@ typedef struct {
     conf_class_t *parent_obj_class;
     _dml_attr_parent_obj_proxy_info_t proxy_info;
     attr_attr_t flags;
-    uint32 start_dim;
+    uint32 object_relative_dims;
     bool readable;
     bool writable;
     bool should_be_registered;
@@ -3362,12 +3362,11 @@ UNUSED static void _DML_register_attributes(
 
         strbuf_t type = sb_newf("%s", attr_info.type);
         _id_info_t id_info = id_info_array[list.id - 1];
-        for (int64 i = (int64)id_info.dimensions - 1; i >= attr_info.start_dim;
-             --i) {
+        for (uint32 i = 0; i < attr_info.object_relative_dims; ++i) {
             char *tmp_type = sb_detach(&type);
             sb_addfmt(&type,
                       attr_info.allow_cutoff ? "[%s{0:%d}]" : "[%s{%d}]",
-                      tmp_type, id_info.dimsizes[i]);
+                      tmp_type, id_info.dimsizes[id_info.dimensions - 1 - i]);
             MM_FREE(tmp_type);
         }
         conf_class_t *parent_obj_class = attr_info.parent_obj_class;

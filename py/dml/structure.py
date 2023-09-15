@@ -1084,12 +1084,6 @@ def make_autoparams(obj, index_vars, index_var_sites):
     else:
         autoparams['parent'] = SimpleParamExpr(mkUndefined(obj.site))
     if dml.globals.dml_version != (1, 2):
-        if obj.object_parent:
-            autoparams['_object_parent'] = ObjectParentParamExpr(obj.site,
-                                                                 obj)
-        else:
-            autoparams['_object_parent'] = SimpleParamExpr(
-                mkUndefined(obj.site))
         if obj.nongroup_parent:
             autoparams['_nongroup_parent'] = NongroupParentParamExpr(obj.site,
                                                                      obj)
@@ -2495,19 +2489,6 @@ class NullParamExpr(objects.ParamExpr):
 
     def mkexpr(self, indices):
         return mkNullConstant(self.site)
-
-class ObjectParentParamExpr(objects.ParamExpr):
-    '''The _object_parent parameter of any object but the device'''
-    __slots__ = ('site', 'node',)
-
-    def __init__(self, site, node):
-        assert node.objtype != "device"
-        self.site = site
-        self.node = node
-
-    def mkexpr(self, indices):
-        return mkNodeRef(self.site, self.node.object_parent,
-                         indices[:self.node.object_parent.dimensions])
 
 class NongroupParentParamExpr(objects.ParamExpr):
     '''The _nongroup_parent parameter of any object but the device'''
