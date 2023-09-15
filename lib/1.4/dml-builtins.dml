@@ -450,6 +450,8 @@ template object is (name, _qname, desc, documentation, limitations) {
     param _ident auto;
 
     param objtype;
+    // Does this DML object correspond to a Simics object?
+    param _is_simics_object;
     param parent                    auto;
 
     // the closest ancestor that is not a group.
@@ -460,15 +462,12 @@ template object is (name, _qname, desc, documentation, limitations) {
     //     #: undefined;
     param _nongroup_parent auto;
 
-    // the closest ancestor that has a corresponding a Simics object.
-    // Can be softcoded, but that would have too much of a performance impact
-    //
-    // param _object_parent = defined(parent)
-    //     #? (parent.objtype != "device" && parent.objtype != "bank"
-    //         && parent.objtype == "port" && parent.objtype == "subdevice")
-    //         #? parent._object_parent #: parent
-    //     #: undefined;
-    param _object_parent auto;
+    // The total number of dimensions this object has relative to the closest
+    // ancestor that has a corresponding a Simics object. 0 if the object
+    // itself corresponds to a Simics object.
+    param _object_relative_dims     = _is_simics_object #? 0
+                                    #: parent._object_relative_dims
+                                       + indices.len;
 
     param indices                   auto;
 
@@ -537,6 +536,7 @@ template device {
 
     // structural info
     param objtype = "device";
+    param _is_simics_object = true;
 
     param simics_api_version auto;
 
@@ -582,6 +582,7 @@ group object may be named `bank` or `port`; this is to avoid name clashes.
 */
 template group is object {
     param objtype = "group";
+    param _is_simics_object = false;
     param log_group = undefined;
     #if ((_nongroup_parent.objtype == "subdevice"
           || _nongroup_parent.objtype == "device")
@@ -646,10 +647,9 @@ template _conf_attribute is object {
     param _parent_obj_proxy_info : _dml_attr_parent_obj_proxy_info_t;
     param _parent_obj_proxy_info auto;
 
-    // Indicates the first dimension to be used when calculating the complete
-    // array-wrapped type of the attribute
-    param _attr_start_dim : uint32;
-    param _attr_start_dim = _object_parent.indices.len;
+    // Defined by the object template. We need it typed to leverage it in
+    // attribute registration.
+    param _object_relative_dims : uint32;
 
     // If the attribute is an array, indicates whether it should be allowed
     // to set only part of the array.
@@ -798,6 +798,7 @@ template attribute is _conf_attribute {
     shared method get() -> (attr_value_t);
     shared method set(attr_value_t val) throws;
     param objtype = "attribute";
+    param _is_simics_object = false;
 
     param _attr_type     = type;
     param type;
@@ -826,7 +827,7 @@ extern typedef struct {
     conf_class_t *parent_obj_class;
     _dml_attr_parent_obj_proxy_info_t proxy_info;
     attr_attr_t flags;
-    uint32 start_dim;
+    uint32 object_relative_dims;
     bool readable;
     bool writable;
     bool should_be_registered;
@@ -838,7 +839,7 @@ independent method _get_attribute_info(_conf_attribute attr)
     return {
         attr._attr_name, attr._attr_type, attr._documentation,
         attr._parent_obj_class ? *attr._parent_obj_class : NULL,
-        attr._parent_obj_proxy_info, attr._flags, attr._attr_start_dim,
+        attr._parent_obj_proxy_info, attr._flags, attr._object_relative_dims,
         attr.readable, attr.writable, attr._should_be_registered,
         attr._attr_allow_cutoff
     };
@@ -1264,6 +1265,7 @@ template connect is _conf_attribute {
     }
 
     param objtype = "connect";
+    param _is_simics_object = false;
     // limitations for connects are not recognized
     param limitations = undefined;
     param _attr_type = configuration == "required" #? "o|[os]" #: "o|[os]|n";
@@ -1410,6 +1412,7 @@ template interface is object {
     session const void *val;
 
     param objtype = "interface";
+    param _is_simics_object = false;
 
     param required                 default true;
     param _c_type                    = name + "_interface_t";
@@ -1435,6 +1438,7 @@ When compiling with Simics API 6 or newer, evaluates to the
 */
 template port is object {
     param objtype = "port";
+    param _is_simics_object = true;
     // limitations for ports are not recognized
     param limitations = undefined;
     param obj = (simics_api_version == "5" || simics_api_version == "4.8")
@@ -1461,6 +1465,7 @@ The `subdevice` template exposes one parameter, `obj`, which evaluates to the
 
 template subdevice is object {
     param objtype = "subdevice";
+    param _is_simics_object = true;
     // limitations for subdevices are not recognized
     param limitations = undefined;
     param obj = _port_obj();
@@ -1486,6 +1491,7 @@ The `implement` template provides no particular parameters or methods.
 */
 template implement is object {
     param objtype = "implement";
+    param _is_simics_object = false;
 
     param _c_type = name + "_interface_t";
 
@@ -1783,6 +1789,7 @@ template bank is (object, shown_desc) {
 
     // structural info
     param objtype = "bank";
+    param _is_simics_object = true;
     param bank                      = this;
     param _each_register = each register in (this);
 
@@ -2742,6 +2749,7 @@ template register is (_conf_attribute, get, set, shown_desc,
     session uint64 val;
 
     param objtype = "register";
+    param _is_simics_object = false;
     param internal default true;
     param bank = this._nongroup_parent;
     param bitsize                   = this.size * 8;
@@ -3219,6 +3227,7 @@ template field is (object, _bitsize, _lsb, init_val, shown_desc, _get, _set) {
 
     // structural info
     param objtype = "field";
+    param _is_simics_object = false;
     param _reg    = this._nongroup_parent;
     param reg     = cast(_reg, register);
     param _desc   = defined this.desc #? this.desc #: "";
@@ -3644,6 +3653,7 @@ template event is (object, shown_desc) {
     param _pevclass : event_class_t **;
     param _pevclass = &evclass;
     param objtype = "event";
+    param _is_simics_object = false;
     param limitations = undefined;
     // Internal. TODO: should be soft-coded, US1591
     param evclass auto;

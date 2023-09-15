@@ -509,4 +509,8 @@
       stack have been completed, and the simulation of the current
       processor would otherwise be ready to move onto the next cycle
       <bug number="SIMICS-20379"/>.</add-note></build-id>
+  <build-id value="next"><add-note> Fixed a bug where an attribute declared
+      within a port, bank or subdevice that is itself declared within an object
+      array would lead to the type of that attribute being incorrectly
+      registered <bug number="SIMICS-21474"/>.</add-note></build-id>
 </rn>

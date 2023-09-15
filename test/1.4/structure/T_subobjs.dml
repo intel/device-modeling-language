@@ -26,6 +26,14 @@ subdevice d[i < 2] {
     saved int ds;
 }
 
+group g[i < 2] {
+    bank b {
+        group g[k < 3] {
+            attribute gbga[l < 5] is uint64_attr;
+        }
+    }
+}
+
 bank b[i < 2] {
     attribute ba is uint64_attr {
         method set(attr_value_t a) throws {
@@ -59,6 +67,11 @@ method test() {
     assert SIM_attr_integer(
         SIM_attr_list_item(
             SIM_attr_list_item(SIM_get_attribute(b[1].obj, "bb"), 2), 3)) == 8;
+    g[1].b.g[2].gbga[3].val = 10;
+    assert SIM_attr_integer(
+        SIM_attr_list_item(
+            SIM_attr_list_item(SIM_get_attribute(g[1].b.obj, "g_gbga"), 2), 3))
+        == 10;
 
     // legacy trampoline attributes
     assert SIM_class_has_attribute(SIM_object_class(dev.obj), "p_pa");
