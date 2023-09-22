@@ -1721,7 +1721,7 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
   <build-id value="6205"><add-note> Fixed a bug with how template types were
       handled by DMLC that could cause the compiler to still exhibit
       nondeterministic behaviour.</add-note></build-id>
-  <build-id value="next"><add-note> Added an error if a device declares
+  <build-id value="6244"><add-note> Added an error if a device declares
       more than 63 log groups (including the two built-in log groups.)
   </add-note></build-id>
 </rn>

@@ -494,22 +494,22 @@
       Currently, the only form of computations that can be suspended on hooks
       are single method calls. This is done via the <tt>after</tt> statement,
       which has been extended to permit this.</add-note></build-id>
-  <build-id value="next"><add-note>Fixed a bug where partial inquiry
+  <build-id value="6244"><add-note>Fixed a bug where partial inquiry
       writes to a bank would incorrectly clear register bits
       <bug number="SIMICS-21382"/>.</add-note></build-id>
-  <build-id value="next"><add-note>Fixed a bug where trying to serialize
+  <build-id value="6244"><add-note>Fixed a bug where trying to serialize
       values of <tt>long</tt> or <tt>size_t</tt> type (via <tt>saved</tt>
       variables or arguments of <tt>after</tt> statements) would lead
       to an internal compiler error
       <bug number="SIMICS-21424"/>.</add-note></build-id>
-  <build-id value="next"><add-note> Added a new form of the <tt>after</tt>
+  <build-id value="6244"><add-note> Added a new form of the <tt>after</tt>
       statement, called <em>immediate <tt>after</tt></em>. Syntax is
       <tt>after: callback(1, false)</tt>. An immediate after will delay the call
       to the specified method until all current entries into devices on the call
       stack have been completed, and the simulation of the current
       processor would otherwise be ready to move onto the next cycle
       <bug number="SIMICS-20379"/>.</add-note></build-id>
-  <build-id value="next"><add-note> Fixed a bug where an attribute declared
+  <build-id value="6244"><add-note> Fixed a bug where an attribute declared
       within a port, bank or subdevice that is itself declared within an object
       array would lead to the type of that attribute being incorrectly
       registered <bug number="SIMICS-21474"/>.</add-note></build-id>
