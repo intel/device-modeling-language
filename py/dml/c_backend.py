@@ -2703,11 +2703,11 @@ def generate_trait_trampoline(method, vtable_trait):
         site = method.site
         obj = method.parent
         if obj.dimensions:
-            out(f'int _flat_index = {tname}.id.encoded_index;\n')
+            out(f'uint32 _flat_index = {tname}.id.encoded_index;\n')
         indices = [
             mkLit(site, '((_flat_index / %d) %% %d)' % (
                 reduce(operator.mul, obj.dimsizes[dim + 1:], 1),
-                obj.dimsizes[dim]), TInt(32, True))
+                obj.dimsizes[dim]), TInt(32, False))
             for dim in range(obj.dimensions)]
         args = [mkLit(site, n, t) for (n, t) in explicit_inargs]
         call_expr = mkcall_method(site, func, indices)(args)
