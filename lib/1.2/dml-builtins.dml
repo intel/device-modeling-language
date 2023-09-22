@@ -208,6 +208,9 @@ template device {
 
     parameter _deprecate_port_proxy_ifaces auto;
     parameter _deprecate_port_proxy_attrs auto;
+    parameter _compat_dml12_inline auto;
+    parameter _compat_dml12_not auto;
+    parameter _compat_dml12_misc auto;
 
     // automatic parameters
     parameter obj                       auto;

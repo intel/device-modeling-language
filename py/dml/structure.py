@@ -82,7 +82,8 @@ def mkglobals(stmts):
 
     for name in by_name:
         clash = by_name[name]
-        if len(clash) > 1 and dml.globals.compat_dml12:
+        if len(clash) > 1 and (deprecations.dml12_misc
+                               not in dml.globals.enabled_deprecations):
             # DML 1.2 permits multiple redundant 'extern foo;'
             # declarations; drop these
             for stmt in redundant_externs(clash):
@@ -155,7 +156,8 @@ def mkglobals(stmts):
                 if typ is None:
                     # guaranteed by grammar
                     assert dml.globals.dml_version == (1, 2)
-                    if (not dml.globals.compat_dml12
+                    if (deprecations.dml12_misc
+                        in dml.globals.enabled_deprecations
                         and not site.filename().endswith('simics-api.dml')):
                         report(EEXTERN(stmt.site))
                     typ = TUnknown()
@@ -500,7 +502,7 @@ def add_templates(obj_specs, each_stmts):
     while i < len(queue):
         (site, tpl) = queue[i]
         i += 1
-        if (dml.globals.compat_dml12
+        if (deprecations.dml12_misc not in dml.globals.enabled_deprecations
             and tpl.name in dml.globals.missing_templates):
             report(ENTMPL(site, tpl.name))
             continue
@@ -942,7 +944,8 @@ def create_object(site, ident, objtype, parent,
         assert not arraylen_asts
         return objects.Device(ident, site)
     elif objtype == 'bank':
-        if ident is None and not dml.globals.compat_dml12:
+        if (ident is None
+            and deprecations.dml12_misc in dml.globals.enabled_deprecations):
             report(ESYNTAX(site, 'bank', 'anonymous banks are not allowed'))
         return objects.Bank(ident, site, parent, array_lens, index_vars)
     elif objtype == 'group':
@@ -1031,9 +1034,11 @@ def make_autoparams(obj, index_vars, index_var_sites):
             autoparams['NULL'] = NullParamExpr(site)
         autoparams['simics_api_version'] = SimpleParamExpr(
             mkStringConstant(site, dml.globals.api_version))
-        for (tag, dep) in deprecations.deprecations.items():
-            autoparams[f'_deprecate_{tag}'] = SimpleParamExpr(
-                mkBoolConstant(site, dep in dml.globals.enabled_deprecations))
+        for deps in deprecations.deprecations.values():
+            for (tag, dep) in deps.items():
+                autoparams[f'_deprecate_{tag}'] = SimpleParamExpr(
+                    mkBoolConstant(
+                        site, dep in dml.globals.enabled_deprecations))
         dml.globals.device = obj
 
     elif obj.objtype == 'bank':
@@ -1898,7 +1903,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                     else:
                         report(e)
         if (dml.globals.dml_version != (1, 2)
-            or not dml.globals.compat_dml12):
+            or deprecations.dml12_misc in dml.globals.enabled_deprecations):
             # TODO: this should be handled cleaner in the case of pure
             # 1.4 code
             for p in obj.get_components():
