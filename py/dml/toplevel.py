@@ -14,6 +14,7 @@ import pickle
 from ply import lex, yacc
 
 from . import objects, logging, codegen, ctree, ast
+from . import deprecations
 from . import symtab
 from .messages import *
 from .logging import *
@@ -347,7 +348,7 @@ def exists(filename):
         return True
     return os.path.exists(filename)
 
-def parse_main_file(inputfilename, explicit_import_path, strict):
+def parse_main_file(inputfilename, explicit_import_path):
     if not exists(inputfilename):
         raise ENOFILE(SimpleSite(f"{inputfilename}:0"))
     (kind, site, name, stmts) = parse_dmlast_or_dml(inputfilename)
@@ -357,7 +358,10 @@ def parse_main_file(inputfilename, explicit_import_path, strict):
     version = site.dml_version()
     dml.globals.dml_version = version
     version_str = fmt_version(version)
-    dml.globals.compat_dml12 = version == (1, 2) and not strict
+    if version != (1, 2):
+        dml.globals.enabled_deprecations.update([
+            deprecations.dml12_inline, deprecations.dml12_not,
+            deprecations.dml12_misc])
 
     implicit_imports = [
         ast.import_(site, "dml-builtins.dml"),

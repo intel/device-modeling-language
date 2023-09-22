@@ -66,9 +66,6 @@ def compat_dml12_int(site):
     # if site is None, guess DML 1.4
     return not strict_int_flag and site and site.dml_version() == (1, 2)
 
-# True if compiling DML 1.2 without --strict. Set after parsing.
-compat_dml12 = None
-
 debuggable = False
 
 coverity = False

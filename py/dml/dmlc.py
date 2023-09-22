@@ -404,12 +404,11 @@ def main(argv):
     # <dd>Report errors for some constructs that will be forbidden in
     # future versions of the DML language</dd>
     parser.add_argument('--strict-dml12', action='store_true',
-                      help='Report errors for some constructs that will be'
-                      + ' forbidden in future versions of the DML language')
+                        help='Alias for --strict-int'
+                        ' --deprecate=dml12_inline,dml12_not,dml12_misc')
     parser.add_argument('--strict-int', action='store_true',
-                      help='Use DML 1.4 style integer arithmetic semantics'
-                      + ' when compiling DML 1.2 files. Implied by'
-                      + ' --strict-dml12.')
+                        help='Use DML 1.4 style integer arithmetic semantics'
+                        + ' when compiling DML 1.2 files.')
 
     # <dt>--coverity</dt>
     # <dd> Adds Synopsys® Coverity® analysis annotations to suppress common
@@ -589,8 +588,8 @@ def main(argv):
     dml.globals.api_version = options.simics_api
 
     for api in api_versions()[api_versions().index(options.simics_api):]:
-        features = {tag for (tag, dep) in deprecations.deprecations.items()
-                    if dep.last_api_version in apis}
+        features = {tag for (tag, dep) in deprecations.deprecations[api].items()
+                    if dep.last_api_version in api_versions()}
     for flag in options.deprecate:
         for tag in flag.split(','):
             if any(tag in tags for tags in deprecations.deprecations.values()):
@@ -598,6 +597,10 @@ def main(argv):
             else:
                 options.error(f'invalid tag {tag} for --deprecate.'
                               ' Try --help-deprecate.')
+    if options.strict_dml12:
+        features.discard('dml12_include')
+        features.discard('dml12_not')
+        features.discard('dml12_misc')
     dml.globals.enabled_deprecations = {
         dep for deps in deprecations.deprecations.values()
         for (tag, dep) in deps.items()
@@ -644,7 +647,7 @@ def main(argv):
         dml.globals.serialized_traits = serialize.SerializedTraits()
         (dml_version, devname, headers, footers, global_defs,
          top_tpl, imported) = toplevel.parse_main_file(
-             inputfilename, options.import_path, options.strict_dml12)
+             inputfilename, options.import_path)
         logtime("parsing")
 
         if dml_version != (1, 2):

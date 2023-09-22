@@ -56,6 +56,7 @@ from .env import is_windows
 from .output import out
 from .messages import *
 from .logging import *
+from . import deprecations
 import dml .globals
 import abc
 
@@ -552,7 +553,8 @@ class TInt(IntegerType):
         other = realtype(other)
         if other.is_int:
             trunc = (other.bits > self.bits)
-            if dml.globals.compat_dml12 and isinstance(other, TBool):
+            if (deprecations.dml12_misc not in dml.globals.enabled_deprecations
+                and isinstance(other, TBool)):
                 return (False, False, constviol)
             return (True, trunc, constviol)
         if other.is_float and not self.is_bitfields:
@@ -737,7 +739,7 @@ class TArray(DMLType):
             return None
         return self.size.value * elt_size
     def cmp(self, other):
-        if dml.globals.compat_dml12:
+        if deprecations.dml12_misc not in dml.globals.enabled_deprecations:
             if isinstance(other, (TArray, TPtr)):
                 return self.base.cmp(other.base)
         elif isinstance(other, (TPtr, TArray)):
@@ -768,7 +770,7 @@ class TPtr(DMLType):
     def describe(self):
         return 'pointer to %s' % (self.base.describe())
     def cmp(self, other):
-        if dml.globals.compat_dml12:
+        if deprecations.dml12_misc not in dml.globals.enabled_deprecations:
             if isinstance(other, TPtr):
                 # Can only compare for voidness or equality
                 if self.base.void or other.base.void:
