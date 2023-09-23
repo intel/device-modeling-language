@@ -1546,7 +1546,7 @@ def generate_alloc(device):
     out('}\n\n', preindent = -1)
 
 def generate_initialize(device):
-    if dml.globals.api_version <= '6':
+    if dml.globals.api_version <= 6:
         start_function_definition(
             ('void %s_pre_del_notify(conf_object_t *_subscriber,'
          ' conf_object_t *_notifier, lang_void *_data)') % crep.cname(device))
@@ -1591,7 +1591,7 @@ def generate_initialize(device):
             codegen_inline_byname(device, (), '_init', [], [], device.site).toc()
 
     reset_line_directive()
-    if dml.globals.api_version <= '6':
+    if dml.globals.api_version <= 6:
         out('SIM_add_notifier(_obj, Sim_Notify_Object_Delete, _obj, '
             + crep.cname(device) + '_pre_del_notify, NULL);\n')
 
@@ -1911,7 +1911,7 @@ ident_chars = set(chr(i)
     for (start, end) in [('A', 'Z'), ('a', 'z'), ('0', '9'), ('_', '_')]
     for i in range(ord(start), ord(end) + 1))
 def init_function_name(device, outprefix):
-    if dml.globals.api_version in {'4.8'}:
+    if dml.globals.api_version <= 4:
         return 'initialize_' + crep.cname(device)
     return '_initialize_' + ''.join(
         (ch if ch in ident_chars else '_') for ch in outprefix)
@@ -1938,7 +1938,7 @@ def generate_init(device, initcode, outprefix):
     out('.alloc = '+crep.cname(device)+'_alloc,\n')
     out('.init = '+crep.cname(device)+'_init,\n')
     out('.finalize = '+crep.cname(device)+'_finalize,\n')
-    if dml.globals.api_version >= '7':
+    if dml.globals.api_version >= 7:
         out('.deinit = '+crep.cname(device)+'_deinit,\n')
     out('.dealloc = '+crep.cname(device)+'_dealloc,\n')
     out('.description = '+doc.read()+',\n')
@@ -3230,12 +3230,10 @@ def generate_cfile(device, footers,
                    full_module):
     global c_file
 
-    if dml.globals.api_version == 'internal':
-        api_define = ''
-    else:
-        sym = 'SIMICS_%s_API' % dml.globals.api_version.replace('.', '_')
-        api_define = '#ifndef %s\n#define %s\n#endif\n' % (
-            sym, sym)
+    sym = 'SIMICS_%s_API' % ('4_8' if dml.globals.api_version == 4
+                             else dml.globals.api_version)
+    api_define = '#ifndef %s\n#define %s\n#endif\n' % (
+        sym, sym)
 
     c_top = '\n'.join([
         '/*',
@@ -3418,7 +3416,7 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
 
     if full_module:
         # caught as error earlier on
-        assert dml.globals.api_version in ['4.8']
+        assert dml.globals.api_version == 4
         out('\n')
         out('EXPORTED void\n')
         out('init_local(void)\n')

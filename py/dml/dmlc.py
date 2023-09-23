@@ -437,7 +437,7 @@ def main(argv):
     parser.add_argument(
         '--simics-api', action='store',
         metavar='VERSION',
-        default=default_api_version(),
+        default=str(default_api_version()),
         help=('specify Simics API version (default %s)'
               % default_api_version()))
 
@@ -519,7 +519,8 @@ def main(argv):
         else:
             defs[name] = value
 
-    if options.simics_api not in api_versions():
+    api_map = api_versions()
+    if options.simics_api not in api_map:
         prerr("dmlc: the version '%s' is not a valid API version" % (
                 options.simics_api))
         sys.exit(1)
@@ -585,15 +586,16 @@ def main(argv):
               + "The DMLC developers WILL NOT respect their use. "
               + "NEVER enable this flag for any kind of production code!!!***")
 
-    dml.globals.api_version = options.simics_api
+    dml.globals.api_version = api_map[options.simics_api]
 
-    for api in api_versions()[api_versions().index(options.simics_api):]:
-        features = {tag for (tag, dep) in deprecations.deprecations[api].items()
-                    if dep.last_api_version in api_versions()}
+    features = {tag: dep for api in api_map.values()
+                if api <= dml.globals.api_version
+                for (tag, dep) in deprecations.deprecations[api].items()}
     for flag in options.deprecate:
         for tag in flag.split(','):
             if any(tag in tags for tags in deprecations.deprecations.values()):
-                features.discard(tag)
+                if tag in features:
+                    del features[tag]
             else:
                 options.error(f'invalid tag {tag} for --deprecate.'
                               ' Try --help-deprecate.')
