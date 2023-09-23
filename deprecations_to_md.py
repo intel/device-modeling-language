@@ -9,11 +9,13 @@ sys.path.append(path_to_dml)
 from dml.deprecations import deprecations
 from dml.env import api_versions
 
+api_map = {v: k for (k, v) in api_versions().items()}
 with open(outfile, 'w') as f:
     f.write(Path(header).read_text())
     for (ver, deps) in deprecations.items():
-        if deps and ver in api_versions():
-            f.write(f"### Features available up to --simics-api={ver}\n")
+        if deps and ver in api_map:
+            f.write(
+                f"### Features available up to --simics-api={api_map[ver]}\n")
             f.write("<dl>\n")
             for d in deps.values():
                 assert d.__doc__

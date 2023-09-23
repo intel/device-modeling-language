@@ -22,7 +22,7 @@ class DeprecatedFeature(abc.ABC):
 
 # API version -> tag -> deprecation
 deprecations: dict[str, dict[str, DeprecatedFeature]] = {
-    api: {} for api in env.api_versions()}
+    api: {} for api in env.api_versions().values()}
 
 
 def deprecation(cls: type[DeprecatedFeature]):
@@ -45,7 +45,7 @@ class port_proxy_ifaces(DeprecatedFeature):
     banks do not need proxies for backward compatibility.
     '''
     short = "Don't generate proxy port interfaces for banks and ports"
-    last_api_version = "6"
+    last_api_version = 6
 
 
 @deprecation
@@ -60,7 +60,7 @@ class port_proxy_attrs(DeprecatedFeature):
     '''
     short = ("Don't generate top-level proxy attributes"
              + " for attributes in banks and ports")
-    last_api_version = "6"
+    last_api_version = 6
 
 
 @deprecation
@@ -72,7 +72,7 @@ class dml12_inline(DeprecatedFeature):
     implications.
     '''
     short = "Don't inline method arguments with a declared type in DML 1.2"
-    last_api_version = "6"
+    last_api_version = 6
 
 
 # separate class only because last_api_version differs
@@ -82,7 +82,7 @@ class dml12_not(DeprecatedFeature):
     type-checked; in particular, negation expressions on the form
     `!$reg`, where `reg` is a register, are permitted'''
     short = "Disallow ! operator on register references in DML 1.2"
-    last_api_version = "5"
+    last_api_version = 5
 
 
 @deprecation
@@ -124,4 +124,4 @@ class dml12_misc(DeprecatedFeature):
 
     '''
     short = "Disable various DML 1.2 quirks"
-    last_api_version = "6"
+    last_api_version = 6

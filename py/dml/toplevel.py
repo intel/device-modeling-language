@@ -383,10 +383,10 @@ def parse_main_file(inputfilename, explicit_import_path):
         for path in [os.path.join(orig_path, version_str),
                      orig_path]]
 
-    if version == (1, 2) and dml.globals.api_version not in (
+    if version == (1, 2) and dml.globals.api_version not in {
             # we may want to add "8" if we want to postpone the
             # deprecation of DML 1.2
-            "4.8", "5", "6", "7", "internal"):
+            4, 5, 6, 7}:
         raise ESIMAPI(site, fmt_version(version),
                        dml.globals.api_version)
 
