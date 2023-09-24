@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 
 from . import objects, logging, crep, output, ctree, serialize, structure
-from . import traits, deprecations
+from . import traits, compat
 import dml.globals
 from .structure import get_attr_name, port_class_ident, need_port_proxy_attrs
 from .logging import *
@@ -888,8 +888,7 @@ def generate_implement(code, device, impl):
         # descendants of the device object
         if (port.parent is dml.globals.device
             and port.objtype in {'port', 'bank'}
-            and (deprecations.port_proxy_ifaces
-                 not in dml.globals.enabled_deprecations)):
+            and compat.port_proxy_ifaces in dml.globals.enabled_compat):
             if port.local_dimensions() == 0:
                 code.out("static const %s = %s;\n" % (
                     ifacetype.declaration('port_iface'),

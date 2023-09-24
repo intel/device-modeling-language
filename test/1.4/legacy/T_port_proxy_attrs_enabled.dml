@@ -11,5 +11,5 @@ device test;
 import "port_proxy_attrs.dml";
 
 method init() {
-    test(false);
+    test(true);
 }

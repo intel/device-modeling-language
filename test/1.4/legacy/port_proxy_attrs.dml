@@ -10,8 +10,8 @@ port p {
     attribute a is uint64_attr;
 }
 
-method test(bool proxies_deprecated) {
-    assert _deprecate_port_proxy_attrs == proxies_deprecated;
+method test(bool proxies_enabled) {
+    assert _compat_port_proxy_attrs == proxies_enabled;
     assert SIM_class_has_attribute(SIM_object_class(dev.obj), "p_a")
-        == !proxies_deprecated;
+        == proxies_enabled;
 }

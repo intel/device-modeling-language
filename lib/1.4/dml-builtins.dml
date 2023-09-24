@@ -543,8 +543,8 @@ template device {
         || simics_api_version == "4.8";
     param _api_6_or_older = simics_api_version == "6" || _api_5_or_older;
 
-    param _deprecate_port_proxy_ifaces auto;
-    param _deprecate_port_proxy_attrs auto;
+    param _compat_port_proxy_ifaces auto;
+    param _compat_port_proxy_attrs auto;
     param _compat_dml12_inline auto;
     param _compat_dml12_not auto;
     param _compat_dml12_misc auto;

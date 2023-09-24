@@ -14,7 +14,7 @@ import pickle
 from ply import lex, yacc
 
 from . import objects, logging, codegen, ctree, ast
-from . import deprecations
+from . import compat
 from . import symtab
 from .messages import *
 from .logging import *
@@ -359,9 +359,9 @@ def parse_main_file(inputfilename, explicit_import_path):
     dml.globals.dml_version = version
     version_str = fmt_version(version)
     if version != (1, 2):
-        dml.globals.enabled_deprecations.update([
-            deprecations.dml12_inline, deprecations.dml12_not,
-            deprecations.dml12_misc])
+        for feature in [compat.dml12_inline, compat.dml12_not,
+                        compat.dml12_misc]:
+            dml.globals.enabled_compat.discard(feature)
 
     implicit_imports = [
         ast.import_(site, "dml-builtins.dml"),
