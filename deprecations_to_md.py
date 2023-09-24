@@ -6,13 +6,13 @@ from pathlib import Path
 [path_to_dml, header, outfile] = sys.argv[1:]
 sys.path.append(path_to_dml)
 
-from dml.deprecations import deprecations
+from dml.compat import features
 from dml.env import api_versions
 
 api_map = {v: k for (k, v) in api_versions().items()}
 with open(outfile, 'w') as f:
     f.write(Path(header).read_text())
-    for (ver, deps) in deprecations.items():
+    for (ver, deps) in features.items():
         if deps and ver in api_map:
             f.write(
                 f"### Features available up to --simics-api={api_map[ver]}\n")

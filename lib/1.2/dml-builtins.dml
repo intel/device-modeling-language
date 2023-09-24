@@ -206,8 +206,8 @@ template device {
 
     parameter simics_api_version auto;
 
-    parameter _deprecate_port_proxy_ifaces auto;
-    parameter _deprecate_port_proxy_attrs auto;
+    parameter _compat_port_proxy_ifaces auto;
+    parameter _compat_port_proxy_attrs auto;
     parameter _compat_dml12_inline auto;
     parameter _compat_dml12_not auto;
     parameter _compat_dml12_misc auto;

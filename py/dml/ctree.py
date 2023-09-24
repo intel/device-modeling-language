@@ -22,7 +22,7 @@ from .expr import *
 from .expr_util import *
 from .slotsmeta import auto_init
 from . import dmlparse, output
-from . import deprecations
+from . import compat
 import dml.globals
 # set from codegen.py
 codegen_call_expr = None
@@ -2456,7 +2456,7 @@ class AddressOf(UnaryOp):
                     TFunction([TPtr(TNamed('conf_object_t')),
                                TPtr(TVoid())],
                               TVoid())))
-        if (deprecations.dml12_misc in dml.globals.enabled_deprecations
+        if (compat.dml12_misc not in dml.globals.enabled_compat
             and not isinstance(rh, LValue)):
             raise ERVAL(rh.site, '&')
         return AddressOf(site, rh)
@@ -2511,7 +2511,7 @@ class Not(UnaryOp):
 
     @staticmethod
     def make_simple(site, rh):
-        if deprecations.dml12_misc in dml.globals.enabled_deprecations:
+        if compat.dml12_misc not in dml.globals.enabled_compat:
             rh = as_bool(rh)
         if rh.constant:
             return mkBoolConstant(site, not rh.value)
@@ -3790,7 +3790,7 @@ def lookup_component(site, base, indices, name, only_local):
             indices = indices[:-base.local_dimensions()]
         return lookup_component(site, base.parent, indices, name, False)
 
-    if (deprecations.dml12_misc not in dml.globals.enabled_deprecations
+    if (compat.dml12_misc in dml.globals.enabled_compat
         and not base.parent):
         # Last resort is to look for components in anonymous banks
         for bank in base.get_components('bank'):
