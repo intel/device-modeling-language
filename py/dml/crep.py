@@ -10,7 +10,7 @@ from .types import *
 from .logging import *
 from .expr_util import *
 from .messages import *
-from . import deprecations
+from . import compat
 
 __all__ = (
     'cname',
@@ -75,7 +75,7 @@ def cname(node):
         # this is weird... kept for compatibility
         name = param_str(node, 'c_name').replace('-', '_')
         if name != node.name and (
-                deprecations.dml12_misc in dml.globals.enabled_deprecations):
+                compat.dml12_misc not in dml.globals.enabled_compat):
             report(WDEPRECATED(param_expr_site(node, 'c_name'),
                                'parameter c_name'))
         return name
@@ -178,7 +178,7 @@ def node_storage_type_dml12(node, site):
         else:
             return None
     elif node.objtype == 'implement':
-        if deprecations.dml12_misc not in dml.globals.enabled_deprecations:
+        if compat.dml12_misc in dml.globals.enabled_compat:
             typename = param_str(node, 'c_type')
             t = TNamed(typename)
             t.declaration_site = node.site
@@ -228,7 +228,7 @@ def conf_object(site, node, indices):
                            cref_portobj(node, indices[:node.dimensions]))
 
 def cloggroup(name):
-    if deprecations.dml12_misc not in dml.globals.enabled_deprecations:
+    if compat.dml12_misc in dml.globals.enabled_compat:
         return name
     else:
         return '_dml_loggroup_' + name

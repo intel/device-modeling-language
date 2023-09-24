@@ -5,7 +5,7 @@
 
 import os
 from . import ast, logging
-from . import deprecations
+from . import compat
 from .logging import *
 from .messages import *
 from .set import Set
@@ -307,8 +307,7 @@ def process_templates(template_decls):
             for missing in all_missing:
                 site = references[missing].site
                 if (missing not in uncond_refs
-                    or (deprecations.dml12_misc
-                        not in dml.globals.enabled_deprecations)):
+                    or compat.dml12_misc in dml.globals.enabled_compat):
                     # delay error until template instantiation
                     dml.globals.missing_templates.add(missing)
                 else:

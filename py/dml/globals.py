@@ -58,7 +58,7 @@ immediate_after_infos = {}
 # types.TypeSequence -> codegen.TypeSequenceInfo
 type_sequence_infos = {}
 
-enabled_deprecations = set()
+enabled_compat = set()
 
 # 1.4 style integer operations in 1.2, --strict-dml12-int
 strict_int_flag = None

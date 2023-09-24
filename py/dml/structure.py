@@ -32,7 +32,7 @@ from .template import Rank, RankDesc, ObjectSpec
 from .reginfo import explode_registers
 from . import dmlparse
 from .set import Set
-from . import deprecations
+from . import compat
 
 __all__ = (
     'mkglobals', 'mkdev'
@@ -83,8 +83,7 @@ def mkglobals(stmts):
 
     for name in by_name:
         clash = by_name[name]
-        if len(clash) > 1 and (deprecations.dml12_misc
-                               not in dml.globals.enabled_deprecations):
+        if len(clash) > 1 and compat.dml12_misc in dml.globals.enabled_compat:
             # DML 1.2 permits multiple redundant 'extern foo;'
             # declarations; drop these
             for stmt in redundant_externs(clash):
@@ -157,8 +156,7 @@ def mkglobals(stmts):
                 if typ is None:
                     # guaranteed by grammar
                     assert dml.globals.dml_version == (1, 2)
-                    if (deprecations.dml12_misc
-                        in dml.globals.enabled_deprecations
+                    if (compat.dml12_misc not in dml.globals.enabled_compat
                         and not site.filename().endswith('simics-api.dml')):
                         report(EEXTERN(stmt.site))
                     typ = TUnknown()
@@ -503,7 +501,7 @@ def add_templates(obj_specs, each_stmts):
     while i < len(queue):
         (site, tpl) = queue[i]
         i += 1
-        if (deprecations.dml12_misc not in dml.globals.enabled_deprecations
+        if (compat.dml12_misc in dml.globals.enabled_compat
             and tpl.name in dml.globals.missing_templates):
             report(ENTMPL(site, tpl.name))
             continue
@@ -946,7 +944,7 @@ def create_object(site, ident, objtype, parent,
         return objects.Device(ident, site)
     elif objtype == 'bank':
         if (ident is None
-            and deprecations.dml12_misc in dml.globals.enabled_deprecations):
+            and compat.dml12_misc not in dml.globals.enabled_compat):
             report(ESYNTAX(site, 'bank', 'anonymous banks are not allowed'))
         return objects.Bank(ident, site, parent, array_lens, index_vars)
     elif objtype == 'group':
@@ -1036,11 +1034,11 @@ def make_autoparams(obj, index_vars, index_var_sites):
         api_map = {i: s for (s, i) in env.api_versions().items()}
         autoparams['simics_api_version'] = SimpleParamExpr(
             mkStringConstant(site, api_map[dml.globals.api_version]))
-        for deps in deprecations.deprecations.values():
+        for deps in compat.features.values():
             for (tag, dep) in deps.items():
-                autoparams[f'_deprecate_{tag}'] = SimpleParamExpr(
+                autoparams[f'_compat_{tag}'] = SimpleParamExpr(
                     mkBoolConstant(
-                        site, dep in dml.globals.enabled_deprecations))
+                        site, dep in dml.globals.enabled_compat))
         dml.globals.device = obj
 
     elif obj.objtype == 'bank':
@@ -1905,7 +1903,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                     else:
                         report(e)
         if (dml.globals.dml_version != (1, 2)
-            or deprecations.dml12_misc in dml.globals.enabled_deprecations):
+            or compat.dml12_misc not in dml.globals.enabled_compat):
             # TODO: this should be handled cleaner in the case of pure
             # 1.4 code
             for p in obj.get_components():
@@ -2593,8 +2591,7 @@ def need_port_proxy_attrs(port):
     return (port.objtype in {'port', 'bank'}
             and port.dimensions <= 1
             and port.parent is dml.globals.device
-            and (deprecations.port_proxy_attrs
-                 not in dml.globals.enabled_deprecations))
+            and compat.port_proxy_attrs in dml.globals.enabled_compat)
 
 class ConfAttrParentObjectProxyInfoParamExpr(objects.ParamExpr):
     '''The _parent_obj_proxy_info parameter of a attribute, register, or

@@ -11,7 +11,7 @@ import os
 import math
 
 from . import objects, crep, ctree, ast, int_register, logging, serialize
-from . import dmlparse, output, deprecations
+from . import dmlparse, output, compat
 from .logging import *
 from .expr import *
 from .ctree import *
@@ -1079,7 +1079,7 @@ def subast_has_dollar(expr_ast):
 @expression_dispatcher
 def expr_unop(tree, location, scope):
     [op, rh_ast] = tree.args
-    if (deprecations.dml12_misc not in dml.globals.enabled_deprecations
+    if (compat.dml12_misc in dml.globals.enabled_compat
         and op == 'sizeof' and rh_ast.kind == 'variable_dml12'):
         var = rh_ast.args[0]
         if var in typedefs and scope.lookup(var) is None:
@@ -1120,7 +1120,7 @@ def expr_unop(tree, location, scope):
                     return ctree.AddressOfMethod(tree.site, func)
         raise rh.exc()
     if   op == '!':
-        if deprecations.dml12_not not in dml.globals.enabled_deprecations:
+        if compat.dml12_not in dml.globals.enabled_compat:
             t = rh.ctype()
             if isinstance(safe_realtype(t), TInt) and subast_has_dollar(rh_ast):
                 # A previous bug caused DMLC to permit expressions on
@@ -1142,7 +1142,7 @@ def expr_unop(tree, location, scope):
     elif op == 'post++':  return mkPostInc(tree.site, rh)
     elif op == 'post--':  return mkPostDec(tree.site, rh)
     elif op == 'sizeof':
-        if (deprecations.dml12_misc in dml.globals.enabled_deprecations
+        if (compat.dml12_misc not in dml.globals.enabled_compat
             and not isinstance(rh, ctree.LValue)):
             raise ERVAL(rh.site, 'sizeof')
         return codegen_sizeof(tree.site, rh)
@@ -1319,7 +1319,7 @@ def expr_cast(tree, location, scope):
     for (site, _) in struct_defs:
         report(EANONSTRUCT(site, "'cast' expression"))
 
-    if (deprecations.dml12_misc not in dml.globals.enabled_deprecations
+    if (compat.dml12_misc in dml.globals.enabled_compat
         and isinstance(expr, InterfaceMethodRef)):
         # Workaround for SIMICS-9868
         return mkLit(tree.site, "%s->%s" % (
@@ -1525,7 +1525,7 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
             etype = TInt(width, False, members)
         elif tag == 'typeof':
             expr = codegen_expression_maybe_nonvalue(info, location, scope)
-            if (deprecations.dml12_misc in dml.globals.enabled_deprecations
+            if (compat.dml12_misc not in dml.globals.enabled_compat
                 and not isinstance(expr, ctree.LValue)
                 # for compatibility with dml-builtins, using 1.2
                 and not isinstance(expr, ctree.RegisterWithFields)):
@@ -1981,7 +1981,7 @@ def stmt_local(stmt, location, scope):
     def convert_decl(decl_ast):
         (name, asttype) = decl_ast.args
         if (dml.globals.dml_version == (1, 2)
-            and deprecations.dml12_misc in dml.globals.enabled_deprecations):
+            and compat.dml12_misc not in dml.globals.enabled_compat):
             check_varname(stmt.site, name)
         (struct_decls, etype) = eval_type(asttype, stmt.site, location, scope)
         stmts.extend(mkStructDefinition(site, t) for (site, t) in struct_decls)
@@ -2545,7 +2545,7 @@ def stmt_assert(stmt, location, scope):
 @statement_dispatcher
 def stmt_goto(stmt, location, scope):
     [label] = stmt.args
-    if deprecations.dml12_misc in dml.globals.enabled_deprecations:
+    if compat.dml12_misc not in dml.globals.enabled_compat:
         report(ESYNTAX(stmt.site, 'goto', 'goto statement not allowed'))
     return [mkGoto(stmt.site, label)]
 
@@ -3045,7 +3045,7 @@ def stmt_select(stmt, location, scope):
                 if_chain = mkIf(cond.site, cond, stmt, if_chain)
             return [if_chain]
         raise lst.exc()
-    elif (deprecations.dml12_misc not in dml.globals.enabled_deprecations
+    elif (compat.dml12_misc in dml.globals.enabled_compat
           and isinstance(lst.ctype(), TVector)):
         itervar = lookup_var(stmt.site, scope, itername)
         if not itervar:
@@ -3319,19 +3319,19 @@ def common_inline(site, method, indices, inargs, outargs):
 
     if dml.globals.debuggable:
         if method.fully_typed and (
-                deprecations.dml12_inline in dml.globals.enabled_deprecations
+                compat.dml12_inline not in dml.globals.enabled_compat
                 or all(not arg.constant for arg in inargs)):
             # call method instead of inlining it
             func = method_instance(method)
         else:
             # create a specialized method instance based on parameter
             # types, and call that
-            intypes = tuple(arg if ((ptype is None or deprecations.dml12_inline
-                                     not in dml.globals.enabled_deprecations)
-                                    and (arg.constant or undefined(arg)))
-                            else methfunc_param(ptype, arg)
-                            for ((pname, ptype), arg)
-                            in zip(method.inp, inargs))
+            intypes = tuple(
+                arg if ((ptype is None
+                         or compat.dml12_inline in dml.globals.enabled_compat)
+                        and (arg.constant or undefined(arg)))
+                else methfunc_param(ptype, arg)
+                for ((pname, ptype), arg) in zip(method.inp, inargs))
             outtypes = tuple(methfunc_param(ptype, arg)
                              for ((pname, ptype), arg)
                              in zip(method.outp, outargs))
@@ -3551,9 +3551,9 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
 
             if inhibit_copyin or undefined(arg):
                 param_scope.add(ExpressionSymbol(parmname, arg, arg.site))
-            elif arg.constant and (parmtype is None
-                                   or deprecations.dml12_inline
-                                   not in dml.globals.enabled_deprecations):
+            elif arg.constant and (
+                    parmtype is None
+                    or compat.dml12_inline in dml.globals.enabled_compat):
                 # Constants must be passed directly to
                 # provide constant folding.  Other values are stored in a
                 # local variable to improve type checking and variable
@@ -3768,7 +3768,7 @@ def codegen_method_func(func):
     inline_scope = MethodParamScope(global_scope)
     for (name, e) in func.inp:
         if dml.globals.dml_version == (1, 2) and (
-                deprecations.dml12_misc in dml.globals.enabled_deprecations):
+                compat.dml12_misc not in dml.globals.enabled_compat):
             check_varname(method.site, name)
         if isinstance(e, Expression):
             inlined_arg = (
@@ -3976,7 +3976,7 @@ def codegen_call(site, meth_node, indices, inargs, outargs):
     require_fully_typed(site, meth_node)
     func = method_instance(meth_node)
 
-    if deprecations.dml12_misc not in dml.globals.enabled_deprecations:
+    if compat.dml12_misc in dml.globals.enabled_compat:
         # For backward compatibility. See bug 21367.
         inargs = [mkCast(site, arg, TPtr(TNamed('char')))
                   if isinstance(arg, StringConstant) else arg

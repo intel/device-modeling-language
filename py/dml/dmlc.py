@@ -12,7 +12,7 @@ from . import structure, logging, messages, ctree, ast, expr_util, toplevel
 from . import serialize
 from . import dmlparse
 from . import output
-from . import deprecations
+from . import compat
 
 import dml.c_backend
 import dml.info_backend
@@ -283,17 +283,19 @@ class WarnHelpAction(HelpAction):
         for tag in by_ignored[True]:
             print(f'    {tag}')
 
-class DeprecateHelpAction(HelpAction):
+class CompatHelpAction(HelpAction):
     def print_help(self):
         print('''\
-Tags accepted by --deprecate. Each of these represents a deprecated
+Tags accepted by --no-compat. Each of these represents a deprecated
 compatibility feature that will be unavailable in all API versions
-newer than a particular version.  The --deprecate=TAG flag disables a
+newer than a particular version.  The --no-compat=TAG flag disables a
 feature also when an older API version is used. This allows migration
-to a new API version in smaller steps, and can also allow early access
-to deprecations in a yet unreleased API version.''')
-        for (version, deps) in deprecations.deprecations.items():
-            print(f'  Features available with --simics-api={version} or older:')
+to a new API version in smaller steps, and can also allow disabling
+features that are scheduled for removal in a future API version.''')
+        ver_map = {i: s for (s, i) in api_versions().items()}
+        for (version, deps) in compat.features.items():
+            print(f'  Features available with --simics-api={ver_map[version]}'
+                  ' or older:')
             for (tag, dep) in deps.items():
                 print(f'    {tag:20s} {dep.short}')
 
@@ -405,7 +407,7 @@ def main(argv):
     # future versions of the DML language</dd>
     parser.add_argument('--strict-dml12', action='store_true',
                         help='Alias for --strict-int'
-                        ' --deprecate=dml12_inline,dml12_not,dml12_misc')
+                        ' --no-compat=dml12_inline,dml12_not,dml12_misc')
     parser.add_argument('--strict-int', action='store_true',
                         help='Use DML 1.4 style integer arithmetic semantics'
                         + ' when compiling DML 1.2 files.')
@@ -452,15 +454,15 @@ def main(argv):
     # </dl>
     # </add>
 
-    # <dt>--deprecate=<i>TAG</i></dt>
-    # <dd></dd>
+    # <dt>--no-compat=<i>TAG</i></dt>
+    # <dd>Disable a compatibility feature</dd>
     parser.add_argument(
-        '--deprecate', action='append', default=[],
+        '--no-compat', action='append', default=[],
         help='Disable a compatibility feature')
 
     parser.add_argument(
-        '--help-deprecate', action=DeprecateHelpAction,
-        help='List the available tags for --deprecate')
+        '--help-no-compat', action=CompatHelpAction,
+        help='List the available tags for --no-compat')
 
     # </dl>
     # </add>
@@ -589,24 +591,23 @@ def main(argv):
     dml.globals.api_version = api_map[options.simics_api]
 
     features = {tag: dep for api in api_map.values()
-                if api <= dml.globals.api_version
-                for (tag, dep) in deprecations.deprecations[api].items()}
-    for flag in options.deprecate:
+                if api >= dml.globals.api_version
+                for (tag, dep) in compat.features[api].items()}
+    for flag in options.no_compat:
         for tag in flag.split(','):
-            if any(tag in tags for tags in deprecations.deprecations.values()):
+            if any(tag in tags for tags in compat.features.values()):
                 if tag in features:
                     del features[tag]
             else:
-                options.error(f'invalid tag {tag} for --deprecate.'
-                              ' Try --help-deprecate.')
+                options.error(f'invalid tag {tag} for --no-compat.'
+                              ' Try --help-no-compat.')
     if options.strict_dml12:
-        features.discard('dml12_include')
-        features.discard('dml12_not')
-        features.discard('dml12_misc')
-    dml.globals.enabled_deprecations = {
-        dep for deps in deprecations.deprecations.values()
-        for (tag, dep) in deps.items()
-        if tag not in features}
+        for feature in [compat.dml12_inline, compat.dml12_not,
+                        compat.dml12_misc]:
+            tag = feature.tag()
+            if tag in features:
+                del features[tag]
+    dml.globals.enabled_compat = set(features.values())
 
     inputfilename = options.input_filename
 
