@@ -92,6 +92,20 @@ class io_memory(CompatFeature):
 
 
 @feature
+class port_obj_param(CompatFeature):
+    '''This compatibility feature changes the value of the `obj`
+    parameter in `bank` and `port` objects: Before Simics 6 there were
+    no dedicated port objects, so this parameter did not exist and if
+    you wrote `obj` inside a bank, this would resolve to
+    `dev.obj`. This feature preserves this legacy behaviour by making
+    the `obj` parameter of banks and ports resolves to `dev.obj`
+    rather than the port object.
+    '''
+    short = "bank.obj and port.obj resolve to dev.obj"
+    last_api_version = api_5
+
+
+@feature
 class dml12_inline(CompatFeature):
     '''When using `inline` to inline a method in a DML 1.2 device,
     constant parameters passed in typed arguments are inlined as
