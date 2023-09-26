@@ -1021,8 +1021,6 @@ def make_autoparams(obj, index_vars, index_var_sites):
             autoparams['index'] = SimpleParamExpr(mkUndefined(site))
     else:
         autoparams['indices'] = IndexListParamExpr(site, index_params)
-        autoparams['_be_bitorder'] = SimpleParamExpr(
-            mkBoolConstant(site, site.bitorder() == 'be'))
 
     if obj.objtype == 'device':
         with crep.DeviceInstanceContext():
@@ -1031,6 +1029,8 @@ def make_autoparams(obj, index_vars, index_var_sites):
             autoparams['banks'] = UninitializedParamExpr(site, 'banks')
         else:
             autoparams['NULL'] = NullParamExpr(site)
+            autoparams['_be_bitorder'] = SimpleParamExpr(
+                mkBoolConstant(site, site.bitorder() == 'be'))
         autoparams['simics_api_version'] = SimpleParamExpr(
             mkStringConstant(site, dml.globals.api_version.str))
         for (tag, feature) in compat.features.items():
@@ -1081,7 +1081,8 @@ def make_autoparams(obj, index_vars, index_var_sites):
 
     # Add common automatic parameters
     autoparams['qname'] = QNameParamExpr(obj, 'device')
-    autoparams['_static_qname'] = StaticQNameParamExpr(obj, 'device')
+    if dml.globals.dml_version != (1, 2):
+        autoparams['_static_qname'] = StaticQNameParamExpr(obj, 'device')
 
     if obj.parent:
         autoparams['parent'] = ParentParamExpr(obj)
@@ -1134,7 +1135,8 @@ def create_parameters(obj, obj_specs, index_vars, index_sites):
             parameters.setdefault(name, []).append((obj_spec.rank, s))
 
     autoparams = make_autoparams(obj, index_vars, index_sites)
-
+    for name in autoparams:
+        assert name in parameters, name
     return [mkparam(obj, autoparams,
                     merge_parameters(parameters[name], obj_specs))
             for name in sorted(parameters)]
