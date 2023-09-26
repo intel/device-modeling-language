@@ -24,6 +24,12 @@ anchor_re = re.compile(r'<a id="(.*?)"')
 
 assert anchor_re.findall('<a id="comparison-to-c"/>') == ['comparison-to-c']
 
+third_party_trademarks = {'synopsys', 'coverity'}
+
+third_party_trademark_re = re.compile(
+    r'(?i:(' + '|'.join(third_party_trademarks)
+    + r'))([*®™]|&reg;|&trade;|&copy;|\\\*)?')
+
 def char_range(low, high):
     return map(chr, range(ord(low), ord(high) + 1))
 
@@ -95,11 +101,40 @@ def main():
                 line = md_files[path][:match.start()].count('\n') + 1
                 sys.stderr.write(f'{path}:{line}: error: {message}\n')
                 ok = False
+
+        third_party_trademarks_referenced = {}
+        third_party_trademarks_annotated = set()
+        def check_third_party_trademarks():
+            for (tm, line) in third_party_trademarks_referenced.items():
+                if tm not in third_party_trademarks_annotated:
+                    sys.stderr.write(
+                        f"{path}:{line+1}: error: third party trademark "
+                        + f"'{tm}' never annotated with '*' in this section\n")
+                    nonlocal ok
+                    ok = False
+            third_party_trademarks_referenced.clear()
+            third_party_trademarks_annotated.clear()
+
         for (i, line) in enumerate(md_files[path].split('\n')):
             if ' -- ' in f' {line} ':
                 sys.stderr.write(
                     f'{path}:{i+1}: error: replace -- with &mdash;\n')
                 ok = False
+
+            # A third party trademark must be annotated at least once per
+            # (sub)section
+            if line.startswith('#'):
+                check_third_party_trademarks()
+            for match in third_party_trademark_re.finditer(line):
+                annotated = match.group(2) in {'*', '\\*'}
+
+                tm = match.group(1).lower()
+                third_party_trademarks_referenced.setdefault(tm, i)
+                if annotated:
+                    third_party_trademarks_annotated.add(tm)
+
+        check_third_party_trademarks()
+
     sys.exit(0 if ok else 1)
 
 if __name__ == '__main__':

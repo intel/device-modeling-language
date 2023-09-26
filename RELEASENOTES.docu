@@ -1536,7 +1536,7 @@
   <build-id value="6036"><add-note> Adjusted DMLC code generation to silence
     false positives
     reported on <file>dml-builtins.dml</file> when analysing
-    DMLC-generated C code using the Synopsis&reg; Coverity&reg;
+    DMLC-generated C code using the Synopsys* Coverity*
     static analysis tool. </add-note></build-id>
   <build-id value="6044"><add-note> Improved some error messages <bug
     number="SIMICS-15552"/>.</add-note></build-id>

@@ -113,7 +113,7 @@ causes generated C code to follow the DML code more closely.
 --coverity
 </dt><dd>
 
-Adds Synopsys® Coverity® analysis annotations to suppress common false positives
+Adds Synopsys* Coverity* analysis annotations to suppress common false positives
 in generated C code created from DML 1.4 device models.
 </dd><dt>
 
