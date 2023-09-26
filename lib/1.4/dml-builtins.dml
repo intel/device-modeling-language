@@ -539,11 +539,10 @@ template device {
     param _is_simics_object = true;
 
     param simics_api_version auto;
-    param _api_5_or_older = simics_api_version == "5"
-        || simics_api_version == "4.8";
 
     param _compat_port_proxy_ifaces auto;
     param _compat_port_proxy_attrs auto;
+    param _compat_port_obj_param auto;
     param _compat_io_memory auto;
     param _compat_dml12_inline auto;
     param _compat_dml12_not auto;
@@ -1450,7 +1449,7 @@ template port is object {
     param _is_simics_object = true;
     // limitations for ports are not recognized
     param limitations = undefined;
-    param obj = dev._api_5_or_older #? dev.obj #: _port_obj();
+    param obj = dev._compat_port_obj_param #? dev.obj #: _port_obj();
 
     session conf_object_t *_cached_port_obj;
     shared method _port_obj() -> (conf_object_t *) {
@@ -1782,7 +1781,7 @@ template bank is (object, shown_desc) {
     // compatibility: referencing 'obj' in a bank method must evaluate to
     // dev.obj in code that can compile on both 5 and 6
     // TODO: we should probably make obj an immutable session variable
-    param obj = dev._api_5_or_older #? dev.obj #: _bank_obj();
+    param obj = dev._compat_port_obj_param #? dev.obj #: _bank_obj();
     param partial : bool;
     param overlapping : bool;
     param _le_byte_order : bool;
