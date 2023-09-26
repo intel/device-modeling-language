@@ -541,10 +541,10 @@ template device {
     param simics_api_version auto;
     param _api_5_or_older = simics_api_version == "5"
         || simics_api_version == "4.8";
-    param _api_6_or_older = simics_api_version == "6" || _api_5_or_older;
 
     param _compat_port_proxy_ifaces auto;
     param _compat_port_proxy_attrs auto;
+    param _compat_io_memory auto;
     param _compat_dml12_inline auto;
     param _compat_dml12_not auto;
     param _compat_dml12_misc auto;
@@ -561,7 +561,7 @@ template device {
     param be_bitorder             default _be_bitorder;
     param log_group                 = undefined;
 
-    param use_io_memory             default _api_6_or_older;
+    param use_io_memory             default _compat_io_memory;
     // this was available in DML 1.2; defensively reserved in 1.4
     param banks                     = undefined;
     // this carried semantics in DML 1.2; deprecated in 1.4
