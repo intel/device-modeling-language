@@ -81,6 +81,17 @@ class port_proxy_attrs(CompatFeature):
 
 
 @feature
+class io_memory(CompatFeature):
+    '''The `transaction` interface was introduced in 6, and will
+    eventually replace the `io_memory` interface. When this feature is
+    enabled, the top-level parameter `use_io_memory` defaults to
+    `true`, causing `bank` objects to implement `io_memory` instead of
+    `transaction` by default.'''
+    short = 'Use the io_memory interface by default in banks'
+    last_api_version = api_6
+
+
+@feature
 class dml12_inline(CompatFeature):
     '''When using `inline` to inline a method in a DML 1.2 device,
     constant parameters passed in typed arguments are inlined as
