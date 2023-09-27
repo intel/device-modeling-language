@@ -5,6 +5,7 @@ import re
 from abc import ABC, abstractmethod, abstractproperty
 import operator
 import contextlib
+
 from functools import reduce
 import itertools
 import os
@@ -1525,18 +1526,17 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
             etype = TInt(width, False, members)
         elif tag == 'typeof':
             expr = codegen_expression_maybe_nonvalue(info, location, scope)
-            if (compat.dml12_misc not in dml.globals.enabled_compat
-                and not isinstance(expr, ctree.LValue)
-                # for compatibility with dml-builtins, using 1.2
-                and not isinstance(expr, ctree.RegisterWithFields)):
-                raise ERVAL(expr.site, 'typeof')
             if isinstance(expr, NonValue):
+                # for compatibility with dml-builtins, using 1.2
                 if isinstance(expr, (ctree.NoallocNodeRef,
                                      ctree.RegisterWithFields,
                                      ctree.IncompleteNodeRefWithStorage)):
                     etype = expr.node_type
                 else:
                     raise expr.exc()
+            elif (not isinstance(expr, ctree.LValue)
+                  and compat.dml12_misc not in dml.globals.enabled_compat):
+                raise ERVAL(expr.site, 'typeof')
             else:
                 etype = expr.ctype().clone()
             if not etype:
