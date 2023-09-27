@@ -8,14 +8,13 @@ from simicsutils.host import is_windows
 from simicsutils.internal import api_versions, default_api_version
 
 def generate_env(out):
-    api_versions_dict = {v: 4 if v == '4.8' else int(v) for v in api_versions()}
     Path(out).write_text(f'''\
 def is_windows():
     return {is_windows()}
 def api_versions():
-    return {api_versions_dict}
+    return {repr(api_versions())}
 def default_api_version():
-    return {api_versions_dict[default_api_version()]}
+    return {repr(default_api_version())}
 ''')
 
 if __name__ == '__main__':
