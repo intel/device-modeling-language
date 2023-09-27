@@ -142,3 +142,49 @@ class dml12_misc(CompatFeature):
     '''
     short = "Disable various DML 1.2 quirks"
     last_api_version = api_6
+
+
+@feature
+class dml12_int(CompatFeature):
+    '''This compatibility feature affects many semantic details of
+    integer arithmetic. When this feature is enabled, DMLC translates
+    most integer operations directly into C, without compensating for
+    DML-specifics, like the support for odd-sized
+    <tt>uint<i>NN</i></tt> types; this can sometimes have unexpected
+    consequences. The most immediate effect of disabling this feature
+    is that DMLC will report errors on statements like `assert 0;` and
+    `while (1) { ... }`, which need to change into `assert false;` and
+    `while (true) { ... }`, respectively. Other effects include:
+
+    * Integers of non-standard sizes are represented as a native C
+      type, e.g. `uint5` is represented as `uint8`, allowing it to
+      store numbers too large to fit in 5 bits. With modern DML
+      semantics, arithmetic is done on 64-bit integers and bits are
+      truncated if casting or storing in a smaller type.
+
+      Old code sometimes relies on this feature by comparing variables
+      of type `int1` to the value `1`. In DML 1.4, the only values of
+      type `int1` are `0` and `-1`, so such code should be rewritten
+      to use the `uint1` type. It can be a good idea to grep for
+      `[^a-z_]int1[^0-9]` and review if `uint1` is a better choice.
+
+    * Some operations have undefined behaviour in C, which is
+      inherited by traditional DML 1.2. In modern DML this is
+      well-defined, e.g., an unconditional critical error on negative
+      shift or division by zero, and truncation on too large shift
+      operands or signed shift overflow.
+
+    * Comparison operators `<`, `<=`, `==`, `>=`, `>` inherit C
+      semantics in traditional DML, whereas in modern DML they are
+      compared as integers. This sometimes makes a difference when
+      comparing signed and unsigned numbers; in particular, `-1 !=
+      0xffffffffffffffff` consistently in modern DML, whereas with
+      compatibility semantics, they are consiered different only if
+      both are constant.
+
+    The `dml12_int` feature only applies to DML 1.2 files; if a DML
+    1.4 file is imported from a DML 1.2 file, then modern DML
+    semantics is still used for operations in that file.
+    '''
+    short = "Use legacy integer semantics in DML 1.2"
+    last_api_version = api_6
