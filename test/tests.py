@@ -936,6 +936,12 @@ class DumpInputFilesTestCase(CTestCase):
             assert (dir / (self.shortname + '.c')).is_file()
 
 all_tests = []
+def subtest(*args, **kwargs):
+    def register(cls):
+        all_tests.append(cls(*args, **kwargs))
+        return cls
+    return register
+
 
 # First, some special cases
 class ErrorTest(CTestCase):
@@ -1101,6 +1107,21 @@ class DebuggableCheck(BaseTestCase):
     prereqs = ['debuggable-compile']
 
 all_tests.append(DebuggableCheck('debuggable-check'))
+
+@subtest('--help-no-compat')
+@subtest('--help-warn')
+@subtest('--help')
+class HelpTest(BaseTestCase):
+    '''Check that some DMLC flag works'''
+    __slots__ = ()
+    def test(self):
+        cmd = main_dmlc + [self.fullname]
+        self.pr(f"Running: {' '.join(cmd)}")
+        ret = subprocess.run(cmd, capture_output=True, text=True)
+        self.pr(ret.stderr)
+        self.pr(ret.stdout)
+        if ret.returncode:
+            raise TestFail('dmlc returncode {ret.returncode}')
 
 class DmlDepBase(CTestCase):
     '''Base class for DML dependency test cases.'''
