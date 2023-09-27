@@ -292,12 +292,18 @@ newer than a particular version.  The --no-compat=TAG flag disables a
 feature also when an older API version is used. This allows migration
 to a new API version in smaller steps, and can also allow disabling
 features that are scheduled for removal in a future API version.''')
-        ver_map = {i: s for (s, i) in api_versions().items()}
-        for (version, deps) in compat.features.items():
-            print(f'  Features available with --simics-api={ver_map[version]}'
+        by_version = {}
+        for feature in compat.features.values():
+            if (feature.last_api_version.str in api_versions()
+                or (feature.last_api_version
+                    > compat.apis[default_api_version()])):
+                by_version.setdefault(feature.last_api_version, []).append(
+                    feature)
+        for (api, features) in sorted(by_version.items()):
+            print(f'  Features available with --simics-api={api.str}'
                   ' or older:')
-            for (tag, dep) in deps.items():
-                print(f'    {tag:20s} {dep.short}')
+            for feature in sorted(features, key=lambda f: f.tag()):
+                print(f'    {feature.tag():20s} {feature.short}')
 
 def main(argv):
     # DML files must be utf8, but are generally opened without specifying
@@ -521,16 +527,14 @@ def main(argv):
         else:
             defs[name] = value
 
-    api_map = api_versions()
-    if options.simics_api not in api_map:
-        prerr("dmlc: the version '%s' is not a valid API version" % (
-                options.simics_api))
-        sys.exit(1)
+    api = dml.globals.api_version = compat.apis.get(options.simics_api)
+    if api is None:
+        parser.error(f"dmlc: the version '{options.simics_api}'"
+                     " is not a valid API version")
 
-    if options.full_module and options.simics_api not in ['4.8']:
-        prerr("dmlc: the -m option is only valid together with --api=4.8"
-              " or older")
-        sys.exit(1)
+    if options.full_module and api != compat.api_4_8:
+        parser.error("dmlc: the -m option is only valid together with --api=4.8"
+                     " or older")
 
     # This warning is disabled by default below Simics 7 due to sheer
     # prominence of the issue it warns about in existing code.
@@ -538,7 +542,7 @@ def main(argv):
     # to handle the bugs as part of migration, instead of suddenly
     # overwhelming them with a truly massive amount of warnings in an
     # intermediate release.
-    if options.simics_api in {'4.8', '5', '6'}:
+    if api <= compat.api_6:
         ignore_warning('WLOGMIXUP')
 
     for w in options.disabled_warnings:
@@ -588,14 +592,13 @@ def main(argv):
               + "The DMLC developers WILL NOT respect their use. "
               + "NEVER enable this flag for any kind of production code!!!***")
 
-    dml.globals.api_version = api_map[options.simics_api]
+    features = {tag: feature
+                for (tag, feature) in compat.features.items()
+                if feature.last_api_version >= dml.globals.api_version}
 
-    features = {tag: dep for api in api_map.values()
-                if api >= dml.globals.api_version
-                for (tag, dep) in compat.features[api].items()}
     for flag in options.no_compat:
         for tag in flag.split(','):
-            if any(tag in tags for tags in compat.features.values()):
+            if tag in compat.features:
                 if tag in features:
                     del features[tag]
             else:

@@ -2,33 +2,50 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import abc
+from dataclasses import dataclass
 
-from . import env
+
+@dataclass(order=True, frozen=True)
+class API:
+    ordinal: int
+    str: str
+
+
+api_4_8 = API(4, "4.8")
+api_5 = API(5, "5")
+api_6 = API(6, "6")
+api_7 = API(7, "7")
+
+
+# All API versions known to the DML implementation. Note that the set
+# of APIs accessible to the end-user is limited to what the associated
+# Simics version supports.
+apis = {api.str: api
+        for api in [api_4_8, api_5, api_6, api_7]}
 
 
 class CompatFeature(abc.ABC):
-    def tag(self):
+    def tag(self) -> str:
         return self.__class__.__name__
 
     @abc.abstractproperty
     def __doc__(self): pass
 
     @abc.abstractproperty
-    def short(self): pass
+    def short(self) -> str: pass
 
     @abc.abstractproperty
-    def last_api_version(self): pass
+    def last_api_version(self) -> API: pass
 
 
-# API version -> tag -> feature
-features: dict[str, dict[str, CompatFeature]] = {
-    api: {} for api in env.api_versions().values()}
+# tag -> feature
+features: dict[str, CompatFeature] = {}
 
 
 def feature(cls: type[CompatFeature]):
     assert issubclass(cls, CompatFeature)
     singleton = cls()
-    features[cls.last_api_version][singleton.tag()] = singleton
+    features[singleton.tag()] = singleton
     return singleton
 
 
@@ -45,7 +62,7 @@ class port_proxy_ifaces(CompatFeature):
     banks do not need proxies for backward compatibility.
     '''
     short = "Don't generate proxy port interfaces for banks and ports"
-    last_api_version = 6
+    last_api_version = api_6
 
 
 @feature
@@ -60,7 +77,7 @@ class port_proxy_attrs(CompatFeature):
     '''
     short = ("Don't generate top-level proxy attributes"
              + " for attributes in banks and ports")
-    last_api_version = 6
+    last_api_version = api_6
 
 
 @feature
@@ -72,7 +89,7 @@ class dml12_inline(CompatFeature):
     implications.
     '''
     short = "Don't inline method arguments with a declared type in DML 1.2"
-    last_api_version = 6
+    last_api_version = api_6
 
 
 # separate class only because last_api_version differs
@@ -82,7 +99,7 @@ class dml12_not(CompatFeature):
     type-checked; in particular, negation expressions on the form
     `!$reg`, where `reg` is a register, are permitted'''
     short = "Disallow ! operator on register references in DML 1.2"
-    last_api_version = 5
+    last_api_version = api_5
 
 
 @feature
@@ -124,4 +141,4 @@ class dml12_misc(CompatFeature):
 
     '''
     short = "Disable various DML 1.2 quirks"
-    last_api_version = 6
+    last_api_version = api_6

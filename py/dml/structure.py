@@ -1031,14 +1031,11 @@ def make_autoparams(obj, index_vars, index_var_sites):
             autoparams['banks'] = UninitializedParamExpr(site, 'banks')
         else:
             autoparams['NULL'] = NullParamExpr(site)
-        api_map = {i: s for (s, i) in env.api_versions().items()}
         autoparams['simics_api_version'] = SimpleParamExpr(
-            mkStringConstant(site, api_map[dml.globals.api_version]))
-        for deps in compat.features.values():
-            for (tag, dep) in deps.items():
-                autoparams[f'_compat_{tag}'] = SimpleParamExpr(
-                    mkBoolConstant(
-                        site, dep in dml.globals.enabled_compat))
+            mkStringConstant(site, dml.globals.api_version.str))
+        for (tag, feature) in compat.features.items():
+            autoparams[f'_compat_{tag}'] = SimpleParamExpr(
+                mkBoolConstant(site, feature in dml.globals.enabled_compat))
         dml.globals.device = obj
 
     elif obj.objtype == 'bank':
@@ -1883,7 +1880,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                         param.get_expr(zero_index * param.dimensions)
                 except DMLError as e:
                     if (dml.globals.dml_version == (1, 2)
-                        and dml.globals.api_version <= 5
+                        and dml.globals.api_version <= compat.api_5
                         and isinstance(e, EREF)):
                         # We forgive some errors in unused parameters, to
                         # avoid the annoyance caused by hard errors from code
