@@ -62,7 +62,7 @@ class port_proxy_ifaces(CompatFeature):
     banks do not need proxies for backward compatibility.
     '''
     short = "Don't generate proxy port interfaces for banks and ports"
-    last_api_version = api_6
+    last_api_version = api_7
 
 
 @feature
@@ -77,7 +77,7 @@ class port_proxy_attrs(CompatFeature):
     '''
     short = ("Don't generate top-level proxy attributes"
              + " for attributes in banks and ports")
-    last_api_version = api_6
+    last_api_version = api_7
 
 
 @feature
