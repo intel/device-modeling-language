@@ -1233,9 +1233,9 @@ def parse_type(typename):
         return TBool()
     elif typename == 'void':
         return TVoid()
-    elif typename == 'integer_t' and dml.globals.api_version < 7:
+    elif typename == 'integer_t' and dml.globals.api_version < compat.api_7:
         return TInt(64, True)
-    elif typename == 'uinteger_t' and dml.globals.api_version < 7:
+    elif typename == 'uinteger_t' and dml.globals.api_version < compat.api_7:
         return TInt(64, False)
     else:
         return TNamed(typename)

@@ -383,12 +383,10 @@ def parse_main_file(inputfilename, explicit_import_path):
         for path in [os.path.join(orig_path, version_str),
                      orig_path]]
 
-    if version == (1, 2) and dml.globals.api_version not in {
-            # we may want to add "8" if we want to postpone the
-            # deprecation of DML 1.2
-            4, 5, 6, 7}:
-        raise ESIMAPI(site, fmt_version(version),
-                       dml.globals.api_version)
+    # we may want to bump last version to 8 if we want to postpone the
+    # deprecation of DML 1.2
+    if version == (1, 2) and dml.globals.api_version > compat.api_7:
+        raise ESIMAPI(site, fmt_version(version), dml.globals.api_version.str)
 
     # Map normalized, absolute path of an imported file, to list of
     # seen spellings. One spelling is a string in an import statement which
