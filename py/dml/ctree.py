@@ -1152,8 +1152,13 @@ class BinOp(Expression):
 
         lhtype = lh.ctype()
         rhtype = rh.ctype()
-        if isinstance(lhtype, TUnknown) or isinstance(rhtype, TUnknown):
-            return cls(site, lh, rh)
+        if (dml.globals.dml_version == (1, 2)
+            and (isinstance(lhtype, TUnknown) or isinstance(rhtype, TUnknown))):
+            # urgh, some classes take an extra constructor arg
+            if issubclass(cls, (ArithBinOp, BitBinOp, BitShift)):
+                return cls(site, lh, rh, TUnknown)
+            else:
+                return cls(site, lh, rh)
 
         return cls.make_simple(site, lh, rh)
 
