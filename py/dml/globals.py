@@ -3,6 +3,8 @@
 
 # Global variables
 
+from . import compat
+
 # name -> Template instance. An object declaration in a file are
 # represented implicitly as a template, named @filename.dml.
 templates = {}
@@ -60,11 +62,11 @@ type_sequence_infos = {}
 
 enabled_compat = set()
 
-# 1.4 style integer operations in 1.2, --strict-dml12-int
-strict_int_flag = None
+# 1.4 style integer operations in 1.2
 def compat_dml12_int(site):
     # if site is None, guess DML 1.4
-    return not strict_int_flag and site and site.dml_version() == (1, 2)
+    return (compat.dml12_int in enabled_compat
+            and site and site.dml_version() == (1, 2))
 
 debuggable = False
 

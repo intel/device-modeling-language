@@ -142,3 +142,38 @@ class dml12_misc(CompatFeature):
     '''
     short = "Disable various DML 1.2 quirks"
     last_api_version = api_6
+
+
+@feature
+class dml12_int(CompatFeature):
+    '''This compatibility feature affects many semantic details of
+    integer arithmetic. When it is enabled, most integer operations
+    are translated directly into C, sometimes with unpredictable
+    results. For instance:
+
+    * Integers of non-standard sizes are represented as a native C
+      type, e.g. `uint5` is represented as `uint8`, allowing it to
+      store numbers too large to fit in 5 bits. With modern DML
+      semantics, arithmetic is done on 64-bit integers and bits are
+      truncated if casting or storing in a smaller type.
+
+    * Some operations have undefined behaviour in C, which is
+      inherited by traditional DML 1.2. In modern DML this is
+      well-defined, e.g., an unconditional fatal error on negative
+      shift or division by zero, and truncation on too large shift
+      operands or signed shift overflow.
+
+    * Comparison operators `<`, `<=`, `==`, `>=`, `>` inherit C
+      semantics in traditional DML, whereas in modern DML they are
+      compared as integers. This sometimes makes a difference when
+      comparing signed and unsigned numbers; in particular, `-1 !=
+      0xffffffffffffffff` consistently in modern DML, whereas with
+      compatibility semantics, they are consiered different only if
+      both are constant.
+
+    The `dml12_int` feature only applied to DML 1.2 files; if a DML
+    1.4 file is imported from a DML 1.2 file, then modern DML
+    semantics is still used for operations in that file.
+    '''
+    short = "Use legacy integer semantics in DML 1.2"
+    last_api_version = api_6

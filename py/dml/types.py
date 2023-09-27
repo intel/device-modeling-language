@@ -483,7 +483,7 @@ class IntegerType(DMLType):
         if isinstance(self, TSize) != isinstance(other, TSize):
             return NotImplemented
         if (dml.globals.dml_version == (1, 2)
-            and not dml.globals.strict_int_flag):
+            and compat.dml12_int in dml.globals.enabled_compat):
             # Ignore signedness
             return 0 if self.bits == other.bits else NotImplemented
         else:

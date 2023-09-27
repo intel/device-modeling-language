@@ -408,15 +408,11 @@ def main(argv):
     parser.add_argument('--werror', action='store_true',
                       help='Turn all warnings into errors')
 
-    # <dt>--strict</dt>
-    # <dd>Report errors for some constructs that will be forbidden in
-    # future versions of the DML language</dd>
     parser.add_argument('--strict-dml12', action='store_true',
-                        help='Alias for --strict-int'
-                        ' --no-compat=dml12_inline,dml12_not,dml12_misc')
+                        help='Alias for --no-compat=dml12_inline'
+                        ',dml12_not,dml12_misc,dml12_int')
     parser.add_argument('--strict-int', action='store_true',
-                        help='Use DML 1.4 style integer arithmetic semantics'
-                        + ' when compiling DML 1.2 files.')
+                        help='Alias for --no-compat=dml12_int')
 
     # <dt>--coverity</dt>
     # <dd> Adds Synopsys® Coverity® analysis annotations to suppress common
@@ -604,9 +600,15 @@ def main(argv):
             else:
                 options.error(f'invalid tag {tag} for --no-compat.'
                               ' Try --help-no-compat.')
+
+    if options.strict_int:
+        tag = compat.dml12_int.tag()
+        if tag in features:
+            del features[tag]
+
     if options.strict_dml12:
         for feature in [compat.dml12_inline, compat.dml12_not,
-                        compat.dml12_misc]:
+                        compat.dml12_misc, compat.dml12_int]:
             tag = feature.tag()
             if tag in features:
                 del features[tag]
@@ -658,8 +660,6 @@ def main(argv):
 
         if dml_version != (1, 2):
             logging.show_porting = False
-
-        dml.globals.strict_int_flag = options.strict_dml12 or options.strict_int
 
         if 'DMLC_DUMP_INPUT_FILES' in os.environ:
             dump_input_files(outputbase, dict(
