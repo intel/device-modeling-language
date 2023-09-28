@@ -1907,7 +1907,13 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             # 1.4 code
             for p in obj.get_components():
                 sym = global_scope.lookup(p.name)
-                if sym:
+                if sym and (
+                        # hacky workaround for the ExpressionSymbol
+                        # implicitly added above. Needed when importing 1.4
+                        # code from 1.2 with --no-compat=dml12_misc
+                        dml.globals.dml_version != (1, 2)
+                        or p.site.dml_version == (1, 2)
+                        or p.site != sym.site):
                     report(ENAMECOLL(p.site, sym.site, p.name))
 
         # At this point, methods and subobjs are created and we can
