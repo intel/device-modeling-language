@@ -3777,6 +3777,14 @@ def codegen_method_func(func):
             inline_scope.add(ExpressionSymbol(name, inlined_arg, method.site))
     inp = [(n, t) for (n, t) in func.inp if isinstance(t, DMLType)]
 
+    if indices:
+        within_bounds = ' && '.join([
+            f'_idx{i} < {dimsize}'
+            for (i, dimsize) in enumerate(method.dimsizes)])
+        validate_indices = f'ASSERT({within_bounds});'
+    else:
+        validate_indices = None
+
     with ErrorContext(method):
         location = Location(method, indices)
         if func.memoized:
@@ -3788,7 +3796,8 @@ def codegen_method_func(func):
             method.site, inp, func.outp, func.throws, func.independent,
             memoization, method.astcode,
             method.default_method.default_sym(indices),
-            location, inline_scope, method.rbrace_site)
+            location, inline_scope, method.rbrace_site,
+            validate_indices)
     return code
 
 def codegen_return(site, outp, throws, retvals):
@@ -3821,7 +3830,7 @@ def codegen_return(site, outp, throws, retvals):
     return mkCompound(site, stmts)
 
 def codegen_method(site, inp, outp, throws, independent, memoization, ast,
-                   default, location, fnscope, rbrace_site):
+                   default, location, fnscope, rbrace_site, validate_indices=None):
     with (crep.DeviceInstanceContext() if not independent
           else contextlib.nullcontext()):
         for (arg, etype) in inp:
@@ -3874,6 +3883,8 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
                         code.append(mkAssignStatement(site, param, init))
                 else:
                     code = []
+            if validate_indices:
+                code.append(mkInline(site, validate_indices))
 
             with fail_handler, exit_handler:
                 code.append(codegen_statement(ast, location, fnscope))
@@ -3889,6 +3900,8 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
             [subs] = ast.args
             with fail_handler, exit_handler:
                 body = prelude()
+                if validate_indices:
+                    body.append(mkInline(site, validate_indices))
                 body.extend(codegen_statements(subs, location, fnscope))
                 code = mkCompound(site, body)
                 if code.control_flow().fallthrough:
