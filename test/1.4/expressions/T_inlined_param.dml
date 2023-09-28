@@ -19,6 +19,10 @@ inline method m(inline x, void *y) {
     }
 }
 
+inline method m2(inline x, void *y) {
+    m(x, y);
+}
+
 method init() {
-    m(NULL, NULL);
+    m2(NULL, NULL);
 }
