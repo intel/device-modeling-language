@@ -1774,6 +1774,13 @@ supports the following operations:
   Inserts _`item`_ at index _`index`_ within _`v`_. This operation is O(n)
   unless _`index`_ is up to one element away from either end of the vector, in
   which case it's O(1) amortized.
+* <pre><em>v</em>.remove(<em>index<em>)</pre>
+  Remove and return the element at index _`index`_ within _`v`_. This requires
+  the vector to be non-empty. If that is not upheld, then an assertion will be
+  failed at run-time.
+
+  This operation is O(n) unless _`index`_ is up to one element away from either
+  end of the vector, in which case it's O(1) amortized.
 * <pre><em>v</em>.len</pre>
   Evaluates to the length of the vector.
 
