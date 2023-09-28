@@ -802,6 +802,10 @@ class PBITNEQ(Transformation):
         start_offs = self.offset(f)
         [end_site] = self.params
         end_offs = self.offset(f, end_site)
+        self.insert_zero_compare(f, start_offs, end_offs)
+
+    @staticmethod
+    def insert_zero_compare(f, start_offs, end_offs):
         (pad, token, kind) = next(f.read_tokens(end_offs))
         from dml import dmllex14
         if kind in ('ID', 'RBRACKET', 'THIS', 'REGISTER', 'SIGNED',
@@ -816,6 +820,17 @@ class PBITNEQ(Transformation):
         else:
             # f => f != 0
             f.edit(end_offs, 0, ' != 0')
+
+class PZEROCOND(Transformation):
+    def apply(self, f):
+        start_offs = self.offset(f)
+        [end_site, value] = self.params
+        end_offs = self.offset(f, end_site)
+        (pad, token, kind) = next(f.read_tokens(end_offs))
+        if end_offs == start_offs and kind == 'ICONST':
+            f.edit(start_offs, token, value)
+        else:
+            PBITNEQ.insert_zero_compare(f, start_offs, end_offs)
 
 class PVAL(Transformation):
     # must happen after PBITNEQ
@@ -1005,6 +1020,7 @@ tags = {
     'PIMPORT_DML12COMPAT': PIMPORT_DML12COMPAT,
     'PCHANGE_INARGS': PCHANGE_INARGS,
     'PBITNEQ': PBITNEQ,
+    'PZEROCOND': PZEROCOND,
     'PVAL': PVAL,
     'PNODOLLAR': PNODOLLAR,
     'PDOLLAR_QUALIFY': Replace,
@@ -1087,7 +1103,7 @@ def main(argv):
             already_added.add(key)
             t = tags[tag](loc, ast.literal_eval(params))
             transformations.setdefault(t.phase, []).append((t, lineno, line))
-        except:
+        except Exception:
             sys.stderr.write("Unexpected error on this porting tag:\n")
             sys.stderr.write(line)
             sys.stderr.write("%s:%d: found here\n" % (tagfilename, lineno))
@@ -1114,7 +1130,7 @@ def main(argv):
                     loc, '' if e.tag is None else ' ' + e.tag, e))
                 sys.stderr.write("%s:%d: found here\n" % (tagfilename, lineno))
                 errors += 1
-            except:
+            except Exception:
                 sys.stderr.write("Unexpected error on this porting tag:\n")
                 sys.stderr.write(line)
                 sys.stderr.write("%s:%d: found here\n" % (tagfilename, lineno))

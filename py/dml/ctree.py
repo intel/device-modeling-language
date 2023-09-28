@@ -984,10 +984,15 @@ def as_bool(e):
     if isinstance(t, TBool):
         return e
     elif t.is_int and t.bits == 1:
-        if logging.show_porting and (isinstance(e, NodeRef)
-                                     or isinstance(e, LocalVariable)):
-            report(PBITNEQ(dmlparse.start_site(e.site),
-                           dmlparse.end_site(e.site)))
+        if logging.show_porting:
+            if e.constant:
+                report(PZEROCOND(dmlparse.start_site(e.site),
+                                 dmlparse.end_site(e.site),
+                                 'true' if e.value else 'false'))
+            elif (isinstance(e, NodeRef)
+                  or isinstance(e, LocalVariable)):
+                report(PBITNEQ(dmlparse.start_site(e.site),
+                               dmlparse.end_site(e.site)))
         return mkFlag(e.site, e)
     elif isinstance(t, TPtr):
         return mkNotEquals(e.site, e,
