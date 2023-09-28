@@ -4601,6 +4601,8 @@ class InlinedParam(RValue):
 def mkInlinedParam(site, expr, name, type):
     if not defined(expr):
         raise ICE(site, 'undefined parameter')
+    if isinstance(expr, InlinedParam):
+        expr = expr.expr
     if isinstance(expr, IntegerConstant):
         value = expr.value
         type = realtype(type)
