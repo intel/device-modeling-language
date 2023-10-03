@@ -886,14 +886,14 @@ class TArray(DMLType):
         cconst = conv_const if consider_quals else lambda c, t: t
         if not dml.globals.compat_dml12:
             if isinstance(other, (TArray, TPtr)):
-                return cconst(self.const, self.base).cmp(
+                return cconst(self.const, self.base).cmp_fuzzy(
                     cconst(other.const and isinstance(other, TArray),
                            other.base),
                     consider_quals)
         elif isinstance(other, (TPtr, TArray)):
             if self.base.void or other.base.void:
                 return 0
-            if (cconst(self.const, self.base).cmp(
+            if (cconst(self.const, self.base).cmp_fuzzy(
                     cconst(other.const and isinstance(other, TArray),
                            other.base), consider_quals) == 0):
                 return 0

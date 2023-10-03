@@ -3160,8 +3160,8 @@ def mkInterfaceMethodRef(site, iface_node, indices, method_name):
 
     if (not isinstance(ftype, TFunction)
         or not ftype.input_types
-        or TPtr(safe_realtype(TNamed('conf_object_t'))).cmp(
-            safe_realtype(ftype.input_types[0])) != 0):
+        or TPtr(safe_realtype_unconst(TNamed('conf_object_t'))).cmp(
+            safe_realtype_unconst(ftype.input_types[0])) != 0):
         # non-method members are not accessible
         raise EMEMBER(site, struct_name, method_name)
 
