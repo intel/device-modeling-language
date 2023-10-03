@@ -1724,7 +1724,7 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
   <build-id value="6244"><add-note> Added an error if a device declares
       more than 63 log groups (including the two built-in log groups.)
   </add-note></build-id>
-  <build-id value="next"><add-note> Added a warning for if a specified log
+  <build-id value="6247"><add-note> Added a warning for if a specified log
       level of a log statement is likely intended to instead specify the log
       groups, and/or vice versa <bug number="22018374443"/>.
       This warning is only enabled by default with Simics API version 7 or
