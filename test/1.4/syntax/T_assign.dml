@@ -83,4 +83,10 @@ method init() {
     j = 0;
     (i, j) = (j, i);
     assert i == 0 && j == 1;
+
+    // += with target, source of nonequal types but compatible with +
+    local int arr[4] = {0, 1, 2, 3};
+    local int *p = arr;
+    p += 2;
+    assert *p == 2;
 }

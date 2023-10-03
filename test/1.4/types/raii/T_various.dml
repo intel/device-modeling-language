@@ -186,6 +186,16 @@ method init() {
         v.len += 3;
         assert v.len == 7;
     }
+    local int *chunks_p = mk_chunks(1, 2).x;
+    assert chunks_p[0] == 1 && chunks_p[1] == 2;
+}
+
+typedef struct {
+    int x[2];
+} chunks_t;
+
+independent method mk_chunks(int x, int y) -> (chunks_t) {
+    return {{x, y}};
 }
 
 method ms(const char *s) -> (string) throws {

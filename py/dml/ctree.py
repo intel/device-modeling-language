@@ -2484,7 +2484,7 @@ mkStringCStrRef = StringCStrRef
 class StringCStrApply(Expression):
     priority = dml.expr.Apply.priority
 
-    slots = ('type', 'constant', 'value')
+    slots = ('type',)
 
     @auto_init
     def __init__(self, site, expr):
@@ -2493,8 +2493,6 @@ class StringCStrApply(Expression):
             TNamed('char',
                    const=(not expr.writable
                           or safe_realtype_shallow(expr.ctype()).const)))
-        self.constant = expr.constant
-        self.value = expr.value if expr.constant else None
 
     def __str__(self):
         return str_expr_pseudomethod(self.expr, 'c_str()')
@@ -2502,7 +2500,14 @@ class StringCStrApply(Expression):
     def read(self):
         return f'_dml_string_str({self.expr.read()})'
 
+    @property
+    def is_pointer_to_stack_allocation(self):
+        return self.expr.is_stack_allocated
+
 def mkStringCStrApply(site, expr):
+    if expr.constant and isinstance(expr, FromCString):
+        return mkStringConstant(site, expr.value)
+
     if expr.orphan:
         expr = mkAdoptedOrphan(expr.site, expr)
     return StringCStrApply(site, expr)
@@ -2807,7 +2812,7 @@ class AddressOf(UnaryOp):
 
     @property
     def is_pointer_to_stack_allocation(self):
-        return self.rh.writable and self.rh.is_stack_allocated
+        return self.rh.is_stack_allocated
 
 def mkAddressOf(site, rh):
     if dml.globals.compat_dml12_int(site):
@@ -4612,11 +4617,14 @@ class StructMember(Expression):
     priority = 160
     explicit_type = True
 
+    slots = ('orphan',)
+
     @auto_init
     def __init__(self, site, expr, sub, type, op):
         assert not expr.writable or expr.c_lval
         assert_type(site, expr, Expression)
         assert_type(site, sub, str)
+        self.orphan = expr.orphan and op == '.'
 
     @property
     def writable(self):
@@ -4643,7 +4651,9 @@ class StructMember(Expression):
 
     @property
     def is_stack_allocated(self):
-        return self.expr.writable and self.expr.is_stack_allocated
+        return (self.expr.is_stack_allocated
+                if self.op == '.' else
+                self.expr.is_pointer_to_stack_allocation)
 
     @property
     def is_pointer_to_stack_allocation(self):
@@ -4697,7 +4707,12 @@ def mkSubRef(site, expr, sub, op):
         typ = real_basetype.get_member_qualified(sub)
         if not typ:
             raise EMEMBER(site, baseexpr, sub)
-        return StructMember(site, structmember_expr(), sub, typ, op)
+        subref = StructMember(site, structmember_expr(), sub, typ, op)
+        return (AdoptedOrphan(site, subref)
+                if (subref.orphan
+                    and isinstance(safe_realtype_shallow(typ), TArray))
+                else subref)
+
     elif real_basetype.is_int and real_basetype.is_bitfields:
         member = real_basetype.members.get(sub)
         if member is None:
@@ -4844,7 +4859,9 @@ class ArrayRef(LValue):
     @auto_init
     def __init__(self, site, expr, idx):
         expr_type = realtype_shallow(expr.ctype())
-        self.type = conv_const(expr_type.const, expr_type.base)
+        self.type = conv_const(expr_type.const
+                               and isinstance(expr_type, TArray),
+                               expr_type.base)
     def __str__(self):
         return '%s[%s]' % (self.expr, self.idx)
     def read(self):
@@ -4893,6 +4910,8 @@ def mkStringCharRef(site, expr, idx):
 # Not considered addressable, as the address of an elem is very easily
 # invalidated.
 # Users have to use .c_buf() instead to acknowledge that possibility.
+# TODO(RAII): users may shoot themselves in the foot anyway, if the basetype
+# is an array or a struct with array member. What do we do about that?
 class VectorRef(Expression):
     slots = ('type',)
     priority = dml.expr.Apply.priority
@@ -4901,6 +4920,7 @@ class VectorRef(Expression):
 
     @auto_init
     def __init__(self, site, expr, idx):
+        assert not expr.orphan
         typ = safe_realtype_shallow(self.expr.ctype())
         self.type = conv_const(typ.const, typ.base)
 
@@ -4913,6 +4933,15 @@ class VectorRef(Expression):
         return ('DML_VECT_ELEM(%s, %s, %s)'
                 % (base_typ.declaration(''), self.expr.read(),
                    self.idx.read()))
+
+    @property
+    def is_stack_allocated(self):
+        return self.expr.is_stack_allocated
+
+    @property
+    def is_pointer_to_stack_allocation(self):
+        return (isinstance(safe_realtype_shallow(self.type), TArray)
+                and self.is_stack_allocated)
 
 def mkVectorRef(site, expr, idx):
     if idx.constant and idx.value < 0:
@@ -5029,6 +5058,8 @@ def mkCast(site, expr, new_type):
         # these casts are permitted by C only if old and new are
         # the same type, which is useless
         return Cast(site, expr, new_type)
+    if isinstance(real, (TVoid, TArray, TFunction)):
+        raise ECAST(site, expr, new_type)
     if old_type.cmp(real) == 0:
         if (old_type.is_int
             and not old_type.is_endian
@@ -5041,7 +5072,7 @@ def mkCast(site, expr, new_type):
         raise ECAST(site, expr, new_type)
     if isinstance(real, TExternStruct):
         raise ECAST(site, expr, new_type)
-    if isinstance(real, (TVoid, TArray, TVector, TTraitList, TFunction)):
+    if isinstance(real, (TVector, TTraitList)):
         raise ECAST(site, expr, new_type)
     if isinstance(old_type, (TVoid, TStruct, TVector, TTraitList, TTrait)):
         raise ECAST(site, expr, new_type)
@@ -5599,19 +5630,26 @@ class CompoundLiteral(Orphan):
         return f'(({self.type.declaration("")}){self.init.read()})'
 
 class ArrayCompoundLiteral(Expression):
-    slots = ('read_adopted',)
+    slots = ('read_adopted', 'is_stack_allocated')
     # TODO(RAII) writable?
     addressable = True
     c_lval = True
     @auto_init
     def __init__(self, site, init, type):
         assert isinstance(init, (CompoundInitializer, MemsetInitializer))
+        self.is_stack_allocated = isinstance(TopRAIIScope.active,
+                                             MethodRAIIScope)
         self.read_adopted = RAIIScope.reserve_orphan_adoption(
             site, CompoundLiteral(site, init, type))
+
     def __str__(self):
         return 'cast(%s, %s)' % (self.init, self.type)
     def read(self):
         return self.read_adopted()
+
+    @property
+    def is_pointer_to_stack_allocation(self):
+        return self.is_stack_allocated
 
 class VectorCompoundLiteral(Orphan):
     '''Initializer for a variable of vector type, using the
@@ -5670,14 +5708,14 @@ class RAIIDupe(Orphan):
 
 class AdoptedOrphan(Expression):
     priority = dml.expr.Apply.priority
-    slots = ('read_adopted', 'constant', 'value')
+    slots = ('read_adopted', 'is_stack_allocated')
     c_lval = True
     @auto_init
     def __init__(self, site, expr):
         assert expr.orphan
+        self.is_stack_allocated = isinstance(TopRAIIScope.active,
+                                             MethodRAIIScope)
         self.read_adopted = RAIIScope.reserve_orphan_adoption(site, expr)
-        self.constant = expr.constant
-        self.value = expr.value if expr.constant else None
 
     def __str__(self):
         return str(self.expr)
@@ -5947,6 +5985,13 @@ class StaticRAIIScope(TopRAIIScope):
     def scope_stack(self):
         return [self]
 
+# TODO(RAII): Very niche, and currently unleveraged! This is for orphans
+# adopted in the constant initializers of sessions/saveds. For example...
+#
+# session int *p = cast({0, 1, 2, 3}, int[4]);
+#
+# But no expression using RAIIScope.reserve_orphan_adoption is currently
+# considered constant.
 class SessionRAIIScope(TopRAIIScope):
     def reserve_orphan_adoption(self, site, expr, subscope):
         assert subscope is self
@@ -6058,7 +6103,6 @@ class StringAppend(Statement):
 class StringCAppend(Statement):
     @auto_init
     def __init__(self, site, tgt, src):
-        assert not src.orphan
         assert tgt.c_lval
 
     def toc_stmt(self):
@@ -6070,8 +6114,8 @@ def mkStringAppend(site, tgt, src):
         raise ERVAL(tgt, '+=')
     elif deep_const(tgt.ctype()):
         raise ENCONST(site)
-    if isinstance(src, FromCString):
-        return StringCAppend(site, tgt, src.expr)
+    if isinstance(src, StringConstant):
+        return StringCAppend(site, tgt, src)
     return StringAppend(site, tgt, mkAdoptedOrphan(site, src))
 
 class VectorAppend(Statement):
@@ -6176,6 +6220,11 @@ class VectorCBufApply(Expression):
 
     def ctype(self):
         return TPtr(self.basetype)
+
+    @property
+    def is_pointer_to_stack_allocation(self):
+        return self.expr.is_stack_allocated
+
 
 mkVectorCBuf = VectorCBufRef
 

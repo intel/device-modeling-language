@@ -2895,14 +2895,28 @@ def stmt_assignop(stmt, location, scope):
     if ttype.is_raii:
         tmp_ret_sym.init = get_initializer(site, ttype, None, location, scope)
 
+    # TODO(RAII): Not ideal... 'p += m();' where m is a throwing method
+    # returning an integer and p is a pointer will fail.
     method_invocation = try_codegen_invocation(
         site, [src_ast], [mkLocalVariable(tgt.site, tmp_ret_sym)], location,
         scope)
     if method_invocation:
         src = OrphanWrap(site, mkLocalVariable(tmp_ret_sym.site, tmp_ret_sym))
     else:
-        src = (eval_initializer(site, ttype, src_ast, location, scope, False)
-               .as_expr(ttype))
+        # Only use eval_initializer if we have to. This is because the RHS
+        # of a binary operator need not be compatible with the LHS, such as
+        # 'p += 4', where 'p' is a pointer.
+        # HACK/TODO(RAII): scalar initializers may receive special treatment
+        # by eval_initializer. Currently, that only applies to string literals,
+        # which are valid initializers for TString. This one case gets handled
+        # by mkStringAppend. However, one could imagine additional cases, with
+        # which one may use a binary operator with, could be added in the
+        # future.
+        if src_ast.kind != 'initializer_scalar':
+            src = (eval_initializer(site, ttype, src_ast, location, scope,
+                                    False).as_expr(ttype))
+        else:
+            src = codegen_expression(src_ast.args[0], location, scope)
 
     operation = None
     # TODO(RAII) this is somewhat hacky.

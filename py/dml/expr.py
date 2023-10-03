@@ -231,17 +231,14 @@ class Expression(Code):
 
     @property
     def is_stack_allocated(self):
-        '''Returns true only if it's known that writing to this expression will
-           write to stack-allocated data.
-           This may only be called if the expression is writable or
-           addressable'''
-        assert self.writable or self.addressable
-        return False
+        '''Returns true only if it's known that the storage for the value that
+           this expression evaluates to is temporary to a method scope'''
+        return self.orphan
 
     @property
     def is_pointer_to_stack_allocation(self):
         '''Returns True only if it's known that the expression is a pointer
-           to stack-allocated data'''
+           to storage that is temporary to a method scope'''
         return False
 
     def incref(self):
@@ -306,12 +303,12 @@ class Lit(Expression):
         return self.str or self.cexpr
     def read(self):
         return self.cexpr
-    def write(self, source):
-        assert self.writable
-        return source.assign_to(self.cexpr, self.type)
     @property
     def writable(self):
-        return self.type is not None
+        return self.c_lval
+    @property
+    def addressable(self):
+        return self.c_lval
     @property
     def c_lval(self):
         return self.type is not None

@@ -3210,12 +3210,6 @@ UNUSED static void _dml_vect_set_compound_init_raii(
     memcpy(tgt->elements, src, no_elements*elem_size);
 }
 
-// TODO(RAII): Just replace usages with _dml_vect_append_array?
-UNUSED static inline void _dml_vect_append_compound_init_raii(
-    size_t elem_size, _dml_vect_t *tgt, const void *src, uint32 no_elements) {
-    _dml_vect_append_array(elem_size, tgt, src, no_elements);
-}
-
 // TODO(RAII): Not currently used.
 #define _DML_RAII_MOVED(x) (({                                                \
             typeof(x) *__val = &(x);                                          \
