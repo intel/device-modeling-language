@@ -3478,13 +3478,25 @@ method n() -> (bool, int) {
 
 <pre>
 delete <em>expr</em>;
+delete\<<em>spec</em>\> <em>expr</em>;
 </pre>
 
-Deallocates the memory pointed to by the result of evaluating
-*`expr`*. The memory must have been allocated with the
-`new` operator, and must not have been deallocated previously.
-Equivalent to `delete` in C++; however, in DML, `delete`
-can only be used as a statement, not as an expression.
+Deallocates the memory pointed to by the result of evaluating *`expr`*.
+
+*spec* specifies an *allocation format*, and can either be `enriched` or
+`extern`. If not explicitly specified, *spec* will default to `extern`. This is
+for backwards compatibility reasons &mdash; in the future the default will be
+changed to be `enriched`.
+
+The *enriched* format uses an allocation format specific to the device model,
+and so can *only* be used in order to deallocate storage previously allocated
+via [`new<enriched>`](#new-expressions) by the same device model.
+
+The *extern* format compiles the `delete` statement to a use of `MM_FREE`,
+meaning it may be used to deallocate storage previously allocated by any use of
+Simics's memory allocation functions/macros (such as `MM_MALLOC`.) This includes
+storage allocated via [`new<extern>`](#new-expressions) (which `new` without
+allocation format specifier is equivalent to).
 
 ### Try Statements
 
@@ -4145,16 +4157,39 @@ independent method callback(int i, void *aux) {
 new <em>type</em>
 
 new <em>type</em>[<em>count</em>]
+
+new\<<em>spec</em>\> <em>type</em>
+
+new\<<em>spec</em>\> <em>type</em>[<em>count</em>]
 </pre>
 
 Allocates a chunk of memory large enough for a value of the specified
-type.  If the second form is used, memory for *count* values will
+type.  If a form specifying *count* is used, then memory for *count* values will
 be allocated.  The result is a pointer to the allocated memory. (The
 pointer is never null; if allocation should fail, the Simics
 application will be terminated.)
 
+*spec* specifies an *allocation format*, and can either be `enriched` or
+`extern`. If not explicitly specified, *spec* will default to `extern`. This is
+for backwards compatibility reasons &mdash; in the future the default will be
+changed to be `enriched`.
+
+The *enriched* format uses an allocation format specific to the device model,
+and *must* be used in order to allocate storage for values of [resource-enriched
+(RAII) type](#raii-types). The fact the allocation format is model-specific
+comes with the drawback that a pointer created with `new<enriched>` *cannot be
+freed* using `MM_FREE`/`free`: only code from the same device model can free it,
+and only by using [`delete<enriched>`](#delete-statements).
+
+The *extern* format compiles `new` to a use of `MM_ZALLOC`, meaning a pointer
+allocated this way may be freed using `MM_FREE` outside of the device model.
+However, this format does not support allocating storage for values of
+resource-enriched type.
+
 When the memory is no longer needed, it should be deallocated using a
-`delete` statement.
+[`delete` statement](#delete-statements). The allocation format specified for the
+`delete` statement *must* match that of the `new` expression used to allocate
+the pointer.
 
 ### Cast Expressions
 

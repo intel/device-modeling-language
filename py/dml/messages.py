@@ -1603,6 +1603,34 @@ class EANONRAIISTRUCT(DMLError):
     fmt = ("method-local anonymous struct declared that has a member of "
            + "resource-enriched (RAII) type")
 
+class ENEWRAII(DMLError):
+    """
+    A `new` expression not specified as `enriched` can't be used to allocate a
+    storage for values of resource-enriched (RAII) type.
+    To address this, use `new<enriched>` instead of `new` or `new<extern>`.
+    """
+    fmt = ("'new' expression not specified as 'enriched' used to create "
+           + "pointer with resource-enriched (RAII) basetype '%s'. To address "
+           + "this, use 'new<enriched>' instead of '%s', and ensure any "
+           + "pointer allocated this way is only deallocated using "
+           + "'delete<enriched>'!")
+
+class EDELETERAII(DMLError):
+    """
+    A `delete` statement not specified as `enriched` was used on a pointer with
+    resource-enriched (RAII) basetype. Except for extremely niche cases, this
+    is incorrect: an allocated pointer of resource-enriched basetype can only
+    be validly created through a `new` expression specified as `enriched`.
+
+    To address this, use `delete<enriched>` instead of `delete` or
+    `delete<extern>`.
+    """
+    version = "1.4"
+    fmt = ("'delete' statement not specified as 'enriched' used on pointer "
+          + "with resource-enriched (RAII) basetype '%s'. "
+          + "To address this, use 'delete<enriched>' instead of '%s', and "
+          + "ensure any pointer deallocated through this 'delete' is only "
+          + "allocated using 'new<enriched>'!")
 
 class EIDENTSIZEOF(DMLError):
     """

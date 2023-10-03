@@ -1824,15 +1824,33 @@ def typeop_arg_par(t):
     '''typeoparg : LPAREN ctypedecl RPAREN'''
     t[0] = t[2]
 
+@prod_dml14
+def maybe_newdelete_spec_yes(t):
+    '''maybe_newdelete_spec : LT ID GT
+                            | LT EXTERN GT'''
+    supported_specs = ('extern', 'enriched')
+    spec = t[2]
+    if spec not in supported_specs:
+        suggestions = ' or '.join(f"'{spec}'" for spec in supported_specs)
+        report(ESYNTAX(site(t, 1), spec,
+                      f"expected new/delete specification ({suggestions})"))
+        spec = 'enriched'
+    t[0] = spec
+
+@prod
+def maybe_newdelete_spec_no(t):
+    '''maybe_newdelete_spec : '''
+    t[0] = None
+
 @prod
 def expression_new(t):
-    '''expression : NEW ctypedecl'''
-    t[0] = ast.new(site(t), t[2], None)
+    '''expression : NEW maybe_newdelete_spec ctypedecl'''
+    t[0] = ast.new(site(t), t[2], t[3], None)
 
 @prod
 def expression_new_array(t):
-    '''expression : NEW ctypedecl LBRACKET expression RBRACKET'''
-    t[0] = ast.new(site(t), t[2], t[4])
+    '''expression : NEW maybe_newdelete_spec ctypedecl LBRACKET expression RBRACKET'''
+    t[0] = ast.new(site(t), t[2], t[3], t[5])
 
 @prod
 def expression_paren(t):
@@ -2200,8 +2218,8 @@ def case_blocks_list_hashifelse(t):
 # Delete is an expression in C++, not a statement, but we don't care.
 @prod
 def statement_delete(t):
-    'statement_except_hashif : DELETE expression SEMI'
-    t[0] = ast.delete(site(t), t[2])
+    'statement_except_hashif : DELETE maybe_newdelete_spec expression SEMI'
+    t[0] = ast.delete(site(t), t[2], t[3])
 
 @prod
 def statent_try(t):

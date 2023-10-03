@@ -1600,13 +1600,22 @@ def expr_typeop(tree, location, scope):
 
 @expression_dispatcher
 def expr_new(tree, location, scope):
-    [t, count] = tree.args
+    [spec, t, count] = tree.args
     (struct_defs, t) = eval_type(t, tree.site, location, scope)
+    if t.is_raii and spec != 'enriched':
+        report(ENEWRAII(tree.site, t.describe(),
+                        'new' + f'<{spec}>'*(spec is not None)))
+        spec = 'enriched'
+
     for (site, _) in struct_defs:
         report(EANONSTRUCT(site, "'new' expression"))
     if count:
         count = codegen_expression(count, location, scope)
-    return mkNew(tree.site, t, count)
+    if spec == 'enriched':
+        return mkNew(tree.site, t, count)
+    else:
+        assert spec is None or spec == 'extern'
+        return mkNewExtern(tree.site, t, count)
 
 @expression_dispatcher
 def expr_apply(tree, location, scope):
@@ -3107,9 +3116,22 @@ def stmt_default(stmt, location, scope):
 
 @statement_dispatcher
 def stmt_delete(stmt, location, scope):
-    [expr] = stmt.args
+    [spec, expr] = stmt.args
     expr = codegen_expression(expr, location, scope)
-    return [mkDelete(stmt.site, expr)]
+    etype = safe_realtype_shallow(expr.ctype())
+    if not isinstance(etype, TPtr):
+        raise ENOPTR(stmt.site, expr)
+    if etype.base.is_raii and spec != 'enriched':
+        report(EDELETERAII(stmt.site,
+                           etype.base.describe(),
+                           'delete' + f'<{spec}>'*(spec is not None)))
+        spec = 'enriched'
+
+    if spec == 'enriched':
+        return [mkDelete(stmt.site, expr)]
+    else:
+        assert spec is None or spec == 'extern'
+        return [mkDeleteExtern(stmt.site, expr)]
 
 def probable_loggroups_specification(expr):
     subexprs = [expr]

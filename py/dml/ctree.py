@@ -51,6 +51,7 @@ __all__ = (
     'mkAssert',
     'mkReturn',
     'mkDelete',
+    'mkDeleteExtern',
     'mkExpressionStatement',
     'mkAfter',
     'mkAfterOnHook',
@@ -126,6 +127,7 @@ __all__ = (
     'mkHookSendRef', 'HookSendRef',
     'mkHookSendApply', 'HookSendApply',
     'mkNew',
+    'mkNewExtern',
     #'Constant',
     'mkIntegerConstant', 'IntegerConstant',
     'mkIntegerLiteral',
@@ -582,8 +584,16 @@ class Delete(Statement):
         self.linemark()
         out(f'DML_DELETE({self.expr.read()});\n')
 
-def mkDelete(site, expr):
-    return Delete(site, expr)
+mkDelete = Delete
+
+class DeleteExtern(Statement):
+    @auto_init
+    def __init__(self, site, expr): pass
+    def toc_stmt(self):
+        self.linemark()
+        out(f'MM_FREE({self.expr.read()});\n')
+
+mkDeleteExtern = DeleteExtern
 
 class ExpressionStatement(Statement):
     @auto_init
@@ -3329,9 +3339,9 @@ class New(Expression):
         self.type = TPtr(newtype)
     def __str__(self):
         if self.count:
-            return 'new %s[%s]' % (self.newtype, self.count)
+            return 'new<enriched> %s[%s]' % (self.newtype, self.count)
         else:
-            return 'new %s' % self.newtype
+            return 'new<enriched> %s' % self.newtype
     def read(self):
         destructor = (self.raii_info.cident_destructor_array_item
                       if self.raii_info else '_dml_raii_destructor_ref_none')
@@ -3348,6 +3358,31 @@ def mkNew(site, newtype, count = None):
     else:
         info = None
     return New(site, newtype, count, info)
+
+class NewExtern(Expression):
+    priority = 160 # f()
+    slots = ('type',)
+    @auto_init
+    def __init__(self, site, newtype, count):
+        self.type = TPtr(newtype)
+    def __str__(self):
+        if self.count:
+            return 'new<extern> %s[%s]' % (self.newtype, self.count)
+        else:
+            return 'new<extern> %s' % self.newtype
+    def read(self):
+        t = self.newtype.declaration('')
+        if self.count:
+            return 'MM_ZALLOC(%s, %s)' % (self.count.read(), t)
+        else:
+            return 'MM_ZALLOC(1, %s)' % (t)
+
+
+def mkNewExtern(site, newtype, count = None):
+    assert not newtype.is_raii
+    if count:
+        count = as_int(count)
+    return NewExtern(site, newtype, count)
 
 class ListItems(metaclass=abc.ABCMeta):
     '''A series of consecutive list elements, where each list element

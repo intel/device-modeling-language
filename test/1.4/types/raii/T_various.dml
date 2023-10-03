@@ -129,7 +129,7 @@ method init() {
     assert prev_len == 36 && p->size == 128; // Shrunk to _DML_BITCEIL(36 + 1)*2
     s_ = "";
     assert p->size == 32; // Shrunk to _DML_STRING_INITIAL_SIZE
-    local string *ps = new string;
+    local string *ps = new<enriched> string;
     local int *pater = cast({1,2,3}, int[3]);
     assert pater[1] == 2;
     try {
@@ -153,12 +153,10 @@ method init() {
     assert *ps == "som bristande båge låga.";
     assert strcmp(cast(this, t).whatdoesthisevenmean,
                   "En ondskans tid nu domnar min hand") == 0;
-    delete ps;
+    delete<enriched> ps;
 
     local (string sa, string sb) = splitAt("FLYGANDESPJUT", 8);
     assert sa == "FLYGANDE" && sb == "SPJUT";
-    local char *trab = new char[10];
-    delete trab;
 
     local (string sST, vect(int) vST) = memo();
     assert sST == "SOM EN VÄXANDE VÅG";
