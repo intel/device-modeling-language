@@ -6,6 +6,16 @@ dml 1.4;
 
 device test;
 
+method m(int i) -> (int) throws {
+    if (i > 4) throw;
+    return i;
+}
+
+method ms(int i) -> (string) throws {
+    if (i > 4) throw;
+    return mk_string_f("%d", i);
+}
+
 method init() {
     local int i;
 
@@ -55,9 +65,28 @@ method init() {
     c[++j] += ++i;
     assert c[1] == 4 && j == 1 && i == 4;
 
+    // += with method calls
+    i = 0;
+    try {
+        i += m(i + 4);
+        assert i == 4;
+    } catch assert false;
+    try {
+        i += m(i + 4);
+        assert false;
+    } catch {
+        assert i == 4;
+    }
+
     // multiple simultaneous assignment
     i = 1;
     j = 0;
     (i, j) = (j, i);
     assert i == 0 && j == 1;
+
+    // += with target, source of nonequal types but compatible with +
+    local int arr[4] = {0, 1, 2, 3};
+    local int *p = arr;
+    p += 2;
+    assert *p == 2;
 }

@@ -73,7 +73,11 @@ def mkglobals(stmts):
     by_name = {}
     assert not global_scope.symbols()
     for stmt in stmts:
-        if stmt.kind in ['extern', 'extern_typedef', 'dml_typedef']:
+        if stmt.kind == 'extern':
+            ((_, _, cname, _), name) = stmt.args
+            if name is None:
+                name = cname
+        elif stmt.kind in {'extern_typedef', 'dml_typedef'}:
             ((_, _, name, _),) = stmt.args
         else:
             name = stmt.args[0]
@@ -150,7 +154,9 @@ def mkglobals(stmts):
                     trait_body = None
                 templates[name] = (stmt.site, template_body, trait_body)
             elif stmt[0] == 'extern':
-                (_, esite, (_, site, name, typ)) = stmt
+                (_, esite, (_, site, cname, typ), dmlname) = stmt
+                if dmlname is None:
+                    dmlname = cname
                 if typ is None:
                     # guaranteed by grammar
                     assert dml.globals.dml_version == (1, 2)
@@ -164,8 +170,8 @@ def mkglobals(stmts):
                         allow_void=site.dml_version() == (1, 2))
                     # any substructs are converted to anonymous extern structs
                     assert not struct_defs
-                new_symbols.append(LiteralSymbol(name, typ, site))
-                externs.append((name, site, typ))
+                new_symbols.append(LiteralSymbol(dmlname, typ, site, cname))
+                externs.append((cname, site, typ))
             elif stmt[0] == 'extern_typedef':
                 (_, site, (_, _, name, typ)) = stmt
                 assert not typedefs.get(name, None)
@@ -240,7 +246,7 @@ def check_named_types(t):
         t.resolve()
         for (mn, mt) in t.members.items():
             check_named_types(mt)
-    elif isinstance(t, (TPtr, TVector, TArray)):
+    elif isinstance(t, (TPtr, TVectorLegacy, TVector, TArray)):
         check_named_types(t.base)
     elif isinstance(t, TFunction):
         for pt in t.input_types:
@@ -252,7 +258,7 @@ def check_named_types(t):
     elif isinstance(t, THook):
         for msg_t in t.msg_types:
             check_named_types(msg_t)
-    elif isinstance(t, (TVoid, IntegerType, TBool, TFloat, TTrait)):
+    elif isinstance(t, (TVoid, IntegerType, TBool, TFloat, TTrait, TString)):
         pass
     else:
         raise ICE(t.declaration_site, "unknown type %r" % t)
@@ -302,13 +308,13 @@ def type_deps(t, include_structs, expanded_typedefs):
         return deps
     elif isinstance(t, TArray):
         return type_deps(t.base, True, expanded_typedefs)
-    elif isinstance(t, (TPtr, TVector)):
+    elif isinstance(t, (TPtr, TVectorLegacy, TVector)):
         return type_deps(t.base, False, expanded_typedefs)
     elif isinstance(t, TFunction):
         return ([dep for pt in t.input_types
                  for dep in type_deps(pt, False, expanded_typedefs)]
                 + type_deps(t.output_type, False, expanded_typedefs))
-    elif isinstance(t, (IntegerType, TVoid, TBool, TFloat, TTrait)):
+    elif isinstance(t, (IntegerType, TVoid, TBool, TFloat, TTrait, TString)):
         return []
     elif isinstance(t, TExternStruct):
         # extern structs are assumed to be self-contained
@@ -626,6 +632,8 @@ def merge_parameters(defs, obj_specs):
 
 def typecheck_method_override(m1, m2):
     '''check that m1 can override m2'''
+    # TODO(RAII) the usage of cmp instead of cmp_fuzzy may break old code,
+    # though I doubt it
     assert m1.kind == m2.kind == 'method'
     (_, (inp1, outp1, throws1, qualifiers1, _), _, _, _) \
         = m1.args
@@ -666,7 +674,8 @@ def typecheck_method_override(m1, m2):
             # TODO move to caller
             (_, type1) = eval_type(t1, a1.site, None, global_scope)
             (_, type2) = eval_type(t2, a2.site, None, global_scope)
-            if safe_realtype(type1).cmp(safe_realtype(type2)) != 0:
+            if safe_realtype_unconst(type1).cmp(
+                    safe_realtype_unconst(type2)) != 0:
                 raise EMETH(a1.site, a2.site,
                             f"mismatching types in input argument {n1}")
 
@@ -675,7 +684,8 @@ def typecheck_method_override(m1, m2):
             ((n1, t1), (n2, t2)) = (a1.args, a2.args)
             (_, type1) = eval_type(t1, a1.site, None, global_scope)
             (_, type2) = eval_type(t2, a2.site, None, global_scope)
-            if safe_realtype(type1).cmp(safe_realtype(type2)) != 0:
+            if safe_realtype_unconst(type1).cmp(
+                    safe_realtype_unconst(type2)) != 0:
                 msg = "mismatching types in return value"
                 if len(outp1) > 1:
                     msg += f" {i + 1}"
@@ -1864,6 +1874,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             with ExitStack() as stack:
                 stack.enter_context(ErrorContext(param, None))
                 stack.enter_context(crep.DeviceInstanceContext())
+                stack.enter_context(ctree.StaticRAIIScope())
                 try:
                     try:
                         # Evaluate statically, because it triggers caching
@@ -1930,6 +1941,10 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                 report(ENAMEID(name_ast.site, name))
                 continue
             if method.throws or len(method.outp) > 1:
+                report(EEXPORT(method.site, export.site))
+                continue
+            if any(t.is_raii
+                   for (_, t) in itertools.chain(method.inp, method.outp)):
                 report(EEXPORT(method.site, export.site))
                 continue
             func = method_instance(method)

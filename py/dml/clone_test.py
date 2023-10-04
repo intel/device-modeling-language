@@ -21,13 +21,14 @@ class TestClone(unittest.TestCase):
                     dt.TFloat("a"),
                     dt.TArray(typ0, ctree.mkIntegerLiteral(0, 2)),
                     dt.TPtr(typ0),
-                    dt.TVector(typ0),
+                    dt.TVectorLegacy(typ0),
                     dt.TTrait(object()),
                     dt.TStruct({"name": types.TInt(32, False)}),
                     dt.TLayout("big-endian", {}),
                     dt.TFunction([], dt.TVoid()),
                     dt.TDevice("a")):
             typ_clone = typ.clone()
+
             self.assertEqual(
                 types.realtype(typ_clone).cmp(types.realtype(typ)), 0)
             self.assertEqual(

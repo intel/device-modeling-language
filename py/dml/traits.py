@@ -394,11 +394,11 @@ def typecheck_method_override(left, right):
     if throws0 != throws1:
         raise EMETH(site0, site1, "different nothrow annotations")
     for ((n, t0), (_, t1)) in zip(inp0, inp1):
-        if realtype(t0).cmp(realtype(t1)) != 0:
+        if safe_realtype_unconst(t0).cmp(safe_realtype_unconst(t1)) != 0:
             raise EMETH(site0, site1,
                         "mismatching types in input argument %s" % (n,))
     for (i, ((_, t0), (_, t1))) in enumerate(zip(outp0, outp1)):
-        if realtype(t0).cmp(realtype(t1)) != 0:
+        if safe_realtype_unconst(t0).cmp(safe_realtype_unconst(t1)) != 0:
             raise EMETH(site0, site1,
                         "mismatching types in output argument %d" % (i + 1,))
 
@@ -783,10 +783,10 @@ class Trait(SubTrait):
                     expr = TraitUpcast(site, expr, impl.vtable_trait)
                 return TraitMethodDirect(site, expr, impl)
         if name in self.vtable_methods:
-            (_, inp, outp, throws, independent, _, _) = \
+            (_, inp, outp, throws, independent, _, memoized) = \
                 self.vtable_methods[name]
             return TraitMethodIndirect(site, expr, name, inp, outp, throws,
-                                       independent)
+                                       independent, memoized)
         if name in self.vtable_params:
             (_, ptype) = self.vtable_params[name]
             return TraitParameter(site, expr, name, ptype)

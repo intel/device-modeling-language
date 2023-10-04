@@ -18,6 +18,7 @@ __all__ = (
     'NonValueArrayRef',
     'mkLit', 'Lit',
     'mkApply', 'mkApplyInits', 'Apply',
+    'Orphan', 'OrphanWrap',
     'mkNullConstant', 'NullConstant',
     'StaticIndex',
     'typecheck_inargs',
@@ -173,10 +174,28 @@ class Expression(Code):
     # bitslicing.
     explicit_type = False
 
-    # Can the expression be assigned to?
+    # An expression is considered orphan if it evaluates to a value of an
+    # object that is never accessed again past the particular evaluation of the
+    # expression. This is typically known by virtue of the C representation of
+    # the expression not being an lvalue; for example, the return value of a
+    # function call can never be accessed save by the function call itself.
+    # Orphanhood is only important for the RAII architecture. This means that
+    # there are some expressions that *could* be considered orphans, and yet
+    # are not, as they cannot be of RAII type and so orphanhood status is
+    # irrelevant. Integer literals are an example of this.
+    orphan = False
+
+    # Can the expression be assigned to in DML?
     # If writable is True, there is a method write() which returns a C
     # expression to make the assignment.
     writable = False
+
+    # Can the address of the expression be taken safely in DML?
+    # This implies c_lval, and typically implies writable.
+    addressable = False
+
+    # Is the C representation of the expression an lvalue?
+    c_lval = False
 
     def __init__(self, site):
         assert not site or isinstance(site, Site)
@@ -193,7 +212,14 @@ class Expression(Code):
 
     # Produce a C expression but don't worry about the value.
     def discard(self):
-        return self.read()
+        if self.orphan and self.ctype().is_raii:
+            from .codegen import get_raii_type_info
+            # TODO(RAII) oh i dislike this. I'd rather discard() produced a statement
+            return get_raii_type_info(self.ctype()).read_destroy(self.read())
+        elif self.constant:
+            return '(void)0'
+        else:
+            return self.read()
 
     def ctype(self):
         '''The corresponding DML type of this expression'''
@@ -204,9 +230,15 @@ class Expression(Code):
         return mkApplyInits(self.site, self, inits, location, scope)
 
     @property
+    def is_stack_allocated(self):
+        '''Returns true only if it's known that the storage for the value that
+           this expression evaluates to is temporary to a method scope'''
+        return self.orphan
+
+    @property
     def is_pointer_to_stack_allocation(self):
         '''Returns True only if it's known that the expression is a pointer
-           to stack-allocated data'''
+           to storage that is temporary to a method scope'''
         return False
 
     def incref(self):
@@ -219,6 +251,11 @@ class Expression(Code):
         "Create an identical expression, but with a different site."
         return type(self)(
             site, *(getattr(self, name) for name in self.init_args[2:]))
+
+    def write(self, source):
+        assert self.c_lval
+        return source.assign_to(self.read(), self.ctype())
+
 
 class NonValue(Expression):
     '''An expression that is not really a value, but which may validly
@@ -266,11 +303,14 @@ class Lit(Expression):
         return self.str or self.cexpr
     def read(self):
         return self.cexpr
-    def write(self, source):
-        assert self.writable
-        return "%s = %s" % (self.cexpr, source.read())
     @property
     def writable(self):
+        return self.c_lval
+    @property
+    def addressable(self):
+        return self.c_lval
+    @property
+    def c_lval(self):
         return self.type is not None
 
 mkLit = Lit
@@ -291,6 +331,32 @@ class NullConstant(Expression):
         return NullConstant(site)
 
 mkNullConstant = NullConstant
+
+class Orphan(Expression):
+    """Expressions that evaluate to a value that is allocated on the stack, but
+    not belonging to any local variable. Archetypical example are function
+    applications."""
+    orphan = True
+
+class OrphanWrap(Orphan):
+    @auto_init
+    def __init__(self, site, expr): pass
+
+    def ctype(self):
+        return self.expr.ctype()
+
+    @property
+    def c_lval(self):
+        return self.expr.c_lval
+
+    def __str__(self):
+        return str(self.expr)
+
+    def read(self):
+        return self.expr.read()
+
+    def discard(self):
+        return self.expr.discard()
 
 def typecheck_inargs(site, args, inp, kind="function", known_arglen=None):
     arglen = len(args) if known_arglen is None else known_arglen
@@ -399,16 +465,22 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
             if init.kind != 'initializer_scalar':
                 raise ESYNTAX(init.site, '{',
                               'variadic arguments must be simple expressions')
-            args.append(coerce_if_eint(codegen_expression(init.args[0],
-                                                          location, scope)))
+            arg = codegen_expression(init.args[0], location, scope)
+            if arg.ctype().is_raii:
+                is_string = isinstance(safe_realtype_shallow(arg.ctype()),
+                                       TString)
+                raise ERAIIVARARG(arg.site, is_string)
+            args.append(coerce_if_eint(arg))
 
     return args
 
 class Apply(Expression):
+    # An Apply expression is always orphan except for the application of
+    # memoized methods.
     priority = 160
     explicit_type = True
     @auto_init
-    def __init__(self, site, fun, args, funtype):
+    def __init__(self, site, fun, args, funtype, orphan):
         pass
     def ctype(self):
         return self.funtype.output_type
@@ -419,7 +491,7 @@ class Apply(Expression):
         return (self.fun.read() +
                 '(' + ", ".join(e.read() for e in self.args) + ')')
 
-def mkApplyInits(site, fun, inits, location, scope):
+def mkApplyInits(site, fun, inits, location, scope, orphan=True):
     '''Apply a C function to initializers'''
     funtype = fun.ctype()
 
@@ -442,9 +514,9 @@ def mkApplyInits(site, fun, inits, location, scope):
         [(str(i + 1), t) for (i, t) in enumerate(funtype.input_types)],
         location, scope, 'function', funtype.varargs)
 
-    return Apply(site, fun, args, funtype)
+    return Apply(site, fun, args, funtype, orphan)
 
-def mkApply(site, fun, args):
+def mkApply(site, fun, args, orphan=True):
     '''Apply a C function'''
     funtype = fun.ctype()
 
@@ -485,7 +557,7 @@ def mkApply(site, fun, args):
     else:
         args = [coerce_if_eint(arg) for arg in args[:known_arglen]]
     args.extend(coerced_varargs)
-    return Apply(site, fun, args, funtype)
+    return Apply(site, fun, args, funtype, orphan)
 
 class StaticIndex(NonValue):
     """A reference to the index variable of a containing object array,

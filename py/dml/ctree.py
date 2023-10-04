@@ -20,7 +20,8 @@ from .output import out, quote_filename
 from .types import *
 from .expr import *
 from .expr_util import *
-from .slotsmeta import auto_init
+from .slotsmeta import auto_init, SlotsMeta
+from .set import Set
 from . import dmlparse, output
 import dml.globals
 # set from codegen.py
@@ -31,11 +32,11 @@ __all__ = (
     'source_for_assignment',
 
     'Location',
-
+    'RAIIScope', 'MethodRAIIScope', 'UnusedMethodRAIIScope',
     'ExpressionSymbol',
     'LiteralSymbol',
 
-    'mkCompound',
+    'mkCompound', 'mkCompoundRAII',
     'mkNull', 'Null',
     'mkLabel',
     'mkUnrolledLoop',
@@ -50,6 +51,7 @@ __all__ = (
     'mkAssert',
     'mkReturn',
     'mkDelete',
+    'mkDeleteExtern',
     'mkExpressionStatement',
     'mkAfter',
     'mkAfterOnHook',
@@ -59,15 +61,26 @@ __all__ = (
     'mkDoWhile',
     'mkFor',
     'mkForeachSequence', 'ForeachSequence',
+    'mkForeachVector', 'ForeachVector', 'ForeachVectorIterRef',
     'mkSwitch',
     'mkSubsequentCases',
     'mkCase',
     'mkDefault',
-    'mkVectorForeach',
+    'mkLegacyVectorForeach',
     'mkBreak',
     'mkContinue',
-    'mkAssignStatement',
+    'mkAssignStatement', 'AssignStatement',
     'mkCopyData',
+    'mkRAIIScopeClears',
+    'mkRAIIScopeDeclarations',
+    'mkRAIIScopeBindLVals',
+    'RAIIDupe',
+    'mkDiscardRef', 'DiscardRef',
+    'mkStringAppend',
+    'mkVectorAppend',
+    'mkStringCStrRef', 'mkStringCStrApply',
+    'FromCString',
+    'PseudoMethodRef',
     'mkIfExpr', 'IfExpr',
     #'BinOp',
     #'Test',
@@ -114,6 +127,7 @@ __all__ = (
     'mkHookSendRef', 'HookSendRef',
     'mkHookSendApply', 'HookSendApply',
     'mkNew',
+    'mkNewExtern',
     #'Constant',
     'mkIntegerConstant', 'IntegerConstant',
     'mkIntegerLiteral',
@@ -157,6 +171,7 @@ __all__ = (
     'mkStructDefinition',
     'mkDeclaration',
     'mkCText',
+    'CompoundLiteral', 'VectorCompoundLiteral',
     'Initializer', 'ExpressionInitializer', 'CompoundInitializer',
     'DesignatedStructInitializer', 'MemsetInitializer',
 
@@ -290,9 +305,15 @@ class Statement(Code):
     def __init__(self, site):
         self.site = site
         self.context = ErrorContext.current()
+    # Emit a single C statement
     @abc.abstractmethod
-    def toc(self): pass
-    def toc_inline(self): return self.toc()
+    def toc_stmt(self): pass
+    # Emit any number of C statements, but without any guarantee that they are
+    # in a dedicated C block
+    def toc(self): self.toc_stmt()
+    # Emit any number of C statements, with the guarantee that they are in a
+    # dedicated C block
+    def toc_inline(self): self.toc()
 
     def control_flow(self):
         '''Rudimentary control flow analysis: Return a ControlFlow object
@@ -314,19 +335,33 @@ class Statement(Code):
         example, see test/1.4/errors/T_ENORET_throw_after_break.dml.'''
         return ControlFlow(fallthrough=True)
 
+
 class Compound(Statement):
     @auto_init
     def __init__(self, site, substatements):
         assert isinstance(substatements, list)
 
+    def toc_stmt(self):
+        if all(sub.is_empty for sub in self.substatements):
+            if self.site:
+                self.linemark()
+            out(';\n')
+        else:
+            out('{\n', postindent = 1)
+            self.toc_inline()
+            out('}\n', preindent = -1)
+
     def toc(self):
-        out('{\n', postindent = 1)
-        self.toc_inline()
-        out('}\n', preindent = -1)
+        if any(sub.is_declaration for sub in self.substatements):
+            self.toc_stmt()
+        else:
+            self.toc_inline()
 
     def toc_inline(self):
         for substatement in self.substatements:
-            substatement.toc()
+            if not substatement.is_empty:
+                substatement.toc()
+
 
     def control_flow(self):
         acc = ControlFlow(fallthrough=True)
@@ -336,6 +371,18 @@ class Compound(Statement):
             if not acc.fallthrough:
                 return acc
         return acc
+
+    @property
+    def is_empty(self):
+        return all(sub.is_empty for sub in self.substatements)
+
+def mkCompoundRAII(site, statements, raii_scope):
+    assert raii_scope.completed
+    body = (([mkRAIIScopeDeclarations(site, raii_scope)]
+             if isinstance(raii_scope, MethodRAIIScope) else [])
+            + statements
+            + [mkRAIIScopeClears(site, [raii_scope])])
+    return mkCompound(site, body)
 
 def mkCompound(site, statements):
     "Create a simplified Compound() from a list of ctree.Statement"
@@ -356,9 +403,9 @@ def mkCompound(site, statements):
 
 class Null(Statement):
     is_empty = True
-    def toc_inline(self):
-        pass
     def toc(self):
+        pass
+    def toc_stmt(self):
         if self.site:
             self.linemark()
         out(';\n')
@@ -370,7 +417,7 @@ class Label(Statement):
         Statement.__init__(self, site)
         self.label = label
         self.unused = unused
-    def toc(self):
+    def toc_stmt(self):
         out('%s: %s;\n' % (self.label, 'UNUSED'*self.unused), preindent = -1,
             postindent = 1)
 
@@ -380,14 +427,15 @@ class UnrolledLoop(Statement):
     @auto_init
     def __init__(self, site, substatements, break_label):
         assert isinstance(substatements, list)
+        assert all(not sub.is_declaration for sub in substatements)
 
-    def toc(self):
+    def toc_stmt(self):
         self.linemark()
         out('{\n', postindent = 1)
         self.toc_inline()
         out('}\n', preindent = -1)
 
-    def toc_inline(self):
+    def toc(self):
         for substatement in self.substatements:
             substatement.toc()
         if self.break_label is not None:
@@ -404,7 +452,7 @@ mkUnrolledLoop = UnrolledLoop
 class Goto(Statement):
     @auto_init
     def __init__(self, site, label): pass
-    def toc(self):
+    def toc_stmt(self):
         out('goto %s;\n' % (self.label,))
 
     def control_flow(self):
@@ -435,7 +483,11 @@ class TryCatch(Statement):
     block with a catch label, to which Throw statements inside will go.'''
     @auto_init
     def __init__(self, site, label, tryblock, catchblock): pass
-    def toc_inline(self):
+    def toc_stmt(self):
+        out('{\n', postindent = 1)
+        self.toc()
+        out('}\n', preindent = -1)
+    def toc(self):
         self.tryblock.toc()
 
         if (dml.globals.dml_version != (1, 2)
@@ -449,10 +501,6 @@ class TryCatch(Statement):
             out('%s: ;\n' % (self.label,), postindent=1)
             self.catchblock.toc_inline()
             out('}\n', preindent=-1)
-    def toc(self):
-        out('{\n', postindent = 1)
-        self.toc_inline()
-        out('}\n', preindent = -1)
     def control_flow(self):
         tryflow = self.tryblock.control_flow()
         if not tryflow.throw:
@@ -469,7 +517,7 @@ def mkTryCatch(site, label, tryblock, catchblock):
 class Inline(Statement):
     @auto_init
     def __init__(self, site, str): pass
-    def toc(self):
+    def toc_stmt(self):
         out(self.str + '\n')
 
 mkInline = Inline
@@ -478,6 +526,8 @@ class InlinedMethod(Statement):
     '''Wraps the body of an inlined method, to protect it from analysis'''
     @auto_init
     def __init__(self, site, method, body): pass
+    def toc_stmt(self):
+        self.body.toc_stmt()
     def toc(self):
         self.body.toc()
     def toc_inline(self):
@@ -490,7 +540,7 @@ mkInlinedMethod = InlinedMethod
 class Comment(Statement):
     @auto_init
     def __init__(self, site, str): pass
-    def toc(self):
+    def toc_stmt(self):
         # self.linemark()
         out('/* %s */\n' % self.str)
 
@@ -499,7 +549,7 @@ mkComment = Comment
 class Assert(Statement):
     @auto_init
     def __init__(self, site, expr): pass
-    def toc(self):
+    def toc_stmt(self):
         out('DML_ASSERT("%s", %d, %s);\n'
             % (quote_filename(self.site.filename()),
                self.site.lineno, self.expr.read()))
@@ -513,7 +563,7 @@ def mkAssert(site, expr):
 class Return(Statement):
     @auto_init
     def __init__(self, site, expr): pass
-    def toc(self):
+    def toc_stmt(self):
         self.linemark()
         if self.expr is None:
             out('return;\n')
@@ -530,16 +580,25 @@ def mkReturn(site, expr, rettype=None):
 class Delete(Statement):
     @auto_init
     def __init__(self, site, expr): pass
-    def toc(self):
-        out('MM_FREE(%s);\n' % self.expr.read())
+    def toc_stmt(self):
+        self.linemark()
+        out(f'DML_DELETE({self.expr.read()});\n')
 
-def mkDelete(site, expr):
-    return Delete(site, expr)
+mkDelete = Delete
+
+class DeleteExtern(Statement):
+    @auto_init
+    def __init__(self, site, expr): pass
+    def toc_stmt(self):
+        self.linemark()
+        out(f'MM_FREE({self.expr.read()});\n')
+
+mkDeleteExtern = DeleteExtern
 
 class ExpressionStatement(Statement):
     @auto_init
     def __init__(self, site, expr): pass
-    def toc(self):
+    def toc_stmt(self):
         #if not self.site:
         #    print 'NOSITE', str(self), repr(self)
         self.linemark()
@@ -556,15 +615,19 @@ def mkExpressionStatement(site, expr):
 def toc_constsafe_pointer_assignment(site, source, target, typ):
     target_val = mkDereference(site,
         Cast(site, mkLit(site, target, TPtr(void)), TPtr(typ)))
-    mkAssignStatement(site, target_val,
-                      ExpressionInitializer(mkLit(site, source, typ))).toc()
+
+    init = ExpressionInitializer(
+        source_for_assignment(site, typ, mkLit(site, source, typ)),
+        ignore_raii=True)
+
+    return AssignStatement(site, target_val, init).toc()
 
 class After(Statement):
     @auto_init
     def __init__(self, site, unit, delay, domains, info, indices,
                  args_init):
         crep.require_dev(site)
-    def toc(self):
+    def toc_stmt(self):
         self.linemark()
         objarg = '&_dev->obj'
         out(f'if (SIM_object_clock({objarg}) == NULL)\n', postindent=1)
@@ -622,7 +685,7 @@ class AfterOnHook(Statement):
     def __init__(self, site, domains, hookref_expr, info, indices,
                  args_init):
         crep.require_dev(site)
-    def toc(self):
+    def toc_stmt(self):
         self.linemark()
         hookref = resolve_hookref(self.hookref_expr)
         indices = ('(const uint32 []) {%s}'
@@ -636,18 +699,20 @@ class AfterOnHook(Statement):
         domains = ('(const _identity_t []) {%s}'
                    % (', '.join(domain.read() for domain in self.domains),)
                    if self.domains else 'NULL')
-        out(f'_DML_attach_callback_to_hook({hookref}, '
+        out(f'{{ _DML_attach_callback_to_hook({hookref}, '
             + f'&_after_on_hook_infos[{self.info.uniq}], {indices}, '
             + f'{len(self.indices)}, {args}, {domains}, '
-            + f'{len(self.domains)});\n')
+            + f'{len(self.domains)}); }}\n')
 
 mkAfterOnHook = AfterOnHook
 
 class ImmediateAfter(Statement):
+    slots = ('args_raii_info',)
     @auto_init
     def __init__(self, site, domains, info, indices, args_init):
         crep.require_dev(site)
-    def toc(self):
+
+    def toc_stmt(self):
         self.linemark()
         indices = ('(const uint32 []) {%s}'
                    % (', '.join(i.read() for i in self.indices),)
@@ -660,13 +725,17 @@ class ImmediateAfter(Statement):
             args_size = f'sizeof({self.info.args_type.declaration("")})'
         else:
             (args, args_size) = ('NULL', '0')
+
+        args_destructor = (self.info.args_raii_info.cident_destructor
+                           if self.info.args_raii_info else 'NULL')
         domains = ('(const _identity_t []) {%s}'
                    % (', '.join(domain.read() for domain in self.domains),)
                    if self.domains else 'NULL')
-        out('_DML_post_immediate_after('
+        out('{ _DML_post_immediate_after('
             + '&_dev->obj, _dev->_immediate_after_state, '
-            + f'{self.info.cident_callback}, {indices}, {len(self.indices)}, '
-            + f'{args}, {args_size}, {domains}, {len(self.domains)});\n')
+            + f'{self.info.cident_callback}, {args_destructor}, {indices}, '
+            + f'{len(self.indices)}, {args}, {args_size}, {domains}, '
+            + f'{len(self.domains)}); }}\n')
 
 mkImmediateAfter = ImmediateAfter
 
@@ -676,7 +745,7 @@ class If(Statement):
         assert_type(site, cond.ctype(), TBool)
         assert_type(site, truebranch, Statement)
         assert_type(site, falsebranch, (Statement, type(None)))
-    def toc(self):
+    def toc_stmt(self):
         self.linemark()
         out('if ('+self.cond.read()+') {\n', postindent = 1)
         self.truebranch.toc_inline()
@@ -684,7 +753,10 @@ class If(Statement):
             out('} else ', preindent = -1)
             if dml.globals.linemarks:
                 out('\n')
-            self.falsebranch.toc()
+            # TODO(RAII): from what I (lwaern) can tell, this is the ONE USE of
+            # toc_stmt that is needed across dmlc. If we can work around it, we
+            # may scrap toc_stmt.
+            self.falsebranch.toc_stmt()
         elif self.falsebranch:
             out('} else {\n', preindent = -1, postindent = 1)
             self.falsebranch.toc_inline()
@@ -714,7 +786,7 @@ class While(Statement):
     def __init__(self, site, cond, stmt):
         assert_type(site, cond.ctype(), TBool)
         assert_type(site, stmt, Statement)
-    def toc(self):
+    def toc_stmt(self):
         self.linemark()
         # out('/* %s */\n' % repr(self))
         out('while ('+self.cond.read()+') {\n', postindent = 1)
@@ -742,7 +814,7 @@ class DoWhile(Statement):
     def __init__(self, site, cond, stmt):
         assert_type(site, cond.ctype(), TBool)
         assert_type(site, stmt, Statement)
-    def toc(self):
+    def toc_stmt(self):
         self.linemark()
         # out('/* %s */\n' % repr(self))
         out('do {\n', postindent = 1)
@@ -765,7 +837,7 @@ class For(Statement):
     def __init__(self, site, pres, cond, posts, stmt):
         assert_type(site, cond.ctype(), TBool)
         assert_type(site, stmt, Statement)
-    def toc(self):
+    def toc_stmt(self):
         self.linemark()
 
         out('for (%s; %s; ' % (", ".join(pre.discard()
@@ -821,7 +893,7 @@ class ForeachSequence(Statement):
 
     @auto_init
     def __init__(self, site, trait, each_in_expr, body, break_label): pass
-    def toc(self):
+    def toc_stmt(self):
         self.linemark()
         out('{\n', postindent=1)
         self.linemark()
@@ -851,12 +923,55 @@ class ForeachSequence(Statement):
 
 mkForeachSequence = ForeachSequence
 
+
+class ForeachVectorIterRef(Expression):
+    explicit_type = True
+    priority = dml.expr.Apply.priority
+    c_lval = True
+    @auto_init
+    def __init__(self, site, itername, uniq, writable, type): pass
+
+    def __str__(self):
+        return self.itername
+
+    def read(self):
+        t = self.type.declaration('')
+        return f'DML_VECT_ELEM({t}, *_{self.uniq}_vect, _{self.uniq}_vect_idx)'
+
+class ForeachVector(Statement):
+    count = 0
+
+    @auto_init
+    def __init__(self, site, vect, uniq, body):
+        assert self.vect.c_lval
+    def toc_stmt(self):
+        self.linemark()
+        out('{\n', postindent=1)
+        self.linemark()
+        const = ' const'*safe_realtype_shallow(self.vect.ctype()).const
+        out(f'_dml_vect_t{const} *_{self.uniq}_vect = '
+            + f'&({self.vect.read()});\n')
+        self.linemark()
+        out(f'for (uint32 _{self.uniq}_vect_idx = 0; '
+            + f'_{self.uniq}_vect_idx < _{self.uniq}_vect->len; '
+            + f'++_{self.uniq}_vect_idx) {{\n', postindent=1)
+        self.body.toc_inline()
+        out('}\n', preindent=-1)
+        out('}\n', preindent=-1)
+
+    def control_flow(self):
+        bodyflow = self.body.control_flow()
+        # fallthrough is possible if the vector is empty
+        return bodyflow.replace(fallthrough=True, br=False)
+
+mkForeachVector = ForeachVector
+
 class Switch(Statement):
     @auto_init
     def __init__(self, site, expr, stmt):
         assert_type(site, expr, Expression)
         assert_type(site, stmt, Statement)
-    def toc(self):
+    def toc_stmt(self):
         self.linemark()
         # out('/* %s */\n' % repr(self))
         out('switch ('+self.expr.read()+') {\n', postindent = 1)
@@ -892,7 +1007,7 @@ class SubsequentCases(Statement):
     @auto_init
     def __init__(self, site, cases, has_default):
         assert len(self.cases) > 0
-    def toc(self):
+    def toc_stmt(self):
         for (i, case) in enumerate(self.cases):
             assert isinstance(case, (Case, Default))
             site_linemark(case.site)
@@ -908,7 +1023,7 @@ mkSubsequentCases = SubsequentCases
 class Case(Statement):
     @auto_init
     def __init__(self, site, expr): pass
-    def toc(self):
+    def toc_stmt(self):
         self.linemark()
         out('case %s: ;\n' % self.expr.read(), preindent = -1, postindent = 1)
 
@@ -917,17 +1032,17 @@ mkCase = Case
 class Default(Statement):
     @auto_init
     def __init__(self, site): pass
-    def toc(self):
+    def toc_stmt(self):
         self.linemark()
         out('default: ;\n', preindent = -1, postindent = 1)
 
 mkDefault = Default
 
-class VectorForeach(Statement):
+class LegacyVectorForeach(Statement):
     @auto_init
     def __init__(self, site, vect, var, stmt): pass
 
-    def toc(self):
+    def toc_stmt(self):
         out('VFOREACH(%s, %s) {\n' % (self.vect.read(), self.var.read()),
             postindent = 1)
         self.stmt.toc_inline()
@@ -937,11 +1052,11 @@ class VectorForeach(Statement):
         flow = self.stmt.control_flow()
         return flow.replace(fallthrough=flow.fallthrough or flow.br, br=False)
 
-def mkVectorForeach(site, vect, var, stmt):
-    return VectorForeach(site, vect, var, stmt)
+def mkLegacyVectorForeach(site, vect, var, stmt):
+    return LegacyVectorForeach(site, vect, var, stmt)
 
 class Break(Statement):
-    def toc(self):
+    def toc_stmt(self):
         out('break;\n')
     def control_flow(self):
         return ControlFlow(br=True)
@@ -949,7 +1064,7 @@ class Break(Statement):
 mkBreak = Break
 
 class Continue(Statement):
-    def toc(self):
+    def toc_stmt(self):
         out('continue;\n')
     def control_flow(self):
         return ControlFlow()
@@ -960,19 +1075,39 @@ class AssignStatement(Statement):
     @auto_init
     def __init__(self, site, target, initializer):
         assert isinstance(initializer, Initializer)
-    def toc(self):
-        out('{\n', postindent=1)
-        self.toc_inline()
-        out('}\n', preindent=-1)
-    def toc_inline(self):
-        self.initializer.assign_to(self.target, self.target.ctype())
+    def toc_stmt(self):
+        self.linemark()
+        out(self.target.write(self.initializer) + ';\n')
 
-mkAssignStatement = AssignStatement
+def mkAssignStatement(site, target, init):
+    if isinstance(target, InlinedParam):
+        raise EASSINL(target.site, target.name)
+    if not target.writable:
+        raise EASSIGN(site, target)
 
-def mkCopyData(site, source, target):
+    if isinstance(target, NonValue):
+        if not isinstance(init, ExpressionInitializer):
+            raise ICE(target.site,
+                      f'{target} can only be used as the target of an '
+                      + 'assignment if its initializer is a simple expression '
+                      + 'or a return value of a method call')
+    else:
+        target_type = target.ctype()
+
+        if deep_const(target_type):
+            raise ECONST(site)
+
+        if isinstance(init, ExpressionInitializer):
+            init = ExpressionInitializer(
+                source_for_assignment(site, target_type, init.expr),
+                init.ignore_raii)
+
+    return AssignStatement(site, target, init)
+
+def mkCopyData(site, source, target, ignore_raii=False):
     "Convert a copy statement to intermediate representation"
-    assignexpr = mkAssignOp(site, target, source)
-    return mkExpressionStatement(site, assignexpr)
+    return mkAssignStatement(site, target,
+                             ExpressionInitializer(source, ignore_raii))
 
 #
 # Expressions
@@ -1015,7 +1150,8 @@ def as_int(e):
         target_type = TInt(64, True)
     if t.is_endian:
         (fun, funtype) = t.get_load_fun()
-        e = dml.expr.Apply(e.site, mkLit(e.site, fun, funtype), (e,), funtype)
+        e = dml.expr.Apply(e.site, mkLit(e.site, fun, funtype), (e,), funtype,
+                           True)
         if not compatible_types(realtype(e.ctype()), target_type):
             e = mkCast(e.site, e, target_type)
         return e
@@ -1030,27 +1166,28 @@ def truncate_int_bits(value, signed, bits=64):
     else:
         return value & mask
 
+class PseudoMethodRef(NonValue):
+    '''Nonvalue expressions with 'apply' that are not method references'''
+
+    def apply(self, inits, location, scope):
+        raise ICE(self.site, f'apply not implemented for {type(self)}')
+
 class LValue(Expression):
     "Somewhere to read or write data"
     writable = True
-
-    def write(self, source):
-        rt = realtype(self.ctype())
-        if isinstance(rt, TEndianInt):
-            return (f'{rt.dmllib_fun("copy")}(&{self.read()},'
-                    + f' {source.read()})')
-        return '%s = %s' % (self.read(), source.read())
-
-    @property
-    def is_stack_allocated(self):
-        '''Returns true only if it's known that writing to the lvalue will
-           write to stack-allocated data'''
-        return False
+    addressable = True
+    c_lval = True
 
 class IfExpr(Expression):
     priority = 30
+    slots = ('orphan',)
     @auto_init
-    def __init__(self, site, cond, texpr, fexpr, type): pass
+    def __init__(self, site, cond, texpr, fexpr, type):
+        self.orphan = texpr.orphan and fexpr.orphan
+        if texpr.orphan != fexpr.orphan:
+            self.texpr = mkAdoptedOrphan(texpr.site, texpr)
+            self.fexpr = mkAdoptedOrphan(fexpr.site, fexpr)
+
     def __str__(self):
         return '%s ? %s : %s' % (self.cond, self.texpr, self.fexpr)
     def read(self):
@@ -1103,7 +1240,7 @@ def mkIfExpr(site, cond, texpr, fexpr):
                 (texpr, fexpr, utype) = usual_int_conv(
                     texpr, ttype, fexpr, ftype)
         else:
-            if not compatible_types(ttype, ftype):
+            if not compatible_types_fuzzy(ttype, ftype):
                 raise EBINOP(site, ':', texpr, fexpr)
             # TODO: in C, the rules are more complex,
             # but our type system is too primitive to cover that
@@ -1226,7 +1363,7 @@ class Compare(BinOp):
 
     @abc.abstractproperty
     def cmp_functions(self):
-        '''pair of dmllib.h functions for comparison between signed and
+        '''pair of dml-lib.h functions for comparison between signed and
         unsigned integer, with (int, uint) and (uint, int) args,
         respectively'''
 
@@ -1240,8 +1377,10 @@ class Compare(BinOp):
         lhtype = realtype(lh.ctype())
         rhtype = realtype(rh.ctype())
 
-        if (lhtype.is_arith and rhtype.is_arith
-            and lh.constant and rh.constant):
+        if ((lhtype.is_arith and rhtype.is_arith
+             and lh.constant and rh.constant)
+            or (isinstance(lh, StringConstant)
+                and isinstance(rh, StringConstant))):
             return mkBoolConstant(site, cls.eval_const(lh.value, rh.value))
         if lhtype.is_int:
             lh = as_int(lh)
@@ -1272,8 +1411,13 @@ class Compare(BinOp):
         if ((lhtype.is_arith and rhtype.is_arith)
             or (isinstance(lhtype, (TPtr, TArray))
                 and isinstance(rhtype, (TPtr, TArray))
-                and compatible_types(lhtype.base, rhtype.base))):
+                and compatible_types_fuzzy(lhtype.base, rhtype.base))):
             return cls.make_simple(site, lh, rh)
+        if ((isinstance(lh, StringConstant)
+             or isinstance(lhtype, TString))
+            and (isinstance(rh, StringConstant)
+                 or isinstance (rhtype, TString))):
+            return mkStringCmp(site, lh, rh, cls.op)
         raise EILLCOMP(site, lh, lhtype, rh, rhtype)
 
     @classmethod
@@ -1405,6 +1549,58 @@ class Equals_dml12(Compare_dml12):
             return mkBoolConstant(site, lh.value == rh.value)
         return Equals_dml12(site, lh, rh)
 
+class StringCmp(Expression):
+    priority = 70
+    type = TBool()
+
+    @auto_init
+    def __init__(self, site, lh, rh, op): pass
+
+    def __str__(self):
+        lh = str(self.lh)
+        rh = str(self.rh)
+        if self.lh.priority <= self.priority:
+            lh = '('+lh+')'
+        if self.rh.priority <= self.priority:
+            rh = '('+rh+')'
+        return lh + ' ' + self.op + ' ' + rh
+
+    def read(self):
+        return (f'_dml_string_cmp({self.lh.read()}, {self.rh.read()}) '
+                + f'{self.op} 0')
+
+class StringCmpC(Expression):
+    priority = 70
+    type = TBool()
+
+    @auto_init
+    def __init__(self, site, lh, rh, op): pass
+
+    def __str__(self):
+        lh = str(self.lh)
+        rh = str(self.rh)
+        if self.lh.priority <= self.priority:
+            lh = '('+lh+')'
+        if self.rh.priority <= self.priority:
+            rh = '('+rh+')'
+        return lh + ' ' + self.op + ' ' + rh
+
+    def read(self):
+        return (f'_dml_string_cmp_c_str({self.lh.read()}, {self.rh.read()}) '
+                + f'{self.op} 0')
+
+def mkStringCmp(site, lh, rh, op):
+    if isinstance(lh, StringConstant):
+        op = {'<': '>', '>':'<'}.get(op[1], op[1]) + op[1:]
+        rh_conv = mkAdoptedOrphan(rh.site, rh)
+        return StringCmpC(site, rh_conv, lh, op)
+    elif isinstance(rh, StringConstant):
+        lh_conv = mkAdoptedOrphan(rh.site, lh)
+        return StringCmpC(site, lh_conv, rh, op)
+    lh_conv = mkAdoptedOrphan(lh.site, lh_conv)
+    rh_conv = mkAdoptedOrphan(rh.site, rh_conv)
+    return StringCmp(site, lh_conv, rh_conv, op)
+
 class Equals(BinOp):
     priority = 70
     type = TBool()
@@ -1477,7 +1673,7 @@ class Equals(BinOp):
         if ((lhtype.is_arith and rhtype.is_arith)
             or (isinstance(lhtype, (TPtr, TArray))
                 and isinstance(rhtype, (TPtr, TArray))
-                and compatible_types(lhtype, rhtype))
+                and compatible_types_fuzzy(lhtype, rhtype))
             or (isinstance(lhtype, TBool) and isinstance(rhtype, TBool))):
             return Equals(site, lh, rh)
 
@@ -1488,6 +1684,11 @@ class Equals(BinOp):
         if (isinstance(lhtype, THook) and isinstance(rhtype, THook)
             and lhtype.cmp(rhtype) == 0):
             return IdentityEq(site, lh, rh)
+        if ((isinstance(lh, StringConstant)
+             or isinstance(lhtype, TString))
+            and (isinstance(rh, StringConstant)
+                 or isinstance (rhtype, TString))):
+            return mkStringCmp(site, lh, rh, '==')
 
         raise EILLCOMP(site, lh, lhtype, rh, rhtype)
 
@@ -2202,6 +2403,143 @@ class Add_dml12(ArithBinOp_dml12):
 
         return Add_dml12(site, lh, rh)
 
+class StringAdd(Orphan):
+    priority = dml.expr.Apply.priority
+
+    type = TString()
+
+    # Implemented by INHERITING ownership of first argument, but only BORROWING
+    # second argument. Meaning the second argument is never duped, and, if
+    # orphan, must be adopted.
+    def __init__(self, site, lh, rh):
+        self.site = site
+        self.lh = lh
+        self.rh = mkAdoptedOrphan(rh.site, rh)
+
+    def __str__(self):
+        lh = str(self.lh)
+        rh = str(self.rh)
+        if self.lh.priority <= Add.priority:
+            lh = '('+lh+')'
+        if self.rh.priority <= Add.priority:
+            rh = '('+rh+')'
+        return lh + ' + ' + rh
+
+    def read(self):
+        lh = self.lh.read()
+        if not self.lh.orphan:
+            lh = f'_dml_string_dupe({lh})'
+        return f'_dml_string_add({lh}, {self.rh.read()})'
+
+class StringAddCStrAfter(Orphan):
+    priority = dml.expr.Apply.priority
+
+    type = TString()
+
+    @auto_init
+    def __init__(self, site, lh, rh): pass
+
+    def __str__(self):
+        lh = str(self.lh)
+        rh = str(self.rh)
+        if self.lh.priority <= Add.priority:
+            lh = '('+lh+')'
+        if self.rh.priority <= Add.priority:
+            rh = '('+rh+')'
+        return lh + ' + ' + rh
+
+    def read(self):
+        lh = self.lh.read()
+        if not self.lh.orphan:
+            lh = f'_dml_string_dupe({lh})'
+        return f'_dml_string_add_cstr({lh}, {self.rh.read()})'
+
+class StringAddCStrBefore(Orphan):
+    priority = dml.expr.Apply.priority
+
+    type = TString()
+
+    @auto_init
+    def __init__(self, site, lh, rh): pass
+
+    def __str__(self):
+        lh = str(self.lh)
+        rh = str(self.rh)
+        if self.lh.priority <= Add.priority:
+            lh = '('+lh+')'
+        if self.rh.priority <= Add.priority:
+            rh = '('+rh+')'
+        return lh + ' + ' + rh
+
+    def read(self):
+        rh = self.rh.read()
+        if not self.rh.orphan:
+            rh = f'_dml_string_dupe({rh})'
+        return f'_dml_string_add_cstr_before({self.lh.read()}, {rh})'
+
+class StringCStrRef(PseudoMethodRef):
+    @auto_init
+    def __init__(self, site, expr): pass
+
+    def __str__(self):
+        return str_expr_pseudomethod(self.expr, 'c_str')
+
+    def apply(self, inits, location, scope):
+        if inits:
+            raise EARG(self.site, '.c_str')
+        return mkStringCStrApply(self.site, self.expr)
+
+mkStringCStrRef = StringCStrRef
+
+class StringCStrApply(Expression):
+    priority = dml.expr.Apply.priority
+
+    slots = ('type',)
+
+    @auto_init
+    def __init__(self, site, expr):
+        assert not expr.orphan
+        self.type = TPtr(
+            TNamed('char',
+                   const=(not expr.writable
+                          or safe_realtype_shallow(expr.ctype()).const)))
+
+    def __str__(self):
+        return str_expr_pseudomethod(self.expr, 'c_str()')
+
+    def read(self):
+        return f'_dml_string_str({self.expr.read()})'
+
+    @property
+    def is_pointer_to_stack_allocation(self):
+        return self.expr.is_stack_allocated
+
+def mkStringCStrApply(site, expr):
+    if expr.constant and isinstance(expr, FromCString):
+        return mkStringConstant(site, expr.value)
+
+    if expr.orphan:
+        expr = mkAdoptedOrphan(expr.site, expr)
+    return StringCStrApply(site, expr)
+
+class FromCString(Orphan):
+    priority = dml.expr.Apply.priority
+
+    type = TString()
+
+    slots = ('constant', 'value')
+
+    @auto_init
+    def __init__(self, site, expr):
+        self.constant = expr.constant
+        self.value = expr.value if expr.constant else None
+
+    def __str__(self):
+        return f'cast({self.expr}, string)'
+
+    def read(self):
+        return f'_dml_string_new({self.expr.read()})'
+
 class Add(ArithBinOp):
     priority = 110
     op = '+'
@@ -2216,6 +2554,29 @@ class Add(ArithBinOp):
             return StringConstant(site, lh.value + rh.value)
         lhtype = realtype(lh.ctype())
         rhtype = realtype(rh.ctype())
+        if isinstance(lhtype, TString) and isinstance(rh, StringConstant):
+            if (isinstance(lh, StringAddCStrAfter)
+                and isinstance(lh.rh, StringConstant)):
+                (lh, rh) = (lh.lh,
+                            mkStringConstant(rh.site, lh.rh.value + rh.value))
+
+            return StringAddCStrAfter(site, lh, rh)
+        elif isinstance(lh, StringConstant) and isinstance(rhtype, TString):
+            if (isinstance(rh, StringAddCStrBefore)
+                and isinstance(rh.lh, StringConstant)):
+                (lh, rh) = (mkStringConstant(lh.site, lh.value + rh.lh.value),
+                            rh.rh)
+            return StringAddCStrBefore(site, lh, rh)
+
+        if isinstance(lhtype, TString) and isinstance(rhtype, TString):
+            return StringAdd(site, lh, rh)
+
+        if (isinstance(lhtype, TVector)
+            and (safe_realtype_unconst(lhtype).cmp(
+                    safe_realtype_unconst(rhtype))
+                 == 0)):
+            return VectorAdd(site, lh, rh)
+
         # ECSADD should always be emitted when the operand types are equivalent
         # to char pointers/arrays -- even including when the operands are
         # explicitly typed as int8 pointers/arrays
@@ -2377,7 +2738,7 @@ class AssignOp(BinOp):
         return "%s = %s" % (self.lh, self.rh)
 
     def discard(self):
-        return self.lh.write(self.rh)
+        return self.lh.write(ExpressionInitializer(self.rh))
 
     def read(self):
         return '((%s), (%s))' % (self.discard(), self.lh.read())
@@ -2394,7 +2755,6 @@ def mkAssignOp(site, target, source):
         raise EASSINL(target.site, target.name)
     if not target.writable:
         raise EASSIGN(site, target)
-
     target_type = target.ctype()
 
     source = source_for_assignment(site, target_type, source)
@@ -2455,13 +2815,14 @@ class AddressOf(UnaryOp):
                     TFunction([TPtr(TNamed('conf_object_t')),
                                TPtr(TVoid())],
                               TVoid())))
-        if not dml.globals.compat_dml12 and not isinstance(rh, LValue):
+        if not dml.globals.compat_dml12 and not rh.addressable:
             raise ERVAL(rh.site, '&')
+
         return AddressOf(site, rh)
 
     @property
     def is_pointer_to_stack_allocation(self):
-        return isinstance(self.rh, LValue) and self.rh.is_stack_allocated
+        return self.rh.is_stack_allocated
 
 def mkAddressOf(site, rh):
     if dml.globals.compat_dml12_int(site):
@@ -2621,7 +2982,7 @@ def mkUnaryPlus(site, rh):
         rh, _ = promote_integer(rh, rhtype)
     else:
         raise ICE(site, "Unexpected arith argument to unary +")
-    if isinstance(rh, LValue):
+    if rh.addressable or rh.writable:
         # +x is a rvalue
         rh = mkRValue(rh)
     return rh
@@ -2647,7 +3008,7 @@ class IncDec(UnaryOp):
         rhtype = safe_realtype(rh.ctype())
         if not isinstance(rhtype, (IntegerType, TPtr)):
             raise EINCTYPE(site, cls.op)
-        if not isinstance(rh, LValue):
+        if not rh.addressable:
             if isinstance(rh, BitSlice):
                 hint = 'try %s= 1' % (cls.base_op[0],)
             else:
@@ -2660,9 +3021,10 @@ class IncDec(UnaryOp):
             (result, signed) = promote_integer(result, rhtype)
             return result
 
+    @classmethod
     @property
-    def op(self):
-        return self.base_op
+    def op(cls):
+        return cls.base_op
 
     @property
     def is_pointer_to_stack_allocation(self):
@@ -2808,8 +3170,8 @@ def mkInterfaceMethodRef(site, iface_node, indices, method_name):
 
     if (not isinstance(ftype, TFunction)
         or not ftype.input_types
-        or TPtr(safe_realtype(TNamed('conf_object_t'))).cmp(
-            safe_realtype(ftype.input_types[0])) != 0):
+        or TPtr(safe_realtype_unconst(TNamed('conf_object_t'))).cmp(
+            safe_realtype_unconst(ftype.input_types[0])) != 0):
         # non-method members are not accessible
         raise EMEMBER(site, struct_name, method_name)
 
@@ -2853,7 +3215,8 @@ class BitSlice(Expression):
         return self.expr.writable
 
     def write(self, source):
-        source_expr = source
+        assert isinstance(source, ExpressionInitializer)
+        source_expr = source.expr
         # if not self.size.constant or source.ctype() > self.type:
         #     source = mkBitAnd(source, self.mask)
 
@@ -2875,7 +3238,7 @@ class BitSlice(Expression):
         target_type = realtype(self.expr.ctype())
         if target_type.is_int and target_type.is_endian:
             expr = mkCast(self.site, expr, target_type)
-        return self.expr.write(expr)
+        return self.expr.write(ExpressionInitializer(expr))
 
 def mkBitSlice(site, expr, msb, lsb, bitorder):
     # lsb == None means that only one bit number was given (expr[i]
@@ -2923,13 +3286,18 @@ def mkBitSlice(site, expr, msb, lsb, bitorder):
 class TraitMethodApplyIndirect(Expression):
     '''The C expression of a trait method call'''
     @auto_init
-    def __init__(self, site, traitref, methname, independent, inargs, type):
+    def __init__(self, site, traitref, methname, independent, memoized,
+                 inargs, type):
         if not independent:
             crep.require_dev(site)
 
     def __str__(self):
         return '%s.%s(%s)' % (self.traitref, self.methname,
                               ', '.join(map(str, self.inargs)))
+
+    @property
+    def orphan(self):
+        return not self.memoized
 
     def read(self):
         infix_independent = 'INDEPENDENT_' if self.independent else ''
@@ -2953,6 +3321,10 @@ class TraitMethodApplyDirect(Expression):
     def __str__(self):
         return '%s(%s)' % (self.methodref, ', '.join(map(str, self.inargs)))
 
+    @property
+    def orphan(self):
+        return not self.methodref.memoized
+
     def read(self):
         return "%s(%s)" % (
             self.methodref.cname(),
@@ -2963,13 +3335,41 @@ class New(Expression):
     priority = 160 # f()
     slots = ('type',)
     @auto_init
+    def __init__(self, site, newtype, count, raii_info):
+        self.type = TPtr(newtype)
+    def __str__(self):
+        if self.count:
+            return 'new<enriched> %s[%s]' % (self.newtype, self.count)
+        else:
+            return 'new<enriched> %s' % self.newtype
+    def read(self):
+        destructor = (self.raii_info.cident_destructor_array_item
+                      if self.raii_info else '_dml_raii_destructor_ref_none')
+        count = self.count.read() if self.count else '1'
+        return (f'DML_NEW({self.newtype.declaration("")}, {count}, '
+                +f'{destructor})')
+
+def mkNew(site, newtype, count = None):
+    if count:
+        count = as_int(count)
+    if newtype.is_raii:
+        from .codegen import get_raii_type_info # TODO(RAII) imports...
+        info = get_raii_type_info(newtype)
+    else:
+        info = None
+    return New(site, newtype, count, info)
+
+class NewExtern(Expression):
+    priority = 160 # f()
+    slots = ('type',)
+    @auto_init
     def __init__(self, site, newtype, count):
         self.type = TPtr(newtype)
     def __str__(self):
         if self.count:
-            return 'new %s[%s]' % (self.newtype, self.count)
+            return 'new<extern> %s[%s]' % (self.newtype, self.count)
         else:
-            return 'new %s' % self.newtype
+            return 'new<extern> %s' % self.newtype
     def read(self):
         t = self.newtype.declaration('')
         if self.count:
@@ -2977,10 +3377,12 @@ class New(Expression):
         else:
             return 'MM_ZALLOC(1, %s)' % (t)
 
-def mkNew(site, newtype, count = None):
+
+def mkNewExtern(site, newtype, count = None):
+    assert not newtype.is_raii
     if count:
         count = as_int(count)
-    return New(site, newtype, count)
+    return NewExtern(site, newtype, count)
 
 class ListItems(metaclass=abc.ABCMeta):
     '''A series of consecutive list elements, where each list element
@@ -3337,7 +3739,9 @@ class AddressOfMethod(Constant):
                               self.value.rettype))
 
     def read(self):
-        prefix = '_trampoline' * (not self.value.independent)
+        prefix = '_trampoline' * (not self.value.independent
+                                  or (self.value.memoized
+                                      and self.value.rettype.is_raii))
         return f'(&{prefix}{self.value.get_cname()})'
 
 
@@ -3397,6 +3801,18 @@ class Undefined(NonValue):
         return EUNDEF(self)
 
 mkUndefined = Undefined
+
+class DiscardRef(NonValue):
+    writable = True
+
+    def __str__(self):
+        return '_'
+
+    def write(self, source):
+        assert isinstance(source, ExpressionInitializer)
+        return source.expr.discard()
+
+mkDiscardRef = DiscardRef
 
 def endian_convert_expr(site, idx, endian, size):
     """Convert a bit index to little-endian (lsb=0) numbering.
@@ -3570,8 +3986,12 @@ def mkTraitUpcast(site, sub, parent):
         if typ.trait is parent:
             return sub
         elif parent in typ.trait.ancestors:
+            if isinstance(sub, ObjTraitRef):
+                return ObjTraitRef(site, sub.node, parent, sub.indices)
             return TraitUpcast(site, sub, parent)
         elif parent is dml.globals.object_trait:
+            if isinstance(sub, ObjTraitRef):
+                return ObjTraitRef(site, sub.node, parent, sub.indices)
             return TraitObjectCast(site, sub)
     raise ETEMPLATEUPCAST(site, typ, parent.type())
 
@@ -3646,6 +4066,8 @@ class TraitMethodRef(NonValue):
     def throws(self): pass
     @abc.abstractproperty
     def independent(self): pass
+    @abc.abstractproperty
+    def memoized(self): pass
 
     def apply(self, inits, location, scope):
         '''Return expression for application as a function'''
@@ -3688,6 +4110,10 @@ class TraitMethodDirect(TraitMethodRef):
     def independent(self):
         return self.methodref.independent
 
+    @property
+    def memoized(self):
+        return self.methodref.memoized
+
     def call_expr(self, inargs, rettype):
         return TraitMethodApplyDirect(self.site, self.traitref,
                                       self.methodref, inargs, rettype)
@@ -3699,7 +4125,7 @@ class TraitMethodIndirect(TraitMethodRef):
     it needs to be called.'''
     @auto_init
     def __init__(self, site, traitref, methname, inp, outp, throws,
-                 independent): pass
+                 independent, memoized): pass
 
     def __str__(self):
         return "%s.%s" % (str(self.traitref), self.methname)
@@ -3707,7 +4133,7 @@ class TraitMethodIndirect(TraitMethodRef):
     def call_expr(self, inargs, rettype):
         return TraitMethodApplyIndirect(self.site, self.traitref,
                                         self.methname, self.independent,
-                                        inargs, rettype)
+                                        self.memoized, inargs, rettype)
 
 class TraitHookArrayRef(NonValueArrayRef):
     @auto_init
@@ -4067,7 +4493,7 @@ class HookSuspended(Expression):
 
 mkHookSuspended = HookSuspended
 
-class HookSendNowRef(NonValue):
+class HookSendNowRef(PseudoMethodRef):
     '''Reference to the send_now pseudomethod of a hook'''
     @auto_init
     def __init__(self, site, hookref_expr): pass
@@ -4087,33 +4513,39 @@ mkHookSendNowRef = HookSendNowRef
 
 class HookSendNowApply(Expression):
     '''Application of the send_now pseudomethod with valid arguments'''
-    slots = ('msg_struct',)
+    slots = ('msg_struct', 'msg_struct_info')
     type = TInt(64, False)
     priority = dml.expr.Apply.priority
     @auto_init
     def __init__(self, site, hookref_expr, args):
         crep.require_dev(site)
         msg_types = safe_realtype(hookref_expr.ctype()).msg_types
-        from .codegen import get_type_sequence_info
+        from .codegen import get_type_sequence_info, get_raii_type_info
         self.msg_struct = get_type_sequence_info(msg_types,
                                                  create_new=True).struct
+        self.msg_struct_info = (get_raii_type_info(self.msg_struct)
+                                if self.msg_struct and self.msg_struct.is_raii
+                                else None)
+
 
     def __str__(self):
         return '%s.send_now(%s)' % (self.hookref_expr,
                                     ', '.join(str(e) for e in self.args))
     def read(self):
-        msg = (('&(%s_t) {%s}'
+        hookref = resolve_hookref(self.hookref_expr)
+        msg = (('&((%s_t) {%s})'
                 % (self.msg_struct.label,
                    ', '.join(arg.read() for arg in self.args)))
                if self.args else 'NULL')
-        hookref = resolve_hookref(self.hookref_expr)
-
-        return ('_DML_send_hook(&_dev->obj, '
-                + f'&_dev->_detached_hook_queue_stack, {hookref}, {msg})')
+        if self.msg_struct_info:
+            return (f'_DML_SEND_HOOK_RAII({hookref}, {msg}, '
+                    + f'{self.msg_struct_info.cident_destructor})')
+        else:
+            return f'_DML_SEND_HOOK({hookref}, {msg})'
 
 mkHookSendNowApply = HookSendNowApply
 
-class HookSendRef(NonValue):
+class HookSendRef(PseudoMethodRef):
     '''Reference to the send pseudomethod of a hook'''
     @auto_init
     def __init__(self, site, hookref_expr): pass
@@ -4157,11 +4589,15 @@ class HookSendApply(Expression):
                     % (TArray(self.info.args_type,
                               mkIntegerLiteral(self.site, 1)).declaration(''),
                        self.hookref_expr.read()))
+
+        args_destructor = (self.info.args_raii_info.cident_destructor
+                           if self.info.args_raii_info else 'NULL')
+
         args_size = f'sizeof({self.info.args_type.declaration("")})'
-        return ('_DML_post_immediate_after('
+        return ('(({ _DML_post_immediate_after('
                 + '&_dev->obj, _dev->_immediate_after_state, '
-                + f'{self.info.cident_callback}, NULL, 0, {args}, '
-                + f'{args_size}, NULL, 0)')
+                + f'{self.info.cident_callback}, {args_destructor}, NULL, 0, '
+                + f'{args}, {args_size}, NULL, 0); }}))')
 
 mkHookSendApply = HookSendApply
 
@@ -4182,6 +4618,8 @@ class Variable(LValue):
         else:
             s = self.sym.name
         return s
+    def discard(self):
+        return f'(void){self.read()}'
     def incref(self):
         self.sym.incref()
     def decref(self):
@@ -4210,13 +4648,30 @@ class StaticVariable(Variable):
 
 mkStaticVariable = StaticVariable
 
-class StructMember(LValue):
+class StructMember(Expression):
     priority = 160
     explicit_type = True
+
+    slots = ('orphan',)
+
     @auto_init
     def __init__(self, site, expr, sub, type, op):
+        assert not expr.writable or expr.c_lval
         assert_type(site, expr, Expression)
         assert_type(site, sub, str)
+        self.orphan = expr.orphan and op == '.'
+
+    @property
+    def writable(self):
+        return self.expr.writable
+
+    @property
+    def addressable(self):
+        return self.expr.addressable
+
+    @property
+    def c_lval(self):
+        return self.expr.c_lval
 
     def __str__(self):
         s = str(self.expr)
@@ -4231,7 +4686,9 @@ class StructMember(LValue):
 
     @property
     def is_stack_allocated(self):
-        return isinstance(self.expr, LValue) and self.expr.is_stack_allocated
+        return (self.expr.is_stack_allocated
+                if self.op == '.' else
+                self.expr.is_pointer_to_stack_allocation)
 
     @property
     def is_pointer_to_stack_allocation(self):
@@ -4270,12 +4727,14 @@ def mkSubRef(site, expr, sub, op):
         basetype = real_etype.base
         real_basetype = safe_realtype(basetype)
         baseexpr = mkDereference(site, expr)
+        def structmember_expr(): return expr
     else:
         if op == '->':
             raise ENOPTR(site, expr)
         basetype = etype
         real_basetype = safe_realtype(etype)
         baseexpr = expr
+        def structmember_expr(): return mkAdoptedOrphan(expr.site, expr)
 
     real_basetype = real_basetype.resolve()
 
@@ -4283,7 +4742,12 @@ def mkSubRef(site, expr, sub, op):
         typ = real_basetype.get_member_qualified(sub)
         if not typ:
             raise EMEMBER(site, baseexpr, sub)
-        return StructMember(site, expr, sub, typ, op)
+        subref = StructMember(site, structmember_expr(), sub, typ, op)
+        return (AdoptedOrphan(site, subref)
+                if (subref.orphan
+                    and isinstance(safe_realtype_shallow(typ), TArray))
+                else subref)
+
     elif real_basetype.is_int and real_basetype.is_bitfields:
         member = real_basetype.members.get(sub)
         if member is None:
@@ -4318,8 +4782,110 @@ def mkSubRef(site, expr, sub, op):
             return mkHookSendNowRef(site, baseexpr)
         elif sub == 'suspended':
             return mkHookSuspended(site, baseexpr)
-
+    elif isinstance(basetype, TString):
+        if sub == 'c_str':
+            return mkStringCStrRef(site, baseexpr)
+        if sub == 'len':
+            return mkStringLen(site, baseexpr)
+    elif isinstance(basetype, TVector):
+        if sub == 'c_buf':
+            return mkVectorCBuf(site, baseexpr)
+        if sub == 'len':
+            return mkVectorLen(site, baseexpr)
+        if sub == 'push_back':
+            return mkVectorPushBack(site, baseexpr)
+        if sub == 'pop_back':
+            return mkVectorPopBack(site, baseexpr)
+        if sub == 'push_front':
+            return mkVectorPushFront(site, baseexpr)
+        if sub == 'pop_front':
+            return mkVectorPopFront(site, baseexpr)
+        if sub == 'insert':
+            return mkVectorInsert(site, baseexpr)
+        if sub == 'remove':
+            return mkVectorRemove(site, baseexpr)
     raise ENOSTRUCT(site, expr)
+
+class StringLen(Expression):
+    priority = StructMember.priority
+
+    slots = ('type',)
+
+    @auto_init
+    def __init__(self, site, expr):
+        assert not expr.orphan
+        assert not expr.writable or expr.c_lval
+        self.type = TInt(32, False,
+                         const=safe_realtype_shallow(self.expr.ctype()).const)
+
+
+    def __str__(self):
+        expr = (f'({self.expr})'
+                if self.expr.priority < StructMember.priority
+                else str(self.expr))
+        return f'{expr}.len'
+
+    @property
+    def writable(self):
+        return self.expr.writable
+
+    def read(self):
+        s = self.expr.read()
+        if self.expr.priority < self.priority:
+            s = '(' + s + ')'
+        return s + '.len'
+
+    def write(self, source):
+        assert isinstance(source, ExpressionInitializer)
+        return (f'_dml_string_resize(&({self.expr.read()}), '
+                + f'{source.expr.read()})')
+
+def mkStringLen(site, expr):
+    return StringLen(site, mkAdoptedOrphan(expr.site, expr))
+
+class VectorLen(Expression):
+    priority = StructMember.priority
+
+    slots = ('type',)
+
+    @auto_init
+    def __init__(self, site, expr):
+        assert not expr.orphan
+        assert not expr.writable or expr.c_lval
+        self.type = TInt(32, False, const=deep_const(self.expr.ctype()))
+
+    def __str__(self):
+        expr = (f'({self.expr})'
+                if self.expr.priority < StructMember.priority
+                else str(self.expr))
+        return f'{expr}.len'
+
+    def read(self):
+        s = self.expr.read()
+        if self.expr.priority < self.priority:
+            s = '(' + s + ')'
+        return s + '.len'
+
+    @property
+    def writable(self):
+        return self.expr.writable
+
+    def write(self, source):
+        assert isinstance(source, ExpressionInitializer)
+        base = realtype_shallow(self.expr.ctype()).base
+        if base.is_raii:
+            from .codegen import get_raii_type_info
+            info = get_raii_type_info(base)
+            return ('_dml_vect_resize_raii(sizeof(%s), %s, (void *)&(%s), %s)'
+                    % (base.declaration(''), info.cident_destructor,
+                       self.expr.read(), source.expr.read()))
+        else:
+            return ('_dml_vect_resize(sizeof(%s), (void *)&(%s), %s, true)'
+                    % (base.declaration(''), self.expr.read(),
+                       source.expr.read()))
+
+def mkVectorLen(site, expr):
+    return VectorLen(site, mkAdoptedOrphan(expr.site, expr))
 
 class ArrayRef(LValue):
     slots = ('type',)
@@ -4327,7 +4893,10 @@ class ArrayRef(LValue):
     explicit_type = True
     @auto_init
     def __init__(self, site, expr, idx):
-        self.type = realtype_shallow(expr.ctype()).base
+        expr_type = realtype_shallow(expr.ctype())
+        self.type = conv_const(expr_type.const
+                               and isinstance(expr_type, TArray),
+                               expr_type.base)
     def __str__(self):
         return '%s[%s]' % (self.expr, self.idx)
     def read(self):
@@ -4344,16 +4913,75 @@ class ArrayRef(LValue):
     def is_pointer_to_stack_allocation(self):
         return isinstance(self.type, TArray) and self.is_stack_allocated
 
-class VectorRef(LValue):
+class LegacyVectorRef(LValue):
     slots = ('type',)
     @auto_init
     def __init__(self, site, expr, idx):
         self.type = realtype(self.expr.ctype()).base
     def read(self):
         return 'VGET(%s, %s)' % (self.expr.read(), self.idx.read())
-    def write(self, source):
-        return "VSET(%s, %s, %s)" % (self.expr.read(), self.idx.read(),
-                                     source.read())
+    # No need for write, VGET results in an lvalue
+
+class StringCharRef(Expression):
+    slots = ('type',)
+    priority = dml.expr.Apply.priority
+    c_lval = True
+    @auto_init
+    def __init__(self, site, expr, idx):
+        self.type = TNamed(
+            'char', const=(safe_realtype(self.expr.ctype()).const))
+
+    @property
+    def writable(self):
+        return self.expr.writable
+
+    def read(self):
+        return f'DML_STRING_CHAR({self.expr.read()}, {self.idx.read()})'
+
+def mkStringCharRef(site, expr, idx):
+    return StringCharRef(site, mkAdoptedOrphan(expr.site, expr), idx)
+
+
+# Not considered addressable, as the address of an elem is very easily
+# invalidated.
+# Users have to use .c_buf() instead to acknowledge that possibility.
+# TODO(RAII): users may shoot themselves in the foot anyway, if the basetype
+# is an array or a struct with array member. What do we do about that?
+class VectorRef(Expression):
+    slots = ('type',)
+    priority = dml.expr.Apply.priority
+    explicit_type=True
+    c_lval = True
+
+    @auto_init
+    def __init__(self, site, expr, idx):
+        assert not expr.orphan
+        typ = safe_realtype_shallow(self.expr.ctype())
+        self.type = conv_const(typ.const, typ.base)
+
+    @property
+    def writable(self):
+        return self.expr.writable
+
+    def read(self):
+        base_typ = safe_realtype_shallow(self.expr.ctype()).base
+        return ('DML_VECT_ELEM(%s, %s, %s)'
+                % (base_typ.declaration(''), self.expr.read(),
+                   self.idx.read()))
+
+    @property
+    def is_stack_allocated(self):
+        return self.expr.is_stack_allocated
+
+    @property
+    def is_pointer_to_stack_allocation(self):
+        return (isinstance(safe_realtype_shallow(self.type), TArray)
+                and self.is_stack_allocated)
+
+def mkVectorRef(site, expr, idx):
+    if idx.constant and idx.value < 0:
+        raise EOOB(expr)
+    return VectorRef(site, mkAdoptedOrphan(expr.site, expr), idx)
 
 def mkIndex(site, expr, idx):
     if isinstance(idx, NonValue):
@@ -4403,11 +5031,19 @@ def mkIndex(site, expr, idx):
     if typ.is_int:
         return mkBitSlice(site, expr, idx, None, None)
 
+    expr = mkAdoptedOrphan(expr.site, expr)
+
     if isinstance(typ, (TArray, TPtr)):
         return ArrayRef(site, expr, idx)
 
     if isinstance(typ, (TVector)):
         return VectorRef(site, expr, idx)
+
+    if isinstance(typ, (TVectorLegacy)):
+        return LegacyVectorRef(site, expr, idx)
+
+    if isinstance(typ, TString):
+        return mkStringCharRef(site, expr, idx)
 
     raise ENARRAY(expr)
 
@@ -4415,8 +5051,10 @@ class Cast(Expression):
     "A C type cast"
     priority = 140
     explicit_type = True
+    slots = ('orphan',)
     @auto_init
-    def __init__(self, site, expr, type): pass
+    def __init__(self, site, expr, type):
+        self.orphan = expr.orphan
     def __str__(self):
         return 'cast(%s, %s)' % (self.expr, self.type.declaration(""))
     def read(self):
@@ -4440,22 +5078,36 @@ def mkCast(site, expr, new_type):
             raise ETEMPLATEUPCAST(site, "object", new_type)
         else:
             return mkTraitUpcast(site, expr, real.trait)
+
+    if (dml.globals.compat_dml12 and dml.globals.api_version <= "6"
+        and isinstance(expr, InterfaceMethodRef)):
+        # Workaround for bug 24144
+        return mkLit(site, "%s->%s" % (
+            expr.node_expr.read(), expr.method_name), new_type)
+    if isinstance(expr, NonValue):
+        raise expr.exc()
     old_type = safe_realtype(expr.ctype())
     if (dml.globals.compat_dml12_int(site)
-        and (isinstance(old_type, (TStruct, TVector))
-             or isinstance(real, (TStruct, TVector)))):
+        and (isinstance(old_type, (TStruct, TVectorLegacy))
+             or isinstance(real, (TStruct, TVectorLegacy)))):
         # these casts are permitted by C only if old and new are
         # the same type, which is useless
         return Cast(site, expr, new_type)
+    if isinstance(real, (TVoid, TArray, TFunction)):
+        raise ECAST(site, expr, new_type)
+    if old_type.cmp(real) == 0:
+        if (old_type.is_int
+            and not old_type.is_endian
+            and dml.globals.compat_dml12_int(expr.site)):
+            # 1.2 integer expressions often lie about their actual type,
+            # and require a "redundant" cast! Why yes, this IS horrid!
+            return Cast(site, expr, new_type)
+        return mkRValue(expr)
     if isinstance(real, TStruct):
-        if isinstance(old_type, TStruct) and old_type.label == real.label:
-            return expr
         raise ECAST(site, expr, new_type)
     if isinstance(real, TExternStruct):
-        if isinstance(old_type, TExternStruct) and old_type.id == real.id:
-            return expr
         raise ECAST(site, expr, new_type)
-    if isinstance(real, (TVoid, TArray, TVector, TTraitList, TFunction)):
+    if isinstance(real, (TVector, TTraitList)):
         raise ECAST(site, expr, new_type)
     if isinstance(old_type, (TVoid, TStruct, TVector, TTraitList, TTrait)):
         raise ECAST(site, expr, new_type)
@@ -4463,7 +5115,7 @@ def mkCast(site, expr, new_type):
         expr = as_int(expr)
         old_type = safe_realtype(expr.ctype())
     if real.is_int and not real.is_endian:
-        if isinstance(expr, IntegerConstant):
+        if old_type.is_int and expr.constant:
             value = truncate_int_bits(expr.value, real.signed, real.bits)
             if dml.globals.compat_dml12_int(site):
                 return IntegerConstant_dml12(site, value, real)
@@ -4474,8 +5126,8 @@ def mkCast(site, expr, new_type):
         # Shorten redundant chains of integer casts. Avoids insane C
         # output for expressions like a+b+c+d.
         if (isinstance(expr, Cast)
-            and isinstance(expr.type, TInt)
-            and expr.type.bits >= real.bits):
+            and isinstance(old_type, TInt)
+            and old_type.bits >= real.bits):
             # (uint64)(int64)x -> (uint64)x
             expr = expr.expr
             old_type = safe_realtype(expr.ctype())
@@ -4511,9 +5163,7 @@ def mkCast(site, expr, new_type):
             return expr
     elif real.is_int and real.is_endian:
         old_type = safe_realtype(expr.ctype())
-        if real.cmp(old_type) == 0:
-            return expr
-        elif old_type.is_arith or isinstance(old_type, TPtr):
+        if old_type.is_arith or isinstance(old_type, TPtr):
             return mkApply(
                 expr.site,
                 mkLit(expr.site, *real.get_store_fun()),
@@ -4570,7 +5220,6 @@ def mkCast(site, expr, new_type):
 class RValue(Expression):
     '''Wraps an lvalue to prohibit write. Useful when a composite
     expression is reduced down to a single variable.'''
-    writable = False
     @auto_init
     def __init__(self, site, expr): pass
     def __str__(self):
@@ -4579,10 +5228,29 @@ class RValue(Expression):
         return self.expr.ctype()
     def read(self):
         return self.expr.read()
-    def discard(self): pass
+    @property
+    def c_lval(self):
+        return self.expr.c_lval()
+    @property
+    def explicit_type(self):
+        return self.expr.explicit_type
+    @property
+    def type(self):
+        assert self.explicit_type
+        return self.expr.type
+    @property
+    def orphan(self):
+        return self.expr.orphan
+    # TODO(RAII) This used to be simply be `pass`, which SCREAMS incorrect.
+    # But it makes me wonder why it was defined like that to begin with.
+    def discard(self):
+        return self.expr.discard()
+    @property
+    def is_pointer_to_stack_allocation(self):
+        return self.expr.is_pointer_to_stack_allocation
 
 def mkRValue(expr):
-    if isinstance(expr, LValue) or expr.writable:
+    if expr.addressable or expr.writable:
         return RValue(expr.site, expr)
     return expr
 
@@ -4733,23 +5401,44 @@ class Initializer(object):
     being initialized."""
     __slots__ = ()
 
+    @abc.abstractproperty
+    def site(self): pass
+
 class ExpressionInitializer(Initializer):
-    __slots__ = ('expr',)
-    def __init__(self, expr):
+    __slots__ = ('expr', 'ignore_raii')
+    def __init__(self, expr, ignore_raii=False):
         assert isinstance(expr, Expression)
         self.expr = expr
+        self.ignore_raii = ignore_raii
     def __str__(self):
         return "%s" % self.expr
     def __repr__(self):
-        return "ExpressionInitializer(%r)" % self.expr
+        return f'ExpressionInitializer({self.expr!r}, {self.ignore_raii})'
+    @property
+    def site(self):
+        return self.expr.site
     def incref(self):
         self.expr.incref()
     def decref(self):
         self.expr.decref()
     def read(self):
+        realt = safe_realtype_shallow(self.expr.ctype())
+        if (not self.ignore_raii
+            and realt.is_raii
+            and not isinstance(realt, TArray)
+            and not self.expr.orphan):
+            from .codegen import get_raii_type_info
+            return get_raii_type_info(self.expr.ctype()).read_dupe(
+                self.expr.read())
+
         return self.expr.read()
     def as_expr(self, typ):
-        return source_for_assignment(self.expr.site, typ, self.expr)
+        expr = source_for_assignment(self.expr.site, typ, self.expr)
+        return (RAIIDupe(expr.site, expr)
+                if (not self.ignore_raii and not self.expr.orphan
+                    and typ.is_raii)
+                else expr)
+
     def assign_to(self, dest, typ):
         # Assigns to (partially) const-qualified targets can happen as part of
         # initializing (partially) const-qualified session variables. To allow
@@ -4758,15 +5447,59 @@ class ExpressionInitializer(Initializer):
         # Since session variables are allocated on the heap, this should *not*
         # be UB as long as the session variable hasn't been initialized
         # previously.
+        typ = realtype(typ)
         site = self.expr.site
-        if deep_const(typ):
-            out('memcpy((void *)&%s, (%s){%s}, sizeof %s);\n'
-                % (dest.read(),
-                   TArray(typ, mkIntegerLiteral(site, 1)).declaration(''),
-                   mkCast(site, self.expr, typ).read(),
-                   dest.read()))
+        if not self.ignore_raii and typ.is_raii:
+            # TODO(RAII) this logic should likely be decentralized
+            from .codegen import get_raii_type_info, VectorRAIITypeInfo
+            info = get_raii_type_info(typ)
+            if isinstance(self.expr, FromCString):
+                return (f'_dml_string_set((void *)&({dest}), '
+                        + f'{self.expr.expr.read()})')
+            if isinstance(self.expr, VectorCompoundLiteral):
+                assert isinstance(info, VectorRAIITypeInfo)
+                sizeof = f'sizeof({info.type.base.declaration("")})'
+                tgt = f'(void *)&({dest})'
+                src = self.expr.as_array_literal().read()
+                length = f'{len(self.expr.inits)}ULL'
+                if not info.base_info:
+                    return (f'(({{ _dml_vect_set_array({sizeof}, {tgt}, {src}, '
+                            + f'{length}); }}))')
+                destructor = info.base_info.cident_destructor
+                return (f'(({{ _dml_vect_set_compound_init_raii({sizeof}, '
+                        + f'{destructor}, {tgt}, {src}, {length}); }}))')
+            if self.expr.orphan:
+                if isinstance(self.expr, RAIIDupe):
+                    return (info.read_copy_lval if self.expr.expr.c_lval else
+                            info.read_copy)(dest, self.expr.expr.read())
+                outp = (info.read_linear_move_lval if self.expr.c_lval else
+                        info.read_linear_move)(dest, self.expr.read())
+                if (isinstance(self.expr, CompoundLiteral)
+                    and isinstance(safe_realtype_shallow(self.expr.ctype()),
+                                   TArray)):
+                    outp = f'(({{ {outp}; }}))'
+                return outp
+            return (info.read_copy_lval
+                    if self.expr.c_lval else info.read_copy)(dest,
+                                                             self.expr.read())
+
+        elif isinstance(typ, TEndianInt):
+            return (f'{typ.dmllib_fun("copy")}((void *)&{dest},'
+                    + f' {self.expr.read()})')
+        elif deep_const(typ):
+            shallow_deconst_typ = safe_realtype_unconst(typ)
+            if (deep_const(shallow_deconst_typ)
+                or isinstance(typ, (TExternStruct, TArray))):
+                return ('memcpy((void *)&%s, (%s){%s}, sizeof %s)'
+                    % (dest,
+                       TArray(typ, mkIntegerLiteral(site, 1)).declaration(''),
+                       mkCast(site, self.expr, typ).read(),
+                       dest))
+            else:
+                return (f'*({TPtr(shallow_deconst_typ).declaration("")})'
+                        + f'&{dest} = {self.expr.read()}')
         else:
-            mkCopyData(site, self.expr, dest).toc()
+            return f'{dest} = {self.expr.read()}'
 
 class CompoundInitializer(Initializer):
     '''Initializer for a variable of struct or array type, using the
@@ -4789,24 +5522,33 @@ class CompoundInitializer(Initializer):
     def read(self):
         return '{' + ", ".join(i.read() for i in self.init) + '}'
     def as_expr(self, typ):
+        if isinstance(safe_realtype_shallow(typ), TArray):
+            return ArrayCompoundLiteral(self.site, self, typ)
         return CompoundLiteral(self.site, self, typ)
     def assign_to(self, dest, typ):
         '''output C statements to assign an lvalue'''
         # (void *) cast to avoid GCC erroring if the target type is (partially)
         # const-qualified. See ExpressionInitializer.assign_to
-        if isinstance(typ, TNamed):
-            out('memcpy((void *)&%s, &(%s)%s, sizeof %s);\n' %
-                (dest.read(), typ.declaration(''), self.read(),
-                 dest.read()))
+        if typ.is_raii:
+            from .codegen import get_raii_type_info
+            info = get_raii_type_info(typ)
+            outp = info.read_linear_move_lval(
+                dest, f'(({typ.declaration("")}){self.read()})')
+            if isinstance(safe_realtype_shallow(typ), TArray):
+                outp = f'(({{ {outp}; }}))'
+            return outp
+        elif isinstance(typ, TNamed):
+            return ('memcpy((void *)&%s, &(%s)%s, sizeof %s)' %
+                (dest, typ.declaration(''), self.read(),
+                 dest))
         elif isinstance(typ, TArray):
-            out('memcpy((void *)%s, (%s)%s, sizeof %s);\n'
-                % (dest.read(), typ.declaration(''),
-                   self.read(), dest.read()))
+            return ('memcpy((void *)%s, (%s)%s, sizeof %s)'
+                % (dest, typ.declaration(''), self.read(), dest))
         elif isinstance(typ, TStruct):
-            out('memcpy((void *)&%s, (%s){%s}, sizeof %s);\n' % (
-                dest.read(),
+            return 'memcpy((void *)&%s, (%s){%s}, sizeof %s)' % (
+                dest,
                 TArray(typ, mkIntegerLiteral(self.site, 1)).declaration(''),
-                self.read(), dest.read()))
+                self.read(), dest)
         else:
             raise ICE(self.site, 'strange type %s' % typ)
 
@@ -4843,15 +5585,25 @@ class DesignatedStructInitializer(Initializer):
     def as_expr(self, typ):
         return CompoundLiteral(self.site, self, typ)
     def assign_to(self, dest, typ):
-        '''output C statements to assign an lvalue'''
+        '''return a C string for a void expression to assign an lvalue'''
         typ = safe_realtype(typ)
         if isinstance(typ, StructType):
-            # (void *) cast to avoid GCC erroring if the target type is
-            # (partially) const-qualified. See ExpressionInitializer.assign_to
-            out('memcpy((void *)&%s, (%s){%s}, sizeof %s);\n' % (
-                dest.read(),
-                TArray(typ, mkIntegerLiteral(self.site, 1)).declaration(''),
-                self.read(), dest.read()))
+            if typ.is_raii:
+                from .codegen import get_raii_type_info
+                info = get_raii_type_info(typ)
+                return info.read_linear_move_lval(
+                    dest,
+                    f'(({typ.declaration.declaration("")}){self.read()})')
+            else:
+                # (void *) cast to avoid GCC erroring if the target type is
+                # (partially) const-qualified.
+                # See ExpressionInitializer.assign_to
+                return 'memcpy((void *)&%s, (%s){%s}, sizeof %s)' % (
+                    dest,
+                    TArray(typ,
+                           mkIntegerLiteral(self.site, 1)).declaration(''),
+                    self.read(), dest)
+
         else:
             raise ICE(self.site, f'unexpected type for initializer: {typ}')
 
@@ -4868,9 +5620,10 @@ class MemsetInitializer(Initializer):
 
     This initializer may only be used for struct or array initializers.
     '''
-    __slots__ = ('site',)
-    def __init__(self, site):
+    __slots__ = ('site','ignore_raii')
+    def __init__(self, site, ignore_raii=False):
         self.site = site
+        self.ignore_raii = ignore_raii
     def __str__(self):
         return self.read()
     def __repr__(self):
@@ -4882,18 +5635,25 @@ class MemsetInitializer(Initializer):
     def read(self):
         return '{0}'
     def as_expr(self, typ):
+        if isinstance(safe_realtype_shallow(typ), TArray):
+            return ArrayCompoundLiteral(self.site, self, typ)
         return CompoundLiteral(self.site, self, typ)
     def assign_to(self, dest, typ):
         '''output C statements to assign an lvalue'''
         assert isinstance(safe_realtype(typ),
                           (TExternStruct, TStruct, TArray, TEndianInt, TTrait,
-                           THook))
+                           THook, TString))
+
+        if not self.ignore_raii and typ.is_raii:
+            from .codegen import get_raii_type_info
+            info = get_raii_type_info(typ)
+            return f'_DML_RAII_ZERO_OUT({info.cident_destructor}, {dest})'
+
         # (void *) cast to avoid GCC erroring if the target type is
         # (partially) const-qualified. See ExpressionInitializer.assign_to
-        out('memset((void *)&%s, 0, sizeof(%s));\n'
-            % (dest.read(), typ.declaration('')))
+        return f'memset((void *)&{dest}, 0, sizeof({typ.declaration("")}))'
 
-class CompoundLiteral(Expression):
+class CompoundLiteral(Orphan):
     @auto_init
     def __init__(self, site, init, type):
         assert isinstance(init, (CompoundInitializer,
@@ -4902,7 +5662,109 @@ class CompoundLiteral(Expression):
     def __str__(self):
         return 'cast(%s, %s)' % (self.init, self.type)
     def read(self):
-        return f'({self.type.declaration("")}) {self.init.read()}'
+        return f'(({self.type.declaration("")}){self.init.read()})'
+
+class ArrayCompoundLiteral(Expression):
+    slots = ('read_adopted', 'is_stack_allocated')
+    # TODO(RAII) writable?
+    addressable = True
+    c_lval = True
+    @auto_init
+    def __init__(self, site, init, type):
+        assert isinstance(init, (CompoundInitializer, MemsetInitializer))
+        self.is_stack_allocated = isinstance(TopRAIIScope.active,
+                                             MethodRAIIScope)
+        self.read_adopted = RAIIScope.reserve_orphan_adoption(
+            site, CompoundLiteral(site, init, type))
+
+    def __str__(self):
+        return 'cast(%s, %s)' % (self.init, self.type)
+    def read(self):
+        return self.read_adopted()
+
+    @property
+    def is_pointer_to_stack_allocation(self):
+        return self.is_stack_allocated
+
+class VectorCompoundLiteral(Orphan):
+    '''Initializer for a variable of vector type, using the
+    {value1, value2, ...}  syntax as in C'''
+    priority = Cast.priority
+    slots = ('type',)
+    @auto_init
+    def __init__(self, site, inits, basetype):
+        self.type = TVector(basetype)
+
+    def __str__(self):
+        return ('cast({%s}, vect(%s))'
+                % (','.join(str(e) for e in self.inits),
+                   str(self.basetype)))
+
+    def read(self):
+        if self.inits:
+            # The statement expression limits the lifetime of the compound
+            # literal, cause the compiler won't be able to tell otherwise
+            # that it needn't consume the stack space.
+            return ('(({ _dml_vect_from_array(sizeof(%s), %s, %s); }))'
+                    % (self.basetype.declaration(''),
+                       self.as_array_literal().read(),
+                       len(self.inits)))
+        else:
+            return '((const _dml_vect_t){0})'
+
+    def as_array_literal(self):
+        if self.inits:
+            count = mkIntegerLiteral(self.site, len(self.inits))
+            const_basetype = conv_const(True, self.basetype)
+            return CompoundLiteral(
+                self.site, CompoundInitializer(self.site, self.inits),
+                TArray(const_basetype, count))
+        else:
+            return NullConstant(self.site)
+
+class RAIIDupe(Orphan):
+    priority = dml.expr.Apply.priority
+    slots = ('info',)
+    @auto_init
+    def __init__(self, site, expr):
+        assert expr.ctype().is_raii
+        assert not isinstance(safe_realtype_shallow(expr.ctype()), TArray)
+        from .codegen import get_raii_type_info
+        self.info = get_raii_type_info(expr.ctype())
+
+    def read(self):
+        return self.info.read_dupe(self.expr.read())
+
+    def ctype(self):
+        return self.expr.ctype()
+
+    def discard(self):
+        return self.expr.discard()
+
+class AdoptedOrphan(Expression):
+    priority = dml.expr.Apply.priority
+    slots = ('read_adopted', 'is_stack_allocated')
+    c_lval = True
+    @auto_init
+    def __init__(self, site, expr):
+        assert expr.orphan
+        self.is_stack_allocated = isinstance(TopRAIIScope.active,
+                                             MethodRAIIScope)
+        self.read_adopted = RAIIScope.reserve_orphan_adoption(site, expr)
+
+    def __str__(self):
+        return str(self.expr)
+
+    def ctype(self):
+        return self.expr.ctype()
+
+    def read(self):
+        return self.read_adopted()
+
+def mkAdoptedOrphan(site, expr):
+    if expr.orphan and expr.ctype().is_raii:
+        return AdoptedOrphan(site, expr)
+    return expr
 
 class StructDefinition(Statement):
     """A C struct definition appearing in a local scope, like
@@ -4911,14 +5773,16 @@ class StructDefinition(Statement):
     is preceded by a StructDefinition."""
     @auto_init
     def __init__(self, site, structtype): pass
-    def toc(self):
+    def toc_stmt(self):
         self.structtype.resolve().print_struct_definition()
 mkStructDefinition = StructDefinition
 
 class Declaration(Statement):
     "A variable declaration"
     is_declaration = True
-    def __init__(self, site, name, type, init = None, unused = False):
+    slots = ('toc_raii_bind',)
+    def __init__(self, site, name, type, init = None, unused = False,
+                 unscoped_raii = False):
         assert site
         self.site = site
         self.name = name
@@ -4930,23 +5794,692 @@ class Declaration(Statement):
         if name.startswith("__"):
             assert unused == True
         self.unused = unused
+        self.unscoped_raii = unscoped_raii
+        if type.is_raii and not unscoped_raii:
+            self.toc_raii_bind = RAIIScope.reserve_bind_lval(
+                site, mkLit(site, self.name, type))
+        else:
+            self.toc_raii_bind = None
 
-    def toc(self):
+    def toc_stmt(self):
         self.linemark()
 
         if (isinstance(self.init, MemsetInitializer)
-            and not deep_const(self.type)):
+            and not deep_const(self.type)
+            and not self.type.is_raii):
             # ducks a potential GCC warning, and also serves to
             # zero-initialize VLAs
             self.type.print_declaration(self.name, unused = self.unused)
-            self.init.assign_to(mkLit(self.site, self.name, self.type),
-                                self.type)
+            self.linemark()
+            out(self.init.assign_to(self.name, self.type) + ';\n')
         else:
             self.type.print_declaration(
                 self.name, init=self.init.read() if self.init else None,
                 unused=self.unused)
+        if self.toc_raii_bind is not None:
+            self.toc_raii_bind()
 
 mkDeclaration = Declaration
+
+class RAIIScope(metaclass=SlotsMeta):
+    slots = ('top_scope', 'allocs', 'scope_stack_ix',)
+    def __init__(self):
+        self.top_scope = None
+        self.scope_stack_ix = None
+        self.allocs = 0
+
+    @staticmethod
+    def scope_stack():
+        return TopRAIIScope.active.scope_stack
+
+    def __enter__(self):
+        assert TopRAIIScope.active is not None
+        self.top_scope = TopRAIIScope.active
+        TopRAIIScope.active.push_scope(self)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        assert TopRAIIScope.active is self.top_scope
+        top = self.top_scope.pop_scope()
+        assert top is self
+
+    @staticmethod
+    def reserve_orphan_adoption(site, expr):
+        assert TopRAIIScope.active is not None
+        return TopRAIIScope.active.reserve_orphan_adoption(
+            site, expr, RAIIScope.scope_stack()[-1])
+
+    @staticmethod
+    def reserve_bind_lval(site, expr):
+        return RAIIScope.reserve_bind_lvals(site, (expr,))
+
+    @staticmethod
+    def reserve_bind_lvals(site, exprs):
+        assert TopRAIIScope.active
+        return TopRAIIScope.active.reserve_bind_lvals(
+            site, exprs, RAIIScope.scope_stack()[-1])
+
+    def clear_scope(self, site):
+        assert self.top_scope is not None
+        self.top_scope.clear_subscope(site, self)
+
+    @property
+    def used(self):
+        return self.allocs > 0
+
+    @property
+    def completed(self):
+        return self.top_scope is not None and self.scope_stack_ix is None
+
+class TopRAIIScope(RAIIScope):
+    active = None
+
+    slots = ('prev_active',)
+
+    @auto_init
+    def __init__(self):
+        self.prev_active = None
+
+    def __enter__(self):
+        self.prev_active = TopRAIIScope.active
+        TopRAIIScope.active = self
+        return RAIIScope.__enter__(self)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        RAIIScope.__exit__(self, exc_type, exc_val, exc_tb)
+        assert TopRAIIScope.active is self
+        TopRAIIScope.active = self.prev_active
+
+    @property
+    def scope_stack(self):
+        raise ICE(None,
+                  f'{type(self).__name__}.scope_stack not supported')
+
+    def clear_subscope(self, site, scope):
+        raise ICE(site,
+                  f'{type(self).__name__}.clear_subscope() not supported')
+
+    def reserve_bind_lval(self, site, lval, scope):
+        raise ICE(site,
+                  f'{type(self).__name__}.reserve_bind_lval() not supported')
+
+    def reserve_bind_lvals(self, site, exprs, scope):
+        raise ICE(site,
+                  f'{type(self).__name__}.reserve_bind_lvals() not supported')
+
+    def reserve_orphan_adoption(self, site, expr, scope):
+        raise ICE(site,
+                  (f'{type(self).__name__}.reserve_orphan_adoption() '
+                   + 'not supported'))
+
+    def push_scope(self, scope):
+        if scope is not self:
+            raise ICE(None, f'{type(self).__name__}: subscopes not supported')
+        self.scope_stack_ix = 0
+
+    def pop_scope(self):
+        assert self.scope_stack_ix == 0
+        self.scope_stack_ix = None
+        return self
+
+
+class MethodRAIIScope(TopRAIIScope):
+    slots = ('scopes', 'scope_stack', 'used_scopes')
+
+    @auto_init
+    def __init__(self):
+        self.scopes = Set()
+        self.scope_stack = []
+        self.used_scopes = None
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        TopRAIIScope.__exit__(self, exc_type, exc_val, exc_tb)
+        self.used_scopes = {scope: i
+                            for (i, scope) in enumerate(filter(
+                                    lambda x: x.used, self.scopes))}
+
+    def reserve_bind_lvals(self, site, exprs, subscope):
+        assert self.used_scopes is None and subscope in self.scopes
+        from .codegen import get_raii_type_info
+        binds = [(expr, get_raii_type_info(expr.ctype()).cident_destructor)
+                 for expr in exprs]
+        subscope.allocs += len(binds)
+        def toc_stmt():
+            assert self.used_scopes is not None
+            for (expr, destructor) in binds:
+                site_linemark(site)
+                out(f'DML_RAII_SCOPE_LVAL({self.used_scopes[subscope]}, '
+                    + f'{destructor}, {expr.read()});\n')
+        return toc_stmt
+
+    def clear_subscope(self, site, scope):
+        assert self.used_scopes is None or scope in self.used_scopes
+        site_linemark(site)
+        out(f'DML_RAII_SCOPE_CLEANUP({self.used_scopes[scope]});\n')
+
+    def reserve_orphan_adoption(self, site, expr, subscope):
+        assert self.used_scopes is None and subscope in self.scopes
+        subscope.allocs += 1
+        typ = safe_realtype_shallow(expr.ctype())
+        if typ.is_raii:
+            from .codegen import get_raii_type_info
+            destructor = get_raii_type_info(typ).cident_destructor
+        else:
+            assert isinstance(typ, TArray)
+            destructor = 'NULL'
+
+        array_prefix = 'ARRAY_'*(isinstance(typ, TArray))
+
+        def read():
+            assert self.used_scopes is not None
+            return (f'DML_RAII_SCOPE_{array_prefix}ORPHAN('
+                    + f'{self.used_scopes[subscope]}, {destructor}, '
+                    + f'{expr.read()})')
+        return read
+
+    def push_scope(self, scope):
+        assert self.used_scopes is None
+        assert scope.scope_stack_ix is None
+        scope.scope_stack_ix = len(self.scope_stack)
+        self.scope_stack.append(scope)
+        self.scopes.add(scope)
+
+    def pop_scope(self):
+        assert self.used_scopes is None
+        scope = self.scope_stack.pop()
+        scope.scope_stack_ix = None
+        return scope
+
+class UnusedMethodRAIIScope(MethodRAIIScope):
+    def reserve_orphan_adoption(self, site, expr, subscope):
+        raise ICE(site, 'orphan adopted in UnusedMethodRAIIScope')
+
+    def reserve_bind_lvals(self, site, exprs, subscope):
+        raise ICE(site, 'lval bound in UnusedMethodRAIIScope')
+
+class StaticRAIIScope(TopRAIIScope):
+    def reserve_orphan_adoption(self, site, expr, subscope):
+        assert subscope is self
+        self.allocs += 1
+        typ = safe_realtype_shallow(expr.ctype())
+        assert typ.is_raii or isinstance(typ, TArray)
+        def read():
+            if isinstance(typ, TArray):
+                unconst_typ = safe_realtype_unconst(typ)
+                if deep_const(unconst_typ):
+                    return f'DML_STATIC_ARRAY_CONSTSAFE({expr.read()})'
+                else:
+                    return (f'DML_STATIC_ARRAY({unconst_typ.declaration("")}, '
+                            + f'{expr.read()})')
+
+            return expr.read()
+        return read
+
+
+    @property
+    def scope_stack(self):
+        return [self]
+
+# TODO(RAII): Very niche, and currently unleveraged! This is for orphans
+# adopted in the constant initializers of sessions/saveds. For example...
+#
+# session int *p = cast({0, 1, 2, 3}, int[4]);
+#
+# But no expression using RAIIScope.reserve_orphan_adoption is currently
+# considered constant.
+class SessionRAIIScope(TopRAIIScope):
+    def reserve_orphan_adoption(self, site, expr, subscope):
+        assert subscope is self
+        ix = self.allocs
+        self.allocs += 1
+        typ = safe_realtype_shallow(expr.ctype())
+        if typ.is_raii:
+            from .codegen import get_raii_type_info
+            destructor = get_raii_type_info(typ).cident_destructor
+        else:
+            assert isinstance(typ, TArray)
+            destructor = 'NULL'
+        array_prefix = 'ARRAY_'*isinstance(typ, TArray)
+        def read():
+            return (f'DML_RAII_SESSION_{array_prefix}ORPHAN('
+                    + f'_dev->_orphan_allocs[{ix}], {destructor}, '
+                    + f'{expr.read()})')
+
+        return read
+
+    @property
+    def scope_stack(self):
+        return [self]
+
+class RAIIScopeDeclarations(Statement):
+    @auto_init
+    def __init__(self, site, methodscope):
+        assert isinstance(methodscope, MethodRAIIScope)
+
+    @property
+    def is_declaration(self):
+        return bool(self.methodscope.used_scopes is None
+                    or self.methodscope.used_scopes)
+
+    @property
+    def is_empty(self):
+        return bool(self.methodscope.used_scopes is not None
+                    and not self.methodscope.used_scopes)
+
+    def toc_stmt(self):
+        raise ICE(self.site, 'RAIIScopeDeclarations.toc_stmt: nonsensical')
+
+    def toc(self):
+        for (scope, c_uniq) in self.methodscope.used_scopes.items():
+            self.linemark()
+            out(f'_scope_allocation_t _scope_{c_uniq}_allocs'
+                + f'[{scope.allocs}] UNUSED;\n')
+        if self.methodscope.used_scopes:
+            self.linemark()
+            out('uint16 _scope_allocs_lens'
+                + f'[{len(self.methodscope.used_scopes)}] UNUSED = {{0}};\n')
+
+mkRAIIScopeDeclarations = RAIIScopeDeclarations
+
+class RAIIScopeBindLVals(Statement):
+    slots = ('toc_bind_lvals',)
+    @auto_init
+    def __init__(self, site, scope, lvals):
+        self.toc_bind_lvals = TopRAIIScope.active.reserve_bind_lvals(
+            site, lvals, scope)
+
+    def toc_stmt(self):
+        out('{\n', postindent = 1)
+        self.toc_inline()
+        out('}\n', preindent = -1)
+
+    def toc(self):
+        self.toc_bind_lvals()
+
+    @property
+    def is_empty(self):
+        return not self.lvals
+
+mkRAIIScopeBindLVals = RAIIScopeBindLVals
+
+class RAIIScopeClears(Statement):
+    @auto_init
+    def __init__(self, site, scopes): pass
+
+    def toc_stmt(self):
+        out('{\n', postindent = 1)
+        self.toc_inline()
+        out('}\n', preindent = -1)
+
+    def toc(self):
+        for scope in self.scopes:
+            if scope.used:
+                scope.clear_scope(self.site)
+
+    @property
+    def is_empty(self):
+        return all(scope.completed and not scope.used
+                   for scope in self.scopes)
+
+def mkRAIIScopeClears(site, scopes):
+    return RAIIScopeClears(site, [scope for scope in scopes
+                                  if scope.used or not scope.completed])
+
+class StringAppend(Statement):
+    @auto_init
+    def __init__(self, site, tgt, src):
+        assert not src.orphan
+        assert tgt.c_lval
+
+    def toc_stmt(self):
+        self.linemark()
+        out(f'_dml_string_cat(&({self.tgt.read()}), {self.src.read()});\n')
+
+class StringCAppend(Statement):
+    @auto_init
+    def __init__(self, site, tgt, src):
+        assert tgt.c_lval
+
+    def toc_stmt(self):
+        self.linemark()
+        out(f'_dml_string_addstr(&({self.tgt.read()}), {self.src.read()});\n')
+
+def mkStringAppend(site, tgt, src):
+    if not tgt.writable:
+        raise ERVAL(tgt, '+=')
+    elif deep_const(tgt.ctype()):
+        raise ENCONST(site)
+    if isinstance(src, StringConstant):
+        return StringCAppend(site, tgt, src)
+    return StringAppend(site, tgt, mkAdoptedOrphan(site, src))
+
+class VectorAppend(Statement):
+    slots = ('basetyp_info',)
+    @auto_init
+    def __init__(self, site, basetyp, tgt, src):
+        assert not src.orphan
+        assert tgt.c_lval
+        from .codegen import get_raii_type_info
+        self.basetyp_info = (get_raii_type_info(basetyp)
+                             if basetyp.is_raii else None)
+
+    def toc_stmt(self):
+        self.linemark()
+        if self.basetyp_info:
+            out('_dml_vect_append_raii(sizeof(%s), %s, &(%s), %s)'
+                % (self.basetyp.declaration(''),
+                   self.basetyp_info.cident_copier, self.tgt.read(),
+                   self.src.read()))
+        else:
+            out('_dml_vect_append(sizeof(%s), &(%s), %s);\n'
+                % (self.basetyp.declaration(''), self.tgt.read(),
+                   self.src.read()))
+
+class VectorCompoundInitAppend(Statement):
+    @auto_init
+    def __init__(self, site, basetype, tgt, src, length):
+        assert tgt.c_lval
+
+    def toc_stmt(self):
+        self.linemark()
+        # Limit the lifetime of the compound literal
+        out('{ _dml_vect_append_array(sizeof(%s), &(%s), %s, %dULL); }\n'
+            % (self.basetype.declaration(''), self.tgt.read(), self.src.read(),
+               self.length))
+
+def mkVectorAppend(site, tgt, src):
+    basetype = safe_realtype_shallow(tgt.ctype()).base
+    if not tgt.writable:
+        raise ERVAL(tgt, '+=')
+    elif deep_const(tgt.ctype()):
+        raise ENCONST(site)
+
+    if isinstance(src, VectorCompoundLiteral):
+        if len(src.inits) == 0:
+            return mkNull(site)
+        elif len(src.inits) == 1:
+            return VectorPushApply(site, 'back', tgt,
+                                   src.inits[0].as_expr(basetype))
+        else:
+            return VectorCompoundInitAppend(site, basetype, tgt,
+                                            src.as_array_literal(),
+                                            len(src.inits))
+
+    return VectorAppend(site, basetype, tgt, mkAdoptedOrphan(site, src))
+
+def str_expr_pseudomethod(expr, sub):
+    expr = (f'({expr})'
+            if expr.priority < StructMember.priority
+            else str(expr))
+    return f'{expr}.{sub}'
+
+class VectorCBufRef(PseudoMethodRef):
+    @auto_init
+    def __init__(self, site, expr):
+        pass
+    def __str__(self):
+        return str_expr_pseudomethod(self.expr, 'c_buf')
+    def apply(self, inits, location, scope):
+        expr = self.expr
+        if inits:
+            raise EARG(self.site, '.c_buf')
+        # No deep_const is intentional, as it's only shallow const that results
+        # in invalid generated C.
+        # TODO(RAII): Though perhaps deep_const should be used anyway...
+        if safe_realtype_shallow(expr.ctype()).const:
+            raise ECONST(self.site)
+        if not expr.writable:
+            raise ERVAL(self.expr.site, '.c_buf()')
+
+        base_const = deep_const(expr.ctype())
+
+        return VectorCBufApply(self.site, expr, base_const)
+
+class VectorCBufApply(Expression):
+    priority = dml.expr.Apply.priority
+
+    slots = ('basetype',)
+
+    @auto_init
+    def __init__(self, site, expr, base_const):
+        typ = safe_realtype_shallow(expr.ctype())
+        assert not expr.orphan and expr.c_lval and not typ.const
+        self.basetype = conv_const(base_const, typ.base)
+
+    def __str__(self):
+        return str_expr_pseudomethod(self.expr, 'c_buf()')
+
+    def read(self):
+        return (f'DML_VECT_ELEMENTS({self.basetype.declaration("")}, '
+                + f'{self.expr.read()})')
+
+    def ctype(self):
+        return TPtr(self.basetype)
+
+    @property
+    def is_pointer_to_stack_allocation(self):
+        return self.expr.is_stack_allocated
+
+
+mkVectorCBuf = VectorCBufRef
+
+class VectorPopRef(PseudoMethodRef):
+    @auto_init
+    def __init__(self, site, direction, expr):
+        pass
+    def __str__(self):
+        return str_expr_pseudomethod(self.expr, f'pop_{self.direction}')
+    def apply(self, inits, location, scope):
+        if inits:
+            raise EARG(self.site, f'.pop_{self.direction}')
+        if not self.expr.writable:
+            raise ERVAL(self.site, f'.pop_{self.direction}()')
+        if deep_const(self.expr.ctype()):
+            raise ECONST(self.site)
+        # Writable orphans are not impossible in principle
+        expr = mkAdoptedOrphan(self.site, self.expr)
+        return VectorPopApply(self.site, self.direction, expr)
+
+class VectorPopApply(Orphan):
+    priority = StructMember.priority
+
+    slots = ('basetype',)
+
+    @auto_init
+    def __init__(self, site, direction, expr):
+        assert not expr.orphan
+        typ = safe_realtype_shallow(expr.ctype())
+        self.basetype = typ.base
+
+    def __str__(self):
+        return str_expr_pseudomethod(self.expr, f'pop_{self.direction}()')
+
+    def read(self):
+        t = self.basetype.declaration('')
+        return (f'DML_VECT_POP_{self.direction.upper()}({t}, '
+                + f'{self.expr.read()})')
+
+    def ctype(self):
+        return self.basetype
+
+def mkVectorPopBack(site, expr):
+    return VectorPopRef(site, 'back', expr)
+
+def mkVectorPopFront(site, expr):
+    return VectorPopRef(site, 'front', expr)
+
+class VectorPushRef(PseudoMethodRef):
+    @auto_init
+    def __init__(self, site, direction, expr):
+        pass
+    def __str__(self):
+        return str_expr_pseudomethod(self.expr, f'push_{self.direction}')
+    def apply(self, inits, location, scope):
+        if not self.expr.writable:
+            raise ERVAL(self.site, f'.push_{self.direction}(...)')
+        if deep_const(self.expr.ctype()):
+            raise ECONST(self.site)
+        basetype = safe_realtype_shallow(self.expr.ctype()).base
+        [item] = typecheck_inarg_inits(
+            self.site, inits, [('item', basetype)], location, scope,
+            f'push_{self.direction}')
+        # Writable orphans are not impossible in principle
+        expr = mkAdoptedOrphan(self.site, self.expr)
+        return VectorPushApply(self.site, self.direction, expr, item)
+
+class VectorPushApply(Expression):
+    priority = AssignOp.priority
+
+    type = void
+
+    slots = ('basetype',)
+
+    @auto_init
+    def __init__(self, site, direction, expr, item):
+        assert not expr.orphan
+        typ = safe_realtype_shallow(expr.ctype())
+        self.basetype = typ.base
+
+    def __str__(self):
+        return str_expr_pseudomethod(self.expr,
+                                     f'push_{self.direction}({self.item})')
+
+    def read(self):
+        t = self.basetype.declaration('')
+        return ('DML_SAFE_ASSIGN('
+                + f'DML_VECT_NEW_ELEM_AT_{self.direction.upper()}({t}, '
+                + f'{self.expr.read()}), {self.item.read()})')
+
+def mkVectorPushBack(site, expr):
+    return VectorPushRef(site, 'back', expr)
+
+def mkVectorPushFront(site, expr):
+    return VectorPushRef(site, 'front', expr)
+
+class VectorInsertRef(PseudoMethodRef):
+    @auto_init
+    def __init__(self, site, expr):
+        pass
+    def __str__(self):
+        return str_expr_pseudomethod(self.expr, 'insert')
+    def apply(self, inits, location, scope):
+        if not self.expr.writable:
+            raise ERVAL(site, '.insert(...)')
+        if deep_const(self.expr.ctype()):
+            raise ECONST(self.site)
+        basetype = safe_realtype_shallow(self.expr.ctype()).base
+        [index, item] = typecheck_inarg_inits(
+            self.site, inits, [('index', TInt(32, False)),
+                               ('item', basetype)],
+            location, scope, 'insert')
+        if index.constant and index.value < 0:
+            raise EOOB(index)
+        # Writable orphans are not impossible in principle
+        expr = mkAdoptedOrphan(self.expr.site, self.expr)
+        return VectorInsertApply(self.site, basetype, expr, index, item)
+
+mkVectorInsert = VectorInsertRef
+
+class VectorInsertApply(Expression):
+    priority = AssignOp.priority
+
+    type = void
+
+    @auto_init
+    def __init__(self, site, basetype, expr, index, item):
+        assert not expr.orphan
+
+    def __str__(self):
+        return str_expr_pseudomethod(self.expr,
+                                     f'insert({self.index}, {self.item})')
+    def read(self):
+        t = self.basetype.declaration('')
+        return (f'DML_SAFE_ASSIGN(DML_VECT_NEW_ELEM_AT({t}, '
+                + f'{self.expr.read()}, {self.index.read()}), '
+                + f'{self.item.read()})')
+
+class VectorRemoveRef(PseudoMethodRef):
+    @auto_init
+    def __init__(self, site, expr):
+        pass
+    def __str__(self):
+        return str_expr_pseudomethod(self.expr, 'remove')
+    def apply(self, inits, location, scope):
+        if not self.expr.writable:
+            raise ERVAL(self.site, '.remove(...)')
+        if deep_const(self.expr.ctype()):
+            raise ECONST(self.site)
+        basetype = safe_realtype_shallow(self.expr.ctype()).base
+        [index] = typecheck_inarg_inits(
+            self.site, inits, [('index', TInt(32, False))],
+            location, scope, 'remove')
+        if index.constant and index.value < 0:
+            raise EOOB(index)
+        # Writable orphans are not impossible in principle
+        expr = mkAdoptedOrphan(self.expr.site, self.expr)
+        return VectorRemoveApply(self.site, basetype, expr, index)
+
+mkVectorRemove = VectorRemoveRef
+
+class VectorRemoveApply(Orphan):
+    priority = dml.expr.Apply.priority
+
+    @auto_init
+    def __init__(self, site, basetype, expr, index):
+        assert not expr.orphan
+
+    def __str__(self):
+        return str_expr_pseudomethod(self.expr,
+                                     f'remove({self.index})')
+    def read(self):
+        t = self.basetype.declaration('')
+        return (f'DML_VECT_REMOVE({t}, {self.vect.read()}, '
+                + f'{self.index.read()})')
+
+    def ctype(self):
+        return self.basetype
+
+class VectorAdd(Orphan):
+    priority = dml.expr.Apply.priority
+
+    slots = ('base_type', 'info')
+
+    # Implemented by INHERITING ownership of first argument, but only BORROWING
+    # second argument. Meaning the second argument is never duped, and, if
+    # orphan, must be adopted.
+    def __init__(self, site, lh, rh):
+        self.site = site
+        self.lh = lh
+        self.rh = mkAdoptedOrphan(rh.site, rh)
+         # TODO(RAII) imports...
+        from .codegen import get_raii_type_info, VectorRAIITypeInfo
+        self.base_type = safe_realtype_unconst(lh.ctype()).base
+        self.info = get_raii_type_info(self.ctype())
+        assert isinstance(self.info, VectorRAIITypeInfo)
+
+    def __str__(self):
+        lh = str(self.lh)
+        rh = str(self.rh)
+        if self.lh.priority <= Add.priority:
+            lh = '('+lh+')'
+        if self.rh.priority <= Add.priority:
+            rh = '('+rh+')'
+        return lh + ' + ' + rh
+
+    def ctype(self):
+        return TVector(self.base_type)
+
+    def read(self):
+        lh = self.lh.read()
+        if not self.lh.orphan:
+            lh = self.info.read_dupe(lh)
+        sizeof = f'sizeof({self.base_type.declaration("")})'
+        if self.info.base_info is None:
+            return f'_dml_vect_add({sizeof}, {lh}, {self.rh.read()})'
+        else:
+            copier = self.info.base_info.cident_copier
+            return (f'_dml_vect_add_raii({sizeof}, {copier}, {lh}, '
+                    + f'{self.rh.read()})')
 
 def possible_side_effect(init):
     """Return True if this expression might have some side effect
@@ -4967,7 +6500,7 @@ def possible_side_effect(init):
         return False
     return True
 
-def sym_declaration(sym, unused=False):
+def sym_declaration(sym, unused=False, unscoped_raii=False):
     assert not isinstance(sym, symtab.StaticSymbol)
     refcount = sym.refcount()
     if not sym.stmt and refcount == 0 and not possible_side_effect(sym.init):
@@ -4980,7 +6513,7 @@ def sym_declaration(sym, unused=False):
     unused = unused or (refcount == 0) or sym.value.startswith("__")
 
     return mkDeclaration(sym.site, sym.value, sym.type,
-                         sym.init, unused)
+                         sym.init, unused, unscoped_raii)
 
 ###
 
@@ -5049,5 +6582,6 @@ def log_statement(site, node, indices, logtype, level, groups, fmt, *args):
                 groups,
                 mkStringConstant(site, fmt) ] +
               list(args),
-              fun.ctype())
+              fun.ctype(),
+              True)
     return mkExpressionStatement(site, x)
