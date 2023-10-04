@@ -1,0 +1,224 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+typedef struct {
+    int x;
+    string s;
+} s_t;
+typedef struct {
+    vect(int) ints;
+    vect(string) strings;
+    string otherstrings[3];
+} bs_t;
+
+extern typedef struct {
+    char *elements;
+    uint32 size;
+    uint32 start;
+    uint32 len;
+} _dml_vect_t;
+
+extern typedef struct {
+    char *s;
+    uint32 size;
+    uint32 len;
+} _dml_string_t;
+
+extern void _dml_string_addfmt(string *s, const char *format, ...);
+extern string _dml_string_new(const char *msg);
+extern void _dml_string_addstr(string *s, const char *str);
+
+saved s_t sav = {0, "is, frostigt mörker"};
+saved string savic[2] = {"betvingande", "kyla"};
+
+
+typedef struct {
+    string xarx[3];
+} calka_t;
+
+typedef struct {
+    string xarx;
+    const int y;
+} racalka_t;
+
+independent method add_strs(string a, string b) -> (string) {
+    _dml_string_addstr(&a, b.c_str());
+    return a;
+}
+
+independent method splitAt(string str, uint32 at) -> (string, string) {
+    local int idx = at > str.len ? str.len : at;
+    return (mk_string_f("%.*s", idx, str.c_str()),
+            mk_string(str.c_str() + idx));
+}
+
+template t {
+    param apocalyptical : string;
+    param apocalyptical = mk_string_f(
+        "Gnistor som släcks %s %s %s %s %s %s.",
+        "i", "en", "stjärnkall", "och", "bister", "natt");
+
+    param whatdoesthisevenmean : const char *;
+    param whatdoesthisevenmean = cast({{"En ondskans tid nu domnar min hand",
+                                       1}}, racalka_t[1])[0].xarx.c_str();
+
+    param avect : vect(int);
+    param avect = cast({1, 2, 3}, vect(int));
+}
+
+is t;
+
+saved struct { string xarx[3]; } salt;
+
+session const char *witness = cast("i svårmod stillar sig", string).c_str();
+
+independent method insert_stringvect(vect(string) *v, uint32 i, string s) {
+    v->insert(i, s);
+}
+
+method init() {
+    local bs_t bs = { .otherstrings = {"bränningen", "vid", "strand"},
+                      .ints = {5,3,3}, ...};
+    assert "vid" == bs.otherstrings[1];
+    assert bs.ints.len == 3;
+    local bs_t bs2 = { .strings = {"hård", "tid", "ensamma", "timmar"}, ...};
+    bs = bs2;
+    assert bs.strings.len == 4 && bs.strings[2] == "ensamma";
+    bs.strings = {"världen", "är", "frusen"};
+    assert bs.strings[2] == "frusen";
+
+    local vect(string) v = {"och","människan","vred"};
+    assert v[1] == "människan";
+    assert v.len == 3;
+    v.len = 5;
+    assert v.len == 5 && v[4] == "";
+    v += {"all", "visdom", "är"};
+
+    v.push_back("förlorad");
+    assert v.len == 9;
+    v.pop_front();
+    assert v.len == 8;
+    local bool polarity = true;
+    insert_stringvect(&v, 4, "och glömt");
+    foreach elem in (v) {
+        elem += polarity ? cast(",", string) : cast(";", string);
+        polarity = !polarity;
+    }
+    local string to_print;
+    foreach elem in (v) {
+        to_print += elem;
+    }
+    to_print = mk_string_f("%s;all sång har", to_print.c_str());
+    assert strcmp(to_print.c_str(),
+                  "människan,vred;,;och glömt,all;visdom,är;förlorad,;"
+                  + "all sång har") == 0;
+
+    local string s1 = "Tystnat.";
+    s1.c_str()[s1.len - 1] = ',';
+    local string s_ = s1 + " och " + "kärleken " + ("med; " + s1);
+    local uint32 prev_len = s_.len;
+    local _dml_string_t *p = cast(&s_, void *);
+    s_.len = 255;
+    assert p->size == 256;
+    s_.len = prev_len;
+    assert prev_len == 36 && p->size == 128; // Shrunk to _DML_BITCEIL(36 + 1)*2
+    s_ = "";
+    assert p->size == 32; // Shrunk to _DML_STRING_INITIAL_SIZE
+    local string *ps = new<enriched> string;
+    local int *pater = cast({1,2,3}, int[3]);
+    assert pater[1] == 2;
+    try {
+        local const s_t st = {1, "som"};
+        *ps = st.s + " bristande";
+        {
+            local string s2 = " båge";
+            if (*ps == "brinnande")
+                throw;
+            *ps += s2;
+        }
+        _dml_string_addstr(&s1, s1.c_str());
+        *ps = add_strs(*ps, " låga.");
+    } catch;
+
+    do
+        local string s2 = "skriande";
+    while (false);
+    sav.s = "kråka";
+    assert s1 + "SKRIANDE" == "Tystnat,Tystnat,SKRIANDE";
+    assert *ps == "som bristande båge låga.";
+    assert strcmp(cast(this, t).whatdoesthisevenmean,
+                  "En ondskans tid nu domnar min hand") == 0;
+    delete<enriched> ps;
+
+    local (string sa, string sb) = splitAt("FLYGANDESPJUT", 8);
+    assert sa == "FLYGANDE" && sb == "SPJUT";
+
+    local (string sST, vect(int) vST) = memo();
+    assert sST == "SOM EN VÄXANDE VÅG";
+    assert vST.len == 20 && vST[10] == 'X';
+
+    local vect(string[3]) sarrv = {{"som","den","kraft"},
+                                   {"en","gång","fanns"},
+                                   {"i ett", "brustet", "svärd"}};
+    assert sarrv[1][1] == "gång";
+
+
+    try {
+        local string s = "hans blick är ";
+        s += ms("som ormens");
+        assert s == "hans blick är som ormens";
+    } catch assert false;
+    {
+        local (string s, vect(int) v) = ("I am", {1, 2});
+        s += " a string";
+        v += {3, 4};
+        assert s == "I am a string" && v.len == 4;
+        for (local uint32 i = 0; i < v.len; ++i) {
+            v[i] = i + 1;
+        }
+        v.len += 3;
+        assert v.len == 7;
+    }
+    local int *chunks_p = mk_chunks(1, 2).x;
+    assert chunks_p[0] == 1 && chunks_p[1] == 2;
+}
+
+typedef struct {
+    int x[2];
+} chunks_t;
+
+independent method mk_chunks(int x, int y) -> (chunks_t) {
+    return {{x, y}};
+}
+
+method ms(const char *s) -> (string) throws {
+    return mk_string(s);
+}
+
+method with_string(vect(string) s) {
+    assert s.len == 2 && s[0] == "som" && s[1] == "FALLANDE BÖLJA";
+}
+
+attribute trigger is write_only_attr {
+    param type = "n";
+    method set(attr_value_t val) throws {
+        local vect(string) s = {"som", "FALLANDE BÖLJA"};
+        after 0.1 s: with_string(s);
+    }
+}
+
+
+independent startup memoized method memo() -> (string, vect(int)) {
+    local vect(int) v;
+    local string s = "SOM EN VÄXANDE VÅG";
+    v.len = s.len;
+    for (local int i = 0; i < s.len; ++i) {
+        v[i] = s[i];
+    }
+    return (s, v);
+}

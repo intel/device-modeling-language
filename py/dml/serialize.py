@@ -90,7 +90,6 @@ def prepare_array_de_serialization(site, t):
     while isinstance(base, TArray):
         dims.append(base.size)
         base = base.base
-
     sizeof_base = expr.mkLit(site, f"sizeof({base.declaration('')})",
                              TNamed('size_t'))
     dimsizes_lit = ('(const uint32 []) { %s }'
@@ -113,10 +112,12 @@ def call_c_fun(site, fun, args):
 # to target_expr
 def serialize(real_type, current_expr, target_expr):
     current_site = current_expr.site
-    def construct_assign_apply(funname, intype):
-        apply_expr = apply_c_fun(current_site, funname,
-                                 [current_expr], attr_value_t)
-        return ctree.mkAssignStatement(current_site, target_expr,
+    def construct_assign_apply(funname):
+        return construct_assign_apply_on_expr(funname, current_expr)
+    def construct_assign_apply_on_expr(funname, custom_expr):
+        apply_expr = apply_c_fun(current_site, funname, [custom_expr],
+                                 attr_value_t)
+        return ctree.AssignStatement(current_site, target_expr,
                                        ctree.ExpressionInitializer(apply_expr))
     if real_type.is_int:
         if real_type.signed:
@@ -131,18 +132,25 @@ def serialize(real_type, current_expr, target_expr):
                                                funname,
                                                function_type),
                                     [converted_arg],
-                                    function_type)
+                                    function_type,
+                                    True)
             return ctree.mkCompound(current_site,
-                                    [ctree.mkAssignStatement(
+                                    [ctree.AssignStatement(
                                         current_site, target_expr,
                                         ctree.ExpressionInitializer(
                                             apply_expr))])
         else:
-            return construct_assign_apply(funname, real_type)
+            return construct_assign_apply(funname)
     elif isinstance(real_type, TBool):
-        return construct_assign_apply("SIM_make_attr_boolean", real_type)
+        return construct_assign_apply("SIM_make_attr_boolean")
     elif isinstance(real_type, TFloat):
-        return construct_assign_apply("SIM_make_attr_floating", real_type)
+        return construct_assign_apply("SIM_make_attr_floating")
+    elif isinstance(real_type, TString):
+        c_string = apply_c_fun(current_site, "_dml_string_str", [current_expr],
+                               TPtr(TNamed('char')))
+        return construct_assign_apply_on_expr("SIM_make_attr_string",
+                                              c_string)
+
     elif isinstance(real_type, TArray):
         (base, dimsizes, sizeof_base,
          dimsizes_expr) = prepare_array_de_serialization(current_site,
@@ -164,15 +172,28 @@ def serialize(real_type, current_expr, target_expr):
                                                          len(dimsizes)),
                                   elem_serializer],
                                  attr_value_t)
-        return ctree.mkAssignStatement(current_site, target_expr,
+        return ctree.AssignStatement(current_site, target_expr,
                                        ctree.ExpressionInitializer(apply_expr))
-
-    elif isinstance(real_type, (TStruct, TVector)):
+    elif isinstance(real_type, TVector):
+        base = real_type.base
+        sizeof_base = expr.mkLit(current_site,
+                                 f"sizeof({base.declaration('')})",
+                                 TNamed('size_t'))
+        elem_serializer = expr.mkLit(current_site, lookup_serialize(base),
+                                     TPtr(serializer_t))
+        apply_expr = apply_c_fun(current_site, '_serialize_vector',
+                                 [expr.OrphanWrap(current_site, current_expr),
+                                  sizeof_base,
+                                  elem_serializer],
+                                 attr_value_t)
+        return ctree.AssignStatement(current_site, target_expr,
+                                     ctree.ExpressionInitializer(apply_expr))
+    elif isinstance(real_type, TStruct):
         apply_expr = apply_c_fun(
             current_site, lookup_serialize(real_type),
-            [ctree.mkAddressOf(current_site, current_expr)], attr_value_t)
-        return ctree.mkAssignStatement(current_site, target_expr,
-                                       ctree.ExpressionInitializer(apply_expr))
+            [ctree.AddressOf(current_site, current_expr)], attr_value_t)
+        return ctree.AssignStatement(current_site, target_expr,
+                                     ctree.ExpressionInitializer(apply_expr))
     elif isinstance(real_type, TTrait):
         id_infos = expr.mkLit(current_site, '_id_infos',
                               TPtr(TNamed('_id_info_t', const = True)))
@@ -180,7 +201,7 @@ def serialize(real_type, current_expr, target_expr):
                                            TNamed("_identity_t"), ".")
         apply_expr = apply_c_fun(current_site, "_serialize_identity",
                                  [id_infos, identity_expr], attr_value_t)
-        return ctree.mkAssignStatement(current_site, target_expr,
+        return ctree.AssignStatement(current_site, target_expr,
                                        ctree.ExpressionInitializer(apply_expr))
     elif isinstance(real_type, THook):
         id_infos = expr.mkLit(current_site,
@@ -189,7 +210,7 @@ def serialize(real_type, current_expr, target_expr):
                               TPtr(TNamed('_id_info_t', const = True)))
         apply_expr = apply_c_fun(current_site, "_serialize_identity",
                                  [id_infos, current_expr], attr_value_t)
-        return ctree.mkAssignStatement(current_site, target_expr,
+        return ctree.AssignStatement(current_site, target_expr,
                                        ctree.ExpressionInitializer(apply_expr))
     else:
         # Callers are responsible for checking that the type is serializeable,
@@ -202,11 +223,12 @@ def serialize(real_type, current_expr, target_expr):
 # with a given set_error_t and message.
 def deserialize(real_type, current_expr, target_expr, error_out):
     current_site = current_expr.site
-    def construct_assign_apply(attr_typ, intype):
+    def construct_assign_apply(attr_typ, intype, mod_apply_expr=lambda x:x):
         check_expr = apply_c_fun(current_site, 'SIM_attr_is_' + attr_typ,
                                  [current_expr], TBool())
-        apply_expr = apply_c_fun(current_site, 'SIM_attr_' + attr_typ,
-                                 [current_expr], intype)
+        apply_expr = mod_apply_expr(apply_c_fun(current_site,
+                                                'SIM_attr_' + attr_typ,
+                                                [current_expr], intype))
         error_stmts = error_out('Sim_Set_Illegal_Type', 'expected ' + attr_typ)
 
         target = target_expr
@@ -223,7 +245,7 @@ def deserialize(real_type, current_expr, target_expr, error_out):
 
         return ctree.mkIf(current_site,
                           check_expr,
-                          ctree.mkAssignStatement(
+                          ctree.AssignStatement(
                               current_site, target,
                               ctree.ExpressionInitializer(apply_expr)),
                           ctree.mkCompound(current_site, error_stmts))
@@ -237,7 +259,7 @@ def deserialize(real_type, current_expr, target_expr, error_out):
     def construct_subcall(apply_expr):
         (sub_success_decl, sub_success_arg) = \
             declare_variable(current_site, "_sub_success", set_error_t)
-        assign_stmt = ctree.mkAssignStatement(
+        assign_stmt = ctree.AssignStatement(
             current_site, sub_success_arg,
             ctree.ExpressionInitializer(apply_expr))
         check_expr = ctree.mkLit(current_site,
@@ -253,18 +275,38 @@ def deserialize(real_type, current_expr, target_expr, error_out):
 
     if real_type.is_int:
         if real_type.is_endian:
-            real_type = TInt(real_type.bits, real_type.signed)
-        return construct_assign_apply("integer", real_type)
+            def mod_apply_expr(expr):
+                return ctree.source_for_assignment(expr.site, real_type, expr)
+        else:
+            def mod_apply_expr(expr):
+                return expr
+        return construct_assign_apply("integer", TInt(64, True),
+                                      mod_apply_expr)
     elif isinstance(real_type, TBool):
         return construct_assign_apply("boolean", real_type)
     elif isinstance(real_type, TFloat):
         return construct_assign_apply("floating", real_type)
+    elif isinstance(real_type, TString):
+        def mod_apply_expr(expr):
+            return apply_c_fun(expr.site, "_dml_string_new", [expr], TString())
+        return construct_assign_apply("string",
+                                      TPtr(TNamed('char', const=True)),
+                                      mod_apply_expr)
     elif isinstance(real_type, TArray):
         (base, dimsizes, sizeof_base,
          dimsizes_expr) = prepare_array_de_serialization(current_site,
                                                          real_type)
         elem_deserializer = expr.mkLit(current_site, lookup_deserialize(base),
                                        TPtr(deserializer_t))
+
+        if base.is_raii:
+            from .codegen import get_raii_type_info
+            raii_destructor = get_raii_type_info(base).cident_destructor
+        else:
+            raii_destructor = "NULL"
+        raii_destructor = expr.mkLit(current_site, raii_destructor,
+                                     TPtr(TFunction([TPtr(void)], void)))
+
         # elems_are_bytes informs if the final dimension may either be
         # deserialized as a list or a data attribute value.
         # This is true for all integer types of width 8 bits
@@ -275,9 +317,29 @@ def deserialize(real_type, current_expr, target_expr, error_out):
             [current_expr, addressof_target_unconst(),
              sizeof_base, dimsizes_expr,
              ctree.mkIntegerLiteral(current_site, len(dimsizes)),
-             elem_deserializer, elems_are_bytes], set_error_t)
+             elem_deserializer, raii_destructor, elems_are_bytes], set_error_t)
         return construct_subcall(apply_expr)
-    elif isinstance(real_type, (TStruct, TVector)):
+    elif isinstance(real_type, TVector):
+        base = real_type.base
+        sizeof_base = expr.mkLit(current_site,
+                                 f"sizeof({base.declaration('')})",
+                                 TNamed('size_t'))
+        elem_deserializer = expr.mkLit(current_site, lookup_deserialize(base),
+                                       TPtr(deserializer_t))
+        if base.is_raii:
+            from .codegen import get_raii_type_info
+            raii_destructor = get_raii_type_info(base).cident_destructor
+        else:
+            raii_destructor = "NULL"
+        raii_destructor = expr.mkLit(current_site, raii_destructor,
+                                     TPtr(TFunction([TPtr(void)], void)))
+
+        apply_expr = apply_c_fun(
+            current_site, '_deserialize_vector',
+            [current_expr, addressof_target_unconst(),
+             sizeof_base, elem_deserializer, raii_destructor], set_error_t)
+        return construct_subcall(apply_expr)
+    elif isinstance(real_type, TStruct):
         apply_expr = apply_c_fun(
             current_site, lookup_deserialize(real_type),
             [current_expr, addressof_target_unconst()],
@@ -345,6 +407,8 @@ def map_dmltype_to_attrtype(site, dmltype):
         return 'b'
     if isinstance(real_type, TFloat):
         return 'f'
+    if isinstance(real_type, TString):
+        return 's'
     if isinstance(real_type, TStruct):
         return '[%s]' % "".join([map_dmltype_to_attrtype(site, mt)
                                  for mt in real_type.members.values()])
@@ -357,9 +421,8 @@ def map_dmltype_to_attrtype(site, dmltype):
         return '[%s{%s}]' % (arr_attr_type, arr_length) + or_data
     if isinstance(real_type, (TTrait, THook)):
         return '[s[i*]]'
-    # TODO should be implemented
-    #if isinstance(real_type, TVector):
-        # return '[%s*]' % (map_dmltype_to_attrtype(site, real_type.base))
+    if isinstance(real_type, TVector):
+        return f'[{map_dmltype_to_attrtype(site, real_type.base)}*]'
     raise ICE(site, 'unserializable type: %r' % (dmltype,))
 
 def mark_for_serialization(site, dmltype):
@@ -375,13 +438,15 @@ def mark_for_serialization(site, dmltype):
         if not real_type.size.constant:
             raise messages.ESERIALIZE(site, dmltype)
         mark_for_serialization(site, real_type.base)
+    elif isinstance(real_type, TVector):
+        mark_for_serialization(site, real_type.base)
     elif isinstance(real_type, TTrait):
         dml.globals.serialized_traits.add(real_type.trait)
     elif isinstance(real_type, THook):
         real_type.validate(dmltype.declaration_site or site)
         from .codegen import get_type_sequence_info
         get_type_sequence_info(real_type.msg_types, create_new=True)
-    elif not isinstance(real_type, (IntegerType, TBool, TFloat)):
+    elif not isinstance(real_type, (IntegerType, TBool, TFloat, TString)):
         raise messages.ESERIALIZE(site, dmltype)
 
 # generate a part of the function name from a description of the dmltype
@@ -416,6 +481,8 @@ def type_signature(dmltype, is_for_serialization):
         return 'B'
     if isinstance(dmltype, TFloat):
         return {'double': 'Fd', 'float': 'Fs'}[dmltype.name]
+    if isinstance(dmltype, TString):
+        return 'STR'
     if isinstance(dmltype, TStruct):
         return 'S' + dmltype.label
     if isinstance(dmltype, TArray):
@@ -442,7 +509,7 @@ def serialize_sources_to_list(site, sources, out_attr):
         site, "SIM_alloc_attr_list",
         [ctree.mkIntegerConstant(site, size, False)],
         attr_value_t)
-    attr_assign_statement = ctree.mkAssignStatement(
+    attr_assign_statement = ctree.AssignStatement(
         site, out_attr, ctree.ExpressionInitializer(attr_alloc_expr))
     imm_attr_decl, imm_attr_ref = declare_variable(
         site, "_imm_attr", attr_value_t)
@@ -457,7 +524,7 @@ def serialize_sources_to_list(site, sources, out_attr):
             if typ is not None:
                 sub_serialize = serialize(typ, source, imm_attr_ref)
             else:
-                sub_serialize = ctree.mkAssignStatement(
+                sub_serialize = ctree.AssignStatement(
                     site, imm_attr_ref, ctree.ExpressionInitializer(source))
         sim_attr_list_set_statement = call_c_fun(
             site, "SIM_attr_list_set_item", [ctree.mkAddressOf(site, out_attr),
@@ -493,10 +560,8 @@ def generate_serialize(real_type):
                         safe_realtype(typ))
                        for (name, typ) in real_type.members.items())
             serialize_sources_to_list(site, sources, out_arg)
-        elif isinstance(real_type, TVector):
-            raise ICE(site, "TODO: serialize vector")
         elif isinstance(real_type, (IntegerType, TBool, TFloat, TTrait,
-                                    TArray, THook)):
+                                    TArray, THook, TString, TVector)):
             serialize(real_type,
                       ctree.mkDereference(site, in_arg),
                       out_arg).toc()
@@ -517,7 +582,7 @@ def deserialize_list_to_targets(site, val_attr, targets, error_out_at_index,
         index = ctree.mkIntegerConstant(site, i, False)
         sim_attr_list_item = apply_c_fun(site, "SIM_attr_list_item",
             [val_attr, index], attr_value_t)
-        imm_set = ctree.mkAssignStatement(
+        imm_set = ctree.AssignStatement(
             site, imm_attr_ref,
             ctree.ExpressionInitializer(sim_attr_list_item))
         statements.append(imm_set)
@@ -535,7 +600,7 @@ def deserialize_list_to_targets(site, val_attr, targets, error_out_at_index,
                 sub_deserialize = deserialize(typ, imm_attr_ref, target,
                                               sub_error_out)
             else:
-                sub_deserialize = ctree.mkAssignStatement(
+                sub_deserialize = ctree.AssignStatement(
                     site, target, ctree.ExpressionInitializer(imm_attr_ref))
             statements.append(sub_deserialize)
         else:
@@ -592,6 +657,7 @@ def generate_deserialize(real_type):
 
     func_code = output.StrOutput()
     with func_code:
+        cleanup_on_failure = []
         cleanup = []
         output.out(function_decl + " {\n", postindent = 1)
         out_arg_decl.toc()
@@ -605,13 +671,22 @@ def generate_deserialize(real_type):
             stmts.append(ctree.mkInline(site, 'goto _exit;'))
             return stmts
         if isinstance(real_type, TStruct):
+            from .codegen import get_raii_type_info
+            raii_info = (get_raii_type_info(real_type)
+                         if real_type.is_raii else None)
+            malloc = expr.mkLit(site,
+                           f'MM_{("Z" if raii_info is not None else "M")}ALLOC'
+                           + f'(1, {real_type.declaration("")})',
+                           TPtr(real_type))
             (tmp_out_decl, tmp_out_ref) = declare_variable(
-                site, "_tmp_out", TPtr(real_type),
-                ctree.mkNew(site, real_type))
-            cleanup_ref = (tmp_out_ref if not deep_const(real_type)
-                           else ctree.mkCast(site, tmp_out_ref, TPtr(void)))
-            cleanup.append(ctree.mkDelete(site, cleanup_ref))
+                site, "_tmp_out", TPtr(real_type), malloc)
             tmp_out_decl.toc()
+            cleanup_ref = '(void *)'*deep_const(real_type) + '_tmp_out'
+            if raii_info is not None:
+                cleanup_on_failure.append(ctree.mkInline(
+                    site, raii_info.read_destroy_lval('*_tmp_out') + ';'))
+
+            cleanup.append(ctree.mkInline(site, f'MM_FREE({cleanup_ref});'))
             targets = tuple((ctree.mkSubRef(site, tmp_out_ref, name, "->"),
                              conv_const(real_type.const, safe_realtype(typ)))
                             for (name, typ) in real_type.members.items())
@@ -620,23 +695,26 @@ def generate_deserialize(real_type):
             deserialize_list_to_targets(site, in_arg, targets,
                                         error_out_at_index,
                                         f'deserialization of {real_type}')
-            ctree.mkAssignStatement(site,
-                                    ctree.mkDereference(site, out_arg),
-                                    ctree.ExpressionInitializer(
-                                        ctree.mkDereference(
-                                            site, tmp_out_ref))).toc()
+            dest = ctree.mkDereference(site, out_arg)
+            src = expr.OrphanWrap(site, ctree.mkDereference(site, tmp_out_ref))
+            ctree.AssignStatement(site, dest, ctree.ExpressionInitializer(src)
+                                  ).toc()
 
-        elif isinstance(real_type, TVector):
-            raise ICE(site, "TODO: serialize vector")
-        elif isinstance(real_type, (IntegerType, TBool, TFloat, TTrait,
-                                    TArray, THook)):
+        elif isinstance(real_type, (IntegerType, TBool, TFloat, TTrait, TArray,
+                                    THook, TString, TVector)):
             deserialize(real_type,
                         in_arg,
                         ctree.mkDereference(site, out_arg),
                         error_out).toc()
         else:
             assert False
+        if cleanup_on_failure:
+            output.out("if (false) {\n", postindent=1)
         output.out("_exit:\n")
+        for stmt in cleanup_on_failure:
+            stmt.toc()
+        if cleanup_on_failure:
+            output.out("}\n", preindent=-1)
         for stmt in cleanup:
             stmt.toc()
         output.out("return _success;\n")

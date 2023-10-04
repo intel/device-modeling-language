@@ -1481,15 +1481,323 @@ deserialize for the purposes of checkpointing. This is important for the use of
 statement](#after-statements).
 
 All primitive non-pointer data types (integers, floating-point types, booleans,
-etc.) are considered serializable, as is any struct, layout, or array type
-consisting entirely of serializable types. [Template types](#templates-as-types)
-and [hook reference types](#hook-declarations) are also considered serializable.
+etc.) are considered serializable, as is any struct, layout, [vector](#vectors),
+or array type consisting entirely of serializable types. The
+[`string`](#strings) type (not to be confused with `char *`) is also considered
+serializable, as are [template types](#templates-as-types) and [hook reference
+types](#hook-declarations).
 
 Any type not fitting the above criteria is not considered serializable:
 in particular, any pointer type is not considered serializable, nor is any
 [`extern`](#typedef-declarations) struct type; the latter is because it's
 impossible for the compiler to ensure it's aware of all members of the struct
 type.
+
+### Resource-enriched (RAII) types
+<a id="raii-types"/>
+_Resource-enriched types_ are types for which any value of such a type has
+_associated resources beyond the simple storage needed for the value_, and that
+these resources are bound to the lifetime of variable.
+The DML compiler automatically manages the integrity of resources bound
+to a value: they are duplicated if the value is copied to another location,
+and are freed once the lifetime of the value expires (such as a variable going
+out of scope, or a pointer allocated via [`new`](#new-expressions) being
+[`delete`](#delete-statements)d.)
+
+Resource-enriched types are DML's application of Resource Acquisition Is
+Initialization (RAII), a concept present in several other languages such as C++
+and Rust.
+
+As the integrity of values of resource-enriched types &mdash; and thus, their
+safe usage &mdash; rely heavily on the DML compiler, usage of resource-enriched
+types are more restricted compared to other types:
+
+* `sizeof` or `sizeoftype` may not be used to acquire the size of a
+  resource-enriched type. This is because the size of the underlying C type does
+  not reflect the associated resources of the type, and so any primitive memory
+  operation such as `memset` or `memcpy` are unsafe with values of
+  resource-enriched types.
+* Values of resource-enriched types may not be passed as variadic arguments.
+  Variadic functions are never defined within DML, and so cannot manage
+  arguments of resource-enriched type correctly.
+* Resource-enriched types may not be present in the signature of any [exported
+  method](#exported-methods).
+  Methods are exported for external use, but DML methods have an internal
+  calling convention when resource-enriched types are involved, and so it does
+  not make sense to export such methods.
+
+Any `struct` or array type containing a resource-enriched type is itself
+considered resource-enriched.
+
+<div class="note">
+**Note:** For the time being, DML's support for resource-enriched types is
+rather minimal. DML currently only supports two kinds of resource-enriched
+types: strings, and vectors, with no way to define your own. In addition,
+DML does not provide any operation to cheaply move resources from one value
+of resource-enriched type to another. Further extensions to resource-enriched
+types are currently under evaluation and experimentation.
+</div>
+
+#### Strings
+```
+string
+```
+DML strings are simultaneously length-counted and `NUL`-terminated dynamically
+allocated strings. They have support for efficient mutation, making them
+suitable for use as string builders. In particular, using `+=` to add *N*
+characters to the end of a particular string is an O(*N*) (amortized) operation,
+no matter the previous length of the string.
+
+`string` supports the use of string literals as initializers:
+```
+local string s = "Hello world!";
+```
+
+String values are copied by contents:
+```
+local string s1 = "Hello world!";
+local string s2 = s1;
+s2 += " Goodbye world"; // Does not affect s1.
+assert s1 == "Hello world!" && s2 == "Hello world! Goodbye world";
+```
+
+To construct a string from any arbitrary C string (rather than a string
+literal), `mk_string` and `mk_string_f` may be used:
+```
+method construct_guarded_string(const char *s) -> (string) throws {
+    if (strlen(s) > 512)
+        throw;
+    return mk_string(s);
+}
+
+method stringify_int(int i) -> (string) {
+    return mk_string_f("%d", i);
+}
+```
+
+Strings may be concatenated using `+`, and support all comparison operators
+(which are based on alphabetical ordering). In addition, `+` and the comparison
+operators support either operand being a string literal.
+
+The [`log` statement](#log-statements) has built-in support for values of string
+type; the following is allowed:
+```
+local string s = "Hello world";
+log info: "%s", s;
+```
+
+In addition to the operations described above, a string <tt><em>s</em></tt> also
+supports the following operations:
+
+* _Indexing_: <pre><em>s</em>[<em>idx</em>]</pre>
+
+  Retrieves the character at index <em>idx</em> within <em>s</em>.
+  <em>idx</em> must be non-negative, and less than the length of the string
+  (which does *not* include the final <tt>NUL</tt> character). Failure to uphold
+  this will result in a failed assertion at run-time.
+
+  <tt><em>s</em>[<em>idx</em>]</tt> is a writable expression as long as _`s`_
+  is writable and not of const-qualified type. However,
+  <tt><em>s</em>[<em>idx</em>]</tt> is never _addressable_, i.e. its address
+  cannot be taken using `&`. In order to retrieve a pointer within the buffer
+  of a string, use `.c_str()`.
+
+* <pre><em>s</em>.c_str()</pre>
+   Retrieves a `NUL`-terminated C string corresponding to _`s`_.
+
+   The pointer retrieved from `.c_str()` will only remain valid as long as the
+   value referenced by <em>s</em> *remains alive* and *is not modified beyond
+   the mutation of preexisting elements*. In particular, for the pointer to be
+   valid it is necessary (but not sufficient) that the length of the string
+   remains unchanged. Any attempt to use the pointer past the point it is
+   invalidated is undefined behavior, and so `.c_str()` must be called again
+   to retrieve a new pointer. For example:
+   ```
+   local string s = "I am a dtring";
+   local char *s_ptr = s.c_str();
+   assert s_ptr[7] == 'd'; // OK
+   s[7] = 's';
+   assert s_ptr[7] == 's'; // OK
+   s += "ly string";
+   assert s_ptr[7] == 's'; // BAD: undefined behavior
+   s_ptr = s.c_str();
+   assert s_ptr[7] == 's'; // OK
+   s = mk_string_f("%sly string", s_ptr); // OK!
+   assert s_ptr[7] == 's'; // BAD: undefined behavior
+   ```
+
+   The type of the retrieved pointer will be `char *` if _`s`_ is both
+   writable and not of const-qualified type. Otherwise, the type of the
+   pointer will be `const char *`. If the former, then it is allowed to use the
+   pointer to mutate characters at indices less than the length of the string (it
+   is *not* allowed to mutate the final `NUL` character) as long as the pointer
+   remains valid as described above. Any character mutated this way will be
+   reflected in the DML string the pointer was retrieved from.
+
+* <pre><em>s</em>.len</pre>
+  Evaluates to the length of the string (which does *not* include the final
+  `NUL` character.)
+
+  <tt><em>s</em>.len</tt> is a writable expression as long as _`s`_ is writable
+  and not of const-qualified type. Writing to <tt><em>s</em>.len</tt> will cause
+  _`s`_ to be resized to the specified length; truncating the string if the new
+  length is less than the previous one, and padding it with `NUL` characters
+  if the new length is greater than the previous one (these `NUL` characters
+  are at indices less than the length of the list, and so are allowed to be
+  indexed and/or overwritten.)
+* <pre>mk_vect_from_string(<em>s</em>)</pre>
+  Creates a `vect(char)` [vector](#vectors) from a string; its length is the
+  as `s`, and its elements are the characters of `s` in order (excluding the
+  final `NUL` character).
+
+  Note that this does not consume or otherwise mutate _`s`_; it remains valid
+  and unchanged.
+
+Strings have a maximum length of 2147483647 characters. Exceeding this limit
+is considered undefined behavior, but will with all likelihood result in a
+failed run-time assertion.
+
+#### Vectors
+<pre>
+vect(<em>elem-type</em>)
+</pre>
+DML vectors are dynamic arrays with support for efficient double-ended queue
+operations &mdash; adding or removing an element from either end of a vector
+is an O(1) (amortized) operation. These properties makes DML vectors suitable
+for a large number of applications.
+
+`vect` supports the use of compound initializers:
+```
+local vect(int) s = {1, 2, 3};
+s += {4, 5};
+```
+
+Vector values are copied by contents:
+```
+local vect(int) v1 = {1, 2, 3};
+local vect(int) v2 = s1;
+v2 += {4, 5}; // Does not affect s1.
+assert v1.len == 3 && s2.len == 5;
+```
+
+Vectors may be concatenated using `+` as long as they share the same
+_`elem-type`_. Unlike [`string`s](#strings), vectors do not support any
+comparison operator; element-by-element comparisons must be done by iterating
+through the vector. Note also that `v + {6, 7}` is not valid, as compound
+initializers are not valid expressions; instead, a cast must be used to create a
+vector out of the initializer: `v + cast({6, 7}, vect(int))`.
+
+The [`foreach`](#foreach-statements) supports iteration on vectors:
+```
+local vect(int) v = {1, 2, 3};
+foreach elem in (v) {
+    // The itered element is considered writable (but not addressable)
+    // as long as the vector or element type is not const-qualified
+    elem += 1;
+}
+assert v[0] == 2 && v[1] == 3 && v[2] == 4;
+```
+`foreach` on vectors are restricted to addressable vector expressions &mdash;
+i.e. those who may have their address taken. This restriction allows for safe
+and predictable semantics while making as few assumptions as possible; if this
+prevents the use of `foreach` for a particular use-case, then consider binding
+the vector expression to variable. If all else fails, consider using a standard
+`for`-loop instead.
+
+In addition to the operations described above, a vector <tt><em>v</em></tt> also
+supports the following operations:
+
+* _Indexing_: <pre><em>v</em>[<em>idx</em>]</pre>
+
+  Retrieves the element at index <em>idx</em> within <em>s</em>.
+  <em>idx</em> must be non-negative, and less than the length of the vector.
+  Failure to uphold this will result in a failed assertion at run-time.
+
+  <tt><em>v</em>[<em>idx</em>]</tt> is a writable expression as long as _`s`_
+  is writable and not of const-qualified type. However,
+  <tt><em>v</em>[<em>idx</em>]</tt> is never _addressable_, i.e. its address
+  cannot be taken using `&`. In order to retrieve a pointer within the buffer
+  of a vector, use `.c_buf()`.
+
+* <pre><em>v</em>.c_buf()</pre>
+  Retrieves a pointer to a continuous array of the vector's elements. Unlike
+  `string`'s `.c_str()`, `.c_buf()` may only be used if _`v`_ is writable and
+  not of const-qualified type. (This is because the underlying buffer of _`v`_
+  may need to be reordered to make the elements continuous in memory.)
+  This also means that the type of the retrieved pointer will always be
+  <tt><em>elem-type</em> *</tt>
+
+  The pointer retrieved from `.c_buf()` will only remain valid as long as the
+  value referenced by <em>s</em> *remains alive* and *has not been modified
+  beyond the mutation of preexisting elements*. In particular, for the pointer
+  to be valid it is necessary (but not sufficient) that the length of vector
+  remains unchanged. Any attempt to use the pointer past the point it is
+  invalidated is undefined behavior, and so `.c_buf()` must be called again to
+  retrieve a new pointer.
+
+  Note that although `.c_buf()` may mutate the vector it's used with, a call to
+  `.c_buf()` is guaranteed not to invalidate any pointer retrieved from a
+  previous call to `c_buf()` (not already invalidated).
+  ```
+  local vect(int) v = {1, 2, 7};
+  local int *v_ptr = v.c_buf();
+  assert v_ptr[2] == 7; // OK
+  v.c_buf()[2] = 3;
+  assert v_ptr[2] == 3; // OK
+  v += {4, 5};
+  assert v_ptr[2] == 3; // BAD: undefined behavior
+  v_ptr = v.c_buf();
+  assert v_ptr[2] == 3; // OK
+  v = {1, 2, 3}
+  assert v_ptr[2] == 3; // BAD: undefined behavior
+  ```
+
+  writable and not of const-qualified type. Otherwise, the type of the
+  pointer will be `const char *`. If the former, then it is allowed to use the
+  pointer to mutate characters at indices less than the length of the string (it
+  is *not* allowed to mutate the final `NUL` character) as long as the pointer
+  remains valid as described above.
+
+* <pre><em>v</em>.push_back(<em>item</em>)</pre>
+  Adds _`item`_ to _`v`_ as its last element.
+* <pre><em>v</em>.push_front(<em>item</em>)</pre>
+  Adds _`item`_ to _`v`_ as its first element.
+* <pre><em>v</em>.pop_back(<em>item</em>)</pre>
+  Remove and return the last element of _`v`_. This requires the vector to be
+  non-empty. If that is not upheld, then an assertion will be failed at
+  run-time.
+* <pre><em>v</em>.pop_front(<em>item</em>)</pre>
+  Remove and return the first element of _`v`_. This requires the vector to be
+  non-empty. If that is not upheld, then an assertion will be failed at
+  run-time.
+* <pre><em>v</em>.insert(<em>index<em>, <em>item</em>)</pre>
+  Inserts _`item`_ at index _`index`_ within _`v`_. This operation is O(n)
+  unless _`index`_ is up to one element away from either end of the vector, in
+  which case it's O(1) amortized.
+* <pre><em>v</em>.remove(<em>index<em>)</pre>
+  Remove and return the element at index _`index`_ within _`v`_. This requires
+  the vector to be non-empty. If that is not upheld, then an assertion will be
+  failed at run-time.
+
+  This operation is O(n) unless _`index`_ is up to one element away from either
+  end of the vector, in which case it's O(1) amortized.
+* <pre><em>v</em>.len</pre>
+  Evaluates to the length of the vector.
+
+  <tt><em>v</em>.len</tt> is a writable expression as long as _`v`_ is writable
+  and not of const-qualified type. Writing to <tt><em>v</em>.len</tt> will cause
+  _`v`_ to be resized to the specified length; truncating the vector if the new
+  length is less than the previous one, and padding it with zero-initialized
+  elements if the new length is greater than the previous one.
+* <pre>mk_string_from_vect(<em>v</em>)</pre>
+  Creates a [`string`](#strings) from a `vect(char)`; its length will be
+  the same as `v`, and its characters will be the same as the elements of `v`.
+  Note that this does not consume or otherwise mutate _`v`_; it remains valid
+  and unchanged.
+
+Vectors have a maximum length of 2147483648 elements. Exceeding this limit is
+considered undefined behavior, but will with all likelihood result in a failed
+run-time assertion.
 
 ## Methods
 <a id="methods-detailed"/>
@@ -3040,6 +3348,7 @@ DML adds the following statements:
 <pre>
 <em>target1</em> [= <em>target2</em> = <em>...</em>] = <em>initializer</em>;
 (<em>target1</em>, <em>target2</em>, ...) = <em>initializer</em>;
+<em>target</em> <em>assignop</em> <em>initializer</em>;
 </pre>
 
 Assign values to targets according to an initializer. Unlike C, assignments are
@@ -3069,6 +3378,25 @@ Targets are updated simultaneously, meaning it's possible to e.g. swap the
 contents of variables through the following:
 ```
 (a, b) = (b, a)
+```
+
+The third form constitues what is known in C as "compound assignment"; mutation
+of the target according to a specified operator, i.e.:
+```
+a += 1;
+a -= 1;
+a |= 1;
+...
+```
+Though the right-hand side permits arbitrary initializer syntax, the types that
+compound assignment support typically restrict the initializer to be a simple
+expression. The one exception to this are [`string`](#strings) and [vector
+types](#vectors), which support the use of `+=` together with a string or
+compound initializer, respectively:
+```
+local (string s, vect(int) v) = ("I am", {1, 2});
+s += " a string";
+v += {3, 4};
 ```
 
 ### Local Statements
@@ -3150,13 +3478,25 @@ method n() -> (bool, int) {
 
 <pre>
 delete <em>expr</em>;
+delete\<<em>spec</em>\> <em>expr</em>;
 </pre>
 
-Deallocates the memory pointed to by the result of evaluating
-*`expr`*. The memory must have been allocated with the
-`new` operator, and must not have been deallocated previously.
-Equivalent to `delete` in C++; however, in DML, `delete`
-can only be used as a statement, not as an expression.
+Deallocates the memory pointed to by the result of evaluating *`expr`*.
+
+*spec* specifies an *allocation format*, and can either be `enriched` or
+`extern`. If not explicitly specified, *spec* will default to `extern`. This is
+for backwards compatibility reasons &mdash; in the future the default will be
+changed to be `enriched`.
+
+The *enriched* format uses an allocation format specific to the device model,
+and so can *only* be used in order to deallocate storage previously allocated
+via [`new<enriched>`](#new-expressions) by the same device model.
+
+The *extern* format compiles the `delete` statement to a use of `MM_FREE`,
+meaning it may be used to deallocate storage previously allocated by any use of
+Simics's memory allocation functions/macros (such as `MM_MALLOC`.) This includes
+storage allocated via [`new<extern>`](#new-expressions) (which `new` without
+allocation format specifier is equivalent to).
 
 ### Try Statements
 
@@ -3587,8 +3927,9 @@ The `foreach` statement repeats its body (the
 The *`identifier`* is used to refer to the current element
 within the body.
 
-DML currently only supports `foreach` iteration on values of `sequence` types
-&mdash; which are created through [Each-In expressions](#each-in-expressions).
+DML currently only supports `foreach` iteration on values of [`vect`
+types](#vectors) or `sequence` types &mdash; the latter of which are created
+through [Each-In expressions](#each-in-expressions).
 
 The `break` statement can be used within a `foreach` loop to exit it.
 
@@ -3778,10 +4119,12 @@ will give a compile error unless it appears in one of the following contexts:
 ### Method References as Function Pointers
 It is possible to retrieve a function pointer for a method by using the prefix
 operator `&` with a reference to that method. The methods this is possible with
-are subject to the same restrictions as with the [`export` object
+are subject to most of the same restrictions as with the [`export` object
 statement](#export-declarations): it's not possible to retrieve a function
 pointer to any inline method, shared method, method that throws, method with
-more than one return argument, or method declared inside an object array.
+more than one return argument, or method declared inside an object array. Unlike
+`export`, `&` may be used with methods that have input parameters or return
+values of [resource-enriched type](#raii-types).
 
 For example, with the following method in DML:
 ```
@@ -3814,16 +4157,39 @@ independent method callback(int i, void *aux) {
 new <em>type</em>
 
 new <em>type</em>[<em>count</em>]
+
+new\<<em>spec</em>\> <em>type</em>
+
+new\<<em>spec</em>\> <em>type</em>[<em>count</em>]
 </pre>
 
 Allocates a chunk of memory large enough for a value of the specified
-type.  If the second form is used, memory for *count* values will
+type.  If a form specifying *count* is used, then memory for *count* values will
 be allocated.  The result is a pointer to the allocated memory. (The
 pointer is never null; if allocation should fail, the Simics
 application will be terminated.)
 
+*spec* specifies an *allocation format*, and can either be `enriched` or
+`extern`. If not explicitly specified, *spec* will default to `extern`. This is
+for backwards compatibility reasons &mdash; in the future the default will be
+changed to be `enriched`.
+
+The *enriched* format uses an allocation format specific to the device model,
+and *must* be used in order to allocate storage for values of [resource-enriched
+(RAII) type](#raii-types). The fact the allocation format is model-specific
+comes with the drawback that a pointer created with `new<enriched>` *cannot be
+freed* using `MM_FREE`/`free`: only code from the same device model can free it,
+and only by using [`delete<enriched>`](#delete-statements).
+
+The *extern* format compiles `new` to a use of `MM_ZALLOC`, meaning a pointer
+allocated this way may be freed using `MM_FREE` outside of the device model.
+However, this format does not support allocating storage for values of
+resource-enriched type.
+
 When the memory is no longer needed, it should be deallocated using a
-`delete` statement.
+[`delete` statement](#delete-statements). The allocation format specified for the
+`delete` statement *must* match that of the `new` expression used to allocate
+the pointer.
 
 ### Cast Expressions
 

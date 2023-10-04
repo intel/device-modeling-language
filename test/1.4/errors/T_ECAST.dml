@@ -8,7 +8,7 @@ device test;
 
 typedef struct { uint32 x; } s_t;
 typedef layout "little-endian" { uint32 x; } l_t;
-/// WARNING WEXPERIMENTAL
+/// WARNING WDEPRECATED
 typedef int vect v_t;
 typedef int a_t[1];
 typedef void f_t(void);
@@ -43,8 +43,6 @@ method init() {
     cast(v, uint32);
     /// ERROR ECAST
     cast(i, v_t);
-    /// ERROR ECAST
-    cast(v, v_t);
     /// ERROR ECAST
     cast(l, uint32);
     // no error!

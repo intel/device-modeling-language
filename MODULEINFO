@@ -89,7 +89,8 @@ Group: dmlc-lib/6
 Require-tokens: public
 Make: dmlc
     $(HOST)/bin/dml/include/simics/LICENSE
-    $(HOST)/bin/dml/include/simics/dmllib.h
+    $(HOST)/bin/dml/include/simics/dml-lib.h
+    $(HOST)/bin/dml/include/simics/dml-raii-types.h
     $(HOST)/bin/dml-old-4.8/1.2/LICENSE
     $(HOST)/bin/dml-old-4.8/1.4/LICENSE
     $(HOST)/bin/dml/1.2/LICENSE
@@ -146,7 +147,8 @@ Group: dmlc-lib/7
 Require-tokens: public
 Make: dmlc
     $(HOST)/bin/dml/include/simics/LICENSE
-    $(HOST)/bin/dml/include/simics/dmllib.h
+    $(HOST)/bin/dml/include/simics/dml-lib.h
+    $(HOST)/bin/dml/include/simics/dml-raii-types.h
     $(HOST)/bin/dml/1.2/LICENSE
     $(HOST)/bin/dml/1.4/LICENSE
     # dml files available in all APIs

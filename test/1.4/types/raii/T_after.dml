@@ -1,0 +1,106 @@
+/*
+  © 2021-2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+import "simics/simulator/callbacks.dml";
+
+template trigger_attr is pseudo_attr {
+    param type = "i";
+    session int val;
+    method inc() default {
+        this.val++;
+    }
+}
+
+attribute trigger[i < 2][j < 2] is trigger_attr {
+    method set(attr_value_t val) throws {
+        after 0.1 s:
+          trigger[SIM_attr_integer(val)][SIM_attr_integer(val)].inc();
+    }
+    method get() -> (attr_value_t) {
+        return SIM_make_attr_uint64(val);
+    }
+}
+
+attribute trigger_hook[i < 2] is (trigger_attr, post_init) {
+    hook() h;
+
+    method post_init() {
+        if (!SIM_is_restoring_state(dev.obj)) {
+            after h: inc();
+        }
+    }
+
+    method inc() {
+        default();
+        after h: inc();
+    }
+
+    method set(attr_value_t val) throws {
+        after 0.1 s: trigger_hook[SIM_attr_integer(val)].h.send_now();
+    }
+    method get() -> (attr_value_t) {
+        return SIM_make_attr_uint64(val);
+    }
+}
+
+attribute operate is (write_only_attr) {
+    param type = "n";
+    method set(attr_value_t val) throws {
+        local vect(int) c = cast({3}, vect(int)) + cast({5}, vect(int));
+        after 0.1 s: single_operator.modify(c, 1);
+        after 0.1 s: multi_operator[0][1].modify(c, 1);
+        after 0.1 s: multi_operator[1][0].modify(c, 0);
+        after 200000 cycles: single_operator.modify(c, 0);
+
+        after 0.1 s: hook_operator[0][1].h.send_now(c, 1);
+        after 0.1 s: hook_operator[1][0].h.send_now(c, 0);
+    }
+}
+
+template operator is (int64_attr) {
+    method modify(vect(int) chunk, int ix) default {
+        this.val = chunk[ix];
+    }
+}
+
+attribute multi_operator[i < 2][j < 2] is (operator);
+attribute single_operator is (operator);
+
+attribute hook_operator[i < 2][j < 2] is (operator, post_init) {
+    hook(vect(int), int) h;
+
+    method post_init() {
+        if (!SIM_is_restoring_state(dev.obj)) {
+            after h -> (c, i): modify(c, i);
+        }
+    }
+
+    method modify(vect(int) chunk, int ix) {
+        default(chunk, ix);
+        after h -> (c, i): modify(c, i);
+    }
+}
+
+// Test methods with const-qualified parameters
+
+typedef layout "little-endian" {
+    const uint32 x[2];
+} l_t;
+
+attribute constig_res[i < 2] is uint64_attr;
+
+method constig(const uint64 i, const l_t l) {
+    constig_res[0].val = i;
+    constig_res[1].val = l.x[0] << 32 | l.x[1];
+}
+
+attribute trigger_constig is (write_only_attr) {
+    param type = "n";
+    method set(attr_value_t val) throws {
+        after 0.1 s: constig(4, {{7, 11}});
+    }
+}

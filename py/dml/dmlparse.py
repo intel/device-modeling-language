@@ -826,12 +826,23 @@ def constant(t):
 @prod_dml12
 def extern(t):
     'toplevel : EXTERN cdecl_or_ident SEMI'
-    t[0] = ast.extern(site(t), t[2])
+    t[0] = ast.extern(site(t), t[2], None)
 
 @prod_dml14
 def extern(t):
-    'toplevel : EXTERN cdecl SEMI'
-    t[0] = ast.extern(site(t), t[2])
+    'toplevel : EXTERN cdecl maybe_extern_as SEMI'
+    t[0] = ast.extern(site(t), t[2], t[3])
+
+
+@prod_dml14
+def maybe_extern_as_no(t):
+    'maybe_extern_as : '
+    t[0] = None
+
+@prod_dml14
+def maybe_extern_as_yes(t):
+    'maybe_extern_as : AS ident'
+    t[0] = t[2]
 
 @prod
 def typedef(t):
@@ -1269,6 +1280,14 @@ def basetype_hook(t):
     cdecl_list_enforce_unnamed(t[3])
     t[0] = ('hook', t[3])
 
+@prod_dml14
+def basetype_vect(t):
+    '''basetype : VECT LPAREN cdecl RPAREN'''
+    (_, site, name, typ) = t[3]
+    if name:
+        report(ESYNTAX(site, name, None))
+    t[0] = ('vect', (site, typ))
+
 @prod
 def cdecl2(t):
     'cdecl2 : cdecl3'
@@ -1285,12 +1304,13 @@ def cdecl2_ptr(t):
     t[0] = ['pointer'] + t[2]
 
 @prod_dml14
-def cdecl2_vect(t):
+def cdecl2_legacy_vect(t):
     'cdecl2 : VECT cdecl2'
     # vect is actually experimental in 1.2 as well, but we will probably
     # defensively keep it the way it is, because it's used a lot.
     # TODO: improve how vect works in 1.4, and make it public (US325)
-    report(WEXPERIMENTAL(site(t), 'vect types'))
+    report(WDEPRECATED(site(t),
+                       "vect.h vector type. Use 'vect(BASETYPE)' instead."))
     t[0] = ['vect'] + t[2]
 
 @prod_dml12
@@ -1586,25 +1606,34 @@ def expression_assign(t):
     'expression : expression EQUALS expression'
     t[0] = ast.set(site(t, 2), t[1], t[3])
 
-@prod
-def assignop(t):
-    '''assignop : expression PLUSEQUAL expression
-                | expression MINUSEQUAL expression
-                | expression TIMESEQUAL expression
-                | expression DIVEQUAL expression
-                | expression MODEQUAL expression
-                | expression BOREQUAL expression
-                | expression BANDEQUAL expression
-                | expression BXOREQUAL expression
-                | expression LSHIFTEQUAL expression
-                | expression RSHIFTEQUAL expression'''
-    t[0] = ast.assignop(site(t, 2), t[1], t[2], t[3])
-
 @prod_dml12
 def expression_assignop(t):
-    '''expression : assignop'''
-    (tgt, op, src) = t[1].args
-    t[0] = ast.set(t[1].site, tgt, ast.binop(t[1].site, tgt, op[:-1], src))
+    '''expression : expression PLUSEQUAL   expression
+                  | expression MINUSEQUAL  expression
+                  | expression TIMESEQUAL  expression
+                  | expression DIVEQUAL    expression
+                  | expression MODEQUAL    expression
+                  | expression BOREQUAL    expression
+                  | expression BANDEQUAL   expression
+                  | expression BXOREQUAL   expression
+                  | expression LSHIFTEQUAL expression
+                  | expression RSHIFTEQUAL expression'''
+    t[0] = ast.set(site(t, 2), t[1],
+                   ast.binop(t[1].site, t[1], t[2][:-1], t[3]))
+
+@prod_dml14
+def assignop(t):
+    '''assignop : expression PLUSEQUAL   single_initializer
+                | expression MINUSEQUAL  single_initializer
+                | expression TIMESEQUAL  single_initializer
+                | expression DIVEQUAL    single_initializer
+                | expression MODEQUAL    single_initializer
+                | expression BOREQUAL    single_initializer
+                | expression BANDEQUAL   single_initializer
+                | expression BXOREQUAL   single_initializer
+                | expression LSHIFTEQUAL single_initializer
+                | expression RSHIFTEQUAL single_initializer'''
+    t[0] = ast.assignop(site(t, 2), t[1], t[2], t[3])
 
 @prod
 def expression_conditional(t):
@@ -1640,10 +1669,21 @@ def expression_binary_operator(t):
 
 # TODO: proper C-cast
 
-@prod
+@prod_dml12
 def expression_cast(t):
-    'expression : CAST LPAREN expression COMMA ctypedecl RPAREN'
-    t[0] = ast.cast(site(t), t[3], t[5])
+    'expression : CAST LPAREN expression COMMA cdecl RPAREN'
+    (_, psite, name, typ) = t[5]
+    if name:
+        report(ESYNTAX(psite, name, ''))
+    t[0] = ast.cast(site(t), ast.initializer_scalar(site(t, 3), t[3]), typ)
+
+@prod_dml14
+def expression_cast(t):
+    'expression : CAST LPAREN single_initializer COMMA cdecl RPAREN'
+    (_, psite, name, typ) = t[5]
+    if name:
+        report(ESYNTAX(psite, name, ''))
+    t[0] = ast.cast(site(t), t[3], typ)
 
 # TODO: proper C-sizeof
 
@@ -1784,15 +1824,33 @@ def typeop_arg_par(t):
     '''typeoparg : LPAREN ctypedecl RPAREN'''
     t[0] = t[2]
 
+@prod_dml14
+def maybe_newdelete_spec_yes(t):
+    '''maybe_newdelete_spec : LT ID GT
+                            | LT EXTERN GT'''
+    supported_specs = ('extern', 'enriched')
+    spec = t[2]
+    if spec not in supported_specs:
+        suggestions = ' or '.join(f"'{spec}'" for spec in supported_specs)
+        report(ESYNTAX(site(t, 1), spec,
+                      f"expected new/delete specification ({suggestions})"))
+        spec = 'enriched'
+    t[0] = spec
+
+@prod
+def maybe_newdelete_spec_no(t):
+    '''maybe_newdelete_spec : '''
+    t[0] = None
+
 @prod
 def expression_new(t):
-    '''expression : NEW ctypedecl'''
-    t[0] = ast.new(site(t), t[2], None)
+    '''expression : NEW maybe_newdelete_spec ctypedecl'''
+    t[0] = ast.new(site(t), t[2], t[3], None)
 
 @prod
 def expression_new_array(t):
-    '''expression : NEW ctypedecl LBRACKET expression RBRACKET'''
-    t[0] = ast.new(site(t), t[2], t[4])
+    '''expression : NEW maybe_newdelete_spec ctypedecl LBRACKET expression RBRACKET'''
+    t[0] = ast.new(site(t), t[2], t[3], t[5])
 
 @prod
 def expression_paren(t):
@@ -2130,43 +2188,38 @@ def statement_switch(t):
 
 @prod_dml14
 def statement_switch(t):
-    'statement_except_hashif : SWITCH LPAREN expression RPAREN LBRACE stmt_or_case_list RBRACE'
+    'statement_except_hashif : SWITCH LPAREN expression RPAREN LBRACE case_blocks_list RBRACE'
     stmts = t[6]
     t[0] = ast.switch(site(t), t[3], ast.compound(site(t, 5), stmts))
 
 @prod_dml14
-def stmt_or_case(t):
-    '''stmt_or_case : statement_except_hashif
-                    | cond_case_statement
-                    | case_statement'''
-    t[0] = t[1]
-
-@prod_dml14
-def switch_hashif(t):
-    'cond_case_statement : HASHIF LPAREN expression RPAREN LBRACE stmt_or_case_list RBRACE %prec LOWEST_PREC'
-    t[0] = ast.hashif(site(t), t[3], ast.compound(site(t, 5), t[6]), None)
-
-@prod_dml14
-def switch_hashifelse(t):
-    'cond_case_statement : HASHIF LPAREN expression RPAREN LBRACE stmt_or_case_list RBRACE HASHELSE LBRACE stmt_or_case_list RBRACE'
-    t[0] = ast.hashif(site(t), t[3], ast.compound(site(t, 5), t[6]),
-                      ast.compound(site(t, 9), t[10]))
-
-@prod_dml14
-def stmt_or_case_list_empty(t):
-    'stmt_or_case_list : '
+def case_blocks_list_empty(t):
+    'case_blocks_list : '
     t[0] = []
 
 @prod_dml14
-def stmt_or_case_list_stmt(t):
-    'stmt_or_case_list : stmt_or_case_list stmt_or_case'
-    t[0] = t[1] + [t[2]]
+def case_blocks_list_case(t):
+    'case_blocks_list : case_statement statement_except_hashif_list case_blocks_list'
+    t[0] = ([t[1]] + ([ast.compound(site(t, 2), t[2])] if t[2] else [])) + t[3]
+
+@prod_dml14
+def case_blocks_list_hashif(t):
+    'case_blocks_list : HASHIF LPAREN expression RPAREN LBRACE case_blocks_list RBRACE case_blocks_list %prec LOWEST_PREC'
+    stmt = ast.hashif(site(t), t[3], ast.compound(site(t, 5), t[6]), None)
+    t[0] = [stmt] + t[8]
+
+@prod_dml14
+def case_blocks_list_hashifelse(t):
+    'case_blocks_list : HASHIF LPAREN expression RPAREN LBRACE case_blocks_list RBRACE HASHELSE LBRACE case_blocks_list RBRACE case_blocks_list'
+    stmt = ast.hashif(site(t), t[3], ast.compound(site(t, 5), t[6]),
+                      ast.compound(site(t, 9), t[10]))
+    t[0] = [stmt] + t[12]
 
 # Delete is an expression in C++, not a statement, but we don't care.
 @prod
 def statement_delete(t):
-    'statement_except_hashif : DELETE expression SEMI'
-    t[0] = ast.delete(site(t), t[2])
+    'statement_except_hashif : DELETE maybe_newdelete_spec expression SEMI'
+    t[0] = ast.delete(site(t), t[2], t[3])
 
 @prod
 def statent_try(t):
@@ -2480,6 +2533,16 @@ def statement_list_1(t):
 @prod
 def statement_list_2(t):
     'statement_list : statement_list statement'
+    t[0] = t[1] + [t[2]]
+
+@prod_dml14
+def statement_except_hashif_list_1(t):
+    'statement_except_hashif_list : '
+    t[0] = []
+
+@prod_dml14
+def statement_except_hashif_list_2(t):
+    'statement_except_hashif_list : statement_except_hashif_list statement_except_hashif'
     t[0] = t[1] + [t[2]]
 
 # local
