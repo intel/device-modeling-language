@@ -103,11 +103,12 @@ _dml_string_realloc_for_len(_dml_string_t *s, uint32 new_len) {
 UNUSED static void
 _dml_string_resize(_dml_string_t *s, uint32 new_len) {
     uint32 prev_len = s->len;
+    uint32 prev_size = s->size;
     if (prev_len == new_len) return;
     _dml_string_realloc_for_len(s, new_len);
     s->len = new_len;
     if (s->size) {
-        if (prev_len > new_len) {
+        if (prev_size == 0 || prev_len > new_len) {
             s->s[new_len] = '\0';
         } else {
             memset(s->s + prev_len + 1, 0, new_len - prev_len);
@@ -640,7 +641,7 @@ _dml_vect_realloc(size_t elem_size, _dml_vect_t *v, uint32 new_size) {
     if (new_size > v->size) {
         ASSERT(new_size >= v->start + v->len);
         v->elements = MM_REALLOC_SZ(v->elements, new_size*elem_size, char);
-        if (v->start + v->len > v->size)
+        if (v->size && v->start + v->len > v->size)
             memcpy(v->elements + v->size*elem_size,
                    v->elements,
                    (v->len - (v->size - v->start))*elem_size);
@@ -960,6 +961,7 @@ _dml_vect_copy_to_index(size_t elem_size, _dml_vect_t *tgt, _dml_vect_t src,
     // Aliasing must be dealt with before this call!
     ASSERT(src.elements != tgt->elements);
     ASSERT(i + src.len <= tgt->len);
+    if (src.len == 0) return;
 
     uint32 tgt_start = DML_VECT_INDEX(*tgt, i);
     uint32 src_start_len = MIN(src.len, src.size - src.start);
