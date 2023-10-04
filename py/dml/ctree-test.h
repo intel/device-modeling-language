@@ -15,7 +15,7 @@ static void capture_assert_error(int line, const char *file,
 static void VT_critical_error(const char *short_msg, const char *long_msg);
 
 #include <simics/base-types.h>
-#include <simics/dmllib.h>
+#include <simics/dml-lib.h>
 
 api_function_t SIM_get_api_function(const char *name) { return NULL; }
 

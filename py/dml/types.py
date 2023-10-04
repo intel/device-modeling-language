@@ -737,7 +737,7 @@ class TSize(IntegerType):
 class TEndianInt(IntegerType):
     '''An integer where the byte storage order is defined.
     Corresponds to the (u)?intX_[be|le] family of types defined in
-    dmllib.h
+    dml-lib.h
     '''
     __slots__ = ('byte_order',)
     def __init__(self, bits, signed, byte_order, members = None, const = False):

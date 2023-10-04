@@ -1363,7 +1363,7 @@ class Compare(BinOp):
 
     @abc.abstractproperty
     def cmp_functions(self):
-        '''pair of dmllib.h functions for comparison between signed and
+        '''pair of dml-lib.h functions for comparison between signed and
         unsigned integer, with (int, uint) and (uint, int) args,
         respectively'''
 

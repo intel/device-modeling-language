@@ -10,7 +10,7 @@ bitorder le;
 loggroup Register_Read;
 loggroup Register_Write;
 header %{
-    #include <simics/dmllib.h>
+    #include <simics/dml-lib.h>
 %}
 
 import "simics/C.dml";
