@@ -384,13 +384,14 @@ def generate_attr_setter(fname, node, port, dimsizes, cprefix, loopvars,
     start_function_definition(proto)
     out('{\n', postindent = 1)
     if port:
+        site = unlinemarked_site(port.site)
         out(' _port_object_t *_portobj = (_port_object_t *)_obj;\n')
         out(crep.structtype(device)+' *_dev UNUSED = ('
             + crep.structtype(device)+'*)_portobj->dev;\n')
-        index_array = mkLit(port.site, '_portobj->indices',
+        index_array = mkLit(site, '_portobj->indices',
                            TPtr(TInt(32, False, const=True)))
-        port_indices = tuple(mkIndex(port.site, index_array,
-                                     mkIntegerLiteral(port.site, i))
+        port_indices = tuple(mkIndex(site, index_array,
+                                     mkIntegerLiteral(site, i))
                              for i in range(port.dimensions))
     else:
         out(crep.structtype(device)+' *_dev UNUSED = ('
@@ -416,18 +417,19 @@ def generate_attr_setter(fname, node, port, dimsizes, cprefix, loopvars,
         out('attr_value_t attr%d = %s;\n' % (dim, list_item))
         valuevar = 'attr%d' % (dim,)
 
-    with NoFailure(node.site), crep.DeviceInstanceContext():
+    site = unlinemarked_site(node.site)
+    with NoFailure(site), crep.DeviceInstanceContext():
         setcode = [
             codegen_inline_byname(
                 node, port_indices + loopvars,
                 '_set_attribute' if dml.globals.dml_version == (1, 2)
                 else 'set_attribute',
-                [mkLit(node.site, valuevar, TNamed('attr_value_t'))],
-                [mkLit(node.site, '_status', TNamed('set_error_t'))],
-                node.site,
+                [mkLit(site, valuevar, TNamed('attr_value_t'))],
+                [mkLit(site, '_status', TNamed('set_error_t'))],
+                site,
                 inhibit_copyin = not loopvars)]
 
-    code = mkCompound(None, declarations(fscope) + setcode)
+    code = mkCompound(site, declarations(fscope) + setcode)
     code.toc_inline()
     reset_line_directive()
     if dimsizes:
@@ -447,13 +449,14 @@ def generate_attr_getter(fname, node, port, dimsizes, cprefix, loopvars):
     start_function_definition(proto)
     out('{\n', postindent = 1)
     if port:
+        site = unlinemarked_site(port.site)
         out(' _port_object_t *_portobj = (_port_object_t *)_obj;\n')
         out(crep.structtype(device)+' *_dev UNUSED = ('
             + crep.structtype(device)+'*)_portobj->dev;\n')
-        index_array = mkLit(port.site, '_portobj->indices',
+        index_array = mkLit(site, '_portobj->indices',
                            TPtr(TInt(32, False, const=True)))
-        port_indices = tuple(mkIndex(port.site, index_array,
-                                     mkIntegerLiteral(port.site, i))
+        port_indices = tuple(mkIndex(site, index_array,
+                                     mkIntegerLiteral(site, i))
                              for i in range(port.dimensions))
     else:
         out(crep.structtype(device)+' *_dev UNUSED = ('
@@ -465,11 +468,12 @@ def generate_attr_getter(fname, node, port, dimsizes, cprefix, loopvars):
         out('uint32 ' + ', '.join(v.str for v in loopvars) + ';\n')
     fscope = Symtab(global_scope)
 
-    valuevar = mkLit(node.site, '_val0', attr_value_t)
+    site = unlinemarked_site(node.site)
+    valuevar = mkLit(site, '_val0', attr_value_t)
     assert len(dimsizes) == len(loopvars)
     for (dim, loopvar, depth) in zip(dimsizes, loopvars,
                                      list(range(len(dimsizes)))):
-        next_valuevar = mkLit(node.site, '_val%s' % (depth + 1,), attr_value_t)
+        next_valuevar = mkLit(site, '_val%s' % (depth + 1,), attr_value_t)
         out('%s = SIM_alloc_attr_list(%d);\n' % (valuevar.read(), dim))
         out('for (%s = 0; %s < %d; %s++) {\n'
             % (loopvar.read(), loopvar.read(), dim, loopvar.read()),
@@ -477,13 +481,13 @@ def generate_attr_getter(fname, node, port, dimsizes, cprefix, loopvars):
         out('attr_value_t %s;\n' % (next_valuevar.read()))
         valuevar = next_valuevar
 
-    with NoFailure(node.site), crep.DeviceInstanceContext():
+    with NoFailure(site), crep.DeviceInstanceContext():
         getcode = codegen_inline_byname(
             node, port_indices + loopvars,
             '_get_attribute' if dml.globals.dml_version == (1, 2)
             else 'get_attribute',
-            [], [valuevar], node.site)
-        code = mkCompound(node.site, declarations(fscope) + [getcode])
+            [], [valuevar], site)
+        code = mkCompound(site, declarations(fscope) + [getcode])
         code.toc_inline()
         reset_line_directive()
 
@@ -549,7 +553,8 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
                 '\n\nRequired interfaces: '
                 + ', '.join('<iface>' + i.name + '</iface>' for i in ifaces)
                 + '.')
-    doc = mkStringConstant(node.site, doc)
+    site = unlinemarked_site(node.site)
+    doc = mkStringConstant(site, doc)
 
     fname = get_attr_fname(node, port, prefix)
 
@@ -578,12 +583,12 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
         else:
             attr_type = "[%s{%d}]" % (attr_type, dim)
 
-    register_attribute(node.site, port, attrname)
+    register_attribute(site, port, attrname)
     if port:
         if need_port_proxy_attrs(port):
             if port.dimensions == 0:
                 register_attribute(
-                    node.site, None, "%s_%s" % (port.name, attrname))
+                    site, None, "%s_%s" % (port.name, attrname))
                 initcode.out(
                     '_register_port_attr(class, %s, offsetof(%s, %s), %s,'
                     % (port_class_ident(port),
@@ -597,9 +602,9 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
                 assert port.dimensions == 1
                 # Generate an accessor attribute for legacy reasons
                 register_attribute(
-                    node.site, None, "%s_%s" % (port.name, attrname))
+                    site, None, "%s_%s" % (port.name, attrname))
                 member = crep.cref_portobj(
-                    port, (mkLit(port.site, '0', TInt(32, False)),))
+                    port, (mkLit(site, '0', TInt(32, False)),))
                 (dimsize,) = port.dimsizes
                 initcode.out(
                     '_register_port_array_attr(class, %s, offsetof(%s, %s),'
@@ -728,33 +733,33 @@ def wrap_method(meth, wrapper_name, indices=()):
         wrapper_name, ", ".join(["conf_object_t *_obj"] + inparams))))
     out('{\n', postindent = 1)
     devstruct = crep.structtype(dml.globals.device)
+    meth_site = unlinemarked_site(meth.site)
     if indices is PORTOBJ:
         out('_port_object_t *_portobj = (_port_object_t *)_obj;\n')
         out(devstruct+' *_dev UNUSED = (' + devstruct + ' *)_portobj->dev;\n')
-        index_array = mkLit(meth.site, '_portobj->indices',
+        index_array = mkLit(meth_site, '_portobj->indices',
                            TPtr(TInt(32, False, const=True)))
-        indices = tuple(mkIndex(meth.site, index_array,
-                                mkIntegerLiteral(meth.site, i))
+        indices = tuple(mkIndex(meth_site, index_array,
+                                mkIntegerLiteral(meth_site, i))
                         for i in range(meth.dimensions))
     else:
         assert meth.dimensions == len(indices)
         out(devstruct+' *_dev UNUSED = ('+devstruct+'*)_obj;\n')
-        indices = tuple(mkIntegerLiteral(meth.site, i) for i in indices)
+        indices = tuple(mkIntegerLiteral(meth_site, i) for i in indices)
     with crep.DeviceInstanceContext():
         if retvar:
-            decl = mkDeclaration(meth.site, retvar, rettype,
-                                 init = get_initializer(meth.site, rettype,
+            decl = mkDeclaration(meth_site, retvar, rettype,
+                                 init = get_initializer(meth_site, rettype,
                                                         None, None, None))
             decl.toc()
 
-        with LogFailure(meth.site, meth, indices):
-            inargs = [mkLit(meth.site, v, t) for v, t in meth.inp]
-            outargs = [mkLit(meth.site, v, t) for v, t in meth.outp]
-            codegen_call(meth.site, meth,
+        with LogFailure(meth_site, meth, indices):
+            inargs = [mkLit(meth_site, v, t) for v, t in meth.inp]
+            outargs = [mkLit(meth_site, v, t) for v, t in meth.outp]
+            codegen_call(meth_site, meth,
                          indices,
                          inargs, outargs).toc()
     output_dml_state_change('_dev')
-
     reset_line_directive()
     if retvar:
         out('return '+retvar+';\n')
@@ -1346,18 +1351,20 @@ def generate_reg_callback(meth, name):
     out('{\n', postindent = 1)
     out('%s *_dev = _obj;\n' % dev_t)
     scope = Symtab(global_scope)
-    fail = ReturnFailure(meth.site)
+    meth_site = unlinemarked_site(meth.site)
+    fail = ReturnFailure(meth_site)
     with fail, crep.DeviceInstanceContext():
-        inargs = [mkLit(meth.site, n, t) for n, t in meth.inp]
-        outargs = [mkLit(meth.site, "*" + n, t) for n, t in meth.outp]
+        inargs = [mkLit(meth_site, n, t) for n, t in meth.inp]
+        outargs = [mkLit(meth_site, "*" + n, t) for n, t in meth.outp]
         code = [codegen_call(
-                meth.site, meth,
-                tuple(mkLit(meth.site, 'indices[%d]' % i, TInt(32, False))
+                meth_site, meth,
+                tuple(mkLit(meth_site, 'indices[%d]' % i, TInt(32, False))
                       for i in range(meth.dimensions)),
                 inargs, outargs)]
 
-    code = mkCompound(meth.site, declarations(scope) + code + [fail.nofail()])
+    code = mkCompound(meth_site, declarations(scope) + code + [fail.nofail()])
     code.toc()
+    reset_line_directive()
     out('}\n', preindent = -1)
     out('\n')
 
@@ -1572,21 +1579,22 @@ def generate_initialize(device):
     out('QINIT(_dev->_immediate_after_state->queue);\n')
 
     with crep.DeviceInstanceContext():
+        device_site = unlinemarked_site(device.site)
         if dml.globals.dml_version == (1, 2):
             # Functions called from init_object shouldn't throw any
             # exceptions. But we don't want to force them to insert try-catch
             # in the init method.
-            with InitFailure(device.site):
+            with InitFailure(device_site):
                 # Inline the init method
                 init = codegen_inline_byname(device, (), 'init', [], [],
-                                             device.site)
+                                             device_site)
                 # Call hard_reset
-                hard_reset = codegen_call_byname(device.site, device, (),
+                hard_reset = codegen_call_byname(device_site, device, (),
                                                  'hard_reset', [], [])
 
-            mkCompound(device.site, [init, hard_reset]).toc()
+            mkCompound(device_site, [init, hard_reset]).toc()
         else:
-            codegen_inline_byname(device, (), '_init', [], [], device.site).toc()
+            codegen_inline_byname(device, (), '_init', [], [], device_site).toc()
 
     reset_line_directive()
     if dml.globals.api_version <= '6':
@@ -1611,22 +1619,24 @@ def generate_finalize(device):
         + crep.structtype(device) + ' *)_obj;\n')
 
     with crep.DeviceInstanceContext():
+        device_site = unlinemarked_site(device.site)
         if dml.globals.dml_version == (1, 2):
             # Functions called from new_instance shouldn't throw any
             # exceptions.  But we don't want to force them to insert try-catch
             # in the init method.
-            with LogFailure(device.site, device, ()):
+            with LogFailure(device_site, device, ()):
                 code = codegen_inline_byname(device, (), 'post_init', [], [],
-                                             device.site)
+                                             device_site)
         else:
             code = codegen_inline_byname(device, (), '_post_init', [], [],
-                                     device.site)
+                                     device_site)
     if not code.is_empty:
         code.toc()
-    out('}\n\n', preindent = -1)
     reset_line_directive()
+    out('}\n\n', preindent = -1)
 
 def generate_deinit(device):
+    site = unlinemarked_site(device.site)
     start_function_definition(
         'void %s_deinit(conf_object_t *_obj)' % (
             crep.cname(device),))
@@ -1649,15 +1659,16 @@ def generate_deinit(device):
                 out(f'for (uint32 _i{i} = 0; _i{i} < {dims[i]}; _i{i}++) {{\n',
                     postindent=1)
 
-            indices = tuple(mkLit(device.site, f'_i{i}', TInt(32, False))
+            indices = tuple(mkLit(site, f'_i{i}', TInt(32, False))
                             for i in range(len(dims)))
             for event in events:
                 method = event.get_component('_cancel_all', 'method')
                 # Functions called from pre_delete_instance shouldn't throw
                 # any exceptions. But we don't want to force them to insert
                 # try-catch in the init method.
-                with LogFailure(device.site, event, indices):
-                    codegen_inline(method.site, method, indices, [], []).toc()
+                with LogFailure(site, event, indices):
+                    codegen_inline(site, method, indices, [], []).toc()
+                reset_line_directive()
             for i in range(len(dims)):
                 out('}\n', preindent=-1)
 
@@ -1665,11 +1676,11 @@ def generate_deinit(device):
             out(f'SIM_event_cancel_time(_obj, {crep.get_evclass(key)}, _obj, '
                 + '0, NULL);\n')
 
-        with LogFailure(device.site, device, ()):
-            code = codegen_inline_byname(device, (), 'destroy', [], [],
-                                         device.site)
+        with LogFailure(site, device, ()):
+            code = codegen_inline_byname(device, (), 'destroy', [], [], site)
         if not code.is_empty:
             code.toc()
+        reset_line_directive()
 
         # Cancel all pending afters on hooks
         by_dims = {}
@@ -1681,7 +1692,7 @@ def generate_deinit(device):
                 out(f'for (uint32 _i{i} = 0; _i{i} < {dims[i]}; _i{i}++) {{\n',
                     postindent=1)
 
-            indices = tuple(mkLit(device.site, f'_i{i}', TInt(32, False))
+            indices = tuple(mkLit(site, f'_i{i}', TInt(32, False))
                             for i in range(len(dims)))
             for hook in hooks:
                 out('_DML_free_hook_queue('
@@ -1717,13 +1728,14 @@ def generate_reset(device, hardness):
     out(crep.structtype(device) + ' *_dev UNUSED = ('
         + crep.structtype(device) + ' *)_obj;\n\n')
     scope = Symtab(global_scope)
-    with LogFailure(device.site, device, ()), crep.DeviceInstanceContext():
-        code = codegen_call_byname(device.site, device, (),
+    site = unlinemarked_site(device.site)
+    with LogFailure(site, device, ()), crep.DeviceInstanceContext():
+        code = codegen_call_byname(site, device, (),
                                    hardness+'_reset', [], [])
-    code = mkCompound(device.site, declarations(scope) + [code])
+    code = mkCompound(site, declarations(scope) + [code])
     code.toc()
-    out('}\n\n', preindent = -1)
     reset_line_directive()
+    out('}\n\n', preindent = -1)
 
 # {(B, C): A} means that a static array 'const uint32 _indices_B_C[A][B][C][3]'
 # will be generated, where element [x][y][z] is {x,y,z}
@@ -2043,11 +2055,11 @@ def generate_extern_trampoline_dml12(exported_name, func):
     out("}\n", preindent=-1)
 
 def som_linemark(site):
-    if dml.globals.linemarks:
+    if dml.globals.linemarks and site.linemarked:
         out('#line %d "%s"\n' % (site.lineno, quote_filename(site.filename())))
 
 def eom_linemark(site):
-    if dml.globals.linemarks:
+    if dml.globals.linemarks and site.linemarked:
         out('#line %d "%s"\n' % (site.lineno, quote_filename(site.filename())))
 
 def generate_each_in_table(trait, instances):
@@ -2704,7 +2716,7 @@ def generate_trait_trampoline(method, vtable_trait):
     with (crep.DeviceInstanceContext() if not method.independent
           else nullcontext()):
         [(tname, ttype)] = implicit_inargs
-        site = method.site
+        site = unlinemarked_site(method.site)
         obj = method.parent
         if obj.dimensions:
             out(f'uint32 _flat_index = {tname}.id.encoded_index;\n')
@@ -3085,7 +3097,7 @@ def generate_startup_call_loops(startup_methods):
             out('for (uint32 %s = 0; %s < %d; %s++) {\n'
                 % (idxvar, idxvar, dims[i], idxvar), postindent=1)
 
-        for (site, gen_call, data) in by_dims[dims]:
+        for (gen_call, data) in by_dims[dims]:
             idxvars = ['_i%d' % (i,) for i in range(len(dims))]
             gen_call(data, idxvars)
 
@@ -3094,7 +3106,7 @@ def generate_startup_call_loops(startup_methods):
 
 def generate_startup_trait_calls(data, idxvars):
     (node, traits) = data
-    site = node.site
+    site = unlinemarked_site(node.site)
 
     indices = tuple(mkLit(site, idx, TInt(32, False)) for idx in idxvars)
 
@@ -3104,22 +3116,23 @@ def generate_startup_trait_calls(data, idxvars):
         ref = ObjTraitRef(site, node, trait, indices)
         out(f'_tref = {ref.read()};\n')
         for method in trait_methods:
-            outargs = [mkLit(method.site,
+            method_site = unlinemarked_site(method.site)
+            outargs = [mkLit(method_site,
                              ('*((%s) {0})'
-                              % ((TArray(t, mkIntegerLiteral(method.site, 1))
+                              % ((TArray(t, mkIntegerLiteral(method_site, 1))
                                   .declaration('')),)),
                              t)
                        for (_, t) in method.outp]
 
             method_ref = TraitMethodDirect(
-                method.site, mkLit(method.site, '_tref', TTrait(trait)), method)
+                method_site, mkLit(method_site, '_tref', TTrait(trait)), method)
             with IgnoreFailure(site):
-                codegen_call_traitmethod(method.site, method_ref, [],
-                                         outargs) .toc()
+                codegen_call_traitmethod(method_site, method_ref, [],
+                                         outargs).toc()
     out('}\n', preindent=-1)
 
 def generate_startup_regular_call(method, idxvars):
-    site = method.site
+    site = unlinemarked_site(method.site)
     indices = tuple(mkLit(site, idx, TInt(32, False)) for idx in idxvars)
     outargs = [mkLit(site,
                      ('*((%s) {0})'
@@ -3132,7 +3145,7 @@ def generate_startup_regular_call(method, idxvars):
     # or not the method did throw during startup by calling the method
     # again.
     with IgnoreFailure(site):
-        codegen_call(method.site, method, indices, [], outargs).toc()
+        codegen_call(site, method, indices, [], outargs).toc()
 
 def generate_startup_calls_entry_function(devnode):
     start_function_definition('void _startup_calls(void)')
@@ -3160,18 +3173,15 @@ def generate_startup_calls_entry_function(devnode):
                 trait_memoized_startups.append((subnode, startup_memoizeds))
 
     all_startups = \
-        ([((method.site, generate_startup_regular_call, method),
-           method.dimsizes)
+        ([((generate_startup_regular_call, method), method.dimsizes)
           for method in structure.startups]
-         + [((node.site, generate_startup_trait_calls, (node, startups)),
-             node.dimsizes)
+         + [((generate_startup_trait_calls, (node, startups)), node.dimsizes)
             for (node, startups) in trait_startups])
     all_memoized_startups = \
-        ([((method.site, generate_startup_regular_call, method),
+        ([((generate_startup_regular_call, method),
            method.dimsizes)
           for method in structure.memoized_startups]
-         + [((node.site, generate_startup_trait_calls, (node, startups)),
-             node.dimsizes)
+         + [((generate_startup_trait_calls, (node, startups)), node.dimsizes)
             for (node, startups) in trait_memoized_startups])
     for startups in (all_startups, all_memoized_startups):
         generate_startup_call_loops(startups)

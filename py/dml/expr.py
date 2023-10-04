@@ -29,7 +29,7 @@ __all__ = (
 )
 
 def site_linemark_nocoverity(site, adjust=0):
-    if isinstance(site, SimpleSite):
+    if site is None or not site.linemarked:
         return
 
     filename = site.filename()
@@ -68,7 +68,7 @@ def coverity_markers(markers, site=None):
         if dml.globals.linemarks and isinstance(output.current(), FileOutput):
             out('#ifdef __COVERITY__\n')
             reset_line_directive()
-            if site_with_loc:
+            if site is not None and site.linemarked:
                 out('#else\n')
                 site_linemark_nocoverity(site,
                                          adjust=-(len(markers) + 1))
@@ -76,7 +76,7 @@ def coverity_markers(markers, site=None):
         for (event, classification) in markers:
             classification = f' : {classification}' if classification else ''
             out(f'/* coverity[{event}{classification}] */\n')
-    elif site is not None:
+    else:
         site_linemark_nocoverity(site)
 
 

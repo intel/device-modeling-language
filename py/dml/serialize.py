@@ -112,7 +112,7 @@ def call_c_fun(site, fun, args):
 # serialize current_expr, interpreted as real_type, and assign
 # to target_expr
 def serialize(real_type, current_expr, target_expr):
-    current_site = current_expr.site
+    current_site = unlinemarked_site(current_expr.site)
     def construct_assign_apply(funname, intype):
         apply_expr = apply_c_fun(current_site, funname,
                                  [current_expr], attr_value_t)
@@ -201,7 +201,7 @@ def serialize(real_type, current_expr, target_expr):
 # to target_expr. error_out constructs statements to fail deserialization
 # with a given set_error_t and message.
 def deserialize(real_type, current_expr, target_expr, error_out):
-    current_site = current_expr.site
+    current_site = unlinemarked_site(current_expr.site)
     def construct_assign_apply(attr_typ, intype):
         check_expr = apply_c_fun(current_site, 'SIM_attr_is_' + attr_typ,
                                  [current_expr], TBool())

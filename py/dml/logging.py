@@ -21,6 +21,7 @@ __all__ = (
     'SimpleSite',
     'DumpableSite',
     'TemplateSite',
+    'unlinemarked_site',
 
     'dbg',
     )
@@ -267,10 +268,14 @@ class Site(metaclass=abc.ABCMeta):
     def filename(self): pass
     @abc.abstractproperty
     def lineno(self): pass
+    @abc.abstractproperty
+    def linemarked(self): pass
     @abc.abstractmethod
     def dml_version(self): pass
     @abc.abstractmethod
     def bitorder(self): pass
+    @abc.abstractmethod
+    def clone(self): pass
     is_site = None
 
 class SimpleSite(Site):
@@ -290,7 +295,10 @@ class SimpleSite(Site):
         return self._dml_version
     def bitorder(self):
         return 'le'
+    def clone(self):
+        return SimpleSite(self._name, self._dml_version)
     lineno = 1
+    linemarked = False
 
 def accumulate(iterable):
     '''Like itertools.accumulate from Python 3.2'''
@@ -360,10 +368,11 @@ class FileInfo(object):
 
 class DumpableSite(Site):
     '''A source code location'''
-    __slots__ = ('file_info', '_offs')
+    __slots__ = ('file_info', '_offs', 'linemarked')
     def __init__(self, file_info, fileoffs):
         self.file_info = file_info
         self._offs = fileoffs
+        self.linemarked = True
     def __repr__(self):
         return '<site %s>' % self.loc()
     def filename(self):
@@ -379,24 +388,29 @@ class DumpableSite(Site):
         return self.file_info.version
     def bitorder(self):
         return self.file_info.bitorder
+    def clone(self):
+        site = DumpableSite(self.file_info, self._offs)
+        site.linemarked = self.linemarked
+        return site
     # A site is serialized when reading or writing .dmlast files. All
     # DumpableSite objects reachable from one AST must share the same FileInfo
     # object in the 'file' attribute; this is needed because it allows
     # FileInfo.name to be changed after the .dmlast file is loaded.
     def __getstate__(self):
-        return (self.file_info, self._offs)
+        return (self.file_info, self._offs, self.linemarked)
     def __setstate__(self, data):
-        (self.file_info, self._offs) = data
+        (self.file_info, self._offs, self.linemarked) = data
 
 class TemplateSite(Site):
     '''A source code location after template expansion'''
-    __slots__ = ('site', 'is_site', 'tpl_name')
+    __slots__ = ('site', 'is_site', 'tpl_name', 'linemarked')
     def __init__(self, site, is_site, tpl_name):
         self.site = site
         # site of the is statement that yielded this site
         self.is_site = is_site
         # name of the template this statement was expanded from
         self.tpl_name = tpl_name
+        self.linemarked = True
     def __repr__(self):
         return '<site %s via %s>' % (repr(self.site), repr(self.is_site))
     def dml_version(self): return self.site.dml_version()
@@ -405,6 +419,16 @@ class TemplateSite(Site):
     def bitorder(self): return self.site.bitorder()
     @property
     def lineno(self): return self.site.lineno
+    def clone(self):
+        site = TemplateSite(self.site, self.is_site, self.tpl_name)
+        site.linemarked = self.linemarked
+        return site
+
+def unlinemarked_site(site):
+    if site.linemarked:
+        site = site.clone()
+        site.linemarked = False
+    return site
 
 store_errors = None
 

@@ -3469,7 +3469,7 @@ def codegen_inline_byname(node, indices, meth_name, inargs, outargs,
     else:
         meth_node = node
 
-    return codegen_inline(meth_node.site, meth_node, indices,
+    return codegen_inline(site, meth_node, indices,
                           inargs, outargs, inhibit_copyin)
 
 intercepted_in_int_reg = {
