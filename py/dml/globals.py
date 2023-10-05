@@ -101,4 +101,8 @@ illegal_attributes = {
 
 build_confidentiality = 0
 
+# Signifies if --nolines was passed to DMLC; if not, this will be set to True
+linemarks_enabled = False
+
+# Relevant during C emission: indicates if linemarks should currently be generated
 linemarks = False
