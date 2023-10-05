@@ -546,6 +546,7 @@ template device {
     param _compat_io_memory auto;
     param _compat_dml12_inline auto;
     param _compat_dml12_not auto;
+    param _compat_dml12_goto auto;
     param _compat_dml12_misc auto;
     param _compat_dml12_int auto;
 
