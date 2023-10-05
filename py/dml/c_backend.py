@@ -261,11 +261,11 @@ def generate_hfile(device, headers, filename):
     emit_guard_start(filename)
     out('#define DML_PREFIX(x) '+crep.cname(device)+'_##x\n\n')
 
-    for c in headers:
-        c.toc()
-        out('\n')
+    with allow_linemarks():
+        for c in headers:
+            c.toc()
+            out('\n')
 
-    reset_line_directive()
     out('\n')
 
     out('#include <simics/util/help-macros.h>\n')
@@ -435,7 +435,6 @@ def generate_attr_setter(fname, node, port, dimsizes, cprefix, loopvars,
 
     code = mkCompound(None, declarations(fscope) + setcode)
     code.toc_inline()
-    reset_line_directive()
     if dimsizes:
         # abort on first bad value
         out('if (_status != Sim_Set_Ok) goto exit;\n')
@@ -491,7 +490,6 @@ def generate_attr_getter(fname, node, port, dimsizes, cprefix, loopvars):
             [], [valuevar], node.site)
         code = mkCompound(node.site, declarations(fscope) + [getcode])
         code.toc_inline()
-        reset_line_directive()
 
     for depth, loopvar in reversed(list(enumerate(loopvars))):
         out('SIM_attr_list_set_item(&_val%d, %s, _val%d);\n'
@@ -760,8 +758,6 @@ def wrap_method(meth, wrapper_name, indices=()):
                          indices,
                          inargs, outargs).toc()
     output_dml_state_change('_dev')
-
-    reset_line_directive()
     if retvar:
         out('return '+retvar+';\n')
     out('}\n', preindent = -1)
@@ -1110,8 +1106,6 @@ def generate_simple_events(device):
             out('}\n\n', preindent = -1)
             splitting_point()
 
-    reset_line_directive()
-
 def generate_after_on_hooks_artifacts(device):
     for info in dml.globals.after_on_hook_infos:
         site = SimpleSite(f'after on hook {string_literal(info.string_key)}')
@@ -1186,8 +1180,6 @@ def generate_after_on_hooks_artifacts(device):
             out('}\n\n', preindent = -1)
             splitting_point()
 
-    reset_line_directive()
-
     if dml.globals.after_on_hook_infos:
         init = '{\n%s\n}' % (',\n'.join(
             '    {%s, %s, %s, %s, %s, %d}'
@@ -1213,7 +1205,6 @@ def generate_after_on_hooks_artifacts(device):
                 + f'_after_on_hook_infos[{info.uniq}].callback_key, '
                 + f'&_after_on_hook_infos[{info.uniq}]);\n')
     out('}\n', preindent = -1)
-    reset_line_directive()
     splitting_point()
 
 def generate_immediate_after_callbacks(device):
@@ -1234,8 +1225,6 @@ def generate_immediate_after_callbacks(device):
         info.generate_callback_call(indices_lit, args_lit)
         out('}\n\n', preindent = -1)
         splitting_point()
-
-    reset_line_directive()
 
 def generate_simple_events_control_methods(device):
     start_function_definition(
@@ -1592,9 +1581,9 @@ def generate_initialize(device):
 
             mkCompound(device.site, stmts).toc()
         else:
-            codegen_inline_byname(device, (), '_init', [], [], device.site).toc()
+            codegen_inline_byname(device, (), '_init', [], [],
+                                  device.site).toc()
 
-    reset_line_directive()
     if dml.globals.api_version <= compat.api_6:
         out('SIM_add_notifier(_obj, Sim_Notify_Object_Delete, _obj, '
             + crep.cname(device) + '_pre_del_notify, NULL);\n')
@@ -1632,7 +1621,6 @@ def generate_finalize(device):
     if not code.is_empty:
         code.toc()
     out('}\n\n', preindent = -1)
-    reset_line_directive()
 
 def generate_deinit(device):
     start_function_definition(
@@ -1715,7 +1703,6 @@ def generate_deinit(device):
     out('}\n', preindent = -1)
 
     out('}\n\n', preindent = -1)
-    reset_line_directive()
     splitting_point()
 
 def generate_reset(device, hardness):
@@ -1734,7 +1721,6 @@ def generate_reset(device, hardness):
     code = mkCompound(method.site, declarations(scope) + [code])
     code.toc()
     out('}\n\n', preindent = -1)
-    reset_line_directive()
 
 # {(B, C): A} means that a static array 'const uint32 _indices_B_C[A][B][C][3]'
 # will be generated, where element [x][y][z] is {x,y,z}
@@ -1853,7 +1839,6 @@ def generate_init_static_vars(device):
             for line in init.splitlines(keepends=True):
                 out(line)
     out('}\n\n', preindent = -1)
-    reset_line_directive()
 
 def generate_init_data_objs(device):
     start_function_definition(
@@ -1881,23 +1866,23 @@ def generate_init_data_objs(device):
             # mainly meant to capture EIDXVAR; for other errors, the error will
             # normally re-appear when evaluating per instance
             except DMLError:
-                for indices in node.all_indices():
-                    index_exprs = tuple(mkIntegerLiteral(node.site, i)
-                                        for i in indices)
-                    nref = mkNodeRef(node.site, node, index_exprs)
-                    try:
-                        init = eval_initializer(
-                            node.site, node._type, node.astinit,
-                            Location(node.parent, index_exprs), global_scope,
-                            True)
-                    except DMLError as e:
-                        report(e)
-                    else:
-                        if deep_const(node._type):
-                            coverity_marker('store_writes_const_field',
-                                            'FALSE',
-                                            node.site)
-                        init.assign_to(nref, node._type)
+                with allow_linemarks():
+                    for indices in node.all_indices():
+                        index_exprs = tuple(mkIntegerLiteral(node.site, i)
+                                            for i in indices)
+                        nref = mkNodeRef(node.site, node, index_exprs)
+                        try:
+                            init = eval_initializer(
+                                node.site, node._type, node.astinit,
+                                Location(node.parent, index_exprs),
+                                global_scope, True)
+                        except DMLError as e:
+                            report(e)
+                        else:
+                            markers = ([('store_writes_const_field', 'FALSE')]
+                                       if deep_const(node._type) else [])
+                            coverity_markers(markers, node.site)
+                            init.assign_to(nref, node._type)
             else:
                 index_exprs = ()
                 for (i, sz) in enumerate(node.dimsizes):
@@ -1907,13 +1892,14 @@ def generate_init_data_objs(device):
                         postindent=1)
                     index_exprs += (mkLit(node.site, var, TInt(64, True)),)
                 nref = mkNodeRef(node.site, node, index_exprs)
-                if deep_const(node._type):
-                    coverity_marker('store_writes_const_field', 'FALSE', node.site)
-                init.assign_to(nref, node._type)
+                with allow_linemarks():
+                    markers = ([('store_writes_const_field', 'FALSE')]
+                               if deep_const(node._type) else [])
+                    coverity_markers(markers, node.site)
+                    init.assign_to(nref, node._type)
                 for _ in range(node.dimensions):
                     out('}\n', postindent=-1)
     out('}\n\n', preindent = -1)
-    reset_line_directive()
     splitting_point()
 
 ident_chars = set(chr(i)
@@ -3157,7 +3143,7 @@ def generate_startup_trait_calls(data, idxvars):
                 method.site, mkLit(method.site, '_tref', TTrait(trait)), method)
             with IgnoreFailure(site):
                 codegen_call_traitmethod(method.site, method_ref, [],
-                                         outargs) .toc()
+                                         outargs).toc()
     out('}\n', preindent=-1)
 
 def generate_startup_regular_call(method, idxvars):
@@ -3262,7 +3248,6 @@ def splitting_point():
     assert_global_c_scope()
     if c_split_threshold and c_file.tell() > c_split_threshold:
         c_file.advance()
-        reset_line_directive()
 
 c_file = None
 def generate_cfile(device, footers,
@@ -3352,14 +3337,15 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
 
     for t in list(dml.globals.traits.values()):
         for m in list(t.method_impls.values()):
-            if gather_size_statistics:
-                ctx = StrOutput()
-                with ctx:
+            with allow_linemarks():
+                if gather_size_statistics:
+                    ctx = StrOutput()
+                    with ctx:
+                        generate_trait_method(m)
+                    size_statistics[m.site.loc()] = [len(ctx.buf)]
+                    out(ctx.buf)
+                else:
                     generate_trait_method(m)
-                size_statistics[m.site.loc()] = [len(ctx.buf)]
-                out(ctx.buf)
-            else:
-                generate_trait_method(m)
     # Note: methods may be added to method_queue while doing this,
     # so don't try to be too smart
     generated_funcs = set()
@@ -3374,39 +3360,39 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
                            for (n, v) in func.inp
                            if isinstance(v, Expression)]
 
-        if gather_size_statistics:
-            ctx = StrOutput()
-        else:
-            ctx = nullcontext()
-        with ErrorContext(func.method), ctx:
-            if specializations:
-                out('/* %s\n' % func.get_name())
-                for (n, v) in specializations:
-                    out('     %s = %s\n' % (n, v))
-                out('*/\n')
+        with allow_linemarks():
+            if gather_size_statistics:
+                ctx = StrOutput()
             else:
-                out('/* %s */\n' % func.get_name())
+                ctx = nullcontext()
+            with ErrorContext(func.method), ctx:
+                if specializations:
+                    out('/* %s\n' % func.get_name())
+                    for (n, v) in specializations:
+                        out('     %s = %s\n' % (n, v))
+                    out('*/\n')
+                else:
+                    out('/* %s */\n' % func.get_name())
 
-            start_function_definition(func.prototype)
-            som_linemark(func.method.astcode.site)
-            out('{\n', postindent = 1)
-            try:
-                code.toc_inline()
-            except DMLError as e:
-                report(e)
-                # Any errors should have been caught during
-                # codegen_method, when all Expression and Statement
-                # objects are instantiated.
-                raise ICE(e.site, 'error during late compile stage')
-            eom_linemark(func.method.rbrace_site)
-            out('}\n\n', preindent = -1)
-        reset_line_directive()
+                start_function_definition(func.prototype)
+                som_linemark(func.method.astcode.site)
+                out('{\n', postindent = 1)
+                try:
+                    code.toc_inline()
+                except DMLError as e:
+                    report(e)
+                    # Any errors should have been caught during
+                    # codegen_method, when all Expression and Statement
+                    # objects are instantiated.
+                    raise ICE(e.site, 'error during late compile stage')
+                eom_linemark(func.method.rbrace_site)
+                out('}\n\n', preindent = -1)
+            if gather_size_statistics:
+                size_statistics.setdefault(func.method.site.loc(), []).append(
+                    len(ctx.buf))
+                out(ctx.buf)
         splitting_point()
 
-        if gather_size_statistics:
-            size_statistics.setdefault(func.method.site.loc(), []).append(
-                len(ctx.buf))
-            out(ctx.buf)
 
     if gather_size_statistics:
         Path(filename_prefix + "-size-stats.json").write_text(json.dumps(
@@ -3451,11 +3437,10 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     generate_index_enumerations()
     generate_tuple_table()
 
-    for c in footers:
-        c.toc()
-        out('\n')
-
-    reset_line_directive()
+    with allow_linemarks():
+        for c in footers:
+            c.toc()
+            out('\n')
 
     if full_module:
         # caught as error earlier on

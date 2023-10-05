@@ -577,7 +577,7 @@ def main(argv):
 
     dml.globals.coverity = options.coverity
 
-    dml.globals.linemarks = not options.noline
+    dml.globals.linemarks_enabled = not options.noline
 
     dml.globals.state_change_dml12 = options.state_change_dml12
 

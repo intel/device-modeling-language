@@ -3481,8 +3481,8 @@ def codegen_inline_byname(node, indices, meth_name, inargs, outargs,
     else:
         meth_node = node
 
-    return codegen_inline(meth_node.site, meth_node, indices,
-                          inargs, outargs, inhibit_copyin)
+    return codegen_inline(site, meth_node, indices, inargs, outargs,
+                          inhibit_copyin)
 
 intercepted_in_int_reg = {
     'get_name': int_register.codegen_get_name,
@@ -3601,11 +3601,11 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
                 code = [codegen_statement(meth_node.astcode,
                                           Location(meth_node, indices),
                                           param_scope)]
-            if exit_handler.used:
-                code.append(mkLabel(site, exit_handler.label))
-            code.extend(copyout)
-            body = mkCompound(site, declarations(param_scope) + code)
-            return mkInlinedMethod(site, meth_node, body)
+            post = ([mkLabel(site, exit_handler.label)]
+                    if exit_handler.used else [])
+            post.extend(copyout)
+            return mkInlinedMethod(site, meth_node, declarations(param_scope),
+                                   code, post)
         else:
             assert meth_node.astcode.kind == 'compound'
             [subs] = meth_node.astcode.args
@@ -3613,12 +3613,13 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
             exit_handler = GotoExit_dml14(outargs)
             with exit_handler:
                 code = codegen_statements(subs, location, param_scope)
-            if exit_handler.used:
-                code.append(mkLabel(site, exit_handler.label))
-            body = mkCompound(site, declarations(param_scope) + code)
+            decls = declarations(param_scope)
+            post = ([mkLabel(site, exit_handler.label)]
+                    if exit_handler.used else [])
+            body = mkCompound(site, decls + code)
             if meth_node.outp and body.control_flow().fallthrough:
                 report(ENORET(meth_node.astcode.site))
-            return mkInlinedMethod(site, meth_node, body)
+            return mkInlinedMethod(site, meth_node, decls, code, post)
 
 def c_rettype(outp, throws):
     if throws:
@@ -3885,8 +3886,8 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
             with fail_handler, exit_handler:
                 code.append(codegen_statement(ast, location, fnscope))
             if exit_handler.used:
-                code.append(mkLabel(site, exit_handler.label))
-            code.append(codegen_return(site, outp, throws, [
+                code.append(mkLabel(rbrace_site, exit_handler.label))
+            code.append(codegen_return(rbrace_site, outp, throws, [
                 lookup_var(site, fnscope, varname) for (varname, _) in outp]))
             to_return = mkCompound(site, code)
         else:
@@ -3895,6 +3896,8 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
             assert ast.kind == 'compound'
             [subs] = ast.args
             with fail_handler, exit_handler:
+                # TODO The linemarks for the prelude will point to the method
+                # declaration, which is not optimal, but should be fine.
                 body = prelude()
                 body.extend(codegen_statements(subs, location, fnscope))
                 code = mkCompound(site, body)
@@ -3902,8 +3905,9 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
                     if outp:
                         report(ENORET(site))
                     else:
-                        code = mkCompound(site, body + [codegen_exit(site,
-                                                                     [])])
+                        code = mkCompound(site,
+                                          body + [codegen_exit(rbrace_site,
+                                                               [])])
             to_return = code
         return to_return
 

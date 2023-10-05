@@ -9,6 +9,8 @@ from .messages import *
 from .output import out, quote_filename, FileOutput
 from .types import *
 from .slotsmeta import *
+from contextlib import contextmanager
+
 from . import output
 
 __all__ = (
@@ -22,6 +24,7 @@ __all__ = (
     'StaticIndex',
     'typecheck_inargs',
     'reset_line_directive',
+    'allow_linemarks',
     'site_linemark',
     'coverity_marker',
     'coverity_markers',
@@ -80,8 +83,28 @@ def coverity_markers(markers, site=None):
         site_linemark_nocoverity(site)
 
 
+# Allow linemarks to be generated if dml.globals.linemarks_enabled is True
+# and the current output is FileOutput
+# This context manager generates a line directive reset when left unless
+# linemarks were already allowed
+@contextmanager
+def allow_linemarks():
+    prev_linemarks = dml.globals.linemarks
+    curr_output = output.current()
+    is_file_output = isinstance(curr_output, FileOutput)
+    assert (not prev_linemarks
+            or (is_file_output and dml.globals.linemarks_enabled))
+    dml.globals.linemarks = is_file_output and dml.globals.linemarks_enabled
+    try:
+        yield
+    finally:
+        assert output.current() is curr_output
+        dml.globals.linemarks = prev_linemarks
+        if not prev_linemarks and is_file_output:
+            reset_line_directive()
+
 def reset_line_directive():
-    if dml.globals.linemarks:
+    if dml.globals.linemarks_enabled:
         o = output.current()
         output.out('#line %d "%s"\n'
                    % (o.lineno + 1, quote_filename(o.filename)))

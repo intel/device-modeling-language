@@ -478,17 +478,35 @@ class Inline(Statement):
 mkInline = Inline
 
 class InlinedMethod(Statement):
-    '''Wraps the body of an inlined method, to protect it from analysis'''
+    '''Wraps the body of an inlined method, both to protect it from analysis
+       and to ensure linemarks are created for it'''
     @auto_init
-    def __init__(self, site, method, body): pass
+    def __init__(self, site, method, pre, body, post): pass
     def toc(self):
-        self.body.toc()
+        out('{\n', postindent = 1)
+        self.toc_inline()
+        out('}\n', preindent = -1)
     def toc_inline(self):
-        self.body.toc_inline()
+        for stmt in self.pre:
+            stmt.toc()
+        with allow_linemarks():
+            for stmt in self.body:
+                stmt.toc()
+        for stmt in self.post:
+            stmt.toc()
     def control_flow(self):
         return ControlFlow(fallthrough=True, throw=self.method.throws)
 
-mkInlinedMethod = InlinedMethod
+def mkInlinedMethod(site, method, pre, body, post):
+    collapsed = []
+    for stmt in body:
+        if (isinstance(stmt, Compound)
+            and not any(subsub.is_declaration
+                        for subsub in stmt.substatements)):
+            collapsed.extend(stmt.substatements)
+        elif not stmt.is_empty:
+            collapsed.append(stmt)
+    return InlinedMethod(site, method, pre, collapsed, post)
 
 class Comment(Statement):
     @auto_init
