@@ -2545,7 +2545,7 @@ def stmt_assert(stmt, location, scope):
 @statement_dispatcher
 def stmt_goto(stmt, location, scope):
     [label] = stmt.args
-    if compat.dml12_misc not in dml.globals.enabled_compat:
+    if compat.dml12_goto not in dml.globals.enabled_compat:
         report(ESYNTAX(stmt.site, 'goto', 'goto statement not allowed'))
     return [mkGoto(stmt.site, label)]
 

@@ -410,7 +410,7 @@ def main(argv):
 
     parser.add_argument('--strict-dml12', action='store_true',
                         help='Alias for --no-compat=dml12_inline'
-                        ',dml12_not,dml12_misc,dml12_int')
+                        ',dml12_not,dml12_goto,dml12_misc,dml12_int')
     parser.add_argument('--strict-int', action='store_true',
                         help='Alias for --no-compat=dml12_int')
 
@@ -608,7 +608,8 @@ def main(argv):
 
     if options.strict_dml12:
         for feature in [compat.dml12_inline, compat.dml12_not,
-                        compat.dml12_misc, compat.dml12_int]:
+                        compat.dml12_goto, compat.dml12_misc,
+                        compat.dml12_int]:
             tag = feature.tag()
             if tag in features:
                 del features[tag]

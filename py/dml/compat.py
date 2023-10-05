@@ -137,8 +137,6 @@ class dml12_misc(CompatFeature):
 
     * the `typeof` operator on an expression that isn't an lvalue
 
-    * the `goto` statement
-
     * `select` statements over `vect` types
 
     * Passing a string literal in a (non-`const`) `char *` method argument
@@ -166,6 +164,18 @@ class dml12_misc(CompatFeature):
 
     '''
     short = "Disable various DML 1.2 quirks"
+    last_api_version = api_6
+
+
+@feature
+class dml12_goto(CompatFeature):
+    '''The `goto` statement is deprecated; this compatibility feature
+    preserves it. Most `goto` based control structures can be reworked by
+    changing the `goto` into a `throw`, and its label into a `catch`
+    block; since this is sometimes nontrivial, it can be useful to disable
+    the `goto` statement separately.
+    '''
+    short = "Disable the goto statement in DML 1.2"
     last_api_version = api_6
 
 

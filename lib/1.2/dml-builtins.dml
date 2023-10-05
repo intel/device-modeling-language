@@ -212,6 +212,7 @@ template device {
     parameter _compat_io_memory auto;
     parameter _compat_dml12_inline auto;
     parameter _compat_dml12_not auto;
+    parameter _compat_dml12_goto auto;
     parameter _compat_dml12_misc auto;
     parameter _compat_dml12_int auto;
 
