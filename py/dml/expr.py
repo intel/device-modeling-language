@@ -25,6 +25,7 @@ __all__ = (
     'typecheck_inargs',
     'reset_line_directive',
     'allow_linemarks',
+    'disallow_linemarks',
     'site_linemark',
     'coverity_marker',
     'coverity_markers',
@@ -102,6 +103,16 @@ def allow_linemarks():
         dml.globals.linemarks = prev_linemarks
         if not prev_linemarks and is_file_output:
             reset_line_directive()
+
+# Locally set dml.globals.linemarks to be False, even if it were already True
+@contextmanager
+def disallow_linemarks():
+    prev_linemarks = dml.globals.linemarks
+    dml.globals.linemarks = False
+    try:
+        yield
+    finally:
+        dml.globals.linemarks = prev_linemarks
 
 def reset_line_directive():
     if dml.globals.linemarks_enabled:

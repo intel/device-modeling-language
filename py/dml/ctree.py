@@ -986,6 +986,7 @@ class AssignStatement(Statement):
         self.toc_inline()
         out('}\n', preindent=-1)
     def toc_inline(self):
+        self.linemark()
         self.initializer.assign_to(self.target, self.target.ctype())
 
 mkAssignStatement = AssignStatement
@@ -4807,7 +4808,8 @@ class ExpressionInitializer(Initializer):
                    mkCast(site, self.expr, typ).read(),
                    dest.read()))
         else:
-            mkCopyData(site, self.expr, dest).toc()
+            with disallow_linemarks():
+                mkCopyData(site, self.expr, dest).toc()
 
 class CompoundInitializer(Initializer):
     '''Initializer for a variable of struct or array type, using the
