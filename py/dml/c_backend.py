@@ -1577,15 +1577,14 @@ def generate_initialize(device):
             # Functions called from init_object shouldn't throw any
             # exceptions. But we don't want to force them to insert try-catch
             # in the init method.
-            with InitFailure(device.site):
-                # Inline the init method
-                init = codegen_inline_byname(device, (), 'init', [], [],
-                                             device.site)
-                # Call hard_reset
-                hard_reset = codegen_call_byname(device.site, device, (),
-                                                 'hard_reset', [], [])
+            stmts = []
+            for method_name in ['init', 'hard_reset']:
+                method = device.get_component(method_name, 'method')
+                with InitFailure(method.site):
+                    stmts.append(codegen_call_byname(
+                        method.site, device, (), method_name, [], []))
 
-            mkCompound(device.site, [init, hard_reset]).toc()
+            mkCompound(device.site, stmts).toc()
         else:
             codegen_inline_byname(device, (), '_init', [], [], device.site).toc()
 
@@ -1616,7 +1615,9 @@ def generate_finalize(device):
             # Functions called from new_instance shouldn't throw any
             # exceptions.  But we don't want to force them to insert try-catch
             # in the init method.
-            with LogFailure(device.site, device, ()):
+            with LogFailure(
+                    device.get_component('post_init', 'method').site,
+                    device, ()):
                 code = codegen_inline_byname(device, (), 'post_init', [], [],
                                              device.site)
         else:
@@ -1657,7 +1658,7 @@ def generate_deinit(device):
                 # Functions called from pre_delete_instance shouldn't throw
                 # any exceptions. But we don't want to force them to insert
                 # try-catch in the init method.
-                with LogFailure(device.site, event, indices):
+                with LogFailure(method.site, event, indices):
                     codegen_inline(method.site, method, indices, [], []).toc()
             for i in range(len(dims)):
                 out('}\n', preindent=-1)
@@ -1666,7 +1667,8 @@ def generate_deinit(device):
             out(f'SIM_event_cancel_time(_obj, {crep.get_evclass(key)}, _obj, '
                 + '0, NULL);\n')
 
-        with LogFailure(device.site, device, ()):
+        with LogFailure(
+                device.get_component('destroy', 'method').site, device, ()):
             code = codegen_inline_byname(device, (), 'destroy', [], [],
                                          device.site)
         if not code.is_empty:
@@ -1718,10 +1720,12 @@ def generate_reset(device, hardness):
     out(crep.structtype(device) + ' *_dev UNUSED = ('
         + crep.structtype(device) + ' *)_obj;\n\n')
     scope = Symtab(global_scope)
-    with LogFailure(device.site, device, ()), crep.DeviceInstanceContext():
-        code = codegen_call_byname(device.site, device, (),
-                                   hardness+'_reset', [], [])
-    code = mkCompound(device.site, declarations(scope) + [code])
+    method_name = hardness + '_reset'
+    method = device.get_component(method_name, 'method')
+    with LogFailure(method.site, device, ()), crep.DeviceInstanceContext():
+        code = codegen_call_byname(method.site, device, (),
+                                   method_name, [], [])
+    code = mkCompound(method.site, declarations(scope) + [code])
     code.toc()
     out('}\n\n', preindent = -1)
     reset_line_directive()
