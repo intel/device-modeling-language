@@ -19,7 +19,7 @@ from .ctree import *
 from .expr_util import *
 from .symtab import *
 from .messages import *
-from .output import out
+from .output import *
 from .types import *
 from .set import Set
 from .slotsmeta import auto_init
@@ -316,11 +316,13 @@ class IndependentMemoized(Memoization):
         assert func.method.independent
         self.func = func
         self.method = func.method
+        # SimpleSite wrapper to avoid linemarks being generated.
+        self.site = SimpleSite(self.method.site.loc())
 
     def make_ref(self, ref, typ):
         indexing = ''.join([f'[_idx{i}]'
                             for i in range(self.method.dimensions)])
-        return mkLit(self.method.site, f'_memo{indexing}.{ref}', typ)
+        return mkLit(self.site, f'_memo{indexing}.{ref}', typ)
 
     def prelude(self):
         struct_body = ''.join(
@@ -331,10 +333,10 @@ class IndependentMemoized(Memoization):
                     + [(f'p_{name}', typ) for (name, typ) in self.func.outp]))
         array_defs = ''.join([f'[{i}]' for i in self.method.dimsizes])
         struct_var_def = mkInline(
-            self.method.site,
+            self.site,
             f'static struct {{{struct_body}}} _memo{array_defs};')
         return [struct_var_def] + memoization_common_prelude(
-            self.method.logname_anonymized(), self.method.site, self.func.outp,
+            self.method.logname_anonymized(), self.site, self.func.outp,
             self.func.throws, self.make_ref)
     def exit_handler(self):
         return MemoizedReturnExit(self.method.site, self.func.outp,
@@ -347,16 +349,18 @@ class SharedIndependentMemoized(Memoization):
     def __init__(self, method):
         assert method.independent
         self.method = method
+        # SimpleSite wrapper to avoid linemarks being generated.
+        self.site = SimpleSite(self.method.site.loc())
     def make_ref(self, ref, typ):
         traitname = cident(self.method.trait.name)
-        return mkLit(self.method.site,
+        return mkLit(self.site,
                      f'((struct _{traitname} *) _{traitname}.trait)'
                      + f'->_memo_outs_{self.method.name}'
                      + f'[_{traitname}.id.encoded_index].{ref}', typ)
     def prelude(self):
         return memoization_common_prelude(
-            self.method.name, self.method.site, self.method.outp,
-            self.method.throws, self.make_ref)
+            self.method.name, self.site, self.method.outp, self.method.throws,
+            self.make_ref)
     def exit_handler(self):
         return MemoizedReturnExit(self.method.site, self.method.outp,
                                   self.method.throws, self.make_ref)
@@ -1925,7 +1929,7 @@ def codegen_statement(tree, *args):
 
 @statement_dispatcher
 def stmt_compound(stmt, location, scope):
-    [stmt_asts] = stmt.args
+    [stmt_asts, rbrace_site] = stmt.args
     if (logging.show_porting and stmt.site.dml_version() == (1, 2)
         and not stmt.site.filename().endswith('dml-builtins.dml')):
         method = location.method()
@@ -1942,7 +1946,8 @@ def stmt_compound(stmt, location, scope):
                                          ret.site))
     lscope = Symtab(scope)
     statements = codegen_statements(stmt_asts, location, lscope)
-    return [mkCompound(stmt.site, declarations(lscope) + statements)]
+    return [mkCompound(stmt.site, declarations(lscope) + statements,
+                       rbrace_site)]
 
 def check_shadowing(scope, name, site):
     if (dml.globals.dml_version == (1, 2)
@@ -2197,7 +2202,7 @@ def stmt_null(stmt, location, scope):
 
 @statement_dispatcher
 def stmt_if(stmt, location, scope):
-    [cond_ast, truebranch, falsebranch] = stmt.args
+    [cond_ast, truebranch, falsebranch, else_site] = stmt.args
     cond = as_bool(codegen_expression(cond_ast, location, scope))
     if cond.constant and stmt.site.dml_version() == (1, 2):
         if (logging.show_porting
@@ -2212,8 +2217,7 @@ def stmt_if(stmt, location, scope):
             if errors:
                 report(PHASH(stmt.site))
                 if falsebranch:
-                    report(PHASHELSE(dmlparse.end_site(truebranch.site),
-                                     'else'))
+                    report(PHASHELSE(else_site, 'else'))
             if (not falsebranch and cond_ast.kind == 'binop'
                 and cond_ast.args[1] == '&&'):
                 lh = as_bool(codegen_expression(cond_ast.args[0], location, scope))
@@ -2234,7 +2238,7 @@ def stmt_if(stmt, location, scope):
             fbranch = codegen_statement(falsebranch, location, scope)
         else:
             fbranch = None
-        return [ctree.If(stmt.site, cond, tbranch, fbranch)]
+        return [ctree.If(stmt.site, cond, tbranch, fbranch, else_site)]
 
 @statement_dispatcher
 def stmt_hashif(stmt, location, scope):
@@ -3219,7 +3223,7 @@ def stmt_switch(stmt, location, scope):
     with CLoopContext():
         if stmt.site.dml_version() != (1, 2):
             assert body_ast.kind == 'compound'
-            [stmt_asts] = body_ast.args
+            [stmt_asts, rbrace_site] = body_ast.args
             stmts = codegen_statements(stmt_asts, location, scope)
             if (not stmts
                 or not isinstance(stmts[0], (ctree.Case, ctree.Default))):
@@ -3257,7 +3261,7 @@ def stmt_switch(stmt, location, scope):
                 body_stmts.append(mkSubsequentCases(
                     subsequent_cases[0].site, subsequent_cases, default_found))
 
-            body = ctree.Compound(body_ast.site, body_stmts)
+            body = ctree.Compound(body_ast.site, body_stmts, rbrace_site)
         else:
             body = codegen_statement(body_ast, location, scope)
 
@@ -3608,7 +3612,7 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
                                    code, post)
         else:
             assert meth_node.astcode.kind == 'compound'
-            [subs] = meth_node.astcode.args
+            [subs, rbrace_site] = meth_node.astcode.args
             location = Location(meth_node, indices)
             exit_handler = GotoExit_dml14(outargs)
             with exit_handler:
@@ -3616,7 +3620,7 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
             decls = declarations(param_scope)
             post = ([mkLabel(site, exit_handler.label)]
                     if exit_handler.used else [])
-            body = mkCompound(site, decls + code)
+            body = mkCompound(site, decls + code, rbrace_site)
             if meth_node.outp and body.control_flow().fallthrough:
                 report(ENORET(meth_node.astcode.site))
             return mkInlinedMethod(site, meth_node, decls, code, post)
@@ -3772,7 +3776,7 @@ def codegen_method_func(func):
                 method.parent, indices,
                 [mkLit(method.site, n, t) for (n, t) in func.inp],
                 [mkLit(method.site, "*%s" % n, t) for (n, t) in func.outp],
-                method.site)
+                SimpleSite(method.site.loc()))
     inline_scope = MethodParamScope(global_scope)
     for (name, e) in func.inp:
         if dml.globals.dml_version == (1, 2) and (
@@ -3894,10 +3898,8 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
             # manually deconstruct compound AST node, to make sure
             # top-level locals share scope with parameters
             assert ast.kind == 'compound'
-            [subs] = ast.args
+            [subs, _] = ast.args
             with fail_handler, exit_handler:
-                # TODO The linemarks for the prelude will point to the method
-                # declaration, which is not optimal, but should be fine.
                 body = prelude()
                 body.extend(codegen_statements(subs, location, fnscope))
                 code = mkCompound(site, body)
@@ -3907,7 +3909,8 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
                     else:
                         code = mkCompound(site,
                                           body + [codegen_exit(rbrace_site,
-                                                               [])])
+                                                               [])],
+                                          rbrace_site)
             to_return = code
         return to_return
 

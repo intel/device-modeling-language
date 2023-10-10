@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import os
+from contextlib import contextmanager
+
+import dml.globals
 from .logging import ICE, SimpleSite
 
 __all__ = (
@@ -9,18 +12,29 @@ __all__ = (
     'FileOutput',
     'StrOutput',
     'out',
+    'linemark',
     'indent_level',
     'quote_filename',
+    'reset_line_directive',
+    'allow_linemarks',
+    'disallow_linemarks',
+    'site_linemark',
+    'coverity_marker',
+    'coverity_markers',
 )
 
 
 class Output(object):
     outwrite_stack = []
 
+    filename = None
+
     def __init__(self, indent=0):
         self.indent = indent
         self.lineno = 1
         self.bol = True
+        self.redirected_filename = None
+        self.redirected_lineno = None
 
     def write(self, s):
         assert False
@@ -31,6 +45,24 @@ class Output(object):
     def __exit__(self, exc_type, exc_val, exc_tb):
         top = self.outwrite_stack.pop(-1)
         assert top is self
+
+    def linemark(self, lineno, filename):
+        assert lineno is not None and filename is not None
+        if (self.redirected_filename != filename
+            or self.redirected_lineno != lineno):
+            self.redirected_lineno = None
+            self.out('#line %d "%s"\n'
+                     % (lineno, quote_filename(filename)))
+            self.redirected_filename = filename
+            self.redirected_lineno = lineno
+
+    def reset_line_directive(self):
+        assert self.filename is not None
+        if self.redirected_filename is not None:
+            self.redirected_filename = None
+            self.redirected_lineno = None
+            self.out('#line %d "%s"\n'
+                     % (self.lineno + 1, quote_filename(self.filename)))
 
     def out(self, output, preindent = 0, postindent = 0):
         self.indent += preindent * indent_level
@@ -45,8 +77,11 @@ class Output(object):
                 self.write(' ' * self.indent)
             self.write(output)
             self.bol = (output.endswith('\n'))
+        no_lines = output.count('\n')
         self.indent += postindent * indent_level
-        self.lineno += output.count('\n')
+        self.lineno += no_lines
+        if self.redirected_lineno is not None:
+            self.redirected_lineno += no_lines
 
 class NoOutput(Output):
     def write(self, s):
@@ -64,6 +99,8 @@ class FileOutput(Output):
         self.__file = f
         self.write = self.__file.write
         self.lineno = 1
+        self.redirected_filename = None
+        self.redirected_lineno = None
 
     def tell(self):
         return self.__file.tell()
@@ -81,8 +118,10 @@ class FileOutput(Output):
         os.rename(self.filename+'.tmp', self.filename)
 
 class StrOutput(Output):
-    def __init__(self, indent=0):
+    def __init__(self, indent=0, filename=None, lineno=1):
         super(StrOutput, self).__init__(indent)
+        self.lineno = lineno
+        self.filename = filename
         self.buf = ''
 
     def write(self, s):
@@ -92,6 +131,13 @@ indent_level = 4
 
 def out(output = '', preindent = 0, postindent = 0):
     Output.outwrite_stack[-1].out(output, preindent, postindent)
+
+def linemark(lineno, filename):
+    Output.outwrite_stack[-1].linemark(lineno, filename)
+
+def reset_line_directive():
+    if dml.globals.linemarks_enabled:
+        Output.outwrite_stack[-1].reset_line_directive()
 
 def current():
     return Output.outwrite_stack[-1]
@@ -107,3 +153,84 @@ def quote_filename(filename):
         fn = '\\\\'.join([s.replace('"', '\\"') for s in p])
         quoted_filenames[filename] = fn
     return fn
+
+
+def site_linemark_nocoverity(site, adjust=0):
+    if dml.globals.linemarks:
+        if site is not None and not isinstance(site, SimpleSite):
+            filename = site.filename()
+            lineno = site.lineno
+            if lineno + adjust < 0:
+                raise ICE(
+                    site,
+                    "linemark can't be created for this line!! This should "
+                    + "only happen if you disregard proper formatting and  "
+                    + "omit a *ridiculous* number of natural linebreaks. "
+                    + "If so you probably have no use for linemarks anyway, "
+                    + "in which case you can pass '--noline' to DMLC.")
+            linemark(lineno + adjust, quote_filename(filename))
+        else:
+            reset_line_directive()
+
+def coverity_marker(event, classification=None, site=None):
+    coverity_markers([(event, classification)], site)
+
+def coverity_markers(markers, site=None):
+    site_with_loc = site is not None and not isinstance(site, SimpleSite)
+    if dml.globals.coverity and site_with_loc:
+        custom_markers = []
+        filename = site.filename()
+        lineno = site.lineno
+
+        while (filename, lineno) in dml.globals.coverity_pragmas:
+            (lineno,
+             inline_markers) = dml.globals.coverity_pragmas[(filename, lineno)]
+            custom_markers.extend(reversed(inline_markers))
+
+        custom_markers.reverse()
+        markers = custom_markers + markers
+
+    if dml.globals.coverity and markers:
+        if dml.globals.linemarks:
+            reset_line_directive()
+            if site_with_loc:
+                out('#ifndef __COVERITY__\n')
+                site_linemark_nocoverity(site, adjust=-(len(markers) + 1))
+                out('#endif\n')
+        for (event, classification) in markers:
+            classification = f' : {classification}' if classification else ''
+            out(f'/* coverity[{event}{classification}] */\n')
+    else:
+        site_linemark_nocoverity(site)
+
+def site_linemark(site):
+    coverity_markers([], site)
+
+# Allow linemarks to be generated if dml.globals.linemarks_enabled is True
+# and the current output has an associated file name
+# This context manager generates a line directive reset when left unless
+# linemarks were already allowed
+@contextmanager
+def allow_linemarks():
+    prev_linemarks = dml.globals.linemarks
+    curr_output = current()
+    is_file_output = curr_output.filename is not None
+    dml.globals.linemarks = is_file_output and dml.globals.linemarks_enabled
+    assert not prev_linemarks or dml.globals.linemarks
+    try:
+        yield
+    finally:
+        assert current() is curr_output
+        dml.globals.linemarks = prev_linemarks
+        if not prev_linemarks and is_file_output:
+            reset_line_directive()
+
+# Locally set dml.globals.linemarks to be False, even if it were already True
+@contextmanager
+def disallow_linemarks():
+    prev_linemarks = dml.globals.linemarks
+    dml.globals.linemarks = False
+    try:
+        yield
+    finally:
+        dml.globals.linemarks = prev_linemarks

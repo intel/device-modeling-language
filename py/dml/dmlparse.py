@@ -517,7 +517,7 @@ def object_method_noinparams(t):
         report(PINPARAMLIST(site(t, i)))
     if logging.show_porting and outp:
         (start, end) = t.lexspan(6)
-        [stmts] = t[6].args
+        [stmts, _] = t[6].args
         (_, rparen) = t.lexspan(4)
         report_pretval(
             site(t), t.parser.file_info, start, end, rparen, outp, stmts)
@@ -544,7 +544,7 @@ def object_method(t):
                 report(PINLINEDECL(decl_site, argname, 'inline ' + argname))
     if logging.show_porting and outp:
         (start, end) = t.lexspan(10)
-        [stmts] = t[10].args
+        [stmts, _] = t[10].args
         (_, rparen) = t.lexspan(7)
         report_pretval(
             site(t), t.parser.file_info, start, end, rparen, outp, stmts)
@@ -2035,12 +2035,12 @@ def statement_expression(t):
 @prod
 def statement_if(t):
     'statement_except_hashif : IF LPAREN expression RPAREN statement %prec LOWEST_PREC'
-    t[0] = ast.if_(site(t), t[3], t[5], None)
+    t[0] = ast.if_(site(t), t[3], t[5], None, None)
 
 @prod
 def statement_ifelse(t):
     'statement_except_hashif : IF LPAREN expression RPAREN statement ELSE statement'
-    t[0] = ast.if_(site(t), t[3], t[5], t[7])
+    t[0] = ast.if_(site(t), t[3], t[5], t[7], site(t, 6))
 
 @prod_dml14
 def statement_hashif(t):
@@ -2121,7 +2121,8 @@ def for_pre_other(t):
 def statement_for(t):
     'statement_except_hashif : FOR LPAREN for_pre SEMI expression_opt SEMI for_post RPAREN statement'
     s = site(t)
-    t[0] = ast.compound(s, t[3] + [ast.for_(site(t), [], t[5], t[7], t[9])])
+    t[0] = ast.compound(s, t[3] + [ast.for_(site(t), [], t[5], t[7], t[9])],
+                        s)
 
 @prod_dml12
 def statement_switch(t):
@@ -2132,7 +2133,8 @@ def statement_switch(t):
 def statement_switch(t):
     'statement_except_hashif : SWITCH LPAREN expression RPAREN LBRACE stmt_or_case_list RBRACE'
     stmts = t[6]
-    t[0] = ast.switch(site(t), t[3], ast.compound(site(t, 5), stmts))
+    t[0] = ast.switch(site(t), t[3], ast.compound(site(t, 5), stmts,
+                                                  site(t, 7)))
 
 @prod_dml14
 def stmt_or_case(t):
@@ -2144,13 +2146,15 @@ def stmt_or_case(t):
 @prod_dml14
 def switch_hashif(t):
     'cond_case_statement : HASHIF LPAREN expression RPAREN LBRACE stmt_or_case_list RBRACE %prec LOWEST_PREC'
-    t[0] = ast.hashif(site(t), t[3], ast.compound(site(t, 5), t[6]), None)
+    t[0] = ast.hashif(site(t), t[3],
+                      ast.compound(site(t, 5), t[6], site(t, 7)), None)
 
 @prod_dml14
 def switch_hashifelse(t):
     'cond_case_statement : HASHIF LPAREN expression RPAREN LBRACE stmt_or_case_list RBRACE HASHELSE LBRACE stmt_or_case_list RBRACE'
-    t[0] = ast.hashif(site(t), t[3], ast.compound(site(t, 5), t[6]),
-                      ast.compound(site(t, 9), t[10]))
+    t[0] = ast.hashif(site(t), t[3], ast.compound(site(t, 5), t[6],
+                                                  site(t, 7)),
+                      ast.compound(site(t, 9), t[10], site(t, 11)))
 
 @prod_dml14
 def stmt_or_case_list_empty(t):
@@ -2468,7 +2472,7 @@ def log_args(t):
 @prod
 def compound_statement_2(t):
     'compound_statement : LBRACE statement_list RBRACE'
-    t[0] = ast.compound(site(t), t[2])
+    t[0] = ast.compound(site(t), t[2], site(t, 3))
 
 # statement-list
 

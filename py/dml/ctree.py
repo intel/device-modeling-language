@@ -16,7 +16,7 @@ from contextlib import nullcontext
 from dml import objects, symtab, logging, crep, serialize
 from .logging import *
 from .messages import *
-from .output import out, quote_filename
+from .output import *
 from .types import *
 from .expr import *
 from .expr_util import *
@@ -47,7 +47,6 @@ __all__ = (
     'mkTryCatch',
     'mkInline',
     'mkInlinedMethod',
-    'mkComment',
     'mkAssert',
     'mkReturn',
     'mkDelete',
@@ -293,9 +292,17 @@ class Statement(Code):
     def __init__(self, site):
         self.site = site
         self.context = ErrorContext.current()
+
+    # Emit a single (labeled) C statement.
     @abc.abstractmethod
-    def toc(self): pass
-    def toc_inline(self): return self.toc()
+    def toc_stmt(self): pass
+    # Emit any number of (labeled) C statements or declarations. These may be
+    # placed inside an existing C block.
+    def toc(self): self.toc_stmt()
+    # Emit any number of (labeled) C statements or declarations. These are
+    # guaranteed to be placed in a dedicated C block.
+    def toc_inline(self): self.toc()
+
 
     def control_flow(self):
         '''Rudimentary control flow analysis: Return a ControlFlow object
@@ -318,14 +325,30 @@ class Statement(Code):
         return ControlFlow(fallthrough=True)
 
 class Compound(Statement):
-    @auto_init
-    def __init__(self, site, substatements):
+    def __repr__(self):
+        return f'Compound({self.substatements!r})'
+
+    def __init__(self, site, substatements, rbrace_site=None):
         assert isinstance(substatements, list)
+        self.site = site
+        self.substatements = substatements
+        self.rbrace_site = rbrace_site
+
+    def toc_stmt(self):
+        self.linemark()
+        if self.is_empty:
+            out(';\n')
+        else:
+            out('{\n', postindent=1)
+            self.toc_inline()
+            site_linemark(self.rbrace_site)
+            out('}\n', preindent=-1)
 
     def toc(self):
-        out('{\n', postindent = 1)
-        self.toc_inline()
-        out('}\n', preindent = -1)
+        if any(sub.is_declaration for sub in self.substatements):
+            self.toc_stmt()
+        else:
+            self.toc_inline()
 
     def toc_inline(self):
         for substatement in self.substatements:
@@ -340,7 +363,7 @@ class Compound(Statement):
                 return acc
         return acc
 
-def mkCompound(site, statements):
+def mkCompound(site, statements, rbrace_site=None):
     "Create a simplified Compound() from a list of ctree.Statement"
     collapsed = []
     for stmt in statements:
@@ -353,18 +376,17 @@ def mkCompound(site, statements):
     if len(collapsed) == 1 and not collapsed[0].is_declaration:
         return collapsed[0]
     elif collapsed:
-        return Compound(site, collapsed)
+        return Compound(site, collapsed, rbrace_site)
     else:
         return mkNull(site)
 
 class Null(Statement):
     is_empty = True
-    def toc_inline(self):
-        pass
-    def toc(self):
-        if self.site:
-            self.linemark()
+    def toc_stmt(self):
+        self.linemark()
         out(';\n')
+    def toc(self):
+        pass
 
 mkNull = Null
 
@@ -373,9 +395,10 @@ class Label(Statement):
         Statement.__init__(self, site)
         self.label = label
         self.unused = unused
-    def toc(self):
-        out('%s: %s;\n' % (self.label, 'UNUSED'*self.unused), preindent = -1,
-            postindent = 1)
+    def toc_stmt(self):
+        self.linemark()
+        out('%s: %s;\n' % (self.label, 'UNUSED'*self.unused),
+            preindent=-1, postindent=1)
 
 mkLabel = Label
 
@@ -384,13 +407,17 @@ class UnrolledLoop(Statement):
     def __init__(self, site, substatements, break_label):
         assert isinstance(substatements, list)
 
-    def toc(self):
+    def toc_stmt(self):
         self.linemark()
-        out('{\n', postindent = 1)
-        self.toc_inline()
-        out('}\n', preindent = -1)
+        if all(sub.is_empty for sub in self.substatements):
+            out(';\n')
+        else:
+            out('{\n', postindent=1)
+            self.toc_inline()
+            self.linemark()
+            out('}\n', preindent=-1)
 
-    def toc_inline(self):
+    def toc(self):
         for substatement in self.substatements:
             substatement.toc()
         if self.break_label is not None:
@@ -407,7 +434,8 @@ mkUnrolledLoop = UnrolledLoop
 class Goto(Statement):
     @auto_init
     def __init__(self, site, label): pass
-    def toc(self):
+    def toc_stmt(self):
+        self.linemark()
         out('goto %s;\n' % (self.label,))
 
     def control_flow(self):
@@ -438,24 +466,27 @@ class TryCatch(Statement):
     block with a catch label, to which Throw statements inside will go.'''
     @auto_init
     def __init__(self, site, label, tryblock, catchblock): pass
-    def toc_inline(self):
+    def toc_stmt(self):
+        self.linemark()
+        out('{\n', postindent=1)
+        self.toc_inline()
+        self.linemark()
+        out('}\n', preindent=-1)
+
+    def toc(self):
         self.tryblock.toc()
 
         if (dml.globals.dml_version != (1, 2)
             and not self.tryblock.control_flow().fallthrough):
-            out('%s: ;\n' % (self.label,))
+            site_linemark(self.catchblock.site)
+            out(f'{self.label}:;\n')
             self.catchblock.toc()
         else:
             # Our fallthrough analysis is more conservative than Coverity's
-            coverity_marker('unreachable', site=self.site)
-            out('if (false) {\n')
-            out('%s: ;\n' % (self.label,), postindent=1)
-            self.catchblock.toc_inline()
-            out('}\n', preindent=-1)
-    def toc(self):
-        out('{\n', postindent = 1)
-        self.toc_inline()
-        out('}\n', preindent = -1)
+            coverity_marker('unreachable', site=self.catchblock.site)
+            out(f'if (false) {self.label}:\n')
+            self.catchblock.toc_stmt()
+
     def control_flow(self):
         tryflow = self.tryblock.control_flow()
         if not tryflow.throw:
@@ -472,7 +503,8 @@ def mkTryCatch(site, label, tryblock, catchblock):
 class Inline(Statement):
     @auto_init
     def __init__(self, site, str): pass
-    def toc(self):
+    def toc_stmt(self):
+        self.linemark()
         out(self.str + '\n')
 
 mkInline = Inline
@@ -482,10 +514,18 @@ class InlinedMethod(Statement):
        and to ensure linemarks are created for it'''
     @auto_init
     def __init__(self, site, method, pre, body, post): pass
-    def toc(self):
+    def toc_stmt(self):
+        self.linemark()
         out('{\n', postindent = 1)
         self.toc_inline()
+        self.linemark()
         out('}\n', preindent = -1)
+    def toc(self):
+        if (any(stmt.is_declaration
+                for stmt in itertools.chain(self.pre, self.body, self.post))):
+            self.toc_stmt()
+        else:
+            self.toc_inline()
     def toc_inline(self):
         for stmt in self.pre:
             stmt.toc()
@@ -508,19 +548,11 @@ def mkInlinedMethod(site, method, pre, body, post):
             collapsed.append(stmt)
     return InlinedMethod(site, method, pre, collapsed, post)
 
-class Comment(Statement):
-    @auto_init
-    def __init__(self, site, str): pass
-    def toc(self):
-        # self.linemark()
-        out('/* %s */\n' % self.str)
-
-mkComment = Comment
-
 class Assert(Statement):
     @auto_init
     def __init__(self, site, expr): pass
-    def toc(self):
+    def toc_stmt(self):
+        self.linemark()
         out('DML_ASSERT("%s", %d, %s);\n'
             % (quote_filename(self.site.filename()),
                self.site.lineno, self.expr.read()))
@@ -534,12 +566,10 @@ def mkAssert(site, expr):
 class Return(Statement):
     @auto_init
     def __init__(self, site, expr): pass
-    def toc(self):
+    def toc_stmt(self):
         self.linemark()
-        if self.expr is None:
-            out('return;\n')
-        else:
-            out('return %s;\n' % self.expr.read())
+        out('return;\n' if self.expr is None else
+            f'return {self.expr.read()};\n')
     def control_flow(self):
         return ControlFlow()
 
@@ -551,8 +581,9 @@ def mkReturn(site, expr, rettype=None):
 class Delete(Statement):
     @auto_init
     def __init__(self, site, expr): pass
-    def toc(self):
-        out('MM_FREE(%s);\n' % self.expr.read())
+    def toc_stmt(self):
+        self.linemark()
+        out(f'MM_FREE({self.expr.read()});\n')
 
 def mkDelete(site, expr):
     return Delete(site, expr)
@@ -560,14 +591,9 @@ def mkDelete(site, expr):
 class ExpressionStatement(Statement):
     @auto_init
     def __init__(self, site, expr): pass
-    def toc(self):
-        #if not self.site:
-        #    print 'NOSITE', str(self), repr(self)
+    def toc_stmt(self):
         self.linemark()
-        # out('/* %s */\n' % repr(self))
-        s = self.expr.discard()
-
-        out(s+';\n')
+        out(self.expr.discard()+';\n')
 
 def mkExpressionStatement(site, expr):
     if isinstance(expr, Constant):
@@ -585,50 +611,60 @@ class After(Statement):
     def __init__(self, site, unit, delay, domains, info, indices,
                  args_init):
         crep.require_dev(site)
-    def toc(self):
+
+    def toc_stmt(self):
         self.linemark()
+        out('{\n', postindent=1)
+        self.toc_inline()
+        self.linemark()
+        out('}\n', preindent=-1)
+
+    def toc(self):
+        def lm_out(*args, **kwargs):
+            self.linemark()
+            out(*args, **kwargs)
         objarg = '&_dev->obj'
-        out(f'if (SIM_object_clock({objarg}) == NULL)\n', postindent=1)
-        out(f'''SIM_log_error({objarg}, 0, "Attribute 'queue' is '''
-            + '''not set, ignoring delayed call");\n''')
-        out('else {\n', preindent=-1, postindent=1)
+        lm_out(f'if (SIM_object_clock({objarg}) == NULL)\n', postindent=1)
+        lm_out(f'''SIM_log_error({objarg}, 0, "Attribute 'queue' is '''
+               + '''not set, ignoring delayed call");\n''')
+        lm_out('else {\n', preindent=-1, postindent=1)
         if self.indices or self.info.args_type or self.domains:
-            out('_simple_event_data_t *_data = MM_ZALLOC(1, '
-                + '_simple_event_data_t);\n')
+            lm_out('_simple_event_data_t *_data = MM_ZALLOC(1, '
+                   + '_simple_event_data_t);\n')
 
             if self.indices:
-                out(f'uint32 *_event_indices = MM_MALLOC({len(self.indices)}, '
-                    + 'uint32);\n')
+                lm_out(f'uint32 *_event_indices = '
+                       + f'MM_MALLOC({len(self.indices)}, uint32);\n')
                 for (i, index_expr) in enumerate(self.indices):
-                    out(f'_event_indices[{i}] = {index_expr.read()};\n')
-                out('_data->indices = _event_indices;\n')
+                    lm_out(f'_event_indices[{i}] = {index_expr.read()};\n')
+                lm_out('_data->indices = _event_indices;\n')
 
             args_type = self.info.args_type
             if args_type:
-                out('%s = %s;\n'
+                lm_out('%s = %s;\n'
                     % (args_type.declaration('_event_args'),
                        self.args_init.args_init()))
-                out('_data->args = MM_MALLOC(1, %s);\n'
+                lm_out('_data->args = MM_MALLOC(1, %s);\n'
                     % (args_type.declaration(''),))
 
                 toc_constsafe_pointer_assignment(self.site, '_event_args',
                                                  '_data->args', args_type)
 
             if self.domains:
-                out('_identity_t *_event_domains = '
-                    + f'MM_MALLOC({len(self.domains)}, _identity_t);\n')
+                lm_out('_identity_t *_event_domains = '
+                       + f'MM_MALLOC({len(self.domains)}, _identity_t);\n')
                 for (i, domain) in enumerate(self.domains):
-                    out(f'_event_domains[{i}] = {domain.read()};\n')
-                out(f'_data->no_domains = {len(self.domains)};\n')
-                out('_data->domains = _event_domains;\n')
+                    lm_out(f'_event_domains[{i}] = {domain.read()};\n')
+                lm_out(f'_data->no_domains = {len(self.domains)};\n')
+                lm_out('_data->domains = _event_domains;\n')
 
             data = '(lang_void *)_data'
         else:
             data = 'NULL'
-        out(f'SIM_event_post_{self.unit}(SIM_object_clock({objarg}), '
-            + f'{crep.get_evclass(self.info.key)}, {objarg}, '
-            + f'{self.delay.read()}, {data});\n')
-        out("}\n", preindent = -1)
+        lm_out(f'SIM_event_post_{self.unit}(SIM_object_clock({objarg}), '
+               + f'{crep.get_evclass(self.info.key)}, {objarg}, '
+               + f'{self.delay.read()}, {data});\n')
+        lm_out("}\n", preindent = -1)
 
 mkAfter = After
 
@@ -643,8 +679,7 @@ class AfterOnHook(Statement):
     def __init__(self, site, domains, hookref_expr, info, indices,
                  args_init):
         crep.require_dev(site)
-    def toc(self):
-        self.linemark()
+    def toc_stmt(self):
         hookref = resolve_hookref(self.hookref_expr)
         indices = ('(const uint32 []) {%s}'
                    % (', '.join(i.read() for i in self.indices),)
@@ -657,10 +692,12 @@ class AfterOnHook(Statement):
         domains = ('(const _identity_t []) {%s}'
                    % (', '.join(domain.read() for domain in self.domains),)
                    if self.domains else 'NULL')
-        out(f'_DML_attach_callback_to_hook({hookref}, '
+        self.linemark()
+        # Block is to delimit lifetime of compound literals
+        out(f'{{ _DML_attach_callback_to_hook({hookref}, '
             + f'&_after_on_hook_infos[{self.info.uniq}], {indices}, '
             + f'{len(self.indices)}, {args}, {domains}, '
-            + f'{len(self.domains)});\n')
+            + f'{len(self.domains)}); }}\n')
 
 mkAfterOnHook = AfterOnHook
 
@@ -668,8 +705,7 @@ class ImmediateAfter(Statement):
     @auto_init
     def __init__(self, site, domains, info, indices, args_init):
         crep.require_dev(site)
-    def toc(self):
-        self.linemark()
+    def toc_stmt(self):
         indices = ('(const uint32 []) {%s}'
                    % (', '.join(i.read() for i in self.indices),)
                    if self.indices else 'NULL')
@@ -684,34 +720,36 @@ class ImmediateAfter(Statement):
         domains = ('(const _identity_t []) {%s}'
                    % (', '.join(domain.read() for domain in self.domains),)
                    if self.domains else 'NULL')
-        out('_DML_post_immediate_after('
+        self.linemark()
+        # Block is to delimit lifetime of compound literals
+        out('{ _DML_post_immediate_after('
             + '&_dev->obj, _dev->_immediate_after_state, '
             + f'{self.info.cident_callback}, {indices}, {len(self.indices)}, '
-            + f'{args}, {args_size}, {domains}, {len(self.domains)});\n')
+            + f'{args}, {args_size}, {domains}, {len(self.domains)}); }}\n')
 
 mkImmediateAfter = ImmediateAfter
 
 class If(Statement):
     @auto_init
-    def __init__(self, site, cond, truebranch, falsebranch):
+    def __init__(self, site, cond, truebranch, falsebranch, else_site):
         assert_type(site, cond.ctype(), TBool)
         assert_type(site, truebranch, Statement)
         assert_type(site, falsebranch, (Statement, type(None)))
+    def toc_stmt(self):
+        site_linemark(self.site)
+        out('{\n',postindent=1)
+        self.toc_inline()
+        site_linemark(self.site)
+        out('}\n',preindent=-1)
+
     def toc(self):
         self.linemark()
-        out('if ('+self.cond.read()+') {\n', postindent = 1)
-        self.truebranch.toc_inline()
-        if isinstance(self.falsebranch, If):
-            out('} else ', preindent = -1)
-            if dml.globals.linemarks:
-                out('\n')
-            self.falsebranch.toc()
-        elif self.falsebranch:
-            out('} else {\n', preindent = -1, postindent = 1)
-            self.falsebranch.toc_inline()
-            out('}\n', preindent = -1)
-        else:
-            out('}\n', preindent = -1)
+        out(f'if ({self.cond.read()})\n')
+        self.truebranch.toc_stmt()
+        if self.falsebranch:
+            site_linemark(self.else_site)
+            out('else\n')
+            self.falsebranch.toc_stmt()
 
     def control_flow(self):
         a = self.truebranch.control_flow()
@@ -719,7 +757,7 @@ class If(Statement):
              else ControlFlow(fallthrough=True))
         return a.union(b)
 
-def mkIf(site, cond, truebranch, falsebranch = None):
+def mkIf(site, cond, truebranch, falsebranch = None, else_site=None):
     assert isinstance(cond.ctype(), TBool)
     if cond.constant:
         if cond.value:
@@ -728,19 +766,17 @@ def mkIf(site, cond, truebranch, falsebranch = None):
             return falsebranch
         else:
             return mkNull(site)
-    return If(site, cond, truebranch, falsebranch)
+    return If(site, cond, truebranch, falsebranch, else_site)
 
 class While(Statement):
     @auto_init
     def __init__(self, site, cond, stmt):
         assert_type(site, cond.ctype(), TBool)
         assert_type(site, stmt, Statement)
-    def toc(self):
+    def toc_stmt(self):
         self.linemark()
-        # out('/* %s */\n' % repr(self))
-        out('while ('+self.cond.read()+') {\n', postindent = 1)
-        self.stmt.toc_inline()
-        out('}\n', preindent = -1)
+        out(f'while ({self.cond.read()})\n')
+        self.stmt.toc_stmt()
 
     def control_flow(self):
         bodyflow = self.stmt.control_flow()
@@ -763,12 +799,12 @@ class DoWhile(Statement):
     def __init__(self, site, cond, stmt):
         assert_type(site, cond.ctype(), TBool)
         assert_type(site, stmt, Statement)
-    def toc(self):
+    def toc_stmt(self):
         self.linemark()
-        # out('/* %s */\n' % repr(self))
-        out('do {\n', postindent = 1)
-        self.stmt.toc_inline()
-        out('} while ('+self.cond.read()+');\n', preindent = -1)
+        out('do\n')
+        self.stmt.toc_stmt()
+        site_linemark(self.cond.site)
+        out(f'while ({self.cond.read()});\n')
     def control_flow(self):
         bodyflow = self.stmt.control_flow()
         if self.cond.constant and self.cond.value:
@@ -786,9 +822,8 @@ class For(Statement):
     def __init__(self, site, pres, cond, posts, stmt):
         assert_type(site, cond.ctype(), TBool)
         assert_type(site, stmt, Statement)
-    def toc(self):
+    def toc_stmt(self):
         self.linemark()
-
         out('for (%s; %s; ' % (", ".join(pre.discard()
                                          for pre in self.pres),
                                       self.cond.read()))
@@ -799,14 +834,14 @@ class For(Statement):
         else:
             # general case: arbitrary statements in post code;
             # encapsulate in a statement expression
-            out('({\n', postindent = 1)
+            out('({\n', postindent=1)
             for post in self.posts:
                 post.toc()
-            out(' })', preindent = -1)
+            self.linemark()
+            out(' })', preindent=-1)
 
-        out(') {\n', postindent = 1)
-        self.stmt.toc_inline()
-        out('}\n', preindent = -1)
+        out(')\n')
+        self.stmt.toc_stmt()
 
     def control_flow(self):
         bodyflow = self.stmt.control_flow()
@@ -842,28 +877,33 @@ class ForeachSequence(Statement):
 
     @auto_init
     def __init__(self, site, trait, each_in_expr, body, break_label): pass
-    def toc(self):
+    def toc_stmt(self):
         self.linemark()
         out('{\n', postindent=1)
+        self.toc_inline()
         self.linemark()
-        out(f'_each_in_t __each_in_expr = {self.each_in_expr.read()};\n')
+        out('}\n', preindent=-1)
+
+    def toc_inline(self):
+        def lm_out(*args, **kwargs):
+            self.linemark()
+            out(*args, **kwargs)
+        lm_out(f'_each_in_t __each_in_expr = {self.each_in_expr.read()};\n')
         coverity_marker('unreachable', site=self.site)
         out('for (uint32 _outer_idx = 0; _outer_idx < __each_in_expr.num; '
             + '++_outer_idx) {\n', postindent=1)
-        out(f'_vtable_list_t _list = {EachIn.array_ident(self.trait)}'
-            + '[__each_in_expr.base_idx + _outer_idx];\n')
-        out('uint32 _num = _list.num / __each_in_expr.array_size;\n')
-        out('uint32 _start = _num * __each_in_expr.array_idx;\n')
+        lm_out(f'_vtable_list_t _list = {EachIn.array_ident(self.trait)}'
+               + '[__each_in_expr.base_idx + _outer_idx];\n')
+        lm_out('uint32 _num = _list.num / __each_in_expr.array_size;\n')
+        lm_out('uint32 _start = _num * __each_in_expr.array_idx;\n')
         coverity_marker('unreachable', site=self.site)
         out('for (uint32 _inner_idx = _start; _inner_idx < _start + _num; '
-            + '++_inner_idx) {\n', postindent=1)
-        self.body.toc_inline()
-        out('}\n', preindent=-1)
-        out('}\n', preindent=-1)
+            + '++_inner_idx)\n')
+        self.body.toc_stmt()
+        lm_out('}\n', preindent=-1)
         if self.break_label is not None:
-            self.linemark()
-            out(f'{self.break_label}: UNUSED;\n', preindent=-1, postindent = 1)
-        out('}\n', preindent=-1)
+            lm_out(f'{self.break_label}: UNUSED;\n', preindent=-1,
+                   postindent=1)
 
     def control_flow(self):
         bodyflow = self.body.control_flow()
@@ -877,12 +917,10 @@ class Switch(Statement):
     def __init__(self, site, expr, stmt):
         assert_type(site, expr, Expression)
         assert_type(site, stmt, Statement)
-    def toc(self):
+    def toc_stmt(self):
         self.linemark()
-        # out('/* %s */\n' % repr(self))
-        out('switch ('+self.expr.read()+') {\n', postindent = 1)
-        self.stmt.toc_inline()
-        out('}\n', preindent = -1)
+        out(f'switch ({self.expr.read()})\n')
+        self.stmt.toc_stmt()
 
     def control_flow(self):
         assert self.site.dml_version() != (1, 2)
@@ -913,7 +951,8 @@ class SubsequentCases(Statement):
     @auto_init
     def __init__(self, site, cases, has_default):
         assert len(self.cases) > 0
-    def toc(self):
+
+    def toc_stmt(self):
         for (i, case) in enumerate(self.cases):
             assert isinstance(case, (Case, Default))
             site_linemark(case.site)
@@ -929,7 +968,7 @@ mkSubsequentCases = SubsequentCases
 class Case(Statement):
     @auto_init
     def __init__(self, site, expr): pass
-    def toc(self):
+    def toc_stmt(self):
         self.linemark()
         out('case %s: ;\n' % self.expr.read(), preindent = -1, postindent = 1)
 
@@ -938,7 +977,7 @@ mkCase = Case
 class Default(Statement):
     @auto_init
     def __init__(self, site): pass
-    def toc(self):
+    def toc_stmt(self):
         self.linemark()
         out('default: ;\n', preindent = -1, postindent = 1)
 
@@ -948,11 +987,10 @@ class VectorForeach(Statement):
     @auto_init
     def __init__(self, site, vect, var, stmt): pass
 
-    def toc(self):
-        out('VFOREACH(%s, %s) {\n' % (self.vect.read(), self.var.read()),
-            postindent = 1)
-        self.stmt.toc_inline()
-        out('}\n', preindent = -1)
+    def toc_stmt(self):
+        self.linemark()
+        out(f'VFOREACH({self.vect.read()}, {self.var.read()})\n')
+        self.stmt.toc_stmt()
 
     def control_flow(self):
         flow = self.stmt.control_flow()
@@ -962,7 +1000,8 @@ def mkVectorForeach(site, vect, var, stmt):
     return VectorForeach(site, vect, var, stmt)
 
 class Break(Statement):
-    def toc(self):
+    def toc_stmt(self):
+        self.linemark()
         out('break;\n')
     def control_flow(self):
         return ControlFlow(br=True)
@@ -970,7 +1009,8 @@ class Break(Statement):
 mkBreak = Break
 
 class Continue(Statement):
-    def toc(self):
+    def toc_stmt(self):
+        self.linemark()
         out('continue;\n')
     def control_flow(self):
         return ControlFlow()
@@ -981,9 +1021,11 @@ class AssignStatement(Statement):
     @auto_init
     def __init__(self, site, target, initializer):
         assert isinstance(initializer, Initializer)
-    def toc(self):
+    def toc_stmt(self):
+        self.linemark()
         out('{\n', postindent=1)
         self.toc_inline()
+        self.linemark()
         out('}\n', preindent=-1)
     def toc_inline(self):
         self.linemark()
@@ -4954,6 +4996,9 @@ class StructDefinition(Statement):
     is preceded by a StructDefinition."""
     @auto_init
     def __init__(self, site, structtype): pass
+    def toc_stmt(self):
+        raise ICE(self.site,
+                  'StructDefinition.toc_stmt: Should never be called')
     def toc(self):
         self.structtype.resolve().print_struct_definition()
 mkStructDefinition = StructDefinition
@@ -4974,6 +5019,13 @@ class Declaration(Statement):
             assert unused == True
         self.unused = unused
 
+    def toc_stmt(self):
+        self.linemark()
+        out('{\n')
+        self.toc_inline()
+        self.linemark()
+        out('}\n')
+
     def toc(self):
         self.linemark()
 
@@ -4982,6 +5034,7 @@ class Declaration(Statement):
             # ducks a potential GCC warning, and also serves to
             # zero-initialize VLAs
             self.type.print_declaration(self.name, unused = self.unused)
+            self.linemark()
             self.init.assign_to(mkLit(self.site, self.name, self.type),
                                 self.type)
         else:
@@ -5045,7 +5098,7 @@ class CText(Code):
         (ident, h_path) = dmldir_macro(path)
         out('#define %s "%s"\n' % (ident, quote_filename(h_path)))
         if dml.globals.linemarks:
-            out('#line %d "%s"\n' % (self.site.lineno, quote_filename(path)))
+            linemark(self.site.lineno, path)
         out(self.text)
         out('\n#undef %s\n' % (ident,))
 
