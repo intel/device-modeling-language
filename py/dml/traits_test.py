@@ -40,7 +40,7 @@ class Test_traits(unittest.TestCase):
             )
 
     def test_one_default_method(self):
-        body = dml.ast.compound(self.site, [])
+        body = dml.ast.compound(self.site, [], self.site)
         t = Trait(self.site, 't', set(),
                   {'m': (self.site, [], [], False, False, False, False, True,
                          body, None)},

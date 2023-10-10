@@ -746,10 +746,9 @@ def wrap_method(meth, wrapper_name, indices=()):
         indices = tuple(mkIntegerLiteral(meth.site, i) for i in indices)
     with crep.DeviceInstanceContext():
         if retvar:
-            decl = mkDeclaration(meth.site, retvar, rettype,
-                                 init = get_initializer(meth.site, rettype,
-                                                        None, None, None))
-            decl.toc()
+            mkDeclaration(meth.site, retvar, rettype,
+                          init = get_initializer(meth.site, rettype,
+                                                 None, None, None)).toc()
 
         with LogFailure(meth.site, meth, indices):
             inargs = [mkLit(meth.site, v, t) for v, t in meth.inp]
@@ -1341,7 +1340,6 @@ def generate_reg_callback(meth, name):
         + ', '.join(params) + ')\n')
     out('{\n', postindent = 1)
     out('%s *_dev = _obj;\n' % dev_t)
-    scope = Symtab(global_scope)
     fail = ReturnFailure(meth.site)
     with fail, crep.DeviceInstanceContext():
         inargs = [mkLit(meth.site, n, t) for n, t in meth.inp]
@@ -1352,8 +1350,7 @@ def generate_reg_callback(meth, name):
                       for i in range(meth.dimensions)),
                 inargs, outargs)]
 
-    code = mkCompound(meth.site, declarations(scope) + code + [fail.nofail()])
-    code.toc()
+    mkCompound(meth.site, code + [fail.nofail()]).toc_inline()
     out('}\n', preindent = -1)
     out('\n')
 
@@ -1618,8 +1615,7 @@ def generate_finalize(device):
         else:
             code = codegen_inline_byname(device, (), '_post_init', [], [],
                                      device.site)
-    if not code.is_empty:
-        code.toc()
+    code.toc_inline()
     out('}\n\n', preindent = -1)
 
 def generate_deinit(device):
@@ -1665,8 +1661,7 @@ def generate_deinit(device):
                 device.get_component('destroy', 'method').site, device, ()):
             code = codegen_inline_byname(device, (), 'destroy', [], [],
                                          device.site)
-        if not code.is_empty:
-            code.toc()
+        code.toc()
 
         # Cancel all pending afters on hooks
         by_dims = {}
@@ -1712,14 +1707,12 @@ def generate_reset(device, hardness):
     out('{\n', postindent = 1)
     out(crep.structtype(device) + ' *_dev UNUSED = ('
         + crep.structtype(device) + ' *)_obj;\n\n')
-    scope = Symtab(global_scope)
     method_name = hardness + '_reset'
     method = device.get_component(method_name, 'method')
     with LogFailure(method.site, device, ()), crep.DeviceInstanceContext():
         code = codegen_call_byname(method.site, device, (),
                                    method_name, [], [])
-    code = mkCompound(method.site, declarations(scope) + [code])
-    code.toc()
+    code.toc_inline()
     out('}\n\n', preindent = -1)
 
 # {(B, C): A} means that a static array 'const uint32 _indices_B_C[A][B][C][3]'
@@ -2039,14 +2032,6 @@ def generate_extern_trampoline_dml12(exported_name, func):
                          ", ".join(n for (n, t) in func.cparams)))
     out("}\n", preindent=-1)
 
-def som_linemark(site):
-    if dml.globals.linemarks:
-        out('#line %d "%s"\n' % (site.lineno, quote_filename(site.filename())))
-
-def eom_linemark(site):
-    if dml.globals.linemarks:
-        out('#line %d "%s"\n' % (site.lineno, quote_filename(site.filename())))
-
 def generate_each_in_table(trait, instances):
     items = []
     for (node, subnodes) in instances:
@@ -2167,9 +2152,12 @@ def generate_trait_method(m):
     code = m.codegen_body()
     out('/* %s */\n' % (str(m),))
     start_function_definition(m.declaration())
-    out('{\n', postindent=1)
-    code.toc_inline()
-    out('}\n', preindent=-1)
+    with allow_linemarks():
+        site_linemark(m.site)
+        out('{\n', postindent=1)
+        code.toc_inline()
+        site_linemark(m.rbrace_site)
+        out('}\n', preindent=-1)
 
 def generate_adjustor_thunk(traitname, name, inp, outp, throws, independent,
                             vtable_path, def_path, hardcoded_impl=None):
@@ -3337,15 +3325,15 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
 
     for t in list(dml.globals.traits.values()):
         for m in list(t.method_impls.values()):
-            with allow_linemarks():
-                if gather_size_statistics:
-                    ctx = StrOutput()
-                    with ctx:
-                        generate_trait_method(m)
-                    size_statistics[m.site.loc()] = [len(ctx.buf)]
-                    out(ctx.buf)
-                else:
+            if gather_size_statistics:
+                ctx = StrOutput(filename=output.current().filename,
+                                lineno=output.current().lineno)
+                with ctx:
                     generate_trait_method(m)
+                size_statistics[m.site.loc()] = [len(ctx.buf)]
+                out(ctx.buf)
+            else:
+                generate_trait_method(m)
     # Note: methods may be added to method_queue while doing this,
     # so don't try to be too smart
     generated_funcs = set()
@@ -3360,23 +3348,24 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
                            for (n, v) in func.inp
                            if isinstance(v, Expression)]
 
-        with allow_linemarks():
-            if gather_size_statistics:
-                ctx = StrOutput()
+        if gather_size_statistics:
+            ctx = StrOutput(lineno=output.current().lineno,
+                            filename=output.current().filename)
+        else:
+            ctx = nullcontext()
+        with ErrorContext(func.method), ctx:
+            if specializations:
+                out('/* %s\n' % func.get_name())
+                for (n, v) in specializations:
+                    out('     %s = %s\n' % (n, v))
+                out('*/\n')
             else:
-                ctx = nullcontext()
-            with ErrorContext(func.method), ctx:
-                if specializations:
-                    out('/* %s\n' % func.get_name())
-                    for (n, v) in specializations:
-                        out('     %s = %s\n' % (n, v))
-                    out('*/\n')
-                else:
-                    out('/* %s */\n' % func.get_name())
+                out('/* %s */\n' % func.get_name())
 
-                start_function_definition(func.prototype)
-                som_linemark(func.method.astcode.site)
-                out('{\n', postindent = 1)
+            start_function_definition(func.prototype)
+            with allow_linemarks():
+                site_linemark(func.method.astcode.site)
+                out('{\n', postindent=1)
                 try:
                     code.toc_inline()
                 except DMLError as e:
@@ -3385,12 +3374,13 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
                     # codegen_method, when all Expression and Statement
                     # objects are instantiated.
                     raise ICE(e.site, 'error during late compile stage')
-                eom_linemark(func.method.rbrace_site)
-                out('}\n\n', preindent = -1)
-            if gather_size_statistics:
-                size_statistics.setdefault(func.method.site.loc(), []).append(
-                    len(ctx.buf))
-                out(ctx.buf)
+                site_linemark(func.method.rbrace_site)
+                out('}\n', preindent=-1)
+            out('\n')
+        if gather_size_statistics:
+            size_statistics.setdefault(func.method.site.loc(), []).append(
+                len(ctx.buf))
+            out(ctx.buf)
         splitting_point()
 
 

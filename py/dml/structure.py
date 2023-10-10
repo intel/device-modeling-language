@@ -1295,7 +1295,8 @@ def report_pbefaft(obj, method_asts):
                                            'is dml12_compat_write_register;'))
 
 
-def wrap_method_body_in_try(site, overridden_site, obj, name, body):
+def wrap_method_body_in_try(site, overridden_site, obj, name, body,
+                            rbrace_site):
     if (obj.objtype != 'implement'
         and not site.filename().endswith('dml-builtins.dml')):
         report(WTHROWS_DML12(site, overridden_site))
@@ -1303,7 +1304,7 @@ def wrap_method_body_in_try(site, overridden_site, obj, name, body):
         ast.try_(site, body, ast.log(
             site, 'error', ast.int(site, 1), None, ast.int(site, 0),
             'Unexpected exception in %s.%s, ignoring'
-            % (obj.logname_anonymized(), name), []))])
+            % (obj.logname_anonymized(), name), []))], rbrace_site)
 
 class ObjMethodHandle(traits.MethodHandle):
     shared = False
@@ -1381,7 +1382,7 @@ def process_method_implementations(obj, name, implementations,
             and vtable_nothrow_dml14):
             body = wrap_method_body_in_try(
                 impl.method_ast.site, vtable_nothrow_dml14,
-                obj, name, body)
+                obj, name, body, rbrace_site)
             throws = False
         for overridden in default_map[impl]:
             if not overridden.overridable:
@@ -1405,7 +1406,7 @@ def process_method_implementations(obj, name, implementations,
                 # to catch any exceptions.
                 body = wrap_method_body_in_try(
                     impl.method_ast.site, overridden.method_ast.site,
-                    obj, name, body)
+                    obj, name, body, rbrace_site)
                 throws = False
             elif throws != overridden.throws:
                 if (dml.globals.dml_version == (1, 2)
