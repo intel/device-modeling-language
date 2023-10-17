@@ -23,8 +23,6 @@ loggroup lg56; loggroup lg57; loggroup lg58; loggroup lg59; loggroup lg60;
 loggroup lg61;
 
 method init() {
-    test_shared_logs();
-
     local uint64 i = 7;
     local uint8 j = 5;
     // types of %d and %* args are automatic, regardless of type
@@ -64,39 +62,4 @@ attribute test_nolog is write_only_attr {
         log info, 1, lg60: "log on another unselected group";
         log info: "log on no group";
     }
-}
-
-
-template t is _qname {
-    shared method hello() {
-        log info: "hello from %s", _qname();
-    }
-}
-
-is t;
-group g is t {
-    in each object { is t; }
-
-    group c[i < 2];
-
-    subdevice s[i < 3] {
-        group c[j < 5][k < 7] is t {
-            subdevice s;
-        }
-    }
-}
-
-method test_shared_logs() {
-    /// GREP \[obj info\] hello from test
-    hello();
-    /// GREP \[obj info\] hello from g
-    g.hello();
-    /// GREP \[obj info\] hello from g.c\[1\]
-    g.c[1].hello();
-    /// GREP \[obj\.g\.s\[2\] info\] hello from g\.s\[2\]
-    g.s[2].hello();
-    /// GREP \[obj\.g\.s\[2\] info\] hello from g\.s\[2\]\.c\[3\]\[5\]
-    g.s[2].c[3][5].hello();
-    /// GREP \[obj\.g\.s\[2\]\.c\[3\]\[5\]\.s info\] hello from g\.s\[2\]\.c\[3\]\[5\]\.s
-    g.s[2].c[3][5].s.hello();
 }

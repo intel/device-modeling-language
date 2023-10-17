@@ -3328,7 +3328,8 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     generate_events(device)
     generate_identity_data_decls()
     generate_object_vtables_array()
-    generate_log_object_assocs_array()
+    if compat.shared_logs_on_device not in dml.globals.enabled_compat:
+        generate_log_object_assocs_array()
     generate_class_var_decl()
     generate_startup_calls_entry_function(device)
     generate_init_data_objs(device)

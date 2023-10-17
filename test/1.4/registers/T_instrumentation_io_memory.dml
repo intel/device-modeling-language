@@ -5,6 +5,8 @@
 dml 1.4;
 device test;
 
+/// DMLC-FLAG --no-compat=shared_logs_on_device
+
 import "instrumentation.dml";
 
 param use_io_memory = true;
