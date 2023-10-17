@@ -268,6 +268,8 @@ def generate_hfile(device, headers, filename):
     reset_line_directive()
     out('\n')
 
+    out('#include <simics/util/help-macros.h>\n')
+    out('#include <stdint.h>\n')
     out('#include "'+os.path.basename(structfilename)+'"\n\n')
 
     for name in dml.globals.traits:
@@ -348,6 +350,10 @@ def generate_hfile(device, headers, filename):
     out('\n')
 
     print_device_substruct(device)
+
+    out('// allows generated code to store device struct offsets in uint32,\n')
+    out('// which saves space\n')
+    out(f'STATIC_ASSERT(sizeof(struct {crep.cname(device)}) <= UINT32_MAX);\n')
 
     if dml.globals.log_groups:
         i = 1
