@@ -7,6 +7,7 @@ import os
 import sys
 import subprocess
 import math
+import shlex
 from pathlib import Path
 
 from dml import ctree, types, logging, messages, output, symtab
@@ -200,12 +201,12 @@ class GccTests(unittest.TestCase):
         if is_windows():
             exe += '.exe'
         here = Path(__file__).parent
-        gcc_cmd = [os.environ['CC'],
-                   '-I%s' % (os.path.join(base, 'src', 'include')),
-                   f'-I{here}',
-                   f'-I{here.parent.parent / "include"}',
-                   '-O', '-std=gnu11', '-Wall', '-Werror',
-                   '-Wno-int-in-bool-context',  '-o', exe, cfile]
+        gcc_cmd = shlex.split(os.environ['CC'], posix=not is_windows()) + [
+            '-I%s' % (os.path.join(base, 'src', 'include')),
+            f'-I{here}',
+            f'-I{here.parent.parent / "include"}',
+            '-O', '-std=gnu11', '-Wall', '-Werror',
+            '-Wno-int-in-bool-context',  '-o', exe, cfile]
         if is_windows():
             gcc_cmd += [
                 "-DUSE_MODULE_HOST_CONFIG", "-D__USE_MINGW_ANSI_STDIO=1"]
