@@ -140,6 +140,7 @@ __all__ = (
     'ObjIdentity',
     'TraitObjIdentity',
     'ObjTraitRef',
+    'LogObjectFromObjIdentity',
     'NodeArrayRef',
     'SessionVariableRef',
     'mkNodeRef', 'NodeRef',
@@ -165,6 +166,7 @@ __all__ = (
     'as_int',
     'sym_declaration',
     'lookup_var',
+    'log_object',
     'log_statement',
 
     'all_index_exprs',
@@ -3534,6 +3536,19 @@ class TraitObjIdentity(Expression):
     def read(self):
         return "(%s).id" % (self.traitref.read(),)
 
+class LogObjectFromObjIdentity(Expression):
+    priority = dml.expr.Apply.priority
+    @auto_init
+    def __init__(self, site, identity):
+        crep.require_dev(site)
+
+    def ctype(self):
+        return TNamed('conf_object_t *')
+
+    def read(self):
+        return ('_identity_to_logobj(_log_object_assocs, &_dev->obj, '
+                + f'{self.identity.read()})')
+
 class TraitUpcast(Expression):
     @auto_init
     def __init__(self, site, sub, parent): pass
@@ -5033,7 +5048,11 @@ def lookup_var(site, scope, name):
     else:
         return sym.expr(site)
 
-def log_statement(site, node, indices, logtype, level, groups, fmt, *args):
+def log_object(site, node, indices):
+    return mkLit(site, crep.conf_object(site, node, indices),
+                 TPtr(TNamed("conf_object_t")))
+
+def log_statement(site, logobj, logtype, level, groups, fmt, *args):
     if logtype in ['error', 'critical']:
         lvl = []
     else:
@@ -5049,8 +5068,6 @@ def log_statement(site, node, indices, logtype, level, groups, fmt, *args):
                      TPtr(TInt(8, True, const=True))])
     fun = mkLit(site, logfunc, TFunction(inargtypes, TVoid(), varargs=True))
 
-    logobj = mkLit(site, crep.conf_object(site, node, indices),
-                   TPtr(TNamed("conf_object_t")))
     x = Apply(site, fun,
               lvl +
               [ logobj,

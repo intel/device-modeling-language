@@ -19,7 +19,7 @@ def test(obj, provider):
         None, 0xc, 4, set_value_callback(4711), None)
 
     # spec-viol is suppressed in 1.2 but not 1.4
-    with stest.allow_log_mgr(obj, 'spec-viol'):
+    with stest.allow_log_mgr(obj.bank.b1, 'spec-viol'):
         stest.expect_equal(dev_util.Register_LE(obj.bank.b1, 0xc, 4).read(), 4711)
 
     provider.remove_callback(handle_1)

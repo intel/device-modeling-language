@@ -2143,7 +2143,38 @@ def generate_object_vtables_array():
         items.append(pointer)
     init = '{%s}' % (', '.join(items),)
     add_variable_declaration(
-        'void * const _object_vtables[%d]' % (len(dml.globals.objects)),
+        f'void * const _object_vtables[{len(dml.globals.objects)}]', init)
+
+def generate_log_object_assocs_array():
+    items = []
+    for node in dml.globals.objects:
+        object_node = (node if node.objtype in {'device', 'bank',
+                                                'subdevice', 'port'}
+                       else node.object_parent)
+        if (object_node is not dml.globals.device
+            # Anonymous banks
+            and not (compat.dml12_misc in dml.globals.enabled_compat
+                     and object_node.ident is None)
+            # HACK compile errors may lead to .name of nodes never being set.
+            # This issue has proven difficult to fix due to multiple technical
+            # debts, most egregiously that the various uses of
+            # dml.globals.objects and dml.globals.hooks don't properly take
+            # into account the possibility of objects becoming rejected
+            and object_node.name is not None):
+            port_obj_offset = (
+                f'offsetof({crep.structtype(dml.globals.device)}, '
+                + f'{crep.cref_portobj(object_node, ())})')
+            index_divisor = str(reduce(
+                operator.mul,
+                itertools.islice(node.dimsizes, object_node.dimensions, None),
+                1))
+        else:
+            port_obj_offset = index_divisor = '0'
+        items.append(f'{{{port_obj_offset}, {index_divisor}}}')
+    init = f'{{{", ".join(items)}}}'
+    add_variable_declaration(
+        'const _dml_log_object_assoc_t '
+        + f'_log_object_assocs[{len(dml.globals.objects)}]',
         init)
 
 def generate_trait_method(m):
@@ -3297,6 +3328,7 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     generate_events(device)
     generate_identity_data_decls()
     generate_object_vtables_array()
+    generate_log_object_assocs_array()
     generate_class_var_decl()
     generate_startup_calls_entry_function(device)
     generate_init_data_objs(device)

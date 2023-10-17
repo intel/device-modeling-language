@@ -167,8 +167,8 @@ class LogFailure(Failure):
         self.indices = indices
 
     def fail(self, site):
-        return log_statement(site, self.node, self.indices, "error",
-                             mkIntegerLiteral(site, 1), None,
+        return log_statement(site, log_object(site, self.node, self.indices),
+                             "error", mkIntegerLiteral(site, 1), None,
                              "Uncaught DML exception")
 
 class ReturnFailure(Failure):
@@ -2640,6 +2640,15 @@ def stmt_log(stmt, location, scope):
     else:
         warn_mixup = probable_loggroups_specification(level)
 
+    # Acquire a subsequent log key and the logging object based on obj or trait
+    # identity
+    if location.method():
+        identity = ObjIdentity(site, location.node.parent, location.indices)
+        logobj = log_object(site, location.node, location.indices)
+    else:
+        identity = TraitObjIdentity(site, lookup_var(site, scope, "this"))
+        logobj = LogObjectFromObjIdentity(site, identity)
+
     if later_level is not None:
         adjusted_later_level = later_level = ctree.as_int(codegen_expression(
             later_level, location, scope))
@@ -2654,14 +2663,10 @@ def stmt_log(stmt, location, scope):
         global log_index
         table_ptr = TPtr(TNamed("ht_int_table_t"))
         table = mkLit(site, '&(_dev->_subsequent_log_ht)', table_ptr)
-        # Acquire a key based on obj or trait identity
-        if location.method():
-            identity = ObjIdentity(site, location.node.parent, location.indices)
-        else:
-            identity = TraitObjIdentity(site, lookup_var(site, scope, "this"))
         key = mkApply(site,
                       mkLit(site, "_identity_to_key",
-                            TFunction([TNamed('_identity_t')], TInt(64, False))),
+                            TFunction([TNamed('_identity_t')],
+                                      TInt(64, False))),
                       [identity])
 
         once_lookup = mkLit(
@@ -2690,8 +2695,8 @@ def stmt_log(stmt, location, scope):
         report(WLOGMIXUP(site, logkind, level, later_level, groups))
     fmt, args = fix_printf(fmt, args, argsites, site)
     return [mkCompound(site, pre_statements + [
-        log_statement(site, location.node, location.indices,
-                      logkind, adjusted_level, groups, fmt, *args)])]
+        log_statement(site, logobj, logkind, adjusted_level, groups, fmt,
+                      *args)])]
 @statement_dispatcher
 def stmt_try(stmt, location, scope):
     [tryblock, excblock] = stmt.args

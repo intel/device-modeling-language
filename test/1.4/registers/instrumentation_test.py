@@ -42,11 +42,11 @@ def test(obj):
     # the instrumentation tests were disabled
     instrumentation_access_inquire.test(obj, subscribe_b2)
     with stest.allow_log_mgr(None, 'spec-viol'):
-        instrumentation_access_set_missed.test(obj, subscribe_b1, obj)
+        instrumentation_access_set_missed.test(obj, subscribe_b1)
     instrumentation_access_set_offset.test(obj, subscribe_b1)
     instrumentation_access_set_value.test(obj, subscribe_b1)
     instrumentation_access_suppress.test(obj, subscribe_b1)
-    instrumentation_access_value_at_miss.test(obj, subscribe_b1, obj)
+    instrumentation_access_value_at_miss.test(obj, subscribe_b1)
     instrumentation_bank_array.test(obj, subscribe_ba[0], subscribe_ba[1])
     instrumentation_callback_args.test(obj, subscribe_b1)
     instrumentation_callback_inquiry.test(obj, subscribe_b1)
@@ -60,7 +60,7 @@ def test(obj):
                                                 0x0A0B0C0D01020304)
     with stest.allow_log_mgr(None, 'spec-viol'):
         instrumentation_instrument_all.test(obj, subscribe_b1)
-    instrumentation_instrument_edge.test(obj, subscribe_b1, obj)
+    instrumentation_instrument_edge.test(obj, subscribe_b1)
     instrumentation_overlapping_order.test(obj, subscribe_b1)
     instrumentation_range.test(obj, subscribe_b1)
     instrumentation_subscribe_multiple.test(obj, subscribe_b1, subscribe_b2)
