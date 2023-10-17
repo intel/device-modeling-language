@@ -53,13 +53,13 @@ with stest.expect_log_mgr(obj, log_type="info", regex=rex):
 
 obj.x_address = 0
 obj.log_level = 2
-with stest.expect_log_mgr(obj, log_type="spec-viol"):
+with stest.expect_log_mgr(obj.bank.z, log_type="spec-viol"):
     rex = re.compile("^failed to read 8 bytes @ 0x0")
     with stest.expect_log_mgr(obj, log_type="info", regex=rex):
         _ = obj.x_value
 
     rex = re.compile("^failed to write 8 bytes @ 0x0")
-    with stest.expect_exception_mgr(simics.SimExc_Attribute):
-        with stest.expect_log_mgr(obj, log_type="info", regex=rex):
+    with stest.expect_log_mgr(obj, log_type="info", regex=rex):
+        with stest.expect_exception_mgr(simics.SimExc_Attribute):
             obj.x_value = 42
 

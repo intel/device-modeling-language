@@ -57,10 +57,9 @@ def codegen_get_name(impl, indices, inargs, outargs, site):
         [mkCopyData(site, regname, name),
          mkIf(site,
               mkNot(site, as_bool(name)),
-              log_statement(site, bank, indices, "error",
-                                       None, None,
-                                       "There is no register with number %d",
-                                       num)),
+              log_statement(site, log_object(site, bank, indices), "error",
+                            None, None, "There is no register with number %d",
+                            num)),
          return_success(site)])
 
 def codegen_get_number(impl, indices, inargs, outargs, site):
@@ -105,8 +104,8 @@ def codegen_get_number(impl, indices, inargs, outargs, site):
                          [mkCopyData(site,
                                      mkIntegerConstant(site, -1, True),
                                      num),
-                          log_statement(site, bank, indices, "error",
-                                        None, None,
+                          log_statement(site, log_object(site, bank, indices),
+                                        "error", None, None,
                                         "There is no register with name %s",
                                         name)])),
          return_success(site)])
@@ -155,9 +154,8 @@ def codegen_read(impl, indices, inargs, outargs, site):
                                   regvar,
                                   reg_table]),
                          val),
-              log_statement(site, bank, indices, "error",
-                            None, None,
-                            "There is no register with number %d",
+              log_statement(site, log_object(site, bank, indices), "error",
+                            None, None, "There is no register with number %d",
                             num)),
          return_success(site)])
 
@@ -203,8 +201,7 @@ def codegen_write(impl, indices, inargs, outargs, site):
                                              regvar,
                                              reg_table,
                                              val])),
-              log_statement(site, bank, indices, "error",
-                            None, None,
-                            "There is no register with number %d",
+              log_statement(site, log_object(site, bank, indices), "error",
+                            None, None, "There is no register with number %d",
                             num)),
          return_success(site)])

@@ -15,7 +15,7 @@ template base {
     param traitref_param: base;
 
     shared method hello2() {
-        /// GREP \[obj info\] hello
+        /// GREP \[obj.port.p\[0\] info\] hello
         log info: "hello";
     }
 

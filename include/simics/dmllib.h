@@ -3130,8 +3130,22 @@ _DML_get_single_hook_attr(void *_hook, uintptr_t _aux) {
 }
 
 
-UNUSED static uint64 _identity_to_key(_identity_t id) {
+UNUSED static inline uint64 _identity_to_key(_identity_t id) {
         return (uint64)id.id << 32 | (uint64)id.encoded_index;
+}
+
+typedef struct {
+    uint32 port_obj_offset;
+    uint32 index_divisor;
+} _dml_log_object_assoc_t;
+
+UNUSED static inline conf_object_t *
+_identity_to_logobj(const _dml_log_object_assoc_t *object_assocs,
+                    conf_object_t *dev, _identity_t id) {
+    _dml_log_object_assoc_t obj_assoc = object_assocs[id.id - 1];
+    if (!obj_assoc.index_divisor) return dev;
+    return ((conf_object_t **)((char *)dev + obj_assoc.port_obj_offset))[
+        id.encoded_index / obj_assoc.index_divisor];
 }
 
 static attr_value_t

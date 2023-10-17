@@ -63,54 +63,54 @@ class LogCapture(object):
     def __exit__(self, *args):
         return self.filter.__exit__(*args)
     def callback(self, obj_, kind, msg):
-        stest.expect_equal(obj_, obj)
+        stest.expect_equal(obj_, obj.bank.b)
         stest.expect_equal(kind, self.expected_kind,
                            'unexpected log type for message %r' % (msg,))
         self.messages.append(msg)
 
 obj.b_read_only = 0xdeadbeef
-obj.log_level = 1
+obj.bank.b.log_level = 1
 stest.expect_equal(read_only.read(), 0xdeadbeef)
 # partial access, second byte of register
 read_only_1 = dev_util.Register_LE(obj.bank.b, 17, size=1)
-with LogCapture() as capture, stest.allow_log_mgr(obj, 'spec-viol'):
+with LogCapture() as capture, stest.allow_log_mgr(obj.bank.b, 'spec-viol'):
     read_only.write(0xdeadbeef)
     # remaining on log-level 2
     read_only.write(0x11111111)
-    obj.log_level = 2
+    obj.bank.b.log_level = 2
     read_only_1.write(0xbe)
     stest.expect_equal(capture.messages, [
         'Write to read-only register b.read_only'
         + ' (value written = 0xdeadbeef, contents = 0xdeadbeef).',
         'Write to read-only register b.read_only'
         + ' (value written = 0xbe00, contents = 0xdeadbeef).'])
-obj.log_level = 1
+obj.bank.b.log_level = 1
 # second time, log level 2
 read_only.write(0x11111111)
-obj.log_level = 2
-with stest.expect_log_mgr(obj, 'spec-viol'):
+obj.bank.b.log_level = 2
+with stest.expect_log_mgr(obj.bank.b, 'spec-viol'):
     read_only.write(0x11111111)
 
-with LogCapture() as capture, stest.allow_log_mgr(obj, 'spec-viol'):
+with LogCapture() as capture, stest.allow_log_mgr(obj.bank.b, 'spec-viol'):
     # read is OK, and fetches current value
-    obj.log_level = 3
+    obj.bank.b.log_level = 3
     obj.b_reserved = 0xdeadbeef
     stest.expect_equal(reserved.read(), 0xdeadbeef)
     stest.expect_equal(capture.messages, [])
     reserved.write(0xdeadbeef)
-    obj.log_level = 2
+    obj.bank.b.log_level = 2
     # log on level 2 on first write, even if value isn't changed
     stest.expect_equal(capture.messages, [
         "Write to reserved register b.reserved (value written = 0xdeadbeef,"
         + " contents = 0xdeadbeef), will not warn again."])
     del capture.messages[:]
-    obj.log_level = 3
+    obj.bank.b.log_level = 3
     # no subsequent logging
     reserved.write(0x12345678)
     # writes update the value
     stest.expect_equal(obj.b_reserved, 0x12345678)
     stest.expect_equal(capture.messages, [])
-obj.log_level = 1
+obj.bank.b.log_level = 1
 
 fields0 = dev_util.Register_LE(
     obj.bank.b, 0, size=1, bitfield=dev_util.Bitfield_LE({
@@ -121,7 +121,7 @@ fields0 = dev_util.Register_LE(
         'reserved1': 4,
         'reserved2': 5}))
 
-with LogCapture() as capture, stest.allow_log_mgr(obj, 'spec-viol'):
+with LogCapture() as capture, stest.allow_log_mgr(obj.bank.b, 'spec-viol'):
     stest.expect_equal(fields0.read(), 0)
     fields0.write(read_only=0)
     # no messages when writing the same value from read_only reg
@@ -142,7 +142,7 @@ with LogCapture() as capture, stest.allow_log_mgr(obj, 'spec-viol'):
                   reserved1=1, reserved2=0)
     stest.expect_equal(capture.messages, [])
     # third time: read_only logs on level 2, reserved2 logs on level 2
-    obj.log_level = 2
+    obj.bank.b.log_level = 2
     obj.b_fields0 = fields0.bitfield.value(reserved2=1)
     fields0.write(0, read_write=1, ignore_write=1, read_zero=1, read_only=1,
                   reserved1=1, reserved2=0)
@@ -153,7 +153,7 @@ with LogCapture() as capture, stest.allow_log_mgr(obj, 'spec-viol'):
         + ' (value written = 0, contents = 0x1), will not warn again.'])
     stest.expect_equal(obj.b_fields0, fields0.bitfield.value(
         read_write=1, read_zero=1, reserved1=1))
-obj.log_level = 1
+obj.bank.b.log_level = 1
 
 obj.b_fields0 = 0xf
 stest.expect_equal(obj.b_fields0, 0xf)
@@ -218,25 +218,25 @@ write_only = dev_util.Register_LE(obj.bank.b, 100, size=4)
 write_only.write(0xdeadbeef)
 stest.expect_equal(obj.b_write_only, 0xdeadbeef)
 
-with LogCapture() as capture, stest.allow_log_mgr(obj, 'spec-viol'):
+with LogCapture() as capture, stest.allow_log_mgr(obj.bank.b, 'spec-viol'):
     stest.expect_equal(write_only.read(), 0)
     stest.expect_equal(capture.messages, [
         'Read from write-only register b.write_only (returning 0).'])
 
 # second time, log level 2
 stest.expect_equal(write_only.read(), 0) # log-level filters spec-viol filtered
-obj.log_level = 2
-with stest.expect_log_mgr(obj, 'spec-viol'):
+obj.bank.b.log_level = 2
+with stest.expect_log_mgr(obj.bank.b, 'spec-viol'):
     stest.expect_equal(write_only.read(), 0)
 
-obj.log_level = 1
+obj.bank.b.log_level = 1
 
 # Access outside fields
 (fields3_0, fields3_2_0, fields3_2_1) = (dev_util.Register_LE(
     obj.bank.b, offset, size=1, bitfield=dev_util.Bitfield_LE({
         'f76': (7, 6), 'y': 5, 'f43': (4, 3), 'x': 2, 'f10': (1, 0)}))
                                      for offset in (3, 128, 129))
-with LogCapture() as capture, stest.allow_log_mgr(obj, 'spec-viol'):
+with LogCapture() as capture, stest.allow_log_mgr(obj.bank.b, 'spec-viol'):
     fields3_0.write(0)
     stest.expect_equal(capture.messages, [])
 
@@ -291,7 +291,7 @@ with LogCapture('unimpl') as capture:
     ])
     del capture.messages[:]
 
-    obj.log_level = 2
+    obj.bank.b.log_level = 2
     # Field reads do not log
     fields.write(0xf)
     fields.read()
@@ -313,7 +313,7 @@ with LogCapture('unimpl') as capture:
     stest.expect_equal(capture.messages, [])
 
     # ... but they are logged on level 3
-    obj.log_level = 3
+    obj.bank.b.log_level = 3
     for reg in [unimpl, write_unimpl, silent_unimpl]:
         reg.write(5)
     for reg in [unimpl, read_unimpl, silent_unimpl]:
@@ -339,7 +339,7 @@ fields5 = dev_util.Register_LE(
         'constant0': 0,
         'constant1': (2, 1)}))
 
-with LogCapture() as capture, stest.allow_log_mgr(obj, "spec-viol"):
+with LogCapture() as capture, stest.allow_log_mgr(obj.bank.b, "spec-viol"):
     # Check initial values
     stest.expect_equal(obj.b_constant0, 0)
     stest.expect_equal(obj.b_constant1, 1)
@@ -347,7 +347,7 @@ with LogCapture() as capture, stest.allow_log_mgr(obj, "spec-viol"):
                        fields4.bitfield.value(
                            constant0=0, constant1=3))
     # No logs when setting attributes directly
-    obj.log_level = 4
+    obj.bank.b.log_level = 4
     obj.b_constant0 = 1
     obj.b_constant1 = 3
     obj.b_fields4 = fields4.bitfield.value(
@@ -371,16 +371,16 @@ with LogCapture() as capture, stest.allow_log_mgr(obj, "spec-viol"):
         constant0=0, constant1=3)
     stest.expect_equal(capture.messages, [])
 
-with LogCapture() as capture, stest.allow_log_mgr(obj, "spec-viol"):
+with LogCapture() as capture, stest.allow_log_mgr(obj.bank.b, "spec-viol"):
     # reading constant field or register produces log on level 4 from
     # builtin, but no log on level 3
-    obj.log_level = 3
+    obj.bank.b.log_level = 3
     constant0.read()
     constant1.read()
     fields4.read()
     stest.expect_equal(capture.messages, [])
     # even on log-level 1, no messages if writing equal to fields
-    obj.log_level = 1
+    obj.bank.b.log_level = 1
     fields4.write(fields4.bitfield.value(
         constant0=0, constant1=3))
     stest.expect_equal(capture.messages, [])
@@ -413,7 +413,7 @@ with LogCapture() as capture, stest.allow_log_mgr(obj, "spec-viol"):
          "(value written = 0x1, contents = 0)."])
     del capture.messages[:]
     # repeated messages on log-level 2
-    obj.log_level = 2
+    obj.bank.b.log_level = 2
     constant0.write(10)
     constant1.write(10)
     fields4.write(fields4.bitfield.value(
@@ -428,7 +428,7 @@ with LogCapture() as capture, stest.allow_log_mgr(obj, "spec-viol"):
     # silent constants do not output log messages
     # so expect error message from the non-silent
     # constant field here only
-    obj.log_level = 3
+    obj.bank.b.log_level = 3
     silent_constant.write(0)
     fields5.write(fields5.bitfield.value(
         constant0=1, constant1=1));
@@ -444,7 +444,7 @@ fields6 = dev_util.Register_LE(
         'ones': 1,
         'many_ones' : (5, 2)}))
 
-with LogCapture() as capture, stest.allow_log_mgr(obj, "spec-viol"):
+with LogCapture() as capture, stest.allow_log_mgr(obj.bank.b, "spec-viol"):
     # check that values of zeros and ones are as expected
     stest.expect_equal(zeros.read(), 0)
     stest.expect_equal(ones.read(), 0xffffffff)
@@ -479,7 +479,7 @@ fields7 = dev_util.Register_LE(
 # No logs from ignore
 with LogCapture() as capture:
     # Writing values does not matter
-    obj.log_level = 3
+    obj.bank.b.log_level = 3
     ignore.write(2)
     fields7.write(fields7.bitfield.value(ignore = 1))
     stest.expect_equal(ignore.read(), 0)
@@ -498,9 +498,9 @@ fields8 = dev_util.Register_LE(
     obj.bank.b, 120, size=1, bitfield=dev_util.Bitfield_LE({
         'undocumented': 0}))
 
-with LogCapture() as capture, stest.allow_log_mgr(obj, "spec-viol"):
+with LogCapture() as capture, stest.allow_log_mgr(obj.bank.b, "spec-viol"):
     # even reads give messages on log-level 1 first time
-    obj.log_level = 1
+    obj.bank.b.log_level = 1
     undocumented0.read()
     fields8.read()
     stest.expect_equal(
@@ -515,7 +515,7 @@ with LogCapture() as capture, stest.allow_log_mgr(obj, "spec-viol"):
     fields8.read()
     stest.expect_equal(capture.messages, [])
     # and then on log-level 2 they appear again
-    obj.log_level = 2
+    obj.bank.b.log_level = 2
     undocumented0.read()
     undocumented1.read()
     fields8.read()
@@ -532,11 +532,11 @@ with LogCapture() as capture, stest.allow_log_mgr(obj, "spec-viol"):
          + "(value written = 0, contents = 0)."])
     del capture.messages[:]
     # check that we get no additional messages on log-level 1
-    obj.log_level = 1
+    obj.bank.b.log_level = 1
     undocumented0.write(1)
     fields8.write(fields8.bitfield.value(undocumented = 1))
     stest.expect_equal(capture.messages, [])
     # check that write still goes through
     stest.expect_equal(obj.b_undocumented0, 1)
     stest.expect_equal(obj.b_fields8, fields8.bitfield.value(undocumented = 1))
-    obj.log_level = 2
+    obj.bank.b.log_level = 2

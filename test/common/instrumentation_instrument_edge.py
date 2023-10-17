@@ -8,7 +8,7 @@ def callback(connection, access, handle, user_data):
     callback.called = True
 callback.called = False
 
-def test(obj, provider, log_obj):
+def test(obj, provider):
     maxuint = 0xffffffffffffffff
     max_address = maxuint - 3
     assert max_address % 4 == 0
@@ -16,7 +16,7 @@ def test(obj, provider, log_obj):
     handle = provider.register_after_read(None, max_address, 4, callback, None)
 
     edge_register = dev_util.Register_LE(obj.bank.b1, max_address, 4)
-    with stest.expect_log_mgr(log_obj, 'spec-viol'):
+    with stest.expect_log_mgr(obj.bank.b1, 'spec-viol'):
         stest.expect_exception(edge_register.read, [], dev_util.MemoryError)
 
     stest.expect_true(callback.called)
