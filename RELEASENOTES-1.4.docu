@@ -518,4 +518,7 @@
       as the log object instead of the configuration object of the nearest
       enclosing <tt>device</tt>, <tt>port</tt>, <tt>bank</tt> or
       <tt>subdevice</tt> <bug number="SIMICS-11346"/>.
+      This fix is only enabled by default with Simics API version 7 or above.
+      With version 6 or below it must be explicitly enabled by passing
+      <tt>--no-compat=shared_logs_on_device</tt> to DMLC.</add-note></build-id>
 </rn>

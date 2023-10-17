@@ -210,6 +210,7 @@ template device {
     parameter _compat_port_proxy_attrs auto;
     parameter _compat_port_obj_param auto;
     parameter _compat_io_memory auto;
+    parameter _compat_shared_logs_on_device auto;
     parameter _compat_dml12_inline auto;
     parameter _compat_dml12_not auto;
     parameter _compat_dml12_goto auto;

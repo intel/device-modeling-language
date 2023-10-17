@@ -106,6 +106,19 @@ class port_obj_param(CompatFeature):
 
 
 @feature
+class shared_logs_on_device(CompatFeature):
+    '''This compatibility feature changes the semantics of log statements
+    inside shared methods so that they always log on the device object, instead
+    of the nearest enclosing configuration object like with non-shared methods.
+    This behaviour was a bug present since the very introduction of shared
+    methods, which has lead to plenty of script code having become reliant
+    on it, especially in regards to how banks log. This feature preserves the
+    bugged behaviour.'''
+    short = "Make logs inside shared methods always log on the device object"
+    last_api_version = api_6
+
+
+@feature
 class dml12_inline(CompatFeature):
     '''When using `inline` to inline a method in a DML 1.2 device,
     constant arguments passed in typed parameters are inlined as

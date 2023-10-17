@@ -5,6 +5,8 @@
 dml 1.4;
 device test;
 
+/// DMLC-FLAG --no-compat=shared_logs_on_device
+
 import "utility.dml";
 
 template partially_mapped_register is (register, unmapped) {
