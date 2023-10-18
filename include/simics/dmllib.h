@@ -3137,15 +3137,15 @@ UNUSED static inline uint64 _identity_to_key(_identity_t id) {
 typedef struct {
     uint32 port_obj_offset;
     uint32 index_divisor;
-} _dml_log_object_assoc_t;
+} _dml_port_object_assoc_t;
 
 UNUSED static inline conf_object_t *
-_identity_to_logobj(const _dml_log_object_assoc_t *object_assocs,
-                    conf_object_t *dev, _identity_t id) {
-    _dml_log_object_assoc_t obj_assoc = object_assocs[id.id - 1];
-    if (!obj_assoc.index_divisor) return dev;
-    return ((conf_object_t **)((char *)dev + obj_assoc.port_obj_offset))[
-        id.encoded_index / obj_assoc.index_divisor];
+_identity_to_portobj(const _dml_port_object_assoc_t *port_object_assocs,
+                     conf_object_t *dev, _identity_t id) {
+    _dml_port_object_assoc_t portobj_assoc = port_object_assocs[id.id - 1];
+    if (!portobj_assoc.index_divisor) return dev;
+    return ((conf_object_t **)((char *)dev + portobj_assoc.port_obj_offset))[
+        id.encoded_index / portobj_assoc.index_divisor];
 }
 
 static attr_value_t
@@ -3311,7 +3311,6 @@ typedef struct {
     bool valid;
     bool is_bank;
     bool is_array;
-    ptrdiff_t port_obj_offset;
     const char *portname;
 } _dml_attr_parent_obj_proxy_info_t;
 
@@ -3338,6 +3337,7 @@ typedef struct {
 
 UNUSED static void _DML_register_attributes(
     conf_class_t *dev_class, const _id_info_t *id_info_array,
+    const _dml_port_object_assoc_t *port_object_assocs,
     const _vtable_list_t *attribute_vtables, _each_in_t sequence,
     _dml_attr_conf_info_t (*get_attribute_info)(_traitref_t),
     attr_value_t (*get_attr)(void *, conf_object_t *, attr_value_t *),
@@ -3395,10 +3395,13 @@ UNUSED static void _DML_register_attributes(
 
         _dml_attr_parent_obj_proxy_info_t proxy_info = attr_info.proxy_info;
         if (proxy_info.valid) {
+            uint32 port_obj_offset =
+                port_object_assocs[list.id - 1].port_obj_offset;
+            ASSERT(port_obj_offset);
             if (proxy_info.is_array) {
                 ASSERT(id_info.dimensions >= 1);
                 _register_port_array_legacy_proxy_attr(
-                    dev_class, parent_obj_class, proxy_info.port_obj_offset,
+                    dev_class, parent_obj_class, port_obj_offset,
                     id_info.dimsizes[0], proxy_info.is_bank,
                     proxy_info.portname, attr_info.name, get_portobj_attr,
                     set_portobj_attr, attr_info.flags, sb_str(&type),
@@ -3406,7 +3409,7 @@ UNUSED static void _DML_register_attributes(
                     attr_get_info ? attr_get_info : attr_set_info);
             } else {
                 _register_port_legacy_proxy_attr(
-                    dev_class, parent_obj_class, proxy_info.port_obj_offset,
+                    dev_class, parent_obj_class, port_obj_offset,
                     proxy_info.is_bank, proxy_info.portname, attr_info.name,
                     get_portobj_attr, set_portobj_attr, attr_info.flags,
                     sb_str(&type), attr_info.doc,

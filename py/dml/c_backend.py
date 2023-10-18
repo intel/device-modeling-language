@@ -2145,7 +2145,7 @@ def generate_object_vtables_array():
     add_variable_declaration(
         f'void * const _object_vtables[{len(dml.globals.objects)}]', init)
 
-def generate_log_object_assocs_array():
+def generate_port_object_assocs_array():
     items = []
     for node in dml.globals.objects:
         object_node = (node if node.objtype in {'device', 'bank',
@@ -2173,8 +2173,8 @@ def generate_log_object_assocs_array():
         items.append(f'{{{port_obj_offset}, {index_divisor}}}')
     init = f'{{{", ".join(items)}}}'
     add_variable_declaration(
-        'const _dml_log_object_assoc_t '
-        + f'_log_object_assocs[{len(dml.globals.objects)}]',
+        'const _dml_port_object_assoc_t '
+        + f'_port_object_assocs[{len(dml.globals.objects)}]',
         init)
 
 def generate_trait_method(m):
@@ -3328,8 +3328,9 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     generate_events(device)
     generate_identity_data_decls()
     generate_object_vtables_array()
-    if compat.shared_logs_on_device not in dml.globals.enabled_compat:
-        generate_log_object_assocs_array()
+    if not (dml.globals.dml_version == (1, 2)
+            and compat.shared_logs_on_device in dml.globals.enabled_compat):
+        generate_port_object_assocs_array()
     generate_class_var_decl()
     generate_startup_calls_entry_function(device)
     generate_init_data_objs(device)

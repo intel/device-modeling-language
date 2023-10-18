@@ -2649,7 +2649,7 @@ def stmt_log(stmt, location, scope):
         identity = TraitObjIdentity(site, lookup_var(site, scope, "this"))
         logobj = (log_object(site, dml.globals.device, ())
                   if compat.shared_logs_on_device in dml.globals.enabled_compat
-                  else LogObjectFromObjIdentity(site, identity))
+                  else PortObjectFromObjIdentity(site, identity))
 
     if later_level is not None:
         adjusted_later_level = later_level = ctree.as_int(codegen_expression(
