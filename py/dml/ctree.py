@@ -140,7 +140,7 @@ __all__ = (
     'ObjIdentity',
     'TraitObjIdentity',
     'ObjTraitRef',
-    'LogObjectFromObjIdentity',
+    'PortObjectFromObjIdentity',
     'NodeArrayRef',
     'SessionVariableRef',
     'mkNodeRef', 'NodeRef',
@@ -3536,7 +3536,7 @@ class TraitObjIdentity(Expression):
     def read(self):
         return "(%s).id" % (self.traitref.read(),)
 
-class LogObjectFromObjIdentity(Expression):
+class PortObjectFromObjIdentity(Expression):
     priority = dml.expr.Apply.priority
     @auto_init
     def __init__(self, site, identity):
@@ -3546,7 +3546,7 @@ class LogObjectFromObjIdentity(Expression):
         return TNamed('conf_object_t *')
 
     def read(self):
-        return ('_identity_to_logobj(_log_object_assocs, &_dev->obj, '
+        return ('_identity_to_portobj(_port_object_assocs, &_dev->obj, '
                 + f'{self.identity.read()})')
 
 class TraitUpcast(Expression):

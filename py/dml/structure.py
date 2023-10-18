@@ -2619,18 +2619,12 @@ class ConfAttrParentObjectProxyInfoParamExpr(objects.ParamExpr):
             and need_port_proxy_attrs(object_parent)):
             is_bank = 'true' if object_parent.objtype == 'bank' else 'false'
             is_array = 'true' if object_parent.dimensions == 1 else 'false'
-            indices = ((mkLit(self.site, '0', TInt(32, False)),)
-                       if object_parent.dimensions else ())
-            port_obj_offset = (
-                f'offsetof({crep.structtype(dml.globals.device)}, '
-                + f'{crep.cref_portobj(object_parent, indices)})')
 
             self.cached = ctree.mkLit(
                 self.site,
                 '(_dml_attr_parent_obj_proxy_info_t) { .valid = true,'
                 + f'.is_bank = {is_bank}, .is_array = {is_array}, '
-                + f'.port_obj_offset = {port_obj_offset}'
-                + f', .portname = "{object_parent.name}" }}',
+                + f'.portname = "{object_parent.name}" }}',
                 TNamed('_dml_attr_parent_obj_proxy_info_t'))
         else:
             self.cached = mkLit(

@@ -615,6 +615,8 @@ extern typedef struct { } _dml_detached_hook_queue_t;
 // Used by hooks
 session _dml_detached_hook_queue_t *_detached_hook_queue_stack;
 
+extern typedef struct {} _dml_attr_parent_obj_proxy_info_t;
+
 // Shared parameters for attributes, registers and connects, which all produce
 // attributes. Methods get_attribute and set_attribute are abstract.
 template _conf_attribute is object {
@@ -699,14 +701,6 @@ template _conf_attribute is object {
 }
 
 extern typedef size_t ptrdiff_t;
-
-extern typedef struct {
-    bool valid;
-    bool is_bank;
-    bool is_array;
-    ptrdiff_t port_obj_offset;
-    const char *portname;
-} _dml_attr_parent_obj_proxy_info_t;
 
 /**
 ## Attribute objects
@@ -1023,10 +1017,12 @@ method _set_attribute_attr(const _dml_attr_getset_info_t *_conf_info,
 }
 
 extern typedef struct {} _vtable_list_t;
+extern typedef struct {} _dml_port_object_assoc_t;
 
 extern void *_DML_register_attributes(
-    conf_class_t *, const _id_info_t *, const _vtable_list_t *,
-    sequence(_conf_attribute), _dml_attr_conf_info_t (*)(_conf_attribute),
+    conf_class_t *, const _id_info_t *, const _dml_port_object_assoc_t *,
+    const _vtable_list_t *, sequence(_conf_attribute),
+    _dml_attr_conf_info_t (*)(_conf_attribute),
     attr_value_t (*get)(void *, conf_object_t *, attr_value_t *),
     set_error_t (*set)(void *, conf_object_t *, attr_value_t *,
                        attr_value_t *),
@@ -1035,10 +1031,12 @@ extern void *_DML_register_attributes(
                             attr_value_t *));
 
 extern const _vtable_list_t *_each___conf_attribute;
+extern const _dml_port_object_assoc_t *_port_object_assocs;
 
 independent startup method _register_all_attributes() {
     _DML_register_attributes(SIM_get_class(dev.classname),
                              _id_infos,
+                             _port_object_assocs,
                              _each___conf_attribute,
                              each _conf_attribute in (dev),
                              &_get_attribute_info,
