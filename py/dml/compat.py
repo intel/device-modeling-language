@@ -61,7 +61,7 @@ class port_proxy_ifaces(CompatFeature):
     e.g., banks inside groups were not allowed in Simics 5, so such
     banks do not need proxies for backward compatibility.
     '''
-    short = "Don't generate proxy port interfaces for banks and ports"
+    short = "Generate proxy port interfaces for banks and ports"
     last_api_version = api_7
 
 
@@ -75,8 +75,8 @@ class port_proxy_attrs(CompatFeature):
     Proxy attributes are not created for all banks and ports, in the
     same manner as documented in the `port_proxy_ifaces` feature.
     '''
-    short = ("Don't generate top-level proxy attributes"
-             + " for attributes in banks and ports")
+    short = ("Generate top-level proxy attributes for attributes in banks and "
+             + "ports")
     last_api_version = api_7
 
 
@@ -101,19 +101,20 @@ class port_obj_param(CompatFeature):
     the `obj` parameter of banks and ports resolves to `dev.obj`
     rather than the port object.
     '''
-    short = "bank.obj and port.obj resolve to dev.obj"
+    short = "Make 'obj' of ports and banks resolve to 'dev.obj'"
     last_api_version = api_5
 
 
 @feature
 class dml12_inline(CompatFeature):
     '''When using `inline` to inline a method in a DML 1.2 device,
-    constant parameters passed in typed arguments are inlined as
+    constant arguments passed in typed parameters are inlined as
     constants when this feature is enabled. This can improve
     compilation time in some cases, but has some unintuitive semantic
     implications.
     '''
-    short = "Don't inline method arguments with a declared type in DML 1.2"
+    short = ("Make inline method calls in DML 1.2 inline every constant "
+             + "argument, even when typed")
     last_api_version = api_6
 
 
@@ -123,7 +124,7 @@ class dml12_not(CompatFeature):
     '''DML 1.2-specific: the operand of the `!` operator is not
     type-checked; in particular, negation expressions on the form
     `!$reg`, where `reg` is a register, are permitted'''
-    short = "Disallow ! operator on register references in DML 1.2"
+    short = "Allow ! operator on register references in DML 1.2"
     last_api_version = api_5
 
 
@@ -163,7 +164,7 @@ class dml12_misc(CompatFeature):
       `constant` or `loggroup`)
 
     '''
-    short = "Disable various DML 1.2 quirks"
+    short = "Enable various legacy DML 1.2 quirks"
     last_api_version = api_6
 
 
@@ -175,7 +176,7 @@ class dml12_goto(CompatFeature):
     block; since this is sometimes nontrivial, it can be useful to disable
     the `goto` statement separately.
     '''
-    short = "Disable the goto statement in DML 1.2"
+    short = "Enable the goto statement in DML 1.2"
     last_api_version = api_6
 
 

@@ -299,11 +299,13 @@ features that are scheduled for removal in a future API version.''')
                     > compat.apis[default_api_version()])):
                 by_version.setdefault(feature.last_api_version, []).append(
                     feature)
+        longest_name = max(len(name) for name in compat.features)
         for (api, features) in sorted(by_version.items()):
             print(f'  Features available with --simics-api={api.str}'
                   ' or older:')
             for feature in sorted(features, key=lambda f: f.tag()):
-                print(f'    {feature.tag():20s} {feature.short}')
+                print(f'    {feature.tag().ljust(longest_name)} '
+                      + feature.short)
 
 def main(argv):
     # DML files must be utf8, but are generally opened without specifying
