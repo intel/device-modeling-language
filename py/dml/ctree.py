@@ -1094,21 +1094,12 @@ def truncate_int_bits(value, signed, bits=64):
         return value & mask
 
 class LValue(Expression):
-    "Somewhere to read or write data"
+    """An expression whose C representation is always an LValue, whose address
+    is always safe to take, in the sense that the duration that address
+    remains valid is intuitively predictable by the user"""
     writable = True
-
-    def write(self, source):
-        rt = realtype(self.ctype())
-        if isinstance(rt, TEndianInt):
-            return (f'{rt.dmllib_fun("copy")}(&{self.read()},'
-                    + f' {source.read()})')
-        return '%s = %s' % (self.read(), source.read())
-
-    @property
-    def is_stack_allocated(self):
-        '''Returns true only if it's known that writing to the lvalue will
-           write to stack-allocated data'''
-        return False
+    addressable = True
+    c_lval = True
 
 class IfExpr(Expression):
     priority = 30
@@ -2524,13 +2515,13 @@ class AddressOf(UnaryOp):
                                TPtr(TVoid())],
                               TVoid())))
         if (compat.dml12_misc not in dml.globals.enabled_compat
-            and not isinstance(rh, LValue)):
+            and not rh.addressable):
             raise ERVAL(rh.site, '&')
         return AddressOf(site, rh)
 
     @property
     def is_pointer_to_stack_allocation(self):
-        return isinstance(self.rh, LValue) and self.rh.is_stack_allocated
+        return self.rh.is_stack_allocated
 
 def mkAddressOf(site, rh):
     if dml.globals.compat_dml12_int(site):
@@ -2568,7 +2559,8 @@ class Dereference(UnaryOp, LValue):
 
     @property
     def is_pointer_to_stack_allocation(self):
-        return isinstance(self.type, TArray) and self.is_stack_allocated
+        return (isinstance(safe_realtype_shallow(self.type), TArray)
+                and self.is_stack_allocated)
 
 mkDereference = Dereference.make
 
@@ -2690,7 +2682,7 @@ def mkUnaryPlus(site, rh):
         rh, _ = promote_integer(rh, rhtype)
     else:
         raise ICE(site, "Unexpected arith argument to unary +")
-    if isinstance(rh, LValue):
+    if rh.addressable or rh.writable:
         # +x is a rvalue
         rh = mkRValue(rh)
     return rh
@@ -2716,7 +2708,7 @@ class IncDec(UnaryOp):
         rhtype = safe_realtype(rh.ctype())
         if not isinstance(rhtype, (IntegerType, TPtr)):
             raise EINCTYPE(site, cls.op)
-        if not isinstance(rh, LValue):
+        if not rh.addressable:
             if isinstance(rh, BitSlice):
                 hint = 'try %s= 1' % (cls.base_op[0],)
             else:
@@ -4293,11 +4285,13 @@ class StaticVariable(Variable):
 
 mkStaticVariable = StaticVariable
 
-class StructMember(LValue):
+class StructMember(Expression):
     priority = 160
     explicit_type = True
     @auto_init
     def __init__(self, site, expr, sub, type, op):
+        # Write of StructMembers rely on them being C lvalues
+        assert not expr.writable or expr.c_lval
         assert_type(site, expr, Expression)
         assert_type(site, sub, str)
 
@@ -4314,11 +4308,12 @@ class StructMember(LValue):
 
     @property
     def is_stack_allocated(self):
-        return isinstance(self.expr, LValue) and self.expr.is_stack_allocated
+        return self.expr.is_stack_allocated
 
     @property
     def is_pointer_to_stack_allocation(self):
-        return isinstance(self.type, TArray) and self.is_stack_allocated
+        return (isinstance(safe_realtype_shallow(self.type), TArray)
+                and self.is_stack_allocated)
 
 def mkSubRef(site, expr, sub, op):
     if isinstance(expr, NodeRef):
@@ -4425,18 +4420,28 @@ class ArrayRef(LValue):
 
     @property
     def is_pointer_to_stack_allocation(self):
-        return isinstance(self.type, TArray) and self.is_stack_allocated
+        return (isinstance(safe_realtype_shallow(self.type), TArray)
+                and self.is_stack_allocated)
 
-class VectorRef(LValue):
+class VectorRef(Expression):
     slots = ('type',)
     @auto_init
     def __init__(self, site, expr, idx):
+        assert not expr.writable or expr.c_lval
         self.type = realtype(self.expr.ctype()).base
     def read(self):
         return 'VGET(%s, %s)' % (self.expr.read(), self.idx.read())
-    def write(self, source):
-        return "VSET(%s, %s, %s)" % (self.expr.read(), self.idx.read(),
-                                     source.read())
+    # No need for write, VGET results in an lvalue
+
+    @property
+    def writable(self):
+        return self.expr.writable
+    @property
+    def addressable(self):
+        return self.expr.addressable
+    @property
+    def c_lval(self):
+        return self.expr.c_lval
 
 def mkIndex(site, expr, idx):
     if isinstance(idx, NonValue):
@@ -4510,7 +4515,7 @@ class Cast(Expression):
 
     @property
     def is_pointer_to_stack_allocation(self):
-        return (isinstance(self.type, TPtr)
+        return (isinstance(safe_realtype_shallow(self.type), TPtr)
                 and self.expr.is_pointer_to_stack_allocation)
 
 def mkCast(site, expr, new_type):
@@ -4653,7 +4658,6 @@ def mkCast(site, expr, new_type):
 class RValue(Expression):
     '''Wraps an lvalue to prohibit write. Useful when a composite
     expression is reduced down to a single variable.'''
-    writable = False
     @auto_init
     def __init__(self, site, expr): pass
     def __str__(self):
@@ -4662,10 +4666,19 @@ class RValue(Expression):
         return self.expr.ctype()
     def read(self):
         return self.expr.read()
-    def discard(self): pass
+    def discard(self):
+        return self.expr.discard()
+    # Since addressable and readable are False this may only ever be leveraged
+    # by DMLC for optimization purposes
+    @property
+    def c_lval(self):
+        return self.expr.c_lval
+    @property
+    def is_pointer_to_stack_allocation(self):
+        return self.expr.is_pointer_to_stack_allocation
 
 def mkRValue(expr):
-    if isinstance(expr, LValue) or expr.writable:
+    if expr.addressable or expr.writable:
         return RValue(expr.site, expr)
     return expr
 

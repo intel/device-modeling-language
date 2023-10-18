@@ -1148,7 +1148,7 @@ def expr_unop(tree, location, scope):
     elif op == 'post--':  return mkPostDec(tree.site, rh)
     elif op == 'sizeof':
         if (compat.dml12_misc not in dml.globals.enabled_compat
-            and not isinstance(rh, ctree.LValue)):
+            and not rh.addressable):
             raise ERVAL(rh.site, 'sizeof')
         return codegen_sizeof(tree.site, rh)
     elif op == 'defined': return mkBoolConstant(tree.site, True)
@@ -1538,7 +1538,7 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
                     etype = expr.node_type
                 else:
                     raise expr.exc()
-            elif (not isinstance(expr, ctree.LValue)
+            elif (not expr.addressable
                   and compat.dml12_misc not in dml.globals.enabled_compat):
                 raise ERVAL(expr.site, 'typeof')
             else:
