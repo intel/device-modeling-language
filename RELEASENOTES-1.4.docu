@@ -50,7 +50,7 @@
     changed: If the path
     starts with <tt>./</tt> or <tt>../</tt>, the path is now
     interpreted relative to the directory of the importing file
-    <bug number="2209506845"/>. </add-note></build-id>
+    <bug number="HSD-2209506845"/>. </add-note></build-id>
   <build-id value="6024"><add-note> Fixed a problem where parameters defined in
     global scope in DML
     1.4 (typically auto-converted from a DML 1.2 <tt>constant</tt>)
@@ -89,7 +89,7 @@
   <build-id value="6046"><add-note> In <tt>switch</tt> statements,
     <tt>case</tt> labels are now
     permitted inside <tt>#if</tt> blocks
-    <bug number="14011267833"/>. </add-note></build-id>
+    <bug number="HSD-14011267833"/>. </add-note></build-id>
   <build-id value="6046"><add-note> Fixed an issue where the <tt>++</tt> and
     <tt>--</tt> operators could not
     be applied to pointers. </add-note></build-id>
@@ -163,17 +163,17 @@
   <build-id value="6079"><add-note> <tt>saved</tt> variable
     declarations are now available. These can be used to declare
     variables that behave similarly to <tt>session</tt> variables,
-    but that are automatically checkpointed.
+    but that are automatically checkpointed
     <bug number="SIMICS-7031"/>. </add-note></build-id>
   <build-id value="6079"><add-note> If a <tt>static</tt> variable is
     declared within a method declared under an object array, it will
     now result in a separate instance of the variable for each
-    instance of the containing object.
+    instance of the containing object
     <bug number="SIMICS-13738"/>. </add-note></build-id>
   <build-id value="6079"><add-note> Fixed a bug that caused a crash
       in <tt>print-device-regs</tt> and related commands, when
       inspecting a function-mapped bank array in a DML 1.4 device
-      <bug number="1508646546"/>.</add-note></build-id>
+      <bug number="HSD-1508646546"/>.</add-note></build-id>
   <build-id value="6080"><add-note> If a method argument has mismatching
       type in an override, then an error will now be
       reported <bug number="SIMICS-9337"/>.</add-note></build-id>
@@ -282,7 +282,7 @@
       </pre></add-note></build-id>
   <build-id value="6143"><add-note>Added an optimization that
       reduces the compile time for devices with huge register arrays
-      <bug number="SIMICS-7038"/> </add-note></build-id>
+      <bug number="SIMICS-7038"/>.</add-note></build-id>
   <build-id value="6143"><add-note> Added support for cancelling events posted
       via <tt>after</tt> statement through the use of the
       <tt>cancel_after()</tt> method, provided as part of the <tt>object</tt>
@@ -294,7 +294,7 @@
   <build-id value="6147"><add-note> When declaring an object array, any
       dimension size specification may now be omitted if already defined through
       a different declaration of the same object array
-      <bug number="22014423596"/>. Omission is done by specifying <tt>...</tt>
+      <bug number="HSD-22014423596"/>. Omission is done by specifying <tt>...</tt>
       instead of the dimension size; for example, the following is now
       supported:
       <pre>
@@ -368,7 +368,7 @@
       suppress logging.</add-note></build-id>
   <build-id value="6177"><add-note>Removed the generation of some
       broken <tt>#line</tt> directives that caused problems in code
-      coverage reports <bug number="18024044100"/>.</add-note></build-id>
+      coverage reports <bug number="HSD-18024044100"/>.</add-note></build-id>
   <build-id value="6177"><add-note>When using designated initializers, partial
       initialization is now possible through trailing <tt>...</tt> syntax
       <bug number="SIMICS-18705"/>. Members not explicitly initialized are
@@ -439,18 +439,18 @@
   <build-id value="6195"><add-note>Fixed Windows-specific gcc compile
       error on DMLC-generated code, caused by name clashes with
       the <tt>interface</tt> macro, defined by <tt>windows.h</tt>
-      <bug number="15012582368"/>.</add-note></build-id>
+      <bug number="HSD-15012582368"/>.</add-note></build-id>
   <build-id value="6200"><add-note>Fixed a bug in <tt>saved</tt>
       variables that caused stack overflow during checkpoint restore
       for huge (multi-megabyte) struct types
-      <bug number="18026246959"/>.</add-note></build-id>
+      <bug number="HSD-18026246959"/>.</add-note></build-id>
   <build-id value="6205"><add-note> <tt>--coverity</tt> has been added as an
       option to DMLC. When used, DMLC will generate Synopsys® Coverity® analysis
       annotations to suppress common false positives in generated C code created
       from DML 1.4 devices.</add-note></build-id>
   <build-id value="6205"><add-note> Fixed an ICE caused by constant inlined
       method parameters being used in constant equalities
-      <bug number="16019548195"/>.</add-note></build-id>
+      <bug number="HSD-16019548195"/>.</add-note></build-id>
   <build-id value="6205"><add-note> Fixed an issue with debuggable compilation
       (<tt>-g</tt>) that caused <tt>inline</tt> method calls to inline constant
       arguments even for parameters not declared <tt>inline</tt>
