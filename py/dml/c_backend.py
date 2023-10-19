@@ -2124,14 +2124,8 @@ def generate_port_object_assocs_array():
                        else node.object_parent)
         if (object_node is not dml.globals.device
             # Anonymous banks
-            and not (compat.dml12_misc in dml.globals.enabled_compat
-                     and object_node.ident is None)
-            # HACK compile errors may lead to .name of nodes never being set.
-            # This issue has proven difficult to fix due to multiple technical
-            # debts, most egregiously that the various uses of
-            # dml.globals.objects and dml.globals.hooks don't properly take
-            # into account the possibility of objects becoming rejected
-            and object_node.name is not None):
+            and (compat.dml12_misc not in dml.globals.enabled_compat
+                 or object_node.ident is not None)):
             port_obj_offset = (
                 f'offsetof({crep.structtype(dml.globals.device)}, '
                 + f'{crep.cref_portobj(object_node, ())})')
