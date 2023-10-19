@@ -1925,7 +1925,9 @@ def codegen_statements(trees, *args):
     return stmts
 
 def codegen_statement(tree, *args):
-    return mkCompound(tree.site, codegen_statements([tree], *args))
+    rbrace_site = tree.args[1] if tree.kind == 'compound' else None
+    return mkCompound(tree.site, codegen_statements([tree], *args),
+                      rbrace_site)
 
 @statement_dispatcher
 def stmt_compound(stmt, location, scope):
@@ -3576,7 +3578,7 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
             else:
                 param_scope.add_variable(parmname,
                                          type = parmtype or arg.ctype(),
-                                         site = meth_node.site,
+                                         site = arg.site,
                                          init = ExpressionInitializer(arg))
                 arg.decref()
 
