@@ -30,6 +30,7 @@ def project_host_path():
 sys.path.append(join(project_host_path(), 'bin', 'dml', 'python'))
 import dml.globals
 import dead_dml_methods
+from dead_dml_methods import line_directive_re
 
 class TestFail(Exception):
     def __init__(self, reason):
@@ -1507,6 +1508,168 @@ class DeadMethods(CTestCase):
 all_tests.append(DeadMethods(["dead_methods"],
                              join(testdir, "1.4", "misc", "dead_methods.dml")))
 
+
+func_start_re = re.compile(r'^static +\S+ +(\S+)\(.*\)$')
+begin_linemarks_func_re = re.compile(r'^// BEGIN-LINEMARKS-FUNC((?:\s+\S+)+)$')
+
+class Linemarks(CTestCase):
+    __slots__ = ()
+
+    def dml_lines_iter(self, c_file, c_lines_iter):
+        reset = True
+        dml_lineno = None
+        curr_func = None
+        for (c_lineno, line) in enumerate(c_lines_iter, 1):
+            if dml_lineno is not None:
+                dml_lineno += 1
+            line = line.rstrip()
+            m = line_directive_re.match(line)
+            if m is not None:
+                (lineno, filename) = m.groups()
+                lineno = int(lineno)
+                if (Path(self.scratchdir) / filename == c_file):
+                    assert not reset, \
+                        f"Redundant line directive reset at {c_lineno}"
+                    assert lineno == c_lineno + 1, \
+                        f"Incorrect line directive reset at {c_lineno}"
+                    reset = True
+                    dml_lineno = None
+                elif filename.endswith(self.filename):
+                    assert dml_lineno != lineno, \
+                            (f'Redundant linemark for {dml_lineno} at '
+                             + f'{c_lineno}')
+                    reset = False
+                    dml_lineno = lineno - 1
+                else:
+                    reset = False
+                    dml_lineno = None
+                continue
+            m = func_start_re.match(line)
+            if m is not None:
+                assert curr_func is None
+                curr_func = m.group(1)
+                assert reset, \
+                    f'Line directive not reset by start of {curr_func}'
+                continue
+            if dml_lineno is not None:
+                yield (dml_lineno, c_lineno, curr_func)
+            if curr_func is not None and line == '}':
+                curr_func = None
+
+        assert reset, "Line directive not reset by end of C file"
+        assert curr_func is None, "Unterminated C function"
+
+    def parse_annotations(self):
+        base_file = Path(self.filename).resolve()
+
+        func_spans : dict[str, set[(int, int)]] = {}
+        cblock_spans : dict[int, int] = {}
+        not_linemarked : set(int) = set()
+        with open(base_file) as base_file_handle:
+            curr_span = None
+            for (lineno, line) in enumerate(base_file_handle, 1):
+                line = line.strip()
+                m = begin_linemarks_func_re.match(line)
+                if m:
+                    assert curr_span is None, \
+                           f'Unterminated span: {curr_span[1:]}'
+                    curr_span = (func_spans, m.group(1).split(), lineno + 1)
+                elif line == '// BEGIN-LINEMARKS-CBLOCK':
+                    curr_span = (cblock_spans, lineno + 1)
+                elif line == '// END-LINEMARKS':
+                    assert curr_span is not None, f'No span to end at {lineno}'
+                    if curr_span[0] is func_spans:
+                        for func in curr_span[1]:
+                            func_spans.setdefault(func, set()).add(
+                                (curr_span[2], lineno - 1))
+                    else:
+                        cblock_spans[curr_span[1]] = lineno - 1
+                    curr_span = None
+                elif line == '// NOT-LINEMARKED':
+                    assert (curr_span is not None
+                            and curr_span[0] is func_spans), \
+                           (f"{lineno}: // NOT-LINEMARKED used outside of "
+                            + "LINEMARKS-FUNC block")
+                    not_linemarked.add(lineno + 1)
+                if (curr_span is not None and curr_span[0] is func_spans
+                    and (not line or line.startswith('//'))):
+                    not_linemarked.add(lineno)
+            assert curr_span is None, f'Unterminated span: {curr_span[1:]}'
+
+        return (func_spans, cblock_spans, not_linemarked)
+
+    def analyze_c_files(self, files, func_spans, cblock_spans, not_linemarked):
+        expected_func_lines = {
+            name: { line: False
+                   for (start, end) in ranges
+                   for line in range(start, end + 1)
+                   if line not in not_linemarked }
+            for (name, ranges) in func_spans.items()}
+        found_cblocks = set()
+        for curr_file in files:
+            with open(curr_file) as file_handle:
+                curr_cblock_expected = []
+                for (dml_lineno, c_lineno, curr_func) in self.dml_lines_iter(
+                        curr_file, file_handle.readlines()):
+                    if curr_cblock_expected:
+                        (expected_dml_lineno,
+                         expected_c_lineno) = curr_cblock_expected.pop()
+                        assert ((dml_lineno, c_lineno)
+                                == (expected_dml_lineno, expected_c_lineno)), \
+                               (f'In {curr_file}: Expected DML line '
+                                + f'{expected_dml_lineno} at '
+                                + f'{expected_c_lineno}, not DML line '
+                                + f'{dml_lineno} at {c_lineno}')
+                        continue
+                    if dml_lineno in cblock_spans:
+                        found_cblocks.add(dml_lineno)
+                        curr_cblock_expected[:] = (
+                            (line, c_lineno + (line - dml_lineno))
+                            for line in range(dml_lineno + 1,
+                                              cblock_spans[dml_lineno] + 1)
+                            if not line in not_linemarked)
+                        # Need to reverse as .pop() pops from the end
+                        curr_cblock_expected.reverse()
+                        continue
+                    assert (curr_func in expected_func_lines
+                            and dml_lineno in expected_func_lines[curr_func]),\
+                           (f'In {curr_file}: Unexpected DML line '
+                            + f'{dml_lineno} at {c_lineno} '
+                            + (f'(inside {curr_func})' if curr_func else
+                               '(top-level)'))
+                    expected_func_lines[curr_func][dml_lineno] = True
+
+                assert not curr_cblock_expected, \
+                       ('Unterminated C block: expected: '
+                        + f'({curr_cblock_expected})')
+
+        remaining_cblocks = [c_block for c_block in cblock_spans
+                             if not c_block in found_cblocks]
+
+        assert not remaining_cblocks, \
+            f'Linemarked C blocks missing: {remaining_cblocks}'
+        for (func_name, lines) in expected_func_lines.items():
+            for (line, was_linemarked) in lines.items():
+                assert was_linemarked, \
+                    f'DML line {line} not found inside {func_name}'
+
+    def test(self):
+        super().test()
+        c_file = Path(f'{self.cfilename}.c').resolve()
+        h_file = Path(f'{self.cfilename}.h').resolve()
+        self.analyze_c_files((c_file, h_file),
+                             *self.parse_annotations())
+
+
+all_tests.append(Linemarks(["linemarks"],
+                           join(testdir, "1.4", "misc", "linemarks.dml")))
+# DMLC_GATHER_SIZE_STATISTICS=1 will cause StrOutput to be used when generating
+# functions.
+# This tests that linemark generation still functions properly in that
+# circumstance.
+all_tests.append(Linemarks(["linemarks-size-stats"],
+                           join(testdir, "1.4", "misc", "linemarks.dml"),
+                           extraenv={'DMLC_GATHER_SIZE_STATISTICS': '1'}))
 
 class CompareIllegalAttrs(BaseTestCase):
     __slots__ = ()

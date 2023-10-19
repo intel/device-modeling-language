@@ -736,6 +736,10 @@ class If(Statement):
         assert_type(site, truebranch, Statement)
         assert_type(site, falsebranch, (Statement, type(None)))
     def toc_stmt(self):
+        # When needed as a single statement, if-else statements are wrapped in
+        # braces. This is to avoid ambiguity in generated C if this if-else is
+        # used as branch of another if-else, which GCC would otherwise complain
+        # about
         site_linemark(self.site)
         out('{\n',postindent=1)
         self.toc_inline()
@@ -4826,6 +4830,9 @@ class ExpressionInitializer(Initializer):
         return "%s" % self.expr
     def __repr__(self):
         return "ExpressionInitializer(%r)" % self.expr
+    @property
+    def site(self):
+        return self.expr.site
     def incref(self):
         self.expr.incref()
     def decref(self):
@@ -5034,7 +5041,7 @@ class Declaration(Statement):
             # ducks a potential GCC warning, and also serves to
             # zero-initialize VLAs
             self.type.print_declaration(self.name, unused = self.unused)
-            self.linemark()
+            site_linemark(self.init.site)
             self.init.assign_to(mkLit(self.site, self.name, self.type),
                                 self.type)
         else:
@@ -5100,7 +5107,11 @@ class CText(Code):
         if dml.globals.linemarks:
             linemark(self.site.lineno, path)
         out(self.text)
-        out('\n#undef %s\n' % (ident,))
+        if not output.current().bol:
+            out('\n')
+        if dml.globals.linemarks:
+            reset_line_directive()
+        out('#undef %s\n' % (ident,))
 
 mkCText = CText
 

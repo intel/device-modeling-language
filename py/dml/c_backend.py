@@ -1874,7 +1874,7 @@ def generate_init_data_objs(device):
                         else:
                             markers = ([('store_writes_const_field', 'FALSE')]
                                        if deep_const(node._type) else [])
-                            coverity_markers(markers, node.site)
+                            coverity_markers(markers, init.site)
                             init.assign_to(nref, node._type)
             else:
                 index_exprs = ()
@@ -1888,7 +1888,7 @@ def generate_init_data_objs(device):
                 with allow_linemarks():
                     markers = ([('store_writes_const_field', 'FALSE')]
                                if deep_const(node._type) else [])
-                    coverity_markers(markers, node.site)
+                    coverity_markers(markers, init.site)
                     init.assign_to(nref, node._type)
                 for _ in range(node.dimensions):
                     out('}\n', postindent=-1)
@@ -2153,7 +2153,7 @@ def generate_trait_method(m):
     out('/* %s */\n' % (str(m),))
     start_function_definition(m.declaration())
     with allow_linemarks():
-        site_linemark(m.site)
+        site_linemark(m.astbody.site)
         out('{\n', postindent=1)
         code.toc_inline()
         site_linemark(m.rbrace_site)

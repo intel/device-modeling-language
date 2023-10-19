@@ -221,7 +221,7 @@ class TraitMethod(TraitVTableItem):
               if not self.independent else contextlib.nullcontext()):
             scope = MethodParamScope(self.trait.scope(global_scope))
             implicit_inargs = self.vtable_trait.implicit_args()
-            site = self.site
+            site = SimpleSite(self.site.loc())
             if self.default_trait:
                 default_method = self.default_trait.method_impls[self.name]
                 [(name, typ)] = implicit_inargs
@@ -229,7 +229,7 @@ class TraitMethod(TraitVTableItem):
                     'default',
                     TraitMethodDirect(
                         default_method.site,
-                        mkLit(self.site, cident(name), typ),
+                        mkLit(site, cident(name), typ),
                         default_method),
                     site)
             else:
@@ -239,7 +239,7 @@ class TraitMethod(TraitVTableItem):
             for (n, t) in self.outp:
                 # See SIMICS-19028
                 if deep_const(t):
-                    raise ICE(site,
+                    raise ICE(self.site,
                               'Methods with (partially) const output/return '
                               + 'values are not yet supported.')
 
@@ -249,7 +249,7 @@ class TraitMethod(TraitVTableItem):
             else:
                 memoization = None
             body = codegen_method(
-                self.site, self.inp, self.outp, self.throws, self.independent,
+                self.astbody.site, self.inp, self.outp, self.throws, self.independent,
                 memoization, self.astbody, default,
                 Location(dml.globals.device, ()), scope, self.rbrace_site)
 
