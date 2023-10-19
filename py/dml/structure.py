@@ -1461,9 +1461,10 @@ def mkobj2(obj, obj_specs, params, each_stmts):
     # to site. For name collision detection.
     symbols = {param.name: param.site for param in params}
     if dml.globals.dml_version == (1, 4):
-        objname = param_str(obj, 'name')
+        objname = param_str_fixup(obj, 'name', obj.ident)
         if not ident_re.match(objname):
-            raise ENAMEID(param_expr_site(obj, 'name'), objname)
+            report(ENAMEID(param_expr_site(obj, 'name'), objname))
+            objname = obj.ident
         obj.name = objname
     else:
         obj.name = obj.ident
