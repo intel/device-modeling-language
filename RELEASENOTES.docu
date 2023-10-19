@@ -1453,7 +1453,7 @@
   <build-id value="6008"><add-note> In the <file>io-memory.dml</file> standard
     library file,
     the <fun>operation</fun> method is now marked <tt>default</tt>
-    <bug number="1507149841"/>. </add-note></build-id>
+    <bug number="HSD-1507149841"/>. </add-note></build-id>
   <build-id value="6008"><add-note> A new parameter <tt>dml_1_2</tt> has been
     added to device
     scope. The parameter is true, but will be false in future
@@ -1472,7 +1472,7 @@
     attribute <tt><v>bank</v>_<v>attr</v></tt> in the device upon
     object creation. Previously, required attributes had to be set
     directly on the bank object
-    <bug number="2207518293"/>. </add-note></build-id>
+    <bug number="HSD-2207518293"/>. </add-note></build-id>
   <build-id value="6012"><add-note> Initial release of DML version 1.4. The new
     language version is
     documented in the <em>DML 1.4 reference manual</em>
@@ -1522,7 +1522,7 @@
   <build-id value="6028"><add-note> Add support to <tt>header</tt> sections for
     including a <tt>.h</tt>
     file relative to the currently imported DML file
-    <bug number="2209645860"/>. </add-note></build-id>
+    <bug number="HSD-2209645860"/>. </add-note></build-id>
   <build-id value="6030"><add-note> Fixed a bug where the
     <tt>DMLDIR_<v>&lt;name&gt;</v>_H</tt> macro was
     undefined when generating dependency files. </add-note></build-id>
@@ -1613,7 +1613,7 @@
     parameter of the register or attribute. </add-note></build-id>
   <build-id value="6075"><add-note> Fixed a bug that could cause a segmentation
       fault when instantiating a device with register arrays following
-      certain patterns <bug number="1508585437"/>.</add-note></build-id>
+      certain patterns <bug number="HSD-1508585437"/>.</add-note></build-id>
   <build-id value="6079"><add-note> If an array of <tt>connect</tt>
     objects is declared
     as <tt>configuration=optional</tt>, then it is now permitted to
@@ -1677,7 +1677,7 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
       path. </add-note></build-id>
   <build-id value="6132"><add-note> Fixed a problem with `log error`
       statements when there are more than 32 log groups
-      <bug number="1305472692"/>. </add-note></build-id>
+      <bug number="HSD-1305472692"/>. </add-note></build-id>
   <build-id value="6132"><add-note> Unicode BiDi control characters
       are no longer permitted in DML source files, for security
       reasons. </add-note></build-id>
@@ -1698,7 +1698,7 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
       </pre></add-note></build-id>
   <build-id value="6141"><add-note> <tt>break</tt> may now be used within
       <tt>foreach</tt> statements in DML 1.2 and <tt>#foreach</tt> statements in
-      DML 1.4 <bug number="1309451301"/>.
+      DML 1.4 <bug number="HSD-1309451301"/>.
   </add-note></build-id>
   <build-id value="6143"><add-note> (Partially) const-qualified <tt>session</tt>
       variables no longer result in invalid generated C
@@ -1726,7 +1726,7 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
   </add-note></build-id>
   <build-id value="6247"><add-note> Added a warning for if a specified log
       level of a log statement is likely intended to instead specify the log
-      groups, and/or vice versa <bug number="22018374443"/>.
+      groups, and/or vice versa <bug number="HSD-22018374443"/>.
       This warning is only enabled by default with Simics API version 7 or
       above. With version 6 and below it must be explicitly enabled by passing
       <tt>--warn=WLOGMIXUP</tt> to DMLC.</add-note></build-id>

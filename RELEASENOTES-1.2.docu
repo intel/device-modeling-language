@@ -6,8 +6,8 @@
 <rn id="dml-1.2">
   <name>Device Modeling Language (DML) 1.2</name>
   <build-id value="6012"><add-note> Fixed a bug that caused a crash on the
-    expression
-    <tt>1 &lt;&lt; 64</tt> <bug number="1306575446"/>. </add-note></build-id>
+    expression <tt>1 &lt;&lt; 64</tt>
+    <bug number="HSD-1306575446"/>.</add-note></build-id>
   <build-id value="6018"><add-note> The <tt>read</tt> and <tt>write</tt>
     templates have been moved from
     utility.dml to always be included into 1.2 DML files. Additionally
@@ -23,7 +23,7 @@
     changed: If the path
     starts with <tt>./</tt>, the path is now interpreted relative to
     the directory of the importing file
-    <bug number="2209506845"/>. </add-note></build-id>
+    <bug number="HSD-2209506845"/>. </add-note></build-id>
   <build-id value="6024"><add-note> Fixed a bug that caused a bad warning and
     incorrect code when
     the operand to <tt>sizeof</tt> is an identifier that can be
@@ -49,7 +49,7 @@
   <build-id value="6031"><add-note> Fixed a bug in nested <tt>foreach</tt>
     loops when traversing
     register arrays inside bank arrays
-    <bug number="1809370911"/>. </add-note></build-id>
+    <bug number="HSD-1809370911"/>. </add-note></build-id>
   <build-id value="6036"><add-note> It is now permitted to use the
     <tt>nothrow</tt> annotation on a
     method override even if the overridden method does not. This is
@@ -96,30 +96,31 @@
   <build-id value="6054"><add-note>Fixed a crash on methods marked
     <tt>nothrow</tt> and
     multiple return arguments, returning a typed template or struct type
-    <bug number="18012036595"/>. </add-note></build-id>
+    <bug number="HSD-18012036595"/>. </add-note></build-id>
   <build-id value="6054"><add-note>The file <tt>dml12-compatibility.dml</tt>
     now adds a
     parameter <tt>val</tt> to <tt>field</tt> objects. </add-note></build-id>
   <build-id value="6059"><add-note>Unmapped registers names are now properly
     anonymized according
     to _confidentiality
-    <bug number="1508117636"/>. </add-note></build-id>
+    <bug number="HSD-1508117636"/>. </add-note></build-id>
   <build-id value="6066"><add-note> Fixed a regression in use cases where
     <tt>if</tt> has a
     constant condition, and the taken branch consists of a variable
     declaration. I.e., if the code <tt>if (true) local int x;</tt>
     appears in a scope, then the variable <tt>x</tt> is now added to
-    that scope <bug number="18013028128"/>. </add-note></build-id>
+    that scope <bug number="HSD-18013028128"/>. </add-note></build-id>
   <build-id value="6079"><add-note> If a <tt>static</tt> variable is
     declared within a method declared under an object array, it will
     now result in a separate instance of the variable for each
-    instance of the containing object.
+    instance of the containing object
     <bug number="SIMICS-13738"/>. </add-note></build-id>
   <build-id value="6082"><add-note> It is no longer possible to
       override the <tt>loggroup</tt> parameter inside a <tt>group</tt>
       object. </add-note></build-id>
   <build-id value="6082"><add-note> Added documentation of the <tt>nothrow</tt>
-      annotation for methods <bug number="18012035545"/>. </add-note></build-id>
+      annotation for methods
+      <bug number="HSD-18012035545"/>. </add-note></build-id>
   <build-id value="6096"><add-note> Fixed a compile error when a DML
       1.2 device imports a DML 1.4 file that declares a <tt>saved</tt>
       variable inside a register or field
@@ -129,7 +130,7 @@
       <bug number="SIMICS-17308"/>. </add-note></build-id>
   <build-id value="6122"><add-note> Added the <tt>--state-change-dml12</tt>
       flag, allowing the use of an incomplete version of state change notifiers
-      in DML 1.2 devices<bug number="SIMICS-17952"/>.</add-note></build-id>
+      in DML 1.2 devices <bug number="SIMICS-17952"/>.</add-note></build-id>
   <build-id value="6124"><add-note> Fixed an issue when using the
       <tt>--state-change-dml12</tt> flag together with the
       <tt>--split-c-file</tt> flag
