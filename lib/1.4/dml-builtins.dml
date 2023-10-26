@@ -568,6 +568,8 @@ template device {
     // this carried semantics in DML 1.2; deprecated in 1.4
     param _confidentiality          = undefined;
 
+    session conf_object_t *_current_initiator;
+
     method _init() { _rec_init(); }
     method _post_init() { _rec_post_init(); }
     method init() default {}
@@ -2007,52 +2009,78 @@ template bank is (object, shown_desc) {
             return 0;
         }
 
-        local register hits[8];
-        local int num_hits;
-        local uint64 unmapped_bytes;
+        local uint64 readval = 0;
+        local bool ok = true;
 
         local uint64 size = _enabled_bytes_to_size(enabled_bytes);
-        (num_hits, unmapped_bytes) = this._dispatch(offset, size, hits, false);
+        local bool inquiry_override = false;
+        _callback_before_read(this._bank_obj(), dev._current_initiator,
+                              &inquiry_override, &offset,
+                              size, &_connections, &_before_read_callbacks);
+        if (inquiry_override) {
+            try {
+                readval = this.get(offset, size);
+            } catch {
+                ok = false;
+            }
+        } else {
+            try {
+                local register hits[8];
+                local int num_hits;
+                local uint64 unmapped_bytes;
 
-        local uint64 readval = 0;
-        if ((unmapped_bytes & enabled_bytes) != 0) {
-            readval[size * 8 - 1 : 0] = this.unmapped_read(
-                offset, unmapped_bytes & enabled_bytes, aux);
+                (num_hits, unmapped_bytes) = this._dispatch(
+                    offset, size, hits, false);
+
+                if ((unmapped_bytes & enabled_bytes) != 0) {
+                    readval[size * 8 - 1 : 0] = this.unmapped_read(
+                        offset, unmapped_bytes & enabled_bytes, aux);
+                }
+
+                for (local int r = 0;  r < num_hits; ++r) {
+                    local int r_start;
+                    local int r_end;
+                    (r_start, r_end) = this._intersect(
+                        hits[r].offset, hits[r]._size(), offset, size, true);
+
+                    local int start;
+                    local int end;
+                    (start, end) = this._intersect(
+                        offset, size, hits[r].offset, hits[r]._size(), true);
+
+                    local uint64 r_enabled_bytes = 0;
+                    r_enabled_bytes[r_end * 8 - 1 : r_start * 8] =
+                        enabled_bytes[end * 8 - 1 : start * 8];
+                    if (r_enabled_bytes == 0) {
+                        continue;
+                    }
+
+                    local uint64 r_val = hits[r].read_register(r_enabled_bytes, aux);
+                    if (r_end - r_start == hits[r]._size()) {
+                        log info, 4, Register_Read:
+                        "Read from register %s -> 0x%0*x",
+                            hits[r]._qname(), cast(size*2, int), r_val;
+                    } else {
+                        log info, 4, Register_Read:
+                        "Partial read from register %s: bytes %d-%d -> 0x%0*x",
+                            hits[r]._qname(), r_start, r_end-1,
+                            cast(r_end - r_start, int),
+                            r_val[r_end * 8 - 1 : r_start * 8];
+                    }
+
+                    readval[end * 8 - 1 : start * 8] =
+                        (r_val & r_enabled_bytes)[r_end * 8 - 1 : r_start * 8];
+                }
+            } catch {
+                ok = false;
+            }
         }
-
-        for (local int r = 0;  r < num_hits; ++r) {
-            local int r_start;
-            local int r_end;
-            (r_start, r_end) = this._intersect(
-                hits[r].offset, hits[r]._size(), offset, size, true);
-
-            local int start;
-            local int end;
-            (start, end) = this._intersect(
-                offset, size, hits[r].offset, hits[r]._size(), true);
-
-            local uint64 r_enabled_bytes = 0;
-            r_enabled_bytes[r_end * 8 - 1 : r_start * 8] =
-                enabled_bytes[end * 8 - 1 : start * 8];
-            if (r_enabled_bytes == 0) {
-                continue;
-            }
-
-            local uint64 r_val = hits[r].read_register(r_enabled_bytes, aux);
-            if (r_end - r_start == hits[r]._size()) {
-                log info, 4, Register_Read:
-                    "Read from register %s -> 0x%0*x",
-                    hits[r]._qname(), cast(size*2, int), r_val;
-            } else {
-                log info, 4, Register_Read:
-                    "Partial read from register %s: bytes %d-%d -> 0x%0*x",
-                        hits[r]._qname(), r_start, r_end-1,
-                        cast(r_end - r_start, int),
-                        r_val[r_end * 8 - 1 : r_start * 8];
-            }
-
-            readval[end * 8 - 1 : start * 8] =
-                (r_val & r_enabled_bytes)[r_end * 8 - 1 : r_start * 8];
+        _callback_after_read(this._bank_obj(), dev._current_initiator,
+                             &offset, size,
+                             &readval, &ok, &_connections,
+                             &_after_read_callbacks);
+        if (!ok) {
+            throw;
         }
 
         return readval;
@@ -2100,52 +2128,72 @@ template bank is (object, shown_desc) {
             return;
         }
 
-        local register hits[8];
-        local int num_hits;
-        local uint64 unmapped_bytes;
-
+        local bool suppress = false;
         local uint64 size = _enabled_bytes_to_size(enabled_bytes);
-        (num_hits, unmapped_bytes) = this._dispatch(offset, size, hits, false);
-        if ((unmapped_bytes & enabled_bytes) != 0) {
-            this.unmapped_write(
-                offset, value, unmapped_bytes & enabled_bytes, aux);
+        _callback_before_write(
+            this._bank_obj(), dev._current_initiator, &offset, size,
+            &value,
+            &suppress, &_connections, &_before_write_callbacks);
+        local bool ok = true;
+        if (!suppress) {
+            try {
+                local register hits[8];
+                local int num_hits;
+                local uint64 unmapped_bytes;
+
+                (num_hits, unmapped_bytes) = this._dispatch(
+                    offset, size, hits, false);
+                if ((unmapped_bytes & enabled_bytes) != 0) {
+                    this.unmapped_write(
+                        offset, value, unmapped_bytes & enabled_bytes, aux);
+                }
+
+                for (local int r = 0;  r < num_hits; ++r) {
+                    local int r_start;
+                    local int r_end;
+                    (r_start, r_end) = this._intersect(
+                        hits[r].offset, hits[r]._size(), offset, size, true);
+
+                    local int start;
+                    local int end;
+                    (start, end) = this._intersect(
+                        offset, size, hits[r].offset, hits[r]._size(), true);
+
+                    local uint64 r_enabled_bytes = 0;
+                    r_enabled_bytes[r_end * 8 - 1 : r_start * 8] =
+                        enabled_bytes[end * 8 - 1 : start * 8];
+                    if (r_enabled_bytes == 0) {
+                        continue;
+                    }
+
+                    local uint64 r_value = 0;
+                    r_value[r_end * 8 - 1 : r_start * 8]
+                        = value[end * 8 - 1 : start * 8];
+                    if (r_end - r_start == hits[r]._size()) {
+                        log info, 4, Register_Write:
+                        "Write to register %s <- 0x%0*x",
+                            hits[r]._qname(), cast(size*2, int), r_value;
+                    } else {
+                        log info, 4, Register_Write:
+                        "Partial write to register %s: bytes %d-%d <- 0x%0*x",
+                            hits[r]._qname(), r_start, r_end-1,
+                            cast(r_end - r_start, int),
+                            r_value[r_end * 8 - 1 : r_start * 8];
+                    }
+
+                    hits[r].write_register(
+                        r_value & r_enabled_bytes, r_enabled_bytes, aux);
+                }
+            } catch {
+                ok = false;
+            }
         }
+        _callback_after_write(
+            this._bank_obj(), dev._current_initiator, &offset, size,
+            &ok, &_connections, &_after_write_callbacks);
 
-        for (local int r = 0;  r < num_hits; ++r) {
-            local int r_start;
-            local int r_end;
-            (r_start, r_end) = this._intersect(
-                hits[r].offset, hits[r]._size(), offset, size, true);
-
-            local int start;
-            local int end;
-            (start, end) = this._intersect(
-                offset, size, hits[r].offset, hits[r]._size(), true);
-
-            local uint64 r_enabled_bytes = 0;
-            r_enabled_bytes[r_end * 8 - 1 : r_start * 8] =
-                enabled_bytes[end * 8 - 1 : start * 8];
-            if (r_enabled_bytes == 0) {
-                continue;
-            }
-
-            local uint64 r_value = 0;
-            r_value[r_end * 8 - 1 : r_start * 8]
-                = value[end * 8 - 1 : start * 8];
-            if (r_end - r_start == hits[r]._size()) {
-                log info, 4, Register_Write:
-                "Write to register %s <- 0x%0*x",
-	            hits[r]._qname(), cast(size*2, int), r_value;
-            } else {
-                log info, 4, Register_Write:
-                    "Partial write to register %s: bytes %d-%d <- 0x%0*x",
-                    hits[r]._qname(), r_start, r_end-1,
-                    cast(r_end - r_start, int),
-                    r_value[r_end * 8 - 1 : r_start * 8];
-            }
-
-            hits[r].write_register(r_value & r_enabled_bytes, r_enabled_bytes,
-                                   aux);
+        if (!ok) {
+            throw;
         }
     }
 
@@ -2240,7 +2288,8 @@ template bank is (object, shown_desc) {
         default {
         local uint64 size = SIM_get_mem_op_size(memop);
         local bool inquiry = SIM_get_mem_op_inquiry(memop);
-        local conf_object_t *ini = SIM_get_mem_op_initiator(memop);
+        local conf_object_t *prev_initiator = dev._current_initiator;
+        dev._current_initiator = SIM_get_mem_op_initiator(memop);
 
         local bool success = true;
         if (inquiry) {
@@ -2262,46 +2311,26 @@ template bank is (object, shown_desc) {
         } else {
             if (SIM_mem_op_is_read(memop)) {
                 local uint64 value = 0;
-                local bool inquiry_override = false;
-                _callback_before_read(
-                    this._bank_obj(), ini, &inquiry_override,
-                    &offset, size, &_connections, &_before_read_callbacks);
                 try {
-                    if (inquiry_override) {
-                        value = this.get(offset, size);
-                    } else {
-                        value = this.read(offset, _mask(size), aux);
-                    }
+                    value = this.read(offset, _mask(size), aux);
                 } catch {
                     success = false;
                 }
-                _callback_after_read(this._bank_obj(), ini, &offset, size,
-                                     &value, &success, &_connections,
-                                     &_after_read_callbacks);
 
                 if (success) {
                     this._memop_set_read_value(memop, value);
                 }
             } else {
                 local uint64 writevalue = this._memop_write_value(memop);
-
-                local bool suppress = false;
-                _callback_before_write(
-                    this._bank_obj(), ini, &offset, size, &writevalue,
-                    &suppress, &_connections, &_before_write_callbacks);
-                if (!suppress) {
-                    try {
-                        this.write(offset, writevalue, _mask(size), aux);
-                    } catch {
-                        success = false;
-                    }
+                try {
+                    this.write(offset, writevalue, _mask(size), aux);
+                } catch {
+                    success = false;
                 }
-                _callback_after_write(this._bank_obj(), ini, &offset, size,
-                                      &success, &_connections,
-                                      &_after_write_callbacks);
             }
         }
 
+        dev._current_initiator = prev_initiator;
         return success;
     }
 
@@ -2346,7 +2375,8 @@ template bank is (object, shown_desc) {
     shared method _transaction_access(
         conf_object_t *ini, bool is_read, bool inquiry,
         uint64 offset, uint64 size, uint8 *buf, void *aux) -> (bool) {
-
+        local conf_object_t *prev_ini = dev._current_initiator;
+        dev._current_initiator = ini;
         local bool success = true;
         if (inquiry) {
             if (is_read) {
@@ -2366,47 +2396,23 @@ template bank is (object, shown_desc) {
             }
         } else {
             if (is_read) {
-                local bool inquiry_override = false;
-                _callback_before_read(this._bank_obj(), ini,
-                                      &inquiry_override, &offset,
-                                      size, &_connections, &_before_read_callbacks);
-                local uint64 value = 0;
                 try {
-                    if (inquiry_override) {
-                        value = this.get(offset, size);
-                    } else {
-                        value = this.read(offset, _mask(size), aux);
-                    }
-                } catch {
-                    success = false;
-                }
-
-                _callback_after_read(this._bank_obj(), ini, &offset, size,
-                                     &value, &success, &_connections,
-                                     &_after_read_callbacks);
-
-                if (success) {
+                    local uint64 value = this.read(offset, _mask(size), aux);
                     this._set_read_value(size, buf, value);
+                    return true;
+                } catch {
+                    return false;
                 }
             } else {
                 local uint64 writevalue = this._write_value(size, buf);
-
-                local bool suppress = false;
-                _callback_before_write(
-                    this._bank_obj(), ini, &offset, size, &writevalue,
-                    &suppress, &_connections, &_before_write_callbacks);
-                if (!suppress) {
-                    try {
-                        this.write(offset, writevalue, _mask(size), aux);
-                    } catch {
-                        success = false;
-                    }
+                try {
+                    this.write(offset, writevalue, _mask(size), aux);
+                } catch {
+                    success = false;
                 }
-                _callback_after_write(this._bank_obj(), ini, &offset, size,
-                                      &success, &_connections,
-                                      &_after_write_callbacks);
             }
         }
+        dev._current_initiator = prev_ini;
 
         return success;
     }
