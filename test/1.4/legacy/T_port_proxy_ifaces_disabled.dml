@@ -6,7 +6,6 @@ dml 1.4;
 
 device test;
 
-/// DMLC-FLAG --simics-api=6
 /// DMLC-FLAG --no-compat=port_proxy_ifaces
 
 import "port_proxy_ifaces.dml";
