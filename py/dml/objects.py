@@ -307,6 +307,8 @@ class Device(CompositeObject):
                            'connect', 'attribute', 'event', 'port', 'implement',
                            'group', 'subdevice', 'initdata']
     objects = None
+    hooks = None
+
     def __init__(self, ident, site):
         super(Device, self).__init__(ident, site, None)
         self.initdata = []
@@ -330,18 +332,27 @@ class Device(CompositeObject):
         during code generation.'''
         assert Device.objects is None
         objs = [self]
+        hooks = []
         self.uniq = 1
         for o in self.recursive_components_postorder():
             if isinstance(o, CompositeObject):
                 o.uniq = len(objs) + 1
                 objs.append(o)
+            elif isinstance(o, Hook):
+                o.uniq = len(hooks) + 1
+                hooks.append(o)
         Device.objects = objs
+        Device.hooks = hooks
+
         try:
             yield
         finally:
             for o in Device.objects:
                 o.uniq = None
             Device.objects = None
+            for o in Device.hooks:
+                o.uniq = None
+            Device.hooks = None
 
 class Group(CompositeObject):
     __slots__ = ()
@@ -485,8 +496,10 @@ class Hook(DMLObject):
         self.msg_types = msg_types
         self._arraylens = arraylens
         self.dimensions += self.local_dimensions()
-        self.uniq = len(dml.globals.hooks) + 1
-        dml.globals.hooks.append(self)
+        # during code generation, set to a unique positive integer
+        # (index in object.Device.hooks plus one, see
+        # CompositeObject.uniq)
+        self.uniq = None
 
     def logname(self, indices=(), relative='device'):
         if self.isindexed():

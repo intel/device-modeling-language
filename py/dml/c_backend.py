@@ -1238,7 +1238,7 @@ def generate_simple_events_control_methods(device):
 
     site = logging.SimpleSite('<_cancel_simple_events>')
     by_dims = {}
-    for hook in dml.globals.hooks:
+    for hook in objects.Device.hooks:
         by_dims.setdefault(hook.dimsizes, []).append(hook)
 
     for (dims, hooks) in by_dims.items():
@@ -1474,8 +1474,8 @@ def generate_identity_data_decls():
                                  'HT_STR_NULL(false)')
 
     declare_id_infos(objects.Device.objects, '')
-    if dml.globals.hooks:
-        declare_id_infos(dml.globals.hooks, '_hook')
+    if objects.Device.hooks:
+        declare_id_infos(objects.Device.hooks, '_hook')
 
 def generate_class_var_decl():
     add_variable_declaration('conf_class_t *_dev_class')
@@ -1493,8 +1493,8 @@ def generate_init_identity_hashtable():
         postindent=1)
     out('ht_insert_str(&_id_info_ht, _id_infos[i].logname, &_id_infos[i]);\n')
     out('}\n', preindent=-1)
-    if dml.globals.hooks:
-        out('for (uint64 i = 0; i < %d; ++i) {\n' % (len(dml.globals.hooks),),
+    if objects.Device.hooks:
+        out('for (uint64 i = 0; i < %d; ++i) {\n' % (len(objects.Device.hooks),),
             postindent=1)
         out('ht_insert_str(&_hook_id_info_ht, _hook_id_infos[i].logname, '
             + '&_hook_id_infos[i]);\n')
@@ -1504,7 +1504,7 @@ def generate_init_identity_hashtable():
 
 def generate_hook_auxiliary_info_array():
     items = []
-    for hook in dml.globals.hooks:
+    for hook in objects.Device.hooks:
         offset = ('offsetof(%s, %s)'
                   % (crep.structtype(dml.globals.device),
                      crep.cref_hook(
@@ -1517,11 +1517,11 @@ def generate_hook_auxiliary_info_array():
             items.append('{%s, %d, %d}' % (offset, typeseq_uniq, hook.uniq))
         except DMLUnkeyableType:
             pass # already reported
-    if dml.globals.hooks:
+    if objects.Device.hooks:
         init = '{\n%s\n}' % (',\n'.join(f'    {item}' for item in items),)
         add_variable_declaration(
             'const _dml_hook_aux_info_t '
-            + f'_hook_aux_infos[{len(dml.globals.hooks)}]',
+            + f'_hook_aux_infos[{len(objects.Device.hooks)}]',
             init)
 
 def generate_alloc(device):
@@ -1665,7 +1665,7 @@ def generate_deinit(device):
 
         # Cancel all pending afters on hooks
         by_dims = {}
-        for hook in dml.globals.hooks:
+        for hook in objects.Device.hooks:
             by_dims.setdefault(hook.dimsizes, []).append(hook)
 
         for (dims, hooks) in by_dims.items():
@@ -2975,7 +2975,7 @@ def register_hook_attributes(initcode, dev):
 
 
 def generate_hook_attribute_funs():
-    if not dml.globals.hooks:
+    if not objects.Device.hooks:
         return
 
     start_function_definition(
