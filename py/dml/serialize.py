@@ -5,6 +5,7 @@
 # dml values and attribute values
 
 from . import ctree, expr, types, logging, symtab, messages, output, logging
+from . import objects
 from .types import *
 from .logging import *
 from .expr_util import *
@@ -184,7 +185,7 @@ def serialize(real_type, current_expr, target_expr):
                                        ctree.ExpressionInitializer(apply_expr))
     elif isinstance(real_type, THook):
         id_infos = expr.mkLit(current_site,
-                              '_hook_id_infos' if dml.globals.hooks
+                              '_hook_id_infos' if objects.Device.hooks
                               else 'NULL',
                               TPtr(TNamed('_id_info_t', const = True)))
         apply_expr = apply_c_fun(current_site, "_serialize_identity",
@@ -311,11 +312,11 @@ def deserialize(real_type, current_expr, target_expr, error_out):
     elif isinstance(real_type, THook):
         id_info_ht = expr.mkLit(current_site,
                                 '&_hook_id_info_ht'
-                                if dml.globals.hooks else 'NULL',
+                                if objects.Device.hooks else 'NULL',
                                 TPtr(TNamed('ht_str_table_t')))
         hook_aux_infos = expr.mkLit(current_site,
                                     '_hook_aux_infos'
-                                    if dml.globals.hooks else 'NULL',
+                                    if objects.Device.hooks else 'NULL',
                                     TPtr(const_void))
         from .codegen import get_type_sequence_info
         expected_typ_uniq = ctree.mkIntegerConstant(

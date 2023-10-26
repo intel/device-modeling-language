@@ -29,9 +29,6 @@ api_version = None
 dml_version = None
 
 
-# Array of all declared hooks
-hooks = []
-
 # Array of all session/saved variables declared in methods, represented by
 # pairs (Symbol, init) where init is str or None
 static_vars = []
