@@ -33,6 +33,7 @@ from .reginfo import explode_registers
 from . import dmlparse
 from .set import Set
 from . import compat
+from .slotsmeta import auto_init
 
 __all__ = (
     'mkglobals', 'mkdev'
@@ -2435,6 +2436,17 @@ class UninitializedParamExpr(objects.ParamExpr):
     def mkexpr(self, indices):
         raise EUNINITIALIZED(self.site, self.name)
 
+class EventClassExpr(ctree.LValue):
+    slots = ('node', 'indices')
+    type = TPtr(TNamed('event_class_t'), const=True)
+    @auto_init
+    def __init__(self, site, node, indices): pass
+    def __str__(self):
+        return f'{self.node.logname()}.evclass'
+    def read(self):
+        indices = ''.join(f'[{i.read()}]' for i in self.indices)
+        return f'{crep.get_evclass(self.node)}{indices}'
+
 class EventClassParamExpr(objects.ParamExpr):
     '''The evclass parameter of an event object'''
     __slots__ = ('node',)
@@ -2451,12 +2463,7 @@ class EventClassParamExpr(objects.ParamExpr):
             if isinstance(i, NonValue):
                 # implicit reference to index variable
                 raise i.exc()
-        expr = crep.get_evclass(self.node)
-        # add an extra *& prefix to make DML and C agree that this is an lvalue
-        return mkDereference(self.node.site, mkLit(self.node.site,
-                     '&%s%s' % (
-                         expr, ''.join('[' + i.read() + ']' for i in indices)),
-                     TPtr(TPtr(TNamed('event_class_t')))))
+        return EventClassExpr(self.node.site, self.node, indices)
 
 class IndexParamExpr(objects.ParamExpr):
     '''Parameter containing a simple index'''

@@ -3656,7 +3656,7 @@ the [`shown_desc`](#shown_desc) template.
 template event is (object, shown_desc) {
     // hack: using double pointer here, since the automatic initialization of
     // the evclass pointer happens after vtables are initialized
-    param _pevclass : event_class_t **;
+    param _pevclass : event_class_t *const*;
     param _pevclass = &evclass;
     param objtype = "event";
     param _is_simics_object = false;

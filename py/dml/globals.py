@@ -28,8 +28,6 @@ api_version = None
 # This is a tuple (major, minor)
 dml_version = None
 
-# Array of all declared composite objects
-objects = []
 
 # Array of all declared hooks
 hooks = []

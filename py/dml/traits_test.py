@@ -31,13 +31,14 @@ class Test_traits(unittest.TestCase):
         t = Trait(None, 't', set(), {}, {}, {}, {}, {}, {}, {})
         ot = ObjTraits(self.dev, {t}, {}, {}, {})
         self.dev.set_traits(ot)
-        self.assertEqual(
-            dml.ctree.mkCast(
-                self.site, dml.ctree.mkNodeRef(self.site, self.dev, ()),
-                t.type()).read(),
-            '((t) {(&_tr__dev__t), '
-            + '((_identity_t) {.id = 1, .encoded_index = 0})})'
-            )
+        with self.dev.use_for_codegen():
+            self.assertEqual(
+                dml.ctree.mkCast(
+                    self.site, dml.ctree.mkNodeRef(self.site, self.dev, ()),
+                    t.type()).read(),
+                '((t) {(&_tr__dev__t), '
+                + '((_identity_t) {.id = 1, .encoded_index = 0})})'
+                )
 
     def test_one_default_method(self):
         body = dml.ast.compound(self.site, [], self.site)
@@ -50,5 +51,5 @@ class Test_traits(unittest.TestCase):
         ref = ot.lookup_shared_method_impl(self.site, 'm', ())
         self.assertTrue(ref)
         # does not crash
-        with crep.DeviceInstanceContext():
+        with crep.DeviceInstanceContext(), self.dev.use_for_codegen():
             ref.call_expr([], types.TVoid()).read()
