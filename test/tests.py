@@ -1527,17 +1527,18 @@ class Linemarks(CTestCase):
             if m is not None:
                 (lineno, filename) = m.groups()
                 lineno = int(lineno)
-                if (Path(self.scratchdir) / filename == c_file):
+                redir_file = Path(self.scratchdir) / filename
+                if redir_file.samefile(c_file):
                     assert not reset, \
-                        f"Redundant line directive reset at {c_lineno}"
+                           f'Redundant line directive reset at {c_lineno}'
                     assert lineno == c_lineno + 1, \
-                        f"Incorrect line directive reset at {c_lineno}"
+                           f'Incorrect line directive reset at {c_lineno}'
                     reset = True
                     dml_lineno = None
-                elif filename.endswith(self.filename):
+                elif redir_file.samefile(self.filename):
                     assert dml_lineno != lineno, \
-                            (f'Redundant linemark for {dml_lineno} at '
-                             + f'{c_lineno}')
+                           (f'Redundant linemark for {dml_lineno} at '
+                            + f'{c_lineno}')
                     reset = False
                     dml_lineno = lineno - 1
                 else:
@@ -1549,7 +1550,7 @@ class Linemarks(CTestCase):
                 assert curr_func is None
                 curr_func = m.group(1)
                 assert reset, \
-                    f'Line directive not reset by start of {curr_func}'
+                       f'Line directive not reset by start of {curr_func}'
                 continue
             if dml_lineno is not None:
                 yield (dml_lineno, c_lineno, curr_func)
