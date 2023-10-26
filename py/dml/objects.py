@@ -3,9 +3,9 @@
 
 import itertools
 import abc
+import contextlib
 
-from .logging import *
-from .messages import *
+from .logging import dollar
 from .set import Set
 import dml.globals
 
@@ -216,8 +216,12 @@ class CompositeObject(DMLObject):
 
         self._confidential = False
 
-        self.uniq = len(dml.globals.objects) + 1
-        dml.globals.objects.append(self)
+        # during code generation, set to a unique positive integer,
+        # used as object ID, e.g. in the id_infos array.  This integer
+        # number is the index into object.Device.objects *plus one*;
+        # the plus one is because object ID 0 is reserved in runtime
+        # for an invalid reference.
+        self.uniq = None
 
     @property
     def name_site(self):
@@ -302,6 +306,7 @@ class Device(CompositeObject):
     allowed_components = [ 'parameter', 'method', 'saved', 'session', 'bank',
                            'connect', 'attribute', 'event', 'port', 'implement',
                            'group', 'subdevice', 'initdata']
+    objects = None
     def __init__(self, ident, site):
         super(Device, self).__init__(ident, site, None)
         self.initdata = []
@@ -318,6 +323,25 @@ class Device(CompositeObject):
 
     def idxvars(self):
         return ()
+
+    @contextlib.contextmanager
+    def use_for_codegen(self):
+        '''Reusable, but not reentrant, context manager, entered
+        during code generation.'''
+        assert Device.objects is None
+        objs = [self]
+        self.uniq = 1
+        for o in self.recursive_components_postorder():
+            if isinstance(o, CompositeObject):
+                o.uniq = len(objs) + 1
+                objs.append(o)
+        Device.objects = objs
+        try:
+            yield
+        finally:
+            for o in Device.objects:
+                o.uniq = None
+            Device.objects = None
 
 class Group(CompositeObject):
     __slots__ = ()

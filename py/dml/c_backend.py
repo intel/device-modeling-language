@@ -1473,7 +1473,7 @@ def generate_identity_data_decls():
         add_variable_declaration(f'ht_str_table_t {prefix}_id_info_ht',
                                  'HT_STR_NULL(false)')
 
-    declare_id_infos(dml.globals.objects, '')
+    declare_id_infos(objects.Device.objects, '')
     if dml.globals.hooks:
         declare_id_infos(dml.globals.hooks, '_hook')
 
@@ -1488,8 +1488,8 @@ def generate_init_identity_hashtable():
     # This gets overridden if there's a top-level object that shares its name
     # with the device.
     out(f'ht_insert_str(&_id_info_ht, "{dml.globals.device.name}", '
-        + f'&_id_infos[{dml.globals.device.uniq} - 1]);\n')
-    out('for (uint64 i = 0; i < %d; ++i) {\n' % (len(dml.globals.objects),),
+        + f'&_id_infos[{dml.globals.device.uniq - 1}]);\n')
+    out('for (uint64 i = 0; i < %d; ++i) {\n' % (len(objects.Device.objects),),
         postindent=1)
     out('ht_insert_str(&_id_info_ht, _id_infos[i].logname, &_id_infos[i]);\n')
     out('}\n', preindent=-1)
@@ -2102,7 +2102,7 @@ def generate_trait_deserialization_hashtables(device):
 
 def generate_object_vtables_array():
     items = []
-    for node in dml.globals.objects:
+    for node in objects.Device.objects:
         if node.traits:
             node.traits.mark_referenced(dml.globals.object_trait)
             ancestry_path = node.traits.ancestry_paths[dml.globals.object_trait][0]
@@ -2114,11 +2114,11 @@ def generate_object_vtables_array():
         items.append(pointer)
     init = '{%s}' % (', '.join(items),)
     add_variable_declaration(
-        f'void * const _object_vtables[{len(dml.globals.objects)}]', init)
+        f'void * const _object_vtables[{len(objects.Device.objects)}]', init)
 
 def generate_port_object_assocs_array():
     items = []
-    for node in dml.globals.objects:
+    for node in objects.Device.objects:
         object_node = (node if node.objtype in {'device', 'bank',
                                                 'subdevice', 'port'}
                        else node.object_parent)
@@ -2145,7 +2145,7 @@ def generate_port_object_assocs_array():
     init = f'{{{", ".join(items)}}}'
     add_variable_declaration(
         'const _dml_port_object_assoc_t '
-        + f'_port_object_assocs[{len(dml.globals.objects)}]',
+        + f'_port_object_assocs[{len(objects.Device.objects)}]',
         init)
 
 def generate_trait_method(m):
@@ -3266,7 +3266,7 @@ def generate_cfile(device, footers,
     else:
         c_file = FileOutput(filename_prefix + '.c')
         c_file.out(c_top)
-    with c_file:
+    with c_file, device.use_for_codegen():
         generate_cfile_body(device, footers, full_module, filename_prefix)
     c_file.close()
     if not logging.failure:
