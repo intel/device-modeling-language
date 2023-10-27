@@ -270,10 +270,7 @@ method test_brace_linemarks()
     // NOT-LINEMARKED
     {
         if (true)
-        // .toc_stmt() of empty braces emits ';', which gets linemarked to the
-        // leading brace
         {
-            // NOT-LINEMARKED
         }
     // NOT-LINEMARKED
     }
