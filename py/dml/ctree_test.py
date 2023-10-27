@@ -56,7 +56,7 @@ class Test_mkcompound(unittest.TestCase):
         n = ctree.mkNull(s)
         d = DummyStatement(s)
         decl = DummyDecl(s)
-        expect_repr(mkCompound(s, []), 'Null()')
+        expect_repr(mkCompound(s, []), 'Compound([])')
         expect_repr(mkCompound(s, [d]), 'D')
         expect_repr(mkCompound(s, [d, d]), 'Compound([D, D])')
         # Shallowly nested compounds are collapsed

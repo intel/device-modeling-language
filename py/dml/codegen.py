@@ -3160,7 +3160,7 @@ def foreach_constant_list(site, itername, lst, statement, location, scope):
                 itername, items.expr(loopvars), site))
             stmt = codegen_statement(statement, location, loopscope)
 
-            if isinstance(stmt, Null):
+            if stmt.is_empty:
                 continue
 
             decls = []

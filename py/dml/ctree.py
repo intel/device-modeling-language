@@ -336,13 +336,14 @@ class Compound(Statement):
 
     def toc_stmt(self):
         self.linemark()
-        if self.is_empty:
-            out(';\n')
-        else:
-            out('{\n', postindent=1)
-            self.toc_inline()
-            site_linemark(self.rbrace_site)
-            out('}\n', preindent=-1)
+        out('{\n', postindent=1)
+        self.toc_inline()
+        site_linemark(self.rbrace_site)
+        out('}\n', preindent=-1)
+
+    @property
+    def is_empty(self):
+        return all(stmt.is_empty for stmt in self.substatements)
 
     def toc(self):
         if any(sub.is_declaration for sub in self.substatements):
@@ -375,10 +376,8 @@ def mkCompound(site, statements, rbrace_site=None):
             collapsed.append(stmt)
     if len(collapsed) == 1 and not collapsed[0].is_declaration:
         return collapsed[0]
-    elif collapsed:
-        return Compound(site, collapsed, rbrace_site)
     else:
-        return mkNull(site)
+        return Compound(site, collapsed, rbrace_site)
 
 class Null(Statement):
     is_empty = True
@@ -409,13 +408,10 @@ class UnrolledLoop(Statement):
 
     def toc_stmt(self):
         self.linemark()
-        if all(sub.is_empty for sub in self.substatements):
-            out(';\n')
-        else:
-            out('{\n', postindent=1)
-            self.toc_inline()
-            self.linemark()
-            out('}\n', preindent=-1)
+        out('{\n', postindent=1)
+        self.toc_inline()
+        self.linemark()
+        out('}\n', preindent=-1)
 
     def toc(self):
         for substatement in self.substatements:
