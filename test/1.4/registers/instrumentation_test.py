@@ -1,6 +1,7 @@
 # © 2021-2023 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import instrumentation_access_initiator
 import instrumentation_access_inquire
 import instrumentation_access_set_missed
 import instrumentation_access_set_offset
@@ -38,8 +39,7 @@ def test(obj):
     # order test first
     instrumentation_connection_order.test(obj, subscribe_b1, order_b1)
 
-    # Disabled tests below broke at some point around 84eff65716f while
-    # the instrumentation tests were disabled
+    instrumentation_access_initiator.test(obj, subscribe_b2)
     instrumentation_access_inquire.test(obj, subscribe_b2)
     with stest.allow_log_mgr(None, 'spec-viol'):
         instrumentation_access_set_missed.test(obj, subscribe_b1)

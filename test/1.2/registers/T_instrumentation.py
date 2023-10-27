@@ -1,6 +1,7 @@
 # © 2021-2023 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import instrumentation_access_initiator
 import instrumentation_access_inquire
 import instrumentation_access_set_missed
 import instrumentation_access_set_offset
@@ -23,10 +24,8 @@ import instrumentation_remove_callback
 import instrumentation_remove_connection_callbacks
 import instrumentation_subscribe_multiple
 
-subscribe_b1 = SIM_get_port_interface(
-    obj, 'bank_instrumentation_subscribe', 'b1')
-subscribe_b2 = SIM_get_port_interface(
-    obj, 'bank_instrumentation_subscribe', 'b2')
+subscribe_b1 = obj.bank.b1.iface.bank_instrumentation_subscribe
+subscribe_b2 = obj.bank.b2.iface.bank_instrumentation_subscribe
 order_b1 = SIM_get_port_interface(obj, 'instrumentation_order', 'b1')
 
 subscribe_ba = [
@@ -37,6 +36,7 @@ subscribe_ba = [
 # order test first
 instrumentation_connection_order.test(obj, subscribe_b1, order_b1)
 
+instrumentation_access_initiator.test(obj, subscribe_b2)
 instrumentation_access_inquire.test(obj, subscribe_b2)
 instrumentation_access_set_missed.test(obj, subscribe_b1)
 instrumentation_access_set_offset.test(obj, subscribe_b1)
