@@ -136,7 +136,7 @@ class DMLObject(object):
         """Return the qualified DML identity of the object, relative to
         nearest ancestor of type 'relative'
 
-        The DML identity of an object is how it would be reffered to
+        The DML identity of an object is how it would be referred to
         within DML code.
         Roughly speaking, objectref(node.identity()) == node."""
         ident = self.ident
