@@ -1837,7 +1837,7 @@ def generate_init_data_objs(device):
     start_function_definition(
         'void _init_data_objs(%s *_dev)' % (crep.structtype(device),))
     out('{\n', postindent = 1)
-    with crep.DeviceInstanceContext():
+    with crep.DeviceInstanceContext(), allow_linemarks():
         for node in device.initdata:
             # Usually, the initializer is constant, but we permit that it
             # depends on index. When the initializer is constant, we use a loop
@@ -1859,25 +1859,26 @@ def generate_init_data_objs(device):
             # mainly meant to capture EIDXVAR; for other errors, the error will
             # normally re-appear when evaluating per instance
             except DMLError:
-                with allow_linemarks():
-                    for indices in node.all_indices():
-                        index_exprs = tuple(mkIntegerLiteral(node.site, i)
-                                            for i in indices)
-                        nref = mkNodeRef(node.site, node, index_exprs)
-                        try:
-                            init = eval_initializer(
-                                node.site, node._type, node.astinit,
-                                Location(node.parent, index_exprs),
-                                global_scope, True)
-                        except DMLError as e:
-                            report(e)
-                        else:
-                            markers = ([('store_writes_const_field', 'FALSE')]
-                                       if deep_const(node._type) else [])
-                            coverity_markers(markers, init.site)
-                            init.assign_to(nref, node._type)
+                for indices in node.all_indices():
+                    index_exprs = tuple(mkIntegerLiteral(node.site, i)
+                                        for i in indices)
+                    nref = mkNodeRef(node.site, node, index_exprs)
+                    try:
+                        init = eval_initializer(
+                            node.site, node._type, node.astinit,
+                            Location(node.parent, index_exprs),
+                            global_scope, True)
+                    except DMLError as e:
+                        report(e)
+                    else:
+                        markers = ([('store_writes_const_field', 'FALSE')]
+                                   if deep_const(node._type) else [])
+                        coverity_markers(markers, init.site)
+                        out(init.assign_to(nref.read(), node._type) + ';\n')
             else:
                 index_exprs = ()
+                if node.dimensions:
+                    reset_line_directive()
                 for (i, sz) in enumerate(node.dimsizes):
                     var = 'i%d' % (i,)
                     out(('for (int %s = 0; %s < %s; ++%s) {\n'
@@ -1885,11 +1886,12 @@ def generate_init_data_objs(device):
                         postindent=1)
                     index_exprs += (mkLit(node.site, var, TInt(64, True)),)
                 nref = mkNodeRef(node.site, node, index_exprs)
-                with allow_linemarks():
-                    markers = ([('store_writes_const_field', 'FALSE')]
-                               if deep_const(node._type) else [])
-                    coverity_markers(markers, init.site)
-                    init.assign_to(nref, node._type)
+                markers = ([('store_writes_const_field', 'FALSE')]
+                           if deep_const(node._type) else [])
+                coverity_markers(markers, init.site)
+                out(init.assign_to(nref.read(), node._type) + ';\n')
+                if node.dimensions:
+                    reset_line_directive()
                 for _ in range(node.dimensions):
                     out('}\n', postindent=-1)
     out('}\n\n', preindent = -1)

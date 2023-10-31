@@ -174,12 +174,10 @@ class Expression(Code):
     # storage this expression represents
     # This should only be called if either writable or c_lval is True
     def write(self, source):
-        assert self.c_lval
-        rt = realtype(self.ctype())
-        if isinstance(rt, TEndianInt):
-            return (f'{rt.dmllib_fun("copy")}(&{self.read()},'
-                    + f' {source.read()})')
-        return '%s = %s' % (self.read(), source.read())
+        assert self.c_lval, repr(self)
+        # Wrap .read() in parantheses if its priority is less than that of &
+        dest = self.read() if self.priority >= 150 else f'({self.read()})'
+        return source.assign_to(dest, self.ctype())
 
 class NonValue(Expression):
     '''An expression that is not really a value, but which may validly

@@ -12,6 +12,7 @@ __all__ = (
     'realtype',
     'safe_realtype_shallow',
     'safe_realtype',
+    'safe_realtype_unconst',
     'conv_const',
     'deep_const',
     'type_union',
@@ -154,6 +155,20 @@ def safe_realtype_shallow(t):
         return realtype_shallow(t)
     except DMLUnknownType as e:
         raise ETYPE(e.type.declaration_site or None, e.type)
+
+def safe_realtype_unconst(t0):
+    def sub(t):
+        if isinstance(t, (TArray, TVector)):
+            base = sub(t.base)
+            if t.const or base is not t.base:
+                t = t.clone()
+                t.const = False
+                t.base = base
+        elif t.const:
+            t = t.clone()
+            t.const = False
+        return t
+    return sub(safe_realtype(t0))
 
 def conv_const(const, t):
     if const and not t.const:
