@@ -1368,9 +1368,8 @@ class ExprTests(GccTests):
     @subtest()
     def assign_trunc(self):
         target_type = types.TInt(5, True)
-        stmt = ctree.mkAssignStatement(
-            site, variable('x', target_type),
-            ctree.ExpressionInitializer(int_const(0x5f)))
+        stmt = ctree.mkCopyData(site, int_const(0x5f),
+                                variable('x', target_type))
         code = output.StrOutput()
         with code:
             stmt.toc()

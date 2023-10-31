@@ -1913,7 +1913,7 @@ def generate_init_data_objs(device):
                             markers = ([('store_writes_const_field', 'FALSE')]
                                        if deep_const(node._type) else [])
                             coverity_markers(markers, init.site)
-                            init.assign_to(nref, node._type)
+                            out(init.assign_to(nref.read(), node._type) + ';\n')
             else:
                 index_exprs = ()
                 for (i, sz) in enumerate(node.dimsizes):
@@ -1927,7 +1927,7 @@ def generate_init_data_objs(device):
                     markers = ([('store_writes_const_field', 'FALSE')]
                                if deep_const(node._type) else [])
                     coverity_markers(markers, init.site)
-                    init.assign_to(nref, node._type)
+                    out(init.assign_to(nref.read(), node._type) + ';\n')
                 for _ in range(node.dimensions):
                     out('}\n', postindent=-1)
     out('}\n\n', preindent = -1)
