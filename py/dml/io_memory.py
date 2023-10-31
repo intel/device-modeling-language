@@ -221,7 +221,8 @@ def codegen_access(bank, bank_indices, isread, memop, offset, size, writevalue,
                 regvar, size.read())])
         lines.append(
                 '            %s;' % (
-            size2.write(mkLit(site, 'bytes', TInt(64, False)))))
+            size2.write(ExpressionInitializer(mkLit(site, 'bytes',
+                                                    TInt(64, False))))))
         if partial:
             if bigendian:
                 lines.extend([
@@ -246,7 +247,8 @@ def codegen_access(bank, bank_indices, isread, memop, offset, size, writevalue,
                     regvar, indices, memop.read(), bytepos_args),
                 '            if (ret) return true;',
                 '            %s;' % (
-                    value2.write(mkLit(site, 'val', TInt(64, False)))),
+                    value2.write(ExpressionInitializer(
+                        mkLit(site, 'val', TInt(64, False))))),
                 '            return false;'])
         else:
             # Shifting/masking can normally be skipped in banks with
@@ -272,7 +274,8 @@ def codegen_access(bank, bank_indices, isread, memop, offset, size, writevalue,
                 '        if (offset >= %s[last].offset' % (regvar,)
                 + ' && offset < %s[last].offset + %s[last].size) {'
                 % (regvar, regvar),
-                '            %s;' % (size2.write(mkIntegerLiteral(site, 0)),),
+                '            %s;' % (size2.write(ExpressionInitializer(
+                    mkIntegerLiteral(site, 0))),),
                 '            return false;',
                 '        }'])
         lines.extend([

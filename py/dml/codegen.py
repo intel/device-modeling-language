@@ -719,9 +719,9 @@ class AfterOnHookIntoMethodInfo(AfterOnHookInfo):
             site, val_expr, targets, error_out_at_index,
             f'deserialization of arguments to {self.method.name}')
         if self.args_type:
-            ctree.mkAssignStatement(site, out_expr,
-                                    ctree.ExpressionInitializer(
-                                        tmp_out_ref)).toc()
+            ctree.AssignStatement(site, out_expr,
+                                  ctree.ExpressionInitializer(
+                                      tmp_out_ref)).toc()
 
     @property
     def args_type(self):
@@ -837,8 +837,8 @@ class AfterOnHookIntoSendNowInfo(AfterOnHookInfo):
                 'deserialization of arguments to a send_now')
 
 
-        ctree.mkAssignStatement(site, out_expr,
-                                ctree.ExpressionInitializer(tmp_out_ref)).toc()
+        ctree.AssignStatement(site, out_expr,
+                              ctree.ExpressionInitializer(tmp_out_ref)).toc()
 
     @property
     def args_type(self):
@@ -2122,8 +2122,8 @@ def make_static_var(site, location, static_sym_type, name, init=None,
         with init_code:
             if deep_const(static_sym_type):
                 coverity_marker('store_writes_const_field', 'FALSE')
-            init.assign_to(mkStaticVariable(site, static_sym),
-                           static_sym_type)
+            out(init.assign_to(mkStaticVariable(site, static_sym).read(),
+                               static_sym_type) + ';\n')
         c_init = init_code.buf
     else:
         c_init = None
@@ -2345,7 +2345,6 @@ def stmt_assign(stmt, location, scope):
     else:
         method_tgts = tgts
 
-    # TODO support multiple assign sources. It should be generalized.
     method_invocation = try_codegen_invocation(site, src_asts, method_tgts,
                                                location, scope)
     if method_invocation:
@@ -2361,19 +2360,26 @@ def stmt_assign(stmt, location, scope):
                            + f'initializer: Expected {src_asts}, got 1'))
             return []
 
-        stmts = []
         lscope = Symtab(scope)
+        init_typ = tgts[-1].ctype()
         init = eval_initializer(
-            site, tgts[-1].ctype(), src_asts[0], location, scope, False)
+            tgts[-1].site, init_typ, src_asts[0], location, scope, False)
 
-        for (i, tgt) in enumerate(reversed(tgts[1:])):
-            name = 'tmp%d' % (i,)
-            sym = lscope.add_variable(
-                name, type=tgt.ctype(), site=tgt.site, init=init, stmt=True)
-            init = ExpressionInitializer(mkLocalVariable(tgt.site, sym))
-            stmts.extend([sym_declaration(sym),
-                          mkAssignStatement(tgt.site, tgt, init)])
-        return stmts + [mkAssignStatement(tgts[0].site, tgts[0], init)]
+        if len(tgts) == 1:
+            return [mkAssignStatement(tgts[0].site, tgts[0], init)]
+
+        sym = lscope.add_variable(
+            'tmp', type=init_typ, site=init.site, init=init,
+            stmt=True)
+        init_expr = mkLocalVariable(init.site, sym)
+        stmts = [sym_declaration(sym)]
+        for tgt in reversed(tgts[1:]):
+            stmts.append(mkCopyData(tgt.site, init_expr, tgt))
+            init_expr = (tgt if isinstance(tgt, NonValue)
+                         else source_for_assignment(tgt.site, tgt.ctype(),
+                                                    init_expr))
+        stmts.append(mkCopyData(tgts[0].site, init_expr, tgts[0]))
+        return [mkCompound(site, stmts)]
     else:
         # Guaranteed by grammar
         assert tgt_ast.kind == 'assign_target_tuple' and len(tgts) > 1
@@ -2400,43 +2406,51 @@ def stmt_assign(stmt, location, scope):
                     stmt=True)
             syms.append(sym)
 
-        stmts.extend(map(sym_declaration, syms))
+        stmts.extend(sym_declaration(sym) for sym in syms)
         stmts.extend(
-            mkAssignStatement(
-                tgt.site, tgt, ExpressionInitializer(mkLocalVariable(tgt.site,
-                                                                     sym)))
+            AssignStatement(
+                tgt.site, tgt,
+                ExpressionInitializer(mkLocalVariable(tgt.site, sym)))
             for (tgt, sym) in zip(tgts, syms))
-        return stmts
+        return [mkCompound(site, stmts)]
 
 @statement_dispatcher
 def stmt_assignop(stmt, location, scope):
-    (kind, site, tgt_ast, op, src_ast) = stmt
+    (_, site, tgt_ast, op, src_ast) = stmt
 
     tgt = codegen_expression(tgt_ast, location, scope)
-    if deep_const(tgt.ctype()):
-        raise ECONST(tgt.site)
-    if isinstance(tgt, ctree.BitSlice):
-        # destructive hack
-        return stmt_assign(
-            ast.assign(site, ast.assign_target_chain(site, [tgt_ast]),
-                       [ast.initializer_scalar(
-                           site,
-                           ast.binop(site, tgt_ast, op[:-1], src_ast))]),
-            location, scope)
-    src = codegen_expression(src_ast, location, scope)
-    ttype = tgt.ctype()
-    lscope = Symtab(scope)
-    sym = lscope.add_variable(
-        'tmp', type = TPtr(ttype), site = tgt.site,
-        init = ExpressionInitializer(mkAddressOf(tgt.site, tgt)), stmt=True)
-    # Side-Effect Free representation of the tgt lvalue
-    tgt_sef = mkDereference(site, mkLocalVariable(tgt.site, sym))
-    return [
-        sym_declaration(sym), mkExpressionStatement(
-        site,
-            mkAssignOp(site, tgt_sef, arith_binops[op[:-1]](
-                site, tgt_sef, src)))]
+    if isinstance(tgt, ctree.InlinedParam):
+        raise EASSINL(tgt.site, tgt.name)
+    if not tgt.writable:
+        raise EASSIGN(site, tgt)
 
+    ttype = tgt.ctype()
+    if deep_const(ttype):
+        raise ECONST(tgt.site)
+
+    src = codegen_expression(src_ast, location, scope)
+
+    if tgt.addressable and not isinstance(tgt, Variable):
+        lscope = Symtab(scope)
+        tmp_tgt_sym = lscope.add_variable(
+            '_tmp_tgt', type = TPtr(ttype), site = tgt.site,
+            init = ExpressionInitializer(mkAddressOf(tgt.site, tgt)),
+            stmt=True)
+        # Side-Effect Free representation of the tgt lvalue
+        tgt = mkDereference(site, mkLocalVariable(tgt.site, tmp_tgt_sym))
+    else:
+        # TODO Not ideal. This path is needed to deal with writable
+        # expressions that do not correspond to C lvalues, such as bit slices.
+        # The incurred repeated evaluation is painful.
+        tmp_tgt_sym = None
+
+    assign_src = source_for_assignment(site, ttype,
+                                       arith_binops[op[:-1]](site, tgt, src))
+
+    return [mkCompound(site,
+        ([sym_declaration(tmp_tgt_sym)] if tmp_tgt_sym else [])
+        + [mkExpressionStatement(site,
+                                 ctree.AssignOp(site, tgt, assign_src))])]
 @statement_dispatcher
 def stmt_expression(stmt, location, scope):
     [expr] = stmt.args
@@ -3927,7 +3941,7 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
                         param = mkDereference(site,
                                               mkLit(site, name, TPtr(typ)))
                         fnscope.add(ExpressionSymbol(name, param, site))
-                        code.append(mkAssignStatement(site, param, init))
+                        code.append(AssignStatement(site, param, init))
                 else:
                     code = []
 
