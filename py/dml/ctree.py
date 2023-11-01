@@ -736,7 +736,7 @@ class If(Statement):
         out(f'if ({self.cond.read()})\n')
         # Work-around to avoid ambiguity in generated C, which GCC would
         # otherwise complain about
-        if isinstance(self.truebranch, (If, For, While)):
+        if isinstance(self.truebranch, (If, For, While, VectorForeach)):
             self.truebranch.linemark()
             out('{\n', postindent=1)
             self.truebranch.toc_inline()
