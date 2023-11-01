@@ -1624,8 +1624,8 @@
   <build-id value="6079"><add-note> Improved DML's type
     system.  DMLC will now detect and report many type
       errors instead of generating broken C code. </add-note></build-id>
-  <build-id value="6079"><add-note>
-      typedefs of <tt>layout</tt> types may no longer be declared <tt>extern</tt>.
+  <build-id value="6079"><add-note> typedefs of
+      <tt>layout</tt> types may no longer be declared <tt>extern</tt>.
       It never worked to access members of such types, so they can safely
       be replaced with an opaque extern struct. E.g., if you have this
       declaration:<pre>
