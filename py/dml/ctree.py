@@ -732,20 +732,19 @@ class If(Statement):
         assert_type(site, truebranch, Statement)
         assert_type(site, falsebranch, (Statement, type(None)))
     def toc_stmt(self):
-        # When needed as a single statement, if-else statements are wrapped in
-        # braces. This is to avoid ambiguity in generated C if this if-else is
-        # used as branch of another if-else, which GCC would otherwise complain
-        # about
-        site_linemark(self.site)
-        out('{\n',postindent=1)
-        self.toc_inline()
-        site_linemark(self.site)
-        out('}\n',preindent=-1)
-
-    def toc(self):
         self.linemark()
         out(f'if ({self.cond.read()})\n')
-        self.truebranch.toc_stmt()
+        # Work-around to avoid ambiguity in generated C, which GCC would
+        # otherwise complain about
+        if isinstance(self.truebranch, (If, For, While)):
+            self.truebranch.linemark()
+            out('{\n', postindent=1)
+            self.truebranch.toc_inline()
+            self.truebranch.linemark()
+            out('}\n', preindent=-1)
+        else:
+            self.truebranch.toc_stmt()
+
         if self.falsebranch:
             site_linemark(self.else_site)
             out('else\n')
