@@ -1207,6 +1207,13 @@ def expr_variable(tree, location, scope):
         if in_dev_tree:
             e = in_dev_tree
     if e is None:
+        # TODO/HACK: The discard ref is exposed like this to allow it to be as
+        # keyword-like as possible while still allowing it to be shadowed.
+        # Once we remove support for discard_ref_shadowing the discard ref
+        # should become a proper keyword and its codegen be done via dedicated
+        # dispatch
+        if name == '_' and tree.site.dml_version() != (1, 2):
+            return mkDiscardRef(tree.site)
         raise EIDENT(tree.site, name)
     return e
 
@@ -2340,14 +2347,25 @@ def try_codegen_invocation(site, init_ast, outargs, location, scope):
     else:
         return common_inline(site, meth_node, indices, inargs, outargs)
 
+def codegen_src_for_nonvalue_target(site, tgt, src_ast, location, scope):
+    if not tgt.writable:
+        raise EASSIGN(site, tgt)
+    if src_ast.kind != 'initializer_scalar':
+        raise EDATAINIT(tgt.site,
+                        f'{tgt} can only be used as the target '
+                        + 'of an assignment if its initializer is a '
+                        + 'simple expression or a return value of a '
+                        + 'method call')
+    return codegen_expression(src_ast.args[0], location, scope)
+
 @statement_dispatcher
 def stmt_assign(stmt, location, scope):
     (_, site, tgt_ast, src_asts) = stmt
     assert tgt_ast.kind in ('assign_target_chain', 'assign_target_tuple')
-    tgts = [codegen_expression(ast, location, scope)
+    tgts = [codegen_expression_maybe_nonvalue(ast, location, scope)
             for ast in tgt_ast.args[0]]
     for tgt in tgts:
-        if deep_const(tgt.ctype()):
+        if not isinstance(tgt, NonValue) and deep_const(tgt.ctype()):
             raise ECONST(tgt.site)
     if tgt_ast.kind == 'assign_target_chain':
         method_tgts = [tgts[0]]
@@ -2369,7 +2387,13 @@ def stmt_assign(stmt, location, scope):
                            + f'initializer: Expected {src_asts}, got 1'))
             return []
 
-        lscope = Symtab(scope)
+        if isinstance(tgts[-1], NonValue):
+            if len(tgts) != 1:
+                raise tgts[-1].exc()
+            expr = codegen_src_for_nonvalue_target(site, tgts[0], src_asts[0],
+                                                   location, scope)
+            return [mkCopyData(site, expr, tgts[0])]
+
         init_typ = tgts[-1].ctype()
         init = eval_initializer(
             tgts[-1].site, init_typ, src_asts[0], location, scope, False)
@@ -2377,6 +2401,7 @@ def stmt_assign(stmt, location, scope):
         if len(tgts) == 1:
             return [mkAssignStatement(tgts[0].site, tgts[0], init)]
 
+        lscope = Symtab(scope)
         sym = lscope.add_variable(
             'tmp', type=init_typ, site=init.site, init=init,
             stmt=True)
@@ -2405,22 +2430,27 @@ def stmt_assign(stmt, location, scope):
 
         stmts = []
         lscope = Symtab(scope)
-        syms = []
+        stmt_pairs = []
         for (i, (tgt, src_ast)) in enumerate(zip(tgts, src_asts)):
-            init = eval_initializer(site, tgt.ctype(), src_ast, location,
-                                    scope, False)
-            name = 'tmp%d' % (i,)
-            sym = lscope.add_variable(
-                    name, type=tgt.ctype(), site=tgt.site, init=init,
-                    stmt=True)
-            syms.append(sym)
+            if isinstance(tgt, NonValue):
+                expr = codegen_src_for_nonvalue_target(site, tgt, src_ast,
+                                                       location, scope)
+                stmt_pairs.append((mkCopyData(tgt.site, expr, tgt), None))
+            else:
+                init = eval_initializer(site, tgt.ctype(), src_ast, location,
+                                        scope, False)
+                name = 'tmp%d' % (i,)
+                sym = lscope.add_variable(
+                        name, type=tgt.ctype(), site=tgt.site, init=init,
+                        stmt=True)
+                write = AssignStatement(
+                    tgt.site, tgt,
+                    ExpressionInitializer(mkLocalVariable(tgt.site, sym)))
+                stmt_pairs.append((sym_declaration(sym), write))
 
-        stmts.extend(sym_declaration(sym) for sym in syms)
-        stmts.extend(
-            AssignStatement(
-                tgt.site, tgt,
-                ExpressionInitializer(mkLocalVariable(tgt.site, sym)))
-            for (tgt, sym) in zip(tgts, syms))
+        stmts.extend(first for (first, _) in stmt_pairs)
+        stmts.extend(second for (_, second) in stmt_pairs
+                     if second is not None)
         return [mkCompound(site, stmts)]
 
 @statement_dispatcher
@@ -3615,7 +3645,7 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
                                 parmtype if parmtype else arg.ctype(),
                                 meth_node.name)
                     for (arg, var, (parmname, parmtype)) in zip(
-                            outargs, outvars, meth_node.outp)] 
+                            outargs, outvars, meth_node.outp)]
             exit_handler = GotoExit_dml12()
             with exit_handler:
                 code = [codegen_statement(meth_node.astcode,
@@ -4039,15 +4069,20 @@ def copy_outarg(arg, var, parmname, parmtype, method_name):
     an exception. We would be able to skip the proxy variable for
     calls to non-throwing methods when arg.ctype() and parmtype are
     equivalent types, but we don't do this today.'''
-    argtype = arg.ctype()
-
-    if not argtype:
-        raise ICE(arg.site, "unknown expression type")
+    if isinstance(arg, NonValue):
+        if not arg.writable:
+            raise arg.exc()
     else:
-        ok, trunc, constviol = realtype(parmtype).canstore(realtype(argtype))
-        if not ok:
-            raise EARGT(arg.site, 'call', method_name,
-                         arg.ctype(), parmname, parmtype, 'output')
+        argtype = arg.ctype()
+
+        if not argtype:
+            raise ICE(arg.site, "unknown expression type")
+        else:
+            ok, trunc, constviol = realtype(parmtype).canstore(
+                realtype(argtype))
+            if not ok:
+                raise EARGT(arg.site, 'call', method_name,
+                             arg.ctype(), parmname, parmtype, 'output')
 
     return mkCopyData(var.site, var, arg)
 

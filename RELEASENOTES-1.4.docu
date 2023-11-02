@@ -521,4 +521,14 @@
       This fix is only enabled by default with Simics API version 7 or above.
       With version 6 or below it must be explicitly enabled by passing
       <tt>--no-compat=shared_logs_on_device</tt> to DMLC.</add-note></build-id>
+  <build-id value="next"><add-note> Added the <em>discard reference</em>
+      '<tt>_</tt>' &mdash; a non-value expression which may be used as an assign
+      target in order to explictly discard the result of an evaluated expression
+      or return value of a method call <bug number="SIMICS-21584"/>.
+      Example usage:
+      <pre>
+      _ = any_expression;
+      _ = throwing_method();
+      (_, x, _) = method_with_multiple_return_values();
+      </pre></add-note></build-id>
 </rn>

@@ -126,6 +126,7 @@ __all__ = (
     'mkEachIn', 'EachIn',
     'mkBoolConstant',
     'mkUndefined', 'Undefined',
+    'mkDiscardRef',
     'TraitParameter',
     'TraitSessionRef',
     'TraitHookRef',
@@ -1034,14 +1035,21 @@ def mkAssignStatement(site, target, init):
     if not target.writable:
         raise EASSIGN(site, target)
 
-    target_type = target.ctype()
+    if isinstance(target, NonValue):
+        if not isinstance(init, ExpressionInitializer):
+            raise EDATAINIT(target.site,
+                            f'{target} can only be used as the target of an '
+                            + 'assignment if its initializer is a simple '
+                            + 'expression or a return value of a method call')
+    else:
+        target_type = target.ctype()
 
-    if deep_const(target_type):
-        raise ECONST(site)
+        if deep_const(target_type):
+            raise ECONST(site)
 
-    if isinstance(init, ExpressionInitializer):
-        init = ExpressionInitializer(
-            source_for_assignment(site, target_type, init.expr))
+        if isinstance(init, ExpressionInitializer):
+            init = ExpressionInitializer(
+                source_for_assignment(site, target_type, init.expr))
 
     return AssignStatement(site, target, init)
 
@@ -2448,7 +2456,7 @@ class AssignOp(BinOp):
     def __str__(self):
         return "%s = %s" % (self.lh, self.rh)
 
-    def discard(self):
+    def discard(self, explicit=False):
         return self.lh.write(ExpressionInitializer(self.rh))
 
     def read(self):
@@ -3472,6 +3480,18 @@ class Undefined(NonValue):
         return EUNDEF(self)
 
 mkUndefined = Undefined
+
+class DiscardRef(NonValue):
+    writable = True
+
+    def __str__(self):
+        return '_'
+
+    def write(self, source):
+        assert isinstance(source, ExpressionInitializer)
+        return source.expr.discard(explicit=True)
+
+mkDiscardRef = DiscardRef
 
 def endian_convert_expr(site, idx, endian, size):
     """Convert a bit index to little-endian (lsb=0) numbering.
@@ -4692,8 +4712,8 @@ class RValue(Expression):
         return self.expr.ctype()
     def read(self):
         return self.expr.read()
-    def discard(self):
-        return self.expr.discard()
+    def discard(self, explicit=False):
+        return self.expr.discard(explicit)
     # Since addressable and readable are False this may only ever be leveraged
     # by DMLC for optimization purposes
     @property
