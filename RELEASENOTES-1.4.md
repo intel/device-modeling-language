@@ -356,3 +356,14 @@
   The bugfix is opt-in, because an immediate bugfix would risk breaking existing builds; the error will only be reported when the flag `--no-compat=broken_unused_types` is passed to DMLC. This flag will be automatically enabled in Simics 8.
 - `release 7 7063`
 - `release 6 6362`
+- `note 6` Added the _discard reference_ '`_`' &mdash; a non-value expression
+  which may be used as an assign target in order to explictly discard the result
+  of an evaluated expression or return value of a method call (fixes
+  SIMICS-21584.)
+
+  Example usage:
+  ```
+  _ = any_expression;
+  _ = throwing_method();
+  (_, x, _) = method_with_multiple_return_values();
+  ```

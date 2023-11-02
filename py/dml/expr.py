@@ -136,8 +136,16 @@ class Expression(Code):
         raise ICE(self.site, "can't read %r" % self)
 
     # Produce a C expression but don't worry about the value.
-    def discard(self):
-        return self.read()
+    def discard(self, explicit=False):
+        if not explicit or safe_realtype_shallow(self.ctype()).void:
+            return self.read()
+
+        if self.constant:
+            return '(void)0'
+        from .ctree import Cast
+        expr = (f'({self.read()})'
+                if self.priority < Cast.priority else self.read())
+        return f'(void){expr}'
 
     def ctype(self):
         '''The corresponding DML type of this expression'''

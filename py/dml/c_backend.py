@@ -3158,12 +3158,7 @@ def generate_startup_trait_calls(data, idxvars):
         ref = ObjTraitRef(site, node, trait, indices)
         out(f'_tref = {ref.read()};\n')
         for method in trait_methods:
-            outargs = [mkLit(method.site,
-                             ('*((%s) {0})'
-                              % ((TArray(t, mkIntegerLiteral(method.site, 1))
-                                  .declaration('')),)),
-                             t)
-                       for (_, t) in method.outp]
+            outargs = [mkDiscardRef(method.site) for _ in method.outp]
 
             method_ref = TraitMethodDirect(
                 method.site, mkLit(method.site, '_tref', TTrait(trait)), method)
@@ -3175,12 +3170,7 @@ def generate_startup_trait_calls(data, idxvars):
 def generate_startup_regular_call(method, idxvars):
     site = method.site
     indices = tuple(mkLit(site, idx, TInt(32, False)) for idx in idxvars)
-    outargs = [mkLit(site,
-                     ('*((%s) {0})'
-                      % ((TArray(t, mkIntegerLiteral(site, 1))
-                          .declaration('')),)),
-                     t)
-               for (_, t) in method.outp]
+    outargs = [mkDiscardRef(method.site) for _ in method.outp]
     # startup memoized methods can throw, which is ignored during startup.
     # Memoization of the throw then allows for the user to check whether
     # or not the method did throw during startup by calling the method
