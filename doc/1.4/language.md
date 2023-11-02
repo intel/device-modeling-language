@@ -4104,6 +4104,32 @@ independent method callback(int i, void *aux) {
 }
 ```
 
+### The Discard Reference (`_`)
+```
+_
+```
+
+The discard reference *`_`* is an expression without any run-time representation
+that may be used as the target of an assignment in order to explicitly discard
+the result of an evaluated expression or return value of a method call.
+
+For backwards compatibility reasons, `_` is not a keyword, but instead behaves
+more closely as a global identifier. What this means is that declared
+identifiers (e.g. local variables) are allowed to shadow it by being named `_`.
+
+Example usage:
+```
+// Evaluate an expression and explicitly discard its result.
+// Can be relevant to e.g. suppress Coverity's CHECKED_RETURN checker
+_ = nonthrowing_single_return_method();
+
+// Calls to methods that throw or have multiple return values require a target
+// for each return value. `_` can be used to discard return values not of
+// interest.
+_ = throwing_method();
+(_, x, _) = method_with_multiple_return_values();
+```
+
 ### New Expressions
 
 <pre>
