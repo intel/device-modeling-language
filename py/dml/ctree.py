@@ -137,6 +137,7 @@ __all__ = (
     'mkEachIn', 'EachIn',
     'mkBoolConstant',
     'mkUndefined', 'Undefined',
+    'mkDiscardRef',
     'TraitParameter',
     'TraitSessionRef',
     'TraitHookRef',
@@ -1127,9 +1128,13 @@ def mkAssignStatement(site, target, init):
     if not target.writable:
         raise EASSIGN(site, target)
 
-    target_type = target.ctype()
+    if isinstance(target, NonValue):
+        target_type = target.type if target.explicit_type else None
+    else:
+        target_type = target.ctype()
 
-    if deep_const(target_type):
+
+    if target_type is not None and deep_const(target_type):
         raise ECONST(site)
 
     return AssignStatement(site, target, init)
@@ -1137,7 +1142,13 @@ def mkAssignStatement(site, target, init):
 
 def mkCopyData(site, source, target):
     "Convert a copy statement to intermediate representation"
-    source = source_for_assignment(site, target.ctype(), source)
+    if isinstance(target, NonValue):
+        typ = target.type if target.explicit_type else None
+    else:
+        typ = target.ctype()
+
+    if typ is not None:
+        source = source_for_assignment(site, typ, source)
 
     return mkAssignStatement(site, target, ExpressionInitializer(source))
 
@@ -2550,7 +2561,7 @@ class AssignOp(BinOp):
     def __str__(self):
         return "%s = %s" % (self.lh, self.rh)
 
-    def discard(self):
+    def discard(self, explicit=False):
         return self.lh.write(ExpressionInitializer(self.rh))
 
     def read(self):
@@ -3575,6 +3586,27 @@ class Undefined(NonValue):
 
 mkUndefined = Undefined
 
+class DiscardRef(NonValue):
+    slots = ('explicit_type', 'type')
+    writable = True
+
+    @auto_init
+    def __init__(self, site, type):
+        self.explicit_type = type is not None
+
+    def __str__(self):
+        return '_'
+
+    def write(self, source):
+        if self.explicit_type:
+            return source.as_expr(self.type).discard(explicit=True)
+        else:
+            assert isinstance(source, ExpressionInitializer)
+            return source.expr.discard(explicit=True)
+
+def mkDiscardRef(site, type=None):
+    return DiscardRef(site, type)
+
 def endian_convert_expr(site, idx, endian, size):
     """Convert a bit index to little-endian (lsb=0) numbering.
 
@@ -4009,7 +4041,6 @@ def node_type(node, site):
 class NodeRef(Expression):
     "A reference to a node in the device specification"
     priority = 1000
-    explicit_type = True
     @auto_init
     def __init__(self, site, node, indices):
         assert isinstance(node, objects.DMLObject)
@@ -4036,6 +4067,7 @@ class NodeRefWithStorage(NodeRef, LValue):
     '''Reference to node that also contains storage, such as allocated
     register, field or attribute in DML 1.2'''
     slots = ('type',)
+    explicit_type = True
 
     @auto_init
     def __init__(self, site, node, indices):
@@ -5032,8 +5064,8 @@ class RValue(Expression):
         return self.expr.ctype()
     def read(self):
         return self.expr.read()
-    def discard(self):
-        return self.expr.discard()
+    def discard(self, explicit=False):
+        return self.expr.discard(explicit)
     def incref(self):
         self.expr.incref()
     def decref(self):
@@ -5240,7 +5272,7 @@ class ExpressionInitializer(Initializer):
         rt = safe_realtype_shallow(typ)
         # There is a reasonable implementation for this case (memcpy), but it
         # never occurs today
-        assert not isinstance(typ, TArray)
+        assert not isinstance(rt, TArray)
         if isinstance(rt, TEndianInt):
             return (f'{rt.dmllib_fun("copy")}((void *)&{dest},'
                     + f' {self.expr.read()})')
@@ -5248,7 +5280,7 @@ class ExpressionInitializer(Initializer):
             shallow_deconst_typ = safe_realtype_unconst(typ)
             # a const-qualified ExternStruct can be leveraged by the user as a
             # sign that there is some const-qualified member unknown to DMLC
-            if (isinstance(typ, TExternStruct)
+            if (isinstance(shallow_deconst_typ, TExternStruct)
                 or deep_const(shallow_deconst_typ)):
                 # Expression statement to delimit lifetime of compound literal
                 # TODO it's possible to improve the efficiency of this by not

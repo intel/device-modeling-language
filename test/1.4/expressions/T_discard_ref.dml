@@ -1,0 +1,46 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+header %{
+    #define FUNCLIKE_MACRO() 4
+    #define VARLIKE_MACRO ++counter
+
+    static int counter = 0;
+%}
+
+extern int FUNCLIKE_MACRO(void);
+extern int VARLIKE_MACRO;
+extern int counter;
+
+method t() -> (int) throws {
+    return 1;
+}
+method m2() -> (int, int) {
+    return (1, 2);
+}
+
+method init() {
+    local int x;
+    // Explicit discard guarantees GCC doesn't emit -Wunused by always
+    // void-casting, unless the expression is already void
+    _ = x;
+    _ = FUNCLIKE_MACRO();
+    // Explicit discard does generate C, which evaluates the initializer
+    assert counter == 0;
+    _ = VARLIKE_MACRO;
+    assert counter == 1;
+    try
+        _ = t();
+    catch assert false;
+    (x, _) = m2();
+    assert x == 1;
+    local int y;
+    // Tuple initializers retain the property of each expression being
+    // evaluated left-to-right
+    (_, y) = (x++, x);
+    assert y == 2;
+}
