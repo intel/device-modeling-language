@@ -5,6 +5,8 @@
 dml 1.4;
 device test;
 
+/// DMLC-FLAG --no-suppress-wunused
+
 header %{
     #define FUNCLIKE_MACRO() 4
     #define VARLIKE_MACRO ++counter
@@ -24,10 +26,10 @@ method m2() -> (int, int) {
 }
 
 method init() {
-    local int x;
+    local int unused;
     // Explicit discard guarantees GCC doesn't emit -Wunused by always
     // void-casting, unless the expression is already void
-    _ = x;
+    _ = unused;
     _ = FUNCLIKE_MACRO();
     // Explicit discard does generate C, which evaluates the initializer
     assert counter == 0;
@@ -36,9 +38,9 @@ method init() {
     try
         _ = t();
     catch assert false;
+    local (int x, int y);
     (x, _) = m2();
     assert x == 1;
-    local int y;
     // Tuple initializers retain the property of each expression being
     // evaluated left-to-right
     (_, y) = (x++, x);

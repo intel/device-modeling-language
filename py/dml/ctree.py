@@ -5146,7 +5146,8 @@ def sym_declaration(sym, unused=False):
         return None
 
     # This will prevent warnings from the C compiler
-    unused = unused or (refcount == 0) or sym.value.startswith("__")
+    unused = (unused or (refcount == 0 and dml.globals.suppress_wunused)
+              or sym.name.startswith("_") or sym.value.startswith("__"))
 
     return mkDeclaration(sym.site, sym.value, sym.type,
                          sym.init, unused)

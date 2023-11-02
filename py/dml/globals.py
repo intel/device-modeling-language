@@ -106,3 +106,6 @@ linemarks_enabled = False
 
 # Relevant during C emission: indicates if linemarks should currently be generated
 linemarks = False
+
+# Insert UNUSED for user variable declarations when they are indeed unused
+suppress_wunused = False

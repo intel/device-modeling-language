@@ -2809,7 +2809,7 @@ template register is (_conf_attribute, get, set, shown_desc,
     shared method _size() -> (int) { return this.bitsize / 8; }
     shared method _num_fields() -> (uint32) {
         local uint32 num_fields = 0;
-        foreach f in (fields) {
+        foreach _f in (fields) {
             num_fields++;
         }
         return num_fields;
@@ -2992,7 +2992,6 @@ template register is (_conf_attribute, get, set, shown_desc,
         local uint64 unmapped_bits = unmapped & ~field_bits;
         local uint64 val = (this.val & default_access_bits & enabled_bytes);
 
-        local int r_lsb = _enabled_bytes_to_offset(enabled_bytes) * 8;
         for (local int f = 0; f < num_fields; f++) {
             local int f_lsb = fields[f].lsb;
             local int f_msb = f_lsb + fields[f].bitsize - 1;
@@ -3081,8 +3080,6 @@ template register is (_conf_attribute, get, set, shown_desc,
             return;
         }
 
-        local int r_lsb = _enabled_bytes_to_offset(enabled_bytes) * 8;
-        local int r_msb = _enabled_bytes_to_size(enabled_bytes) * 8 - 1;
         for (local int f = 0; f < num_fields; f++) {
             local int f_lsb = fields[f].lsb;
             local int f_msb = f_lsb + fields[f].bitsize - 1;

@@ -455,9 +455,6 @@ def main(argv):
         default="0",
         help=('Limit the number of error messages to N'))
 
-    # </dl>
-    # </add>
-
     # <dt>--no-compat=<i>TAG</i></dt>
     # <dd>Disable a compatibility feature</dd>
     parser.add_argument(
@@ -467,6 +464,14 @@ def main(argv):
     parser.add_argument(
         '--help-no-compat', action=CompatHelpAction,
         help='List the available tags for --no-compat')
+
+    # <dt>--no-suppress-wunused</dt>
+    # <dd>Disable the automatic suppression of GCC warnings for unused local
+    # variables</dd>
+    parser.add_argument(
+        '--no-suppress-wunused', action='store_true',
+        help=("Disable the automatic suppression of GCC warnings for unused "
+              + "local variables"))
 
     # </dl>
     # </add>
@@ -576,6 +581,7 @@ def main(argv):
         sys.exit(1)
 
     dml.globals.coverity = options.coverity
+    dml.globals.suppress_wunused = not options.no_suppress_wunused
 
     dml.globals.linemarks_enabled = not options.noline
 
