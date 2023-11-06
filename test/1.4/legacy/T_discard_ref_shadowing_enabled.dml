@@ -1,0 +1,24 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// DMLC-FLAG --simics-api=6
+
+constant _ = 1;
+
+group g is init {
+    param _ = 2;
+    method init() {
+        assert _ == 2;
+    }
+}
+
+method init() {
+    assert _ == 1;
+    local int _ = 2;
+    assert _ == 2;
+}

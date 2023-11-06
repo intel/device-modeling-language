@@ -530,5 +530,11 @@
       _ = any_expression;
       _ = throwing_method();
       (_, x, _) = method_with_multiple_return_values();
-      </pre></add-note></build-id>
+      </pre>
+      For backwards compatibility, declared variables and object members are
+      still allowed to be named '<tt>_</tt>' with Simics API version 6 or below.
+      Any such declaration will <em>shadow</em> the discard reference &mdash;
+      i.e. make it unavailable within the scope that the declaration is
+      accessible. This compatibility feature can be disabled by passing
+      <tt>--no-compat=discard_ref_shadowing</tt> to DMLC.</add-note></build-id>
 </rn>

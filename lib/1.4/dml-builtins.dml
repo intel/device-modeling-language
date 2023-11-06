@@ -545,6 +545,7 @@ template device {
     param _compat_port_obj_param auto;
     param _compat_io_memory auto;
     param _compat_shared_logs_on_device auto;
+    param _compat_discard_ref_shadowing auto;
     param _compat_dml12_inline auto;
     param _compat_dml12_not auto;
     param _compat_dml12_goto auto;
@@ -1848,7 +1849,7 @@ template bank is (object, shown_desc) {
     }
 
     shared method _num_registers() -> (uint32) {
-        local (const register *_, uint64 table_size) = _reginfo_table();
+        local (const register *_table, uint64 table_size) = _reginfo_table();
         return table_size;
     }
 

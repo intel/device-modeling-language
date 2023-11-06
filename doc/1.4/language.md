@@ -3817,9 +3817,10 @@ The discard reference *`_`* is an expression without any run-time representation
 that may be used as the target of an assignment in order to explicitly discard
 the result of an evaluated expression or return value of a method call.
 
-For backwards compatibility reasons, `_` is not a keyword, but instead behaves
-more closely as a global identifier. What this means is that declared
-identifiers (e.g. local variables) are allowed to shadow it by being named `_`.
+When the compatibility feature `discard_ref_shadowing` is enabled, `_` is not a
+keyword, but instead behaves more closely as a global identifier.
+What this means is that declared identifiers (e.g. local variables) are allowed
+to shadow it by being named `_`.
 
 Example usage:
 ```

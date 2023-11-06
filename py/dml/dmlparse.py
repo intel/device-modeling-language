@@ -8,7 +8,7 @@ from ply import lex, yacc
 
 from .logging import *
 from .messages import *
-from . import ast, logging
+from . import ast, logging, compat
 import dml.globals
 from . import dmllex12
 from . import dmllex14
@@ -176,6 +176,7 @@ def prod(f):
 @prod
 def device(t):
     'dml : DEVICE objident SEMI maybe_bitorder device_statements'
+    ident_enforce_not_discard_ref(site(t, 2), t[2])
     t[0] = ast.dml(site(t), t[2], t[5])
 
 # Entry point for imported files
@@ -290,6 +291,7 @@ def array_list(t):
 @prod
 def object_regarray(t):
     'object : REGISTER objident array_list sizespec offsetspec maybe_istemplate object_spec'
+    ident_enforce_not_discard_ref(site(t, 2), t[2])
     t[0] = ast.object_(site(t), t[2], 'register', t[3],
                        t[4] + t[5] + t[6] + t[7])
 
@@ -306,6 +308,7 @@ def bitrangespec_empty(t):
 @prod_dml14
 def object_field(t):
     'object : FIELD objident array_list bitrangespec maybe_istemplate object_spec'
+    ident_enforce_not_discard_ref(site(t, 2), t[2])
     t[0] = ast.object_(site(t), t[2], 'field', t[3], t[4] + t[5] + t[6])
 
 def endian_translate_bit(expr, width, bitorder):
@@ -454,11 +457,13 @@ def object3(t):
               | GROUP     objident array_list maybe_istemplate object_spec
               | PORT      objident array_list maybe_istemplate object_spec
               | IMPLEMENT objident array_list maybe_istemplate object_spec'''
+    ident_enforce_not_discard_ref(site(t, 2), t[2])
     t[0] = ast.object_(site(t), t[2], t[1], t[3], t[4] + t[5])
 
 @prod_dml14
 def object_subdevice(t):
     '''object : SUBDEVICE objident array_list maybe_istemplate object_spec'''
+    ident_enforce_not_discard_ref(site(t, 2), t[2])
     t[0] = ast.object_(site(t), t[2], t[1], t[3], t[4] + t[5])
 
 @prod_dml12
@@ -582,6 +587,7 @@ def method_qualifiers_check(site, qualifiers, inp, outp, throws, default):
 def object_method(t):
     '''method : method_qualifiers METHOD objident method_params_typed maybe_default compound_statement'''
     name = t[3]
+    ident_enforce_not_discard_ref(site(t, 3), name)
     (inp, outp, throws) = t[4]
     body = t[6]
     (inp, outp) = method_qualifiers_check(site(t), t[1], inp, outp, throws,
@@ -594,6 +600,7 @@ def object_method(t):
 def object_inline_method(t):
     '''method : INLINE METHOD objident method_params_maybe_untyped maybe_default compound_statement'''
     name = t[3]
+    ident_enforce_not_discard_ref(site(t, 3), name)
     (inp, outp, throws) = t[4]
     if all(typ for (_, asite, name, typ) in inp):
         # inline annotation would have no effect for fully typed methods.
@@ -642,11 +649,13 @@ def arraydef2(t):
 @prod_dml14
 def arraydef(t):
     '''arraydef : ident LT expression'''
+    ident_enforce_not_discard_ref(site(t, 1), t[1])
     t[0] = (t[1], t[3])
 
 @prod_dml14
 def arraydef_implicit(t):
     '''arraydef : ident LT ELLIPSIS'''
+    ident_enforce_not_discard_ref(site(t, 1), t[1])
     t[0] = (t[1], None)
 
 # Traits
@@ -745,15 +754,18 @@ def trait_method(t):
 @prod
 def shared_method_abstract(t):
     '''shared_method : ident method_params_typed SEMI'''
+    ident_enforce_not_discard_ref(site(t, 1), t[1])
     t[0] = (t[1], t[2], True, None, site(t, 3))
 @prod
 def shared_method_default(t):
     '''shared_method : ident method_params_typed DEFAULT compound_statement'''
+    ident_enforce_not_discard_ref(site(t, 1), t[1])
     t[0] = (t[1], t[2], True, t[4], lex_end_site(t, -1))
 
 @prod
 def shared_method_final(t):
     '''shared_method : ident method_params_typed compound_statement'''
+    ident_enforce_not_discard_ref(site(t, 1), t[1])
     t[0] = (t[1], t[2], False, t[3], lex_end_site(t, -1))
 
 @prod_dml12
@@ -784,6 +796,7 @@ def template(t):
 @prod_dml14
 def template(t):
     'toplevel : TEMPLATE objident maybe_istemplate LBRACE template_stmts RBRACE'
+    ident_enforce_not_discard_ref(site(t, 2), t[2])
     ises = [s for s in t[5] if s.kind == 'is']
     shared_methods = [s for s in t[5] if s.kind == 'sharedmethod']
     if ises and shared_methods:
@@ -812,6 +825,7 @@ def impl_header(t):
 @prod
 def loggroup(t):
     'toplevel : LOGGROUP ident SEMI'
+    ident_enforce_not_discard_ref(site(t, 2), t[2])
     t[0] = ast.loggroup(site(t), t[2])
 
 # constant/extern
@@ -819,6 +833,7 @@ def loggroup(t):
 @prod
 def constant(t):
     'toplevel : CONSTANT ident EQUALS expression SEMI'
+    ident_enforce_not_discard_ref(site(t, 2), t[2])
     t[0] = ast.constant(site(t), t[2], t[4])
     if logging.show_porting:
         report(PCONSTANT(site(t)))
@@ -1019,6 +1034,7 @@ def object_else_if(t):
 @prod
 def object_parameter(t):
     '''parameter : param_ objident paramspec'''
+    ident_enforce_not_discard_ref(site(t, 2), t[2])
     if logging.show_porting:
         if t[2] == 'hard_reset_value':
             report(PHARD_RESET_VALUE(site(t, 2)))
@@ -1031,6 +1047,7 @@ def object_parameter(t):
 @prod_dml14
 def object_typedparam(t):
     '''parameter : param_ objident COLON ctypedecl SEMI'''
+    ident_enforce_not_discard_ref(site(t, 2), t[2])
     t[0] = ast.typedparam(site(t), site(t, 2), t[2], t[4])
 
 @prod
@@ -1207,6 +1224,7 @@ def cdecl_or_ident_decl(t):
 @prod_dml14
 def cdecl_or_ident_inline(t):
     '''cdecl_or_ident : INLINE ident'''
+    ident_enforce_not_discard_ref(site(t, 2), t[2])
     t[0] = ast.cdecl(site(t), t[2], None)
 
 # A C-like declaration with required identifier name
@@ -1309,6 +1327,7 @@ def cdecl3(t):
 @prod_dml14
 def cdecl3(t):
     'cdecl3 : ident'
+    ident_enforce_not_discard_ref(site(t, 1), t[1])
     t[0] = [t[1]]
 
 @prod
@@ -2211,6 +2230,7 @@ def ident_list_nonempty(t):
 @prod_dml14
 def ident_list_one(t):
     'nonempty_ident_list : ident'
+    ident_enforce_not_discard_ref(site(t, 1), t[1])
     t[0] = [(site(t, 1), t[1])]
 
 @prod_dml14
@@ -2226,6 +2246,7 @@ def statement_delay_hook(t):
 @prod_dml14
 def statement_delay_hook_one_msg_param(t):
     'statement_except_hashif : AFTER expression ARROW ident COLON expression SEMI %prec bind'
+    ident_enforce_not_discard_ref(site(t, 4), t[4])
     t[0] = ast.afteronhook(site(t), t[2], [(site(t, 4), t[4])], t[6])
 
 
@@ -2350,11 +2371,13 @@ def hashselect(t):
 @prod
 def select(t):
     'statement_except_hashif : hashselect ident IN LPAREN expression RPAREN WHERE LPAREN expression RPAREN statement hashelse statement'
+    ident_enforce_not_discard_ref(site(t, 2), t[2])
     t[0] = ast.select(site(t), t[2], t[5], t[9], t[11], t[13])
 
 @prod_dml12
 def foreach(t):
     'statement_except_hashif : FOREACH ident IN LPAREN expression RPAREN statement'
+    ident_enforce_not_discard_ref(site(t, 2), t[2])
     t[0] = ast.foreach_dml12(site(t), t[2], t[5], t[7])
     if logging.show_porting:
         report(PHASH(site(t)))
@@ -2362,11 +2385,13 @@ def foreach(t):
 @prod_dml14
 def foreach(t):
     'statement_except_hashif : FOREACH ident IN LPAREN expression RPAREN statement'
+    ident_enforce_not_discard_ref(site(t, 2), t[2])
     t[0] = ast.foreach(site(t), t[2], t[5], t[7])
 
 @prod_dml14
 def hashforeach(t):
     'statement_except_hashif : HASHFOREACH ident IN LPAREN expression RPAREN statement'
+    ident_enforce_not_discard_ref(site(t, 2), t[2])
     t[0] = ast.hashforeach(site(t), t[2], t[5], t[7])
 
 @prod_dml12
@@ -2397,6 +2422,7 @@ def case_statement_default(t):
 @prod_dml14
 def goto_statement(t):
     'statement_except_hashif : GOTO ident SEMI'
+    ident_enforce_not_discard_ref(site(t, 2), t[2])
     # Restricted goto should be implemented, see SIMICS-6130
     report(ESYNTAX(site(t), 'goto',
                   'goto statements are not yet implemented in DML 1.4'))
@@ -2573,6 +2599,7 @@ def simple_array_list(t):
 @prod_dml14
 def hook_decl(t):
     '''hook_decl : HOOK LPAREN cdecl_list RPAREN ident simple_array_list SEMI'''
+    ident_enforce_not_discard_ref(site(t, 5), t[5])
     cdecl_list_enforce_unnamed(t[3])
     if t[6]:
         # Hook arrays are an internal feature, as their design depends on if we
@@ -2631,6 +2658,12 @@ def ident(t):
 @lex.TOKEN(ident_rule(dmllex14.reserved_idents + ('ID',)))
 def ident(t):
     t[0] = t[1]
+
+def ident_enforce_not_discard_ref(site, ident):
+    if (str(ident) == '_'
+        and site.dml_version() != (1, 2)
+        and compat.discard_ref_shadowing not in dml.globals.enabled_compat):
+        report(ESYNTAX(site, '_', "reserved identifier"))
 
 reserved_words_12 = [
     'CLASS', 'ENUM', 'NAMESPACE', 'PRIVATE', 'PROTECTED', 'PUBLIC',

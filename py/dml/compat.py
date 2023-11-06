@@ -117,6 +117,13 @@ class shared_logs_on_device(CompatFeature):
     short = "Make logs inside shared methods always log on the device object"
     last_api_version = api_6
 
+@feature
+class discard_ref_shadowing(CompatFeature):
+    '''This compatibility feature allows declarations (within methods or
+    objects) to be named '_'. This will cause the discard reference `_` to be
+    inaccessible (*shadowed*) in all scopes with such a declaration.'''
+    short = "Allow declarations to shadow '_'"
+    last_api_version = api_6
 
 @feature
 class dml12_inline(CompatFeature):
