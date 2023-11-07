@@ -1748,4 +1748,7 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
       are themselves constant inlined method parameters (i.e. an inline method
       call propagates an inline parameter to an inline method call of its own.)
   </add-note></build-id>
+  <build-id value="next"><add-note> Added the warning `WBIGUNROLL` which is
+      emitted when a <tt>#select</tt> or <tt>#foreach</tt> statement is compiled
+      to a large unrolled loop.</add-note></build-id>
 </rn>
