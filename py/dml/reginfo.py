@@ -156,32 +156,31 @@ def explode_register(node):
 def one_register(node, indices, bank):
     bank_indices = static_indices(bank, param_expr_site(node, 'offset'))
     try:
-        roffset = param_expr(node, 'offset', bank_indices + indices)
+        if dml.globals.dml_version == (1, 2):
+            roffset = param_expr(node, 'offset', bank_indices + indices)
+            roffset = expr_intval(roffset) if defined(roffset) else None
+            regnum = param_expr(node, 'regnum', bank_indices + indices)
+            regnum = expr_intval(regnum) if defined(regnum) else None
+        else:
+            roffset = param_int(node, 'offset', indices=bank_indices + indices)
+            # in 1.4, we use the magic constant unmapped_offset to denote
+            # unmapped registers
+            if roffset == 0xffffffffffffffff:
+                roffset = None
+            # the regnum param is specific to DML 1.2
+            regnum = None
+
+        rsize = param_int(node, 'size')
+
+        # roffset is undefined for unmapped registers
+        if roffset and roffset < 0:
+            report(WNEGOFFS(param_expr_site(node, 'offset'), roffset))
+            roffset &= 0xffffffffffffffff
+
+        return (roffset, rsize, regnum)
     except DMLError as e:
         report(e)
-        roffset = mkUndefined(node.site)
-    bank_indices = static_indices(bank, param_expr_site(node, 'regnum'))
-    try:
-        regnum = param_expr(node, 'regnum', bank_indices + indices)
-    except DMLError as e:
-        report(e)
-        regnum = mkUndefined(node.site)
-
-    rsize = param_int(node, 'size', 4)
-
-    # roffset is undefined for unmapped registers
-    roffset = expr_intval(roffset, None) if defined(roffset) else None
-    if roffset and roffset < 0:
-        report(WNEGOFFS(param_expr_site(node, 'offset'), roffset))
-        roffset &= 0xffffffffffffffff
-
-    # in 1.4, we use the magic constant unmapped_offset to denote
-    # unmapped registers
-    if roffset == 0xffffffffffffffff and dml.globals.dml_version != (1, 2):
-        roffset = None
-    regnum = expr_intval(regnum, None) if defined(regnum) else None
-
-    return roffset, rsize, regnum
+        return (None, 4, None)
 
 def check_overlap(regs):
     instances = sorted((ri for reg in regs for ri in reg.layout),
