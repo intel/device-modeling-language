@@ -8,9 +8,9 @@ import dml.globals
 from itertools import product
 from collections import OrderedDict
 from .ctree import (StringConstant, IntegerConstant, mkIntegerLiteral,
-                    all_index_exprs)
+                    all_index_exprs, param_str_fixup)
 from .expr_util import (
-    defined, undefined, param_str, param_int, param_defined,
+    defined, undefined, param_int, param_defined,
     static_indices)
 from .messages import *
 from .logging import *
@@ -179,6 +179,6 @@ def dev_info(fmt, node, classname):
     fmt.end_element('device')
 
 def generate(device, filename):
-    classname = param_str(device, 'classname', '-')
+    classname = param_str_fixup(device, 'classname', '-')
     with XMLWriter(filename) as outfile:
         dev_info(outfile, device, classname)

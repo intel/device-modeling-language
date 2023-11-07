@@ -1968,13 +1968,13 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                 register_fields(obj),
                 key = field_msb)
             if obj.wholefield:
-                if not param_bool(obj, 'allocate', fallback=True):
+                if not param_bool_fixup(obj, 'allocate', True):
                     if method_is_std(obj, 'set'):
                         obj.writable = False
                     if method_is_std(obj, 'get'):
                         obj.readable = False
             else:
-                if not any(param_bool(f, 'allocate', fallback=True)
+                if not any(param_bool_fixup(f, 'allocate', True)
                            for (f, _, _, _) in fields):
                     if all(method_is_std(f, 'set') for (f, _, _, _) in fields):
                         obj.writable = False
@@ -2261,7 +2261,7 @@ def sort_registers(bank):
                 bank_indices = tuple(StaticIndex(reg.site, var)
                                      for var in bank.idxvars())
                 return [(param_int(reg, 'offset',
-                                   indices = bank_indices + reg_indices), coord)
+                                   indices=bank_indices + reg_indices), coord)
                         for (reg_indices, coord) in zip(
                                 itertools.product(
                                     *([mkIntegerLiteral(reg.site, i)
@@ -2433,17 +2433,6 @@ class UninitializedParamExpr(objects.ParamExpr):
         self.name = name
     def mkexpr(self, indices):
         raise EUNINITIALIZED(self.site, self.name)
-
-class SimpleParamExpr(objects.ParamExpr):
-    '''A parameter expression, using a simple index-free Expression as
-    value'''
-    __slots__ = ('expr',)
-    def __init__(self, expr):
-        self.expr = expr
-    @property
-    def site(self): return self.expr.site
-    def mkexpr(self, indices):
-        return self.expr
 
 class EventClassParamExpr(objects.ParamExpr):
     '''The evclass parameter of an event object'''

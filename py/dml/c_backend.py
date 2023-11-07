@@ -39,7 +39,7 @@ structfilename = None
 def get_attr_flags(obj):
     conf = param_str(obj, 'configuration')
     persist = param_bool(obj, 'persistent')
-    internal = (param_bool(obj, 'internal', fallback=True)
+    internal = (param_bool_fixup(obj, 'internal', True)
                 or obj.is_confidential())
 
     if conf == 'required':
@@ -72,7 +72,7 @@ def get_short_doc(node):
 def get_long_doc(node):
     doc = None
     if param_defined(node, 'documentation'):
-        doc = param_str(node, 'documentation', "")
+        doc = param_str_fixup(node, 'documentation', "")
     # always check desc to catch EIDXVAR even if it isn't used
     desc = get_short_doc(node)
     if doc != None:
@@ -155,7 +155,7 @@ def print_device_substruct(node):
         return arraywrap(node, TNamed('_dml_hook_t'))
     elif (node.objtype in ('register', 'field')
           and dml.globals.dml_version == (1, 2)):
-        allocate = param_bool(node, 'allocate', fallback=True)
+        allocate = param_bool_fixup(node, 'allocate', True)
         if node.simple_storage:
             return (arraywrap(node, crep.node_storage_type(node))
                     if allocate else None)
@@ -503,7 +503,7 @@ def generate_attr_getter(fname, node, port, dimsizes, cprefix, loopvars):
 
 # dimsizes, loopvars, prefix are relative to port.
 def check_attribute(node, port, prefix):
-    config_param = param_str(node, 'configuration', fallback='none')
+    config_param = param_str_fixup(node, 'configuration', 'none')
     if config_param == 'none':
         return
     if not get_long_doc(node):
@@ -523,7 +523,7 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
     assert dml.globals.dml_version == (1, 2)
     attrname = get_attr_name(prefix, node)
 
-    config_param = param_str(node, 'configuration', fallback='none')
+    config_param = param_str_fixup(node, 'configuration', 'none')
     if config_param == 'none':
         return
 
@@ -962,7 +962,7 @@ def generate_port_class(code, device, port):
         port, ('%d',) * port.dimensions)
     portclass_name_comps = [o.name_anonymized
                             for o in node_ancestors(port, device)]
-    portclass_name_comps.append(param_str(device, 'classname', fallback=''))
+    portclass_name_comps.append(param_str_fixup(device, 'classname', ''))
     portclass_name = '.'.join(reversed(portclass_name_comps))
     desc = string_literal(get_short_doc(port))
     doc = string_literal(get_long_doc(port))
@@ -1937,11 +1937,11 @@ def generate_init(device, initcode, outprefix):
     out('};\n', preindent = -1)
     out('\n')
     out('conf_class_t *class = SIM_create_class("'
-        + param_str(device, 'classname', fallback='') + '", &funcs);\n')
+        + param_str_fixup(device, 'classname', '') + '", &funcs);\n')
     out('_dev_class = class;\n')
     out('if (SIM_clear_exception() != SimExc_No_Exception) {\n', postindent = 1)
     out('fprintf(stderr, "Failed to register class '
-        + param_str(device, 'classname', fallback='')
+        + param_str_fixup(device, 'classname', '')
         + ': %s\\n", SIM_last_error());\n')
     out('return NULL;\n')
     out('}\n', preindent = -1)
