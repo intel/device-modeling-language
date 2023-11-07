@@ -1478,7 +1478,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
         if not param_defined(obj, 'size'):
             raise EREGNSZ(obj)
 
-        if param_int(obj, 'size', 4) > 8:
+        if param_int(obj, 'size') > 8:
             raise EREGISZ(obj)
 
     obj_traits = []
