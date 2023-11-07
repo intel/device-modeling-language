@@ -64,6 +64,12 @@ class Output(object):
             self.out('#line %d "%s"\n'
                      % (self.lineno + 1, quote_filename(self.filename)))
 
+    class IndeterminateFilename: pass
+
+    def indeterminate_line_directive(self):
+        self.redirected_filename = Output.IndeterminateFilename
+        self.redirected_lineno = None
+
     def out(self, output, preindent = 0, postindent = 0):
         self.indent += preindent * indent_level
         if output == '\n':
@@ -197,6 +203,7 @@ def coverity_markers(markers, site=None):
                 out('#ifndef __COVERITY__\n')
                 site_linemark_nocoverity(site, adjust=-(len(markers) + 1))
                 out('#endif\n')
+                current().indeterminate_line_directive()
         for (event, classification) in markers:
             classification = f' : {classification}' if classification else ''
             out(f'/* coverity[{event}{classification}] */\n')
