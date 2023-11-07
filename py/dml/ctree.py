@@ -6,14 +6,12 @@
 import os.path
 import re
 import abc
-import collections
 import operator
 import itertools
 import math
 from functools import reduce
-from contextlib import nullcontext
 
-from dml import objects, symtab, logging, crep, serialize
+from dml import objects, symtab, logging, crep
 from .logging import *
 from .messages import *
 from .output import *
@@ -35,6 +33,10 @@ __all__ = (
 
     'ExpressionSymbol',
     'LiteralSymbol',
+
+    'SimpleParamExpr',
+    'param_str_fixup',
+    'param_bool_fixup',
 
     'mkCompound',
     'mkNull', 'Null',
@@ -200,6 +202,48 @@ def assert_comparable_types(site, expr1, expr2, equality):
         typ1 = realtype(expr1.ctype())
         typ2 = realtype(expr2.ctype())
         raise EILLCOMP(site, expr1, typ1, expr2, typ2)
+
+
+class SimpleParamExpr(objects.ParamExpr):
+    '''A parameter expression, using a simple index-free Expression as
+    value'''
+    __slots__ = ('expr',)
+    def __init__(self, expr: Expression):
+        self.expr = expr
+    @property
+    def site(self): return self.expr.site
+    def mkexpr(self, indices):
+        return self.expr
+
+
+def param_str_fixup(node, name: str, fixup: str) -> str:
+    """Return the value of a string parameter. On error, report the
+    error, change the parameter to evaluate to `fixup`, and return
+    that.
+    """
+    try:
+        return param_str(node, name)
+    except DMLError as e:
+        report(e)
+        pnode = node.get_component(name)
+        pnode.set_expr(SimpleParamExpr(mkStringConstant(
+            node.site, fixup)))
+        return param_str(node, name)
+
+
+def param_bool_fixup(node, name: str, fixup: bool) -> bool:
+    """Return a parameter's value. On error,
+    report the error, change the parameter to evaluate to `fixup`, and
+    return that.
+    """
+    try:
+        return param_bool(node, name)
+    except DMLError as e:
+        report(e)
+        pnode = node.get_component(name)
+        pnode.set_expr(SimpleParamExpr(mkBoolConstant(node.site, fixup)))
+        return param_bool(node, name)
+
 
 class ExpressionSymbol(symtab.Symbol):
     """A symbol that corresponds to an expression."""

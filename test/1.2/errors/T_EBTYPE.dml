@@ -5,8 +5,6 @@
 dml 1.2;
 device test;
 
-// Suppress propagated error where classname is used as string
-/// ERROR EPTYPE dml-builtins.dml
 /// ERROR EBTYPE
 parameter classname = 17;
 
@@ -17,7 +15,6 @@ implement foo {
     method i() {}
 }
 
-/// ERROR EPTYPE
 bank B {
     register r1 size 4 @ undefined {
         field f[1] {

@@ -26,8 +26,6 @@ bank b {
         parameter internal = j == 0;
     }
 
-    // for bitsize, which is calculated from size by dml-builtins
-    /// ERROR ENCONST dml-builtins.dml
     register r2
         /// ERROR ENCONST
         size f() @ undefined;
