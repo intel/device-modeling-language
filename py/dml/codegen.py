@@ -3055,7 +3055,7 @@ def stmt_select(stmt, location, scope):
                 if_chain = last_stmt
             else:
                 if_chain = codegen_statement(else_ast, location, scope)
-            if iterations > 50 and isinstance(lst, List):
+            if iterations > WBIGUNROLL.limit and isinstance(lst, List):
                 report(WBIGUNROLL(stmt.site,
                                   '#'*(stmt.site.dml_version() != (1, 2))
                                   + 'select',
@@ -3186,7 +3186,7 @@ def foreach_constant_list(site, itername, lst, statement, location, scope):
                     stmt)
             spec.append(mkCompound(site, decls + [stmt]))
 
-        if len(spec) > 50 and isinstance(lst, List):
+        if len(spec) > WBIGUNROLL.limit and isinstance(lst, List):
             report(WBIGUNROLL(site,
                               '#'*(site.dml_version() != (1, 2)) + 'foreach',
                               len(spec)))

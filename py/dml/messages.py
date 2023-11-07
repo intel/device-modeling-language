@@ -2012,16 +2012,17 @@ class WHOOKSEND(DMLWarning):
            + "information about the differences between 'send' and 'send_now'")
 
 class WBIGUNROLL(DMLWarning):
-    """
+    limit = 64
+    __doc__ = f"""
     A `#select` or `#foreach` statement was specified which caused DMLC to
     study the body and generate duplicated C code for it a large number of
-    times (more than 50 times.) This can dramatically increase both DMLC and
-    GCC compile times and code size, if not crash DMLC outright.
+    times (more than {limit} times.) This can dramatically increase both DMLC
+    and GCC compile times and code size, if not crash DMLC outright.
 
     To address this, you have two options:
     * Ensure most iterations can be entirely eliminated at compile-time by
       DMLC. For `#select`, this can be done by ensuring that the `where` check
-      will be a constant (typically a constant equality) for most if not all
+      will be a constant value (e.g. a constant equality) for most if not all
       items of the specified list. For `#foreach`, encase the body in an `#if`
       check that is false for most items of the specified list.
     * Don't use `#select` or `#foreach`. Represent the specified compile-time
