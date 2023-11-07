@@ -1342,6 +1342,7 @@ template connect is _conf_attribute {
         if (this.port)
             MM_FREE(cast(this.port, void *));
         this.port = port ? MM_STRDUP(port) : NULL;
+        /*% COVERITY var_deref_model %*/
         this.set(obj);
         return Sim_Set_Ok;
     }
