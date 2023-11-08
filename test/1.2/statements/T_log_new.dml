@@ -4,18 +4,20 @@
 */
 dml 1.2;
 device test;
-import "testing.dml";
 
-method test -> (bool ok) {
-    /// GREP \[obj info\] INFO
-    log info: "INFO";
-    /// GREP \[obj spec-viol\] SPEC_VIOL_
-    log spec_viol: "SPEC_VIOL_";
-    /// GREP \[obj unimpl\] UNIMPL_
-    log unimpl: "UNIMPL_";
-    /// GREP \[obj error\] ERROR
-    log error: "ERROR";
-    /// GREP \[obj critical\] CRITICAL
-    log critical: "CRITICAL";
-    ok = true;
+attribute log_stuff {
+    parameter type = "n";
+    parameter configuration = "pseudo";
+    method set(attr_value_t _) {
+        /// GREP \[obj info\] INFO
+        log info: "INFO";
+        /// GREP \[obj spec-viol\] SPEC_VIOL_
+        log spec_viol: "SPEC_VIOL_";
+        /// GREP \[obj unimpl\] UNIMPL_
+        log unimpl: "UNIMPL_";
+        /// GREP \[obj error\] ERROR
+        log error: "ERROR";
+        /// GREP \[obj critical\] CRITICAL
+        log critical: "CRITICAL";
+    }
 }
