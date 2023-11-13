@@ -12,11 +12,11 @@ signal_stub.register()
 
 # instantiation fails if an interface is missing in the init_as_subobj
 # port object
-conf.sim.fail_on_warnings = False
+conf.sim.stop_on_error = False
 with stest.expect_log_mgr(None, 'critical'):
     bad = simics.SIM_create_object('test', 'bad', [])
 stest.expect_equal(bad.sub_renamed, [None, None])
-conf.sim.fail_on_warnings = True
+conf.sim.stop_on_error = True
 
 SIM_register_interface('signal_stub', 'signal', signal_interface_t(
     signal_raise=lambda obj: calls.append((obj, 'signal_raise'))))

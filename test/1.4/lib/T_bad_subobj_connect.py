@@ -3,7 +3,7 @@
 
 from simics_common import CriticalErrors
 import stest
-conf.sim.fail_on_warnings = False
+conf.sim.stop_on_error = False
 try:
     SIM_load_module(f'dml-test-bad_subobj_connect')
 except CriticalErrors as e:
