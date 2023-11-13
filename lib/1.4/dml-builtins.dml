@@ -2825,33 +2825,6 @@ template register is (_conf_attribute, get, set, shown_desc,
 
     // fills in the passed array with all fields in this register, and returns
     // the number of elements and a bitmask showing bits not covered by fields.
-    shared method _get_all_fields(field *fields) -> (int, uint64) /* n, unmapped */ {
-        local uint64 unmapped;
-        unmapped[this.bitsize-1:0] = -1;
-        local int n = 0;
-        // TODO: it is inefficient to re-generate the field list each call
-        foreach f in (this.fields) {
-            local int lsb = f.lsb;
-            // sort 'fields' by lsb
-            local int i;
-            for (i = n; i > 0; --i) {
-                local int next_lsb = fields[i - 1].lsb;
-                if (next_lsb > lsb) {
-                    fields[i] = fields[i - 1];
-                } else {
-                    break;
-                }
-            }
-            fields[i] = f;
-            unmapped[lsb + f.bitsize - 1 : lsb] = 0;
-            ++n;
-        }
-        assert n <= 64;
-        return (n, unmapped);
-    }
-
-    // fills in the passed array with all fields in this register, and returns
-    // the number of elements and a bitmask showing bits not covered by fields.
     shared method _get_get_fields(_get_field *fields) -> (int, uint64) /* n, unmapped */ {
         local uint64 unmapped;
         unmapped[this.bitsize-1:0] = -1;
