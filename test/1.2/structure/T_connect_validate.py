@@ -1,7 +1,7 @@
 # © 2021-2023 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
-conf.sim.fatal_error_messages = False
+conf.sim.stop_on_error = False
 obj.foo = conf.sim
 try:
     obj.foo = obj

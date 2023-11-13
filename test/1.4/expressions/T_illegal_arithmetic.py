@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import simics
-conf.sim.fail_on_warnings = False
+conf.sim.stop_on_error = False
 try:
     obj.not_zero = 0
 except simics.CriticalErrors as e:

@@ -3,7 +3,7 @@
 
 import simics
 import stest
-conf.sim.fail_on_warnings = False
+conf.sim.stop_on_error = False
 
 try:
     obj.test_bad_eq = None
