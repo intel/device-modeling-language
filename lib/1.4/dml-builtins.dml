@@ -2879,7 +2879,9 @@ template register is (_conf_attribute, get, set, shown_desc,
 
     // fills in the passed array with all fields in this register, and returns
     // the number of elements and a bitmask showing bits not covered by fields.
-    shared method _get_write_fields(_write_field *fields) -> (int, uint64) /* n, unmapped */ {
+    shared independent startup memoized method _get_write_fields()
+        -> (int, const _write_field *, uint64) /* n, fields, unmapped */ {
+        local _write_field fields[64];
         local uint64 unmapped;
         unmapped[this.bitsize-1:0] = -1;
         local int n = 0;
@@ -2901,12 +2903,18 @@ template register is (_conf_attribute, get, set, shown_desc,
             ++n;
         }
         assert n <= 64;
-        return (n, unmapped);
+        local _write_field *ret = new _write_field[n];
+        for (local int i = 0; i < n; i++) {
+            ret[i] = fields[i];
+        }
+        return (n, ret, unmapped);
     }
 
     // fills in the passed array with all fields in this register, and returns
     // the number of elements and a bitmask showing bits not covered by fields.
-    shared method _get_read_fields(_read_field *fields) -> (int, uint64) /* n, unmapped */ {
+    shared independent startup memoized method _get_read_fields()
+        -> (int, const _read_field *, uint64) /* n, fields, unmapped */ {
+        local _read_field fields[64];
         local uint64 unmapped;
         unmapped[this.bitsize-1:0] = -1;
         local int n = 0;
@@ -2928,7 +2936,11 @@ template register is (_conf_attribute, get, set, shown_desc,
             ++n;
         }
         assert n <= 64;
-        return (n, unmapped);
+        local _read_field *ret = new _read_field[n];
+        for (local int i = 0; i < n; i++) {
+            ret[i] = fields[i];
+        }
+        return (n, ret, unmapped);
     }
 
     // Reset register to init_val, except bits covered by fields. Only intended
@@ -2958,9 +2970,9 @@ template register is (_conf_attribute, get, set, shown_desc,
            return val & enabled_bytes;
         }
         local int num_fields;
-        local _read_field fields[64];
+        local const _read_field *fields;
         local uint64 unmapped;
-        (num_fields, unmapped) = this._get_read_fields(fields);
+        (num_fields, fields, unmapped) = this._get_read_fields();
         local uint64 default_access_bits = unmapped & field_bits;
         local uint64 unmapped_bits = unmapped & ~field_bits;
         local uint64 val = (this.val & default_access_bits & enabled_bytes);
@@ -3045,9 +3057,9 @@ template register is (_conf_attribute, get, set, shown_desc,
             return;
         }
         local int num_fields;
-        local _write_field fields[64];
+        local const _write_field *fields;
         local uint64 unmapped;
-        (num_fields, unmapped) = this._get_write_fields(fields);
+        (num_fields, fields, unmapped) = this._get_write_fields();
         local uint64 default_write_bits = unmapped & field_bits;
         local uint64 unmapped_bits = unmapped & ~field_bits;
         if (enabled_bytes == 0) {
