@@ -2877,70 +2877,58 @@ template register is (_conf_attribute, get, set, shown_desc,
         return (n, unmapped);
     }
 
-    // fills in the passed array with all fields in this register, and returns
-    // the number of elements and a bitmask showing bits not covered by fields.
-    shared independent startup memoized method _get_write_fields()
-        -> (int, const _write_field *, uint64) /* n, fields, unmapped */ {
-        local _write_field fields[64];
-        local uint64 unmapped;
-        unmapped[this.bitsize-1:0] = -1;
-        local int n = 0;
-        // TODO: it is inefficient to re-generate the field list each call
-        foreach f in (this._write_fields) {
-            local int lsb = f.lsb;
+    shared independent method _sort_permutation(const uint8 *keys, int n)
+        -> (uint8 *) {
+        assert n <= 64;
+        local uint8 sorted[n];
+        local uint8 idx[n];
+        local uint8 perm[n];
+        for (local int i = 0; i < n; i++) {
+            local int lsb = keys[i];
             // sort 'fields' by lsb
-            local int i;
-            for (i = n; i > 0; --i) {
-                local int next_lsb = fields[i - 1].lsb;
+            local int j;
+            for (j = i; j > 0; --j) {
+                local int next_lsb = sorted[j - 1];
                 if (next_lsb > lsb) {
-                    fields[i] = fields[i - 1];
+                    sorted[j] = sorted[j - 1];
+                    idx[j] = idx[j - 1];
+                    perm[idx[j]] += 1;
                 } else {
                     break;
                 }
             }
-            fields[i] = f;
-            unmapped[lsb + f.bitsize - 1 : lsb] = 0;
-            ++n;
+            sorted[j] = lsb;
+            idx[j] = i;
+            perm[i] = j;// | 0x80;
         }
-        assert n <= 64;
-        local _write_field *ret = new _write_field[n];
+        local uint8 *ret = new uint8[n];
         for (local int i = 0; i < n; i++) {
-            ret[i] = fields[i];
+            ret[i] = perm[i];
         }
-        return (n, ret, unmapped);
+        return ret;
     }
 
-    // fills in the passed array with all fields in this register, and returns
-    // the number of elements and a bitmask showing bits not covered by fields.
-    shared independent startup memoized method _get_read_fields()
-        -> (int, const _read_field *, uint64) /* n, fields, unmapped */ {
-        local _read_field fields[64];
-        local uint64 unmapped;
-        unmapped[this.bitsize-1:0] = -1;
+    // returns how to permute `_write_fields` to order it by lsb
+    shared independent startup memoized method _get_write_fields()
+        -> (uint8 *) {
+        local uint8 lsbs[64];
         local int n = 0;
-        // TODO: it is inefficient to re-generate the field list each call
-        foreach f in (this._read_fields) {
-            local int lsb = f.lsb;
-            // sort 'fields' by lsb
-            local int i;
-            for (i = n; i > 0; --i) {
-                local int next_lsb = fields[i - 1].lsb;
-                if (next_lsb > lsb) {
-                    fields[i] = fields[i - 1];
-                } else {
-                    break;
-                }
-            }
-            fields[i] = f;
-            unmapped[lsb + f.bitsize - 1 : lsb] = 0;
+        foreach f in (this._write_fields) {
+            lsbs[n] = f.lsb;
             ++n;
         }
-        assert n <= 64;
-        local _read_field *ret = new _read_field[n];
-        for (local int i = 0; i < n; i++) {
-            ret[i] = fields[i];
+        return _sort_permutation(lsbs, n);
+    }
+
+    // returns how to permute `_write_fields` to order it by lsb
+    shared independent startup memoized method _get_read_fields() -> (uint8 *) {
+        local uint8 lsbs[64];
+        local int n = 0;
+        foreach f in (this._read_fields) {
+            lsbs[n] = f.lsb;
+            ++n;
         }
-        return (n, ret, unmapped);
+        return _sort_permutation(lsbs, n);
     }
 
     // Reset register to init_val, except bits covered by fields. Only intended
@@ -2969,22 +2957,31 @@ template register is (_conf_attribute, get, set, shown_desc,
            // if no fields, then default is to return the value
            return val & enabled_bytes;
         }
-        local int num_fields;
-        local const _read_field *fields;
-        local uint64 unmapped;
-        (num_fields, fields, unmapped) = this._get_read_fields();
+        local _read_field fields[64];
+        local uint8 lsbs[64];
+        local uint8 msbs[64];
+        local uint8 *perm = this._get_read_fields();
+        local uint64 unmapped = 0;
+        unmapped[this.bitsize-1:0] = -1;
+        local int num_fields = 0;
+        foreach f in (this._read_fields) {
+            local int idx = perm[num_fields];
+            fields[idx] = f;
+            lsbs[idx] = f.lsb;
+            msbs[idx] = lsbs[idx] + f.bitsize - 1;
+            unmapped[msbs[idx] : lsbs[idx]] = 0;
+            ++num_fields;
+        }
+
         local uint64 default_access_bits = unmapped & field_bits;
         local uint64 unmapped_bits = unmapped & ~field_bits;
         local uint64 val = (this.val & default_access_bits & enabled_bytes);
 
         local int r_lsb = _enabled_bytes_to_offset(enabled_bytes) * 8;
         for (local int f = 0; f < num_fields; f++) {
-            local int f_lsb = fields[f].lsb;
-            local int f_msb = f_lsb + fields[f].bitsize - 1;
-
-            local uint64 f_enabled_bytes = enabled_bytes[f_msb : f_lsb];
+            local uint64 f_enabled_bytes = enabled_bytes[msbs[f] : lsbs[f]];
             if (f_enabled_bytes != 0) {
-                val[f_msb : f_lsb]
+                val[msbs[f] : lsbs[f]]
                     = fields[f].read_field(f_enabled_bytes,
                                            aux) & f_enabled_bytes;
             }
@@ -3056,10 +3053,21 @@ template register is (_conf_attribute, get, set, shown_desc,
             this.val = (this.val & ~enabled_bytes) | (value & enabled_bytes);
             return;
         }
-        local int num_fields;
-        local const _write_field *fields;
-        local uint64 unmapped;
-        (num_fields, fields, unmapped) = this._get_write_fields();
+        local _write_field fields[64];
+        local uint8 lsbs[64];
+        local uint8 msbs[64];
+        local uint8 *perm = this._get_write_fields();
+        local uint64 unmapped = 0;
+        unmapped[this.bitsize-1:0] = -1;
+        local int num_fields = 0;
+        foreach f in (this._write_fields) {
+            local int idx = perm[num_fields];
+            fields[idx] = f;
+            lsbs[idx] = f.lsb;
+            msbs[idx] = lsbs[idx] + f.bitsize - 1;
+            unmapped[msbs[idx] : lsbs[idx]] = 0;
+            ++num_fields;
+        }
         local uint64 default_write_bits = unmapped & field_bits;
         local uint64 unmapped_bits = unmapped & ~field_bits;
         if (enabled_bytes == 0) {
