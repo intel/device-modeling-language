@@ -3129,9 +3129,91 @@ _DML_get_single_hook_attr(void *_hook, uintptr_t _aux) {
                                      &hook->queue);
 }
 
-
 UNUSED static inline uint64 _identity_to_key(_identity_t id) {
         return (uint64)id.id << 32 | (uint64)id.encoded_index;
+}
+
+typedef struct {
+        ht_int_table_t id_to_idx_read;
+        ht_int_table_t id_to_idx_write;
+        ht_str_table_t perm_set;
+        VECT(uint8) table;
+} _permutation_helper_t;
+
+UNUSED static _permutation_helper_t *
+_DML_new_permutation_helper(void)
+{
+        _permutation_helper_t *ret = MM_MALLOC(1, _permutation_helper_t);
+        ht_init_int_table(&ret->id_to_idx_read);
+        ht_init_int_table(&ret->id_to_idx_write);
+        ht_init_str_table(&ret->perm_set, true);
+        VINIT(ret->table);
+        return ret;
+}
+
+UNUSED static void
+_DML_add_read_permutation(_permutation_helper_t *h, _identity_t id,
+                           const char *perm) {
+        ht_str_entry_t *entry = ht_entry_lookup_str(&h->perm_set, perm);
+        uintptr_t idx;
+        if (entry == NULL) {
+                idx = VLEN(h->table);
+                ht_update_str(&h->perm_set, perm, (void *)idx);
+                int n = strlen(perm);
+                VGROW(h->table, n);
+                for (int i = 0; i < n; i++) {
+                        VSET(h->table, idx + i, perm[i] & 0x7f);
+                }
+        } else {
+                idx = (uintptr_t)entry->e.value;
+        }
+        ht_update_int(&h->id_to_idx_read, _identity_to_key(id), (void *)idx);
+}
+
+UNUSED static void
+_DML_add_write_permutation(_permutation_helper_t *h, _identity_t id,
+                            const char *perm) {
+        ht_str_entry_t *entry = ht_entry_lookup_str(&h->perm_set, perm);
+        uintptr_t idx;
+        if (entry == NULL) {
+                idx = VLEN(h->table);
+                ht_update_str(&h->perm_set, perm, (void *)idx);
+        } else {
+                idx = (uintptr_t)entry->e.value;
+        }
+        ht_update_int(&h->id_to_idx_write, _identity_to_key(id), (void *)idx);
+}
+
+UNUSED static int
+_DML_permutation_index_read(_permutation_helper_t *h, _identity_t id)
+{
+        return (uintptr_t)ht_lookup_int(&h->id_to_idx_read,
+                                        _identity_to_key(id));
+}
+
+UNUSED static int
+_DML_permutation_index_write(_permutation_helper_t *h, _identity_t id)
+{
+        return (uintptr_t)ht_lookup_int(&h->id_to_idx_write,
+                                        _identity_to_key(id));
+}
+
+UNUSED static const uint8 *
+_DML_field_permutations(_permutation_helper_t *h)
+{
+        uint8 *ret = MM_MALLOC(VLEN(h->table), uint8);
+        memcpy(ret, VVEC(h->table), VLEN(h->table));
+        return ret;
+}
+
+UNUSED static void
+_DML_destroy_permutation_table_helper(_permutation_helper_t *helper)
+{
+        ht_delete_int_table(&helper->id_to_idx_read, false);
+        ht_delete_int_table(&helper->id_to_idx_write, false);
+        ht_delete_str_table(&helper->perm_set, false);
+        VFREE(helper->table);
+        MM_FREE(helper);
 }
 
 typedef struct {

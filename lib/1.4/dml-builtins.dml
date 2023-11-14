@@ -72,6 +72,22 @@ extern typedef struct {
     _identity_t id;
 } _traitref_t;
 
+extern typedef struct {} _permutation_helper_t;
+
+extern _permutation_helper_t *_DML_new_permutation_helper(void);
+
+extern void _DML_add_read_permutation(
+    _permutation_helper_t *h, _identity_t id, const char *perm);
+
+extern void _DML_add_write_permutation(_permutation_helper_t *h, _identity_t id,
+                                        const char *perm);
+
+extern int _DML_permutation_index_read(_permutation_helper_t *h, _identity_t id);
+extern int _DML_permutation_index_write(
+    _permutation_helper_t *h, _identity_t id);
+extern const uint8 *_DML_field_permutations(_permutation_helper_t *h);
+extern void _DML_destroy_permutation_table_helper(_permutation_helper_t *helper);
+
 extern bank_callback_handle_t _register_before_read(
     conf_object_t *bank,
     conf_object_t *connection,
@@ -574,6 +590,51 @@ template device {
     method post_init() default {}
 
     method destroy() default { }
+
+    independent startup memoized method _permutation_table_helper()
+        -> (_permutation_helper_t *) {
+        local _permutation_helper_t *h = _DML_new_permutation_helper();
+        foreach reg in (each register in (dev)) {
+            local uint8 lsbs[64];
+            local int n = 0;
+            foreach f in (reg._read_fields) {
+                lsbs[n] = f.lsb;
+                ++n;
+            }
+            _DML_add_read_permutation(h, cast(&reg, _traitref_t *)->id,
+                                      reg._sort_permutation(lsbs, n));
+            n = 0;
+            foreach f in (reg._write_fields) {
+                lsbs[n] = f.lsb;
+                ++n;
+            }
+            _DML_add_write_permutation(h, cast(&reg, _traitref_t *)->id,
+                                       reg._sort_permutation(lsbs, n));
+        }
+        return h;
+    }
+    independent startup memoized method _field_permutation_table()
+        -> (const uint8 *) {
+        return _DML_field_permutations(_permutation_table_helper());
+    }
+    independent method _permutation_index_read(object o)
+        -> (uint32) {
+        return _DML_permutation_index_read(_permutation_table_helper(),
+                                           cast(&o, _traitref_t *)->id);
+    }
+    independent method _permutation_index_write(object o)
+        -> (uint32) {
+        return _DML_permutation_index_write(_permutation_table_helper(),
+                                            cast(&o, _traitref_t *)->id);
+    }
+    independent startup method _cleanup_permutation_table_helper() {
+        foreach reg in (each register in (dev)) {
+            reg._get_read_fields();
+            reg._get_write_fields();
+        }
+        _field_permutation_table();
+        _DML_destroy_permutation_table_helper(_permutation_table_helper());
+    }
 }
 
 /**
@@ -2877,12 +2938,18 @@ template register is (_conf_attribute, get, set, shown_desc,
         return (n, unmapped);
     }
 
+    // given an unordered list of keys, return a list that describes how to
+    // permute the list to make it sorted: index N in the return value says to
+    // what index keys[N] should be moved in order to make the list sorted.
+    // The returned permutation is scrambled by adding 0x80 to every element.
+    // This is to avoid the 0 element: we want the entire permutation to be a C
+    // string so we can use it as the key in a hash table.
     shared independent method _sort_permutation(const uint8 *keys, int n)
-        -> (uint8 *) {
+        -> (char *) {
         assert n <= 64;
         local uint8 sorted[n];
         local uint8 idx[n];
-        local uint8 perm[n];
+        local char perm[n];
         for (local int i = 0; i < n; i++) {
             local int lsb = keys[i];
             // sort 'fields' by lsb
@@ -2899,36 +2966,25 @@ template register is (_conf_attribute, get, set, shown_desc,
             }
             sorted[j] = lsb;
             idx[j] = i;
-            perm[i] = j;// | 0x80;
+            perm[i] = j | 0x80;
         }
-        local uint8 *ret = new uint8[n];
+        local char *ret = new char[n + 1];
         for (local int i = 0; i < n; i++) {
             ret[i] = perm[i];
         }
         return ret;
     }
 
-    // returns how to permute `_write_fields` to order it by lsb
-    shared independent startup memoized method _get_write_fields()
-        -> (uint8 *) {
-        local uint8 lsbs[64];
-        local int n = 0;
-        foreach f in (this._write_fields) {
-            lsbs[n] = f.lsb;
-            ++n;
-        }
-        return _sort_permutation(lsbs, n);
+    // returns how to permute `_read_fields` to order it by lsb
+    shared independent startup memoized method _get_read_fields()
+        -> (int) {
+        return dev._permutation_index_read(cast(this, object));
     }
 
     // returns how to permute `_write_fields` to order it by lsb
-    shared independent startup memoized method _get_read_fields() -> (uint8 *) {
-        local uint8 lsbs[64];
-        local int n = 0;
-        foreach f in (this._read_fields) {
-            lsbs[n] = f.lsb;
-            ++n;
-        }
-        return _sort_permutation(lsbs, n);
+    shared independent startup memoized method _get_write_fields()
+        -> (int) {
+        return dev._permutation_index_write(cast(this, object));
     }
 
     // Reset register to init_val, except bits covered by fields. Only intended
@@ -2960,7 +3016,8 @@ template register is (_conf_attribute, get, set, shown_desc,
         local _read_field fields[64];
         local uint8 lsbs[64];
         local uint8 msbs[64];
-        local uint8 *perm = this._get_read_fields();
+        local const uint8 *perm = dev._field_permutation_table()
+            + this._get_write_fields();
         local uint64 unmapped = 0;
         unmapped[this.bitsize-1:0] = -1;
         local int num_fields = 0;
@@ -3056,7 +3113,8 @@ template register is (_conf_attribute, get, set, shown_desc,
         local _write_field fields[64];
         local uint8 lsbs[64];
         local uint8 msbs[64];
-        local uint8 *perm = this._get_write_fields();
+        local const uint8 *perm = dev._field_permutation_table() +
+            this._get_write_fields();
         local uint64 unmapped = 0;
         unmapped[this.bitsize-1:0] = -1;
         local int num_fields = 0;
