@@ -1737,12 +1737,12 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
       compilation of devices with huge arrays of ports. The
       option <tt>--help-no-compat</tt> lists all features that can be
       disabled.</add-note></build-id>
-  <build-id value="next"><add-note> Addressed multiple issues with line
+  <build-id value="6255"><add-note> Addressed multiple issues with line
       directive generation which were detrimental to the use of debugging and
       coverage tools. Generated C lines should now only ever be redirected to
       DML when the DML line in question can be reasonably considered to describe
       the operation of the C line. </add-note></build-id>
-  <build-id value="next"><add-note> Fixed an issue where attempting to use
+  <build-id value="6255"><add-note> Fixed an issue where attempting to use
       inlined method parameters in constant equalities could lead to internal
       compiler errors or invalid generated C, if the corresponding arguments
       are themselves constant inlined method parameters (i.e. an inline method
