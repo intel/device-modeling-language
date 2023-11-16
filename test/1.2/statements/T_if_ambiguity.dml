@@ -1,0 +1,84 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+// This tests both that GCC doesn't emit Wparentheses and the behavior of
+// the DML parser.
+// Although GCC emitting Wparentheses could be considered desirable for the
+// patterns this test exemplifies, even if braces were inserted to disambiguate
+// the generated C would be identical due to `mkCompound` collapse.
+// Thus Wparentheses must be avoided in general.
+
+import "testing.dml";
+
+data bool t = true;
+data bool f = false;
+
+method test() -> (bool ok) {
+    // Each of these test cases tests that the DML parser associates the 'else'
+    // with the inner 'if', and not the outer 'if' (this happens no matter how
+    // the code is indented).
+    // In addition, we expect DMLC to avoid Wparentheses by inserting braces
+    // around the body of the outer if. E.g. the first test case should
+    // generate:
+    //
+    // if (_dev->t)
+    // {
+    //     if (_dev->f)
+    //     DML_ASSERT(...)
+    //     else
+    //     v10_ok = 1;
+    // }
+    //
+    // instead of:
+    //
+    // if (_dev->t)
+    // if (_dev->f)
+    // DML_ASSERT(...)
+    // else
+    // v10_ok = 1;
+    //
+    // ... which would lead to GCC emitting Wparentheses due to the ambiguity
+    ok = false;
+    if ($t)
+        if ($f)
+            assert false;
+        else ok = true;
+
+    assert ok;
+    ok = false;
+
+    if ($t)
+        while (!ok)
+            if ($f)
+                assert false;
+            else ok = true;
+
+    assert ok;
+    ok = false;
+
+    if ($t)
+        for (;!ok;)
+            if ($f)
+                assert false;
+            else ok = true;
+
+    assert ok;
+    ok = false;
+
+    local int vect v;
+    VINIT(v);
+    VADD(v, 0);
+    local int *x;
+    if ($t)
+        foreach x in (v)
+            if ($f)
+                assert false;
+            else ok = true;
+
+    assert ok;
+}
