@@ -9,12 +9,15 @@ device test;
 /// COMPILE-ONLY
 
 inline method m(inline x) {
-    if (false)
+    // Any variable generated for the inline parameter must be annotated as
+    // unused, despite this usage of it (as it gets constant-folded away!)
+    if (false && x)
         // Previously, DMLC code-generated the returned but then optimized it
         // out, which would cause a dead goto label in generated C code.
         return;
 }
 
 method init() {
-    m(4);
+    local bool b;
+    m(b);
 }

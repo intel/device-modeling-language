@@ -4712,6 +4712,10 @@ class RValue(Expression):
     def read(self):
         return self.expr.read()
     def discard(self): pass
+    def incref(self):
+        self.expr.incref()
+    def decref(self):
+        self.expr.decref()
 
 def mkRValue(expr):
     if isinstance(expr, LValue) or expr.writable:
@@ -5116,9 +5120,19 @@ def possible_side_effect(init):
         return False
     return True
 
-def sym_declaration(sym, unused=False):
+# FIXME(SIMICS-21719): symbol usage tracking is completely broken, and must
+# be fixed (or rather, completely redone) for the sake of SIMICS-21585.
+# Part of the requirements is that it must take into account things like
+# constant folding and inline method calls (see test 1.4/methods/inline)
+def sym_declaration(sym):
     assert not isinstance(sym, symtab.StaticSymbol)
     refcount = sym.refcount()
+
+    # TODO: Variable declaration omission relies on the broken symbol usage
+    # tracking. The only reason it (and so the larger refcount architecture)
+    # has been kept is because proper impact analysis of its removal has not
+    # been made. Any issues from it has historically been circumvented by
+    # ad-hoc ensuring sym.stmt is True.
     if not sym.stmt and refcount == 0 and not possible_side_effect(sym.init):
         # dbg('ignoring %r (init = %r)' % (sym.value, sym.init))
         if sym.init:
@@ -5126,7 +5140,10 @@ def sym_declaration(sym, unused=False):
         return None
 
     # This will prevent warnings from the C compiler
-    unused = unused or (refcount == 0) or sym.value.startswith("__")
+    # HACK: Always True to not rely on the broken symbol usage tracking
+    #
+    # unused = (refcount == 0) or sym.value.startswith("__")
+    unused = True
 
     return mkDeclaration(sym.site, sym.value, sym.type,
                          sym.init, unused)
