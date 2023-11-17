@@ -525,7 +525,7 @@ class TryCatch(Statement):
             # Our fallthrough analysis is more conservative than Coverity's
             coverity_marker('unreachable', site=self.catchblock.site)
             out(f'if (false) {self.label}:\n')
-            self.catchblock.toc_stmt()
+            toc_under_if(self.catchblock)
 
     def control_flow(self):
         tryflow = self.tryblock.control_flow()
@@ -769,6 +769,20 @@ class ImmediateAfter(Statement):
 
 mkImmediateAfter = ImmediateAfter
 
+# To be used instead of .toc_stmt() when generating the statement under an
+# `if`.
+# This applies a work-around to avoid possible `if`-`else` ambiguity in
+# generated C, which GCC would otherwise complain about
+def toc_under_if(stmt):
+    if isinstance(stmt, (If, For, While, VectorForeach)):
+        stmt.linemark()
+        out('{\n', postindent=1)
+        stmt.toc_inline()
+        stmt.linemark()
+        out('}\n', preindent=-1)
+    else:
+        stmt.toc_stmt()
+
 class If(Statement):
     @auto_init
     def __init__(self, site, cond, truebranch, falsebranch, else_site):
@@ -778,16 +792,7 @@ class If(Statement):
     def toc_stmt(self):
         self.linemark()
         out(f'if ({self.cond.read()})\n')
-        # Work-around to avoid ambiguity in generated C, which GCC would
-        # otherwise complain about
-        if isinstance(self.truebranch, (If, For, While, VectorForeach)):
-            self.truebranch.linemark()
-            out('{\n', postindent=1)
-            self.truebranch.toc_inline()
-            self.truebranch.linemark()
-            out('}\n', preindent=-1)
-        else:
-            self.truebranch.toc_stmt()
+        toc_under_if(self.truebranch)
 
         if self.falsebranch:
             site_linemark(self.else_site)
