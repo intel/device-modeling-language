@@ -2032,9 +2032,9 @@ def stmt_local(stmt, location, scope):
         if method_invocation is not None and stmt.site.dml_version != (1, 2):
             for sym in syms_to_add:
                 scope.add(sym)
-            stmts.extend(sym_declaration(sym, True) for sym in tgt_syms)
+            stmts.extend(sym_declaration(sym) for sym in tgt_syms)
             stmts.append(method_invocation)
-            stmts.extend(sym_declaration(sym, True)
+            stmts.extend(sym_declaration(sym)
                          for sym in late_declared_syms)
         else:
             if len(tgts) != 1:
@@ -2044,7 +2044,7 @@ def stmt_local(stmt, location, scope):
                 sym.init = ExpressionInitializer(
                     codegen_expression(inits[0].args[0], location, scope))
                 scope.add(sym)
-                stmts.append(sym_declaration(sym, True))
+                stmts.append(sym_declaration(sym))
     else:
         # Initializer evaluation and variable declarations are done in separate
         # passes in order to prevent the newly declared variables from being in
