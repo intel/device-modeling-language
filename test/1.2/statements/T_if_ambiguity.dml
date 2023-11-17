@@ -81,4 +81,15 @@ method test() -> (bool ok) {
             else ok = true;
 
     assert ok;
+    ok = false;
+
+    // catch block is placed under an if in generated C
+    try {
+        if ($t) throw;
+    } catch {
+        if ($f)
+            assert false;
+        else ok = true;
+    }
+    assert ok;
 }
