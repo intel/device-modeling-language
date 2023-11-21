@@ -1222,15 +1222,12 @@ def expr_variable(tree, location, scope):
         if in_dev_tree:
             e = in_dev_tree
     if e is None:
-        # TODO/HACK: The discard ref is exposed like this to allow it to be as
-        # keyword-like as possible while still allowing it to be shadowed.
-        # Once we remove support for discard_ref_shadowing the discard ref
-        # should become a proper keyword and its codegen be done via dedicated
-        # dispatch
-        if name == '_' and tree.site.dml_version() != (1, 2):
-            return mkDiscardRef(tree.site)
         raise EIDENT(tree.site, name)
     return e
+
+@expression_dispatcher
+def expr_discard(tree, location, scope):
+    return mkDiscardRef(tree.site)
 
 @expression_dispatcher
 def expr_objectref(tree, location, scope):

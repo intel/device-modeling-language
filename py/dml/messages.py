@@ -1893,6 +1893,16 @@ class EPRAGMA(DMLError):
     """
     fmt = "Unknown pragma: %s"
 
+class EDISCARDREF(DMLError):
+    """
+    The expression *`_`* resolves to the [discard
+    reference](language.html#discard-reference), and can only be used as an
+    assignment target, in order to e.g. throw away return values of a function.
+    """
+    version = "1.4"
+    fmt = ("'_' can only be used as an assignment target "
+           + "(to discard some value)")
+
 #
 # WARNINGS (keep these as few as possible)
 #

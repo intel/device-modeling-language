@@ -4064,6 +4064,7 @@ independent method callback(int i, void *aux) {
 ```
 
 ### The Discard Reference (`_`)
+<a id="discard-reference"/>
 ```
 _
 ```

@@ -3597,6 +3597,9 @@ class DiscardRef(NonValue):
     def __str__(self):
         return '_'
 
+    def exc(self):
+        return EDISCARDREF(self.site)
+
     def write(self, source):
         if self.explicit_type:
             return source.as_expr(self.type).discard(explicit=True)
