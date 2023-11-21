@@ -49,6 +49,10 @@ method init() {
 
     /// ERROR ENVAL
     cast([], t);
+    /// ERROR EDISCARDREF
+    _;
+    // no error
+    _ = true;
 }
 
 // dev is not a value in 1.4.  Need to capture this with a rather unnatural

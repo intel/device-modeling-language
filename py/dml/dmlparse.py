@@ -1803,6 +1803,11 @@ def expression_ident(t):
     t[0] = ast.variable(site(t), t[1])
 
 @prod_dml14
+def expression_discardref(t):
+    '''expression : discard'''
+    t[0] = t[1]
+
+@prod_dml14
 def expression_this(t):
     '''expression : THIS'''
     t[0] = ast.variable(site(t), t[1])
@@ -2662,6 +2667,11 @@ def objident(t):
     '''objident : ident
                 | REGISTER'''
     t[0] = t[1]
+
+@prod_dml14
+def discard(t):
+    'discard : DISCARD'
+    t[0] = ast.discard(site(t, 1))
 
 def ident_rule(idents):
     return 'ident : ' +  "\n| ".join(idents)

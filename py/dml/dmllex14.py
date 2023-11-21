@@ -13,16 +13,20 @@ hashids = {'#' + kw: 'HASH' + kw.upper()
 
 tokens = (common_tokens
           + ('HASHCONDOP', 'HASHCOLON')
+          + ('DISCARD',)
           + tuple(hashids.values()))
 
 t_HASHCONDOP = r'\#\?'
 t_HASHCOLON = r'\#:'
+t_DISCARD = r'_'
 
 keywords_dml14 = dict(keywords_common)
 for kw in ['param', 'saved', 'async', 'await', 'with', 'shared', 'stringify',
            'export', 'as', 'independent', 'startup', 'memoized', 'hook']:
     keywords_dml14[kw] = kw.upper()
     tokens += (kw.upper(),)
+
+keywords_dml14['_'] = 'DISCARD'
 
 reserved_idents = reserved_idents_common + (
     'PARAM', 'SAVED', 'INDEPENDENT', 'STARTUP', 'MEMOIZED')
