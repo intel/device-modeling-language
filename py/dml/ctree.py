@@ -40,7 +40,8 @@ __all__ = (
     'param_bool_fixup',
 
     'mkCompound',
-    'mkNull', 'Null',
+    'mkNull',
+    'mkNoop',
     'mkLabel',
     'mkUnrolledLoop',
     'mkGoto',
@@ -432,6 +433,9 @@ def mkCompound(site, statements, rbrace_site=None):
         return Compound(site, collapsed, rbrace_site)
 
 class Null(Statement):
+    '''Should only be used to represent stand-alone ; present in DML code. For
+       all other purposes (artificially created empty statements) Noop should
+       be used instead.'''
     is_empty = True
     def toc_stmt(self):
         self.linemark()
@@ -440,6 +444,19 @@ class Null(Statement):
         pass
 
 mkNull = Null
+
+class Noop(Statement):
+    '''An empty statement represented by a pair of braces in generated C. This
+       avoids certain GCC and Coverity warnings that could manifest if ';' were
+       used instead.'''
+    is_empty = True
+    def toc_stmt(self):
+        self.linemark()
+        out('{}\n')
+    def toc(self):
+        pass
+
+mkNoop = Noop
 
 class Label(Statement):
     def __init__(self, site, label, unused=False):
@@ -664,7 +681,7 @@ class ExpressionStatement(Statement):
 
 def mkExpressionStatement(site, expr):
     if isinstance(expr, Constant):
-        return mkNull(site)
+        return mkNoop(site)
     return ExpressionStatement(site, expr)
 
 def toc_constsafe_pointer_assignment(site, source, target, typ):
@@ -840,7 +857,7 @@ def mkIf(site, cond, truebranch, falsebranch = None, else_site=None):
         elif falsebranch:
             return falsebranch
         else:
-            return mkNull(site)
+            return mkNoop(site)
     return If(site, cond, truebranch, falsebranch, else_site)
 
 class While(Statement):
