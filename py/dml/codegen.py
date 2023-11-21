@@ -210,7 +210,7 @@ class CatchFailure(Failure):
 class IgnoreFailure(Failure):
     '''Ignore exceptions'''
     def fail(self, site):
-        return mkNull(site)
+        return mkNoop(site)
 
 class ExitHandler(ABC):
     current = None
@@ -1916,9 +1916,10 @@ def codegen_statements(trees, *args):
     return stmts
 
 def codegen_statement(tree, *args):
-    rbrace_site = tree.args[1] if tree.kind == 'compound' else None
-    return mkCompound(tree.site, codegen_statements([tree], *args),
-                      rbrace_site)
+    stmts = codegen_statements([tree], *args)
+    if len(stmts) == 1 and not stmts[0].is_declaration:
+        return stmts[0]
+    return mkCompound(tree.site, stmts)
 
 @statement_dispatcher
 def stmt_compound(stmt, location, scope):
@@ -2190,7 +2191,7 @@ def stmt_saved(stmt, location, scope):
 
 @statement_dispatcher
 def stmt_null(stmt, location, scope):
-    return []
+    return [mkNull(stmt.site)]
 
 @statement_dispatcher
 def stmt_if(stmt, location, scope):
@@ -3207,7 +3208,7 @@ def stmt_while(stmt, location, scope):
     [cond, statement] = stmt.args
     cond = as_bool(codegen_expression(cond, location, scope))
     if stmt.site.dml_version() == (1, 2) and cond.constant and not cond.value:
-        return [mkNull(stmt.site)]
+        return [mkNoop(stmt.site)]
     else:
         with CLoopContext():
             res = mkWhile(stmt.site, cond,
@@ -3345,7 +3346,7 @@ def mkcall_method(site, func, indices):
 
 def common_inline(site, method, indices, inargs, outargs):
     if not verify_args(site, method.inp, method.outp, inargs, outargs):
-        return mkNull(site)
+        return mkNoop(site)
 
     if dml.globals.debuggable:
         if method.fully_typed and (
@@ -4023,7 +4024,7 @@ def codegen_call_traitmethod(site, expr, inargs, outargs):
     if not isinstance(expr, TraitMethodRef):
         raise ICE(site, "cannot call %r: not a trait method" % (expr,))
     if not verify_args(site, expr.inp, expr.outp, inargs, outargs):
-        return mkNull(site)
+        return mkNoop(site)
     def mkcall(args):
         rettype = c_rettype(expr.outp, expr.throws)
         # implicitly convert endian int arguments to integers
@@ -4035,7 +4036,7 @@ def codegen_call_traitmethod(site, expr, inargs, outargs):
 def codegen_call(site, meth_node, indices, inargs, outargs):
     '''Generate a call using a direct reference to the method node'''
     if not verify_args(site, meth_node.inp, meth_node.outp, inargs, outargs):
-        return mkNull(site)
+        return mkNoop(site)
     require_fully_typed(site, meth_node)
     func = method_instance(meth_node)
 
