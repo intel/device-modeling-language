@@ -21,6 +21,7 @@ import "simics/model-iface/register-view.dml";
 import "simics/model-iface/register-view-read-only.dml";
 import "simics/model-iface/transaction.dml";
 import "simics/util/hashtab.dml";
+import "simics/util/bitcount.dml";
 
 import "simics/simulator/python.dml";
 import "simics/simulator/sim-get-class.dml";
@@ -2827,26 +2828,21 @@ template register is (_conf_attribute, get, set, shown_desc,
     // the number of elements and a bitmask showing bits not covered by fields.
     shared method _get_get_fields(_get_field *fields) -> (int, uint64) /* n, unmapped */ {
         local uint64 unmapped;
-        unmapped[this.bitsize-1:0] = -1;
+        unmapped[this.bitsize - 1 : 0 ] = -1;
         local int n = 0;
-        // TODO: it is inefficient to re-generate the field list each call
-        foreach f in (this._get_fields) {
+        local uint64 lsbs = 0;
+
+        // counting sort
+        foreach f in (_get_fields) {
             local int lsb = f.lsb;
-            // sort 'fields' by lsb
-            local int i;
-            for (i = n; i > 0; --i) {
-                local int next_lsb = fields[i - 1].lsb;
-                if (next_lsb > lsb) {
-                    fields[i] = fields[i - 1];
-                } else {
-                    break;
-                }
-            }
-            fields[i] = f;
+            lsbs[lsb] = 1;
             unmapped[lsb + f.bitsize - 1 : lsb] = 0;
             ++n;
         }
-        assert n <= 64;
+
+        foreach f in (_get_fields) {
+            fields[bit_count64(lsbs[f.lsb : 0]) - 1] = f;
+        }
         return (n, unmapped);
     }
 
@@ -2854,26 +2850,21 @@ template register is (_conf_attribute, get, set, shown_desc,
     // the number of elements and a bitmask showing bits not covered by fields.
     shared method _get_set_fields(_set_field *fields) -> (int, uint64) /* n, unmapped */ {
         local uint64 unmapped;
-        unmapped[this.bitsize-1:0] = -1;
+        unmapped[this.bitsize - 1 : 0 ] = -1;
         local int n = 0;
-        // TODO: it is inefficient to re-generate the field list each call
-        foreach f in (this._set_fields) {
+        local uint64 lsbs = 0;
+
+        // counting sort
+        foreach f in (_set_fields) {
             local int lsb = f.lsb;
-            // sort 'fields' by lsb
-            local int i;
-            for (i = n; i > 0; --i) {
-                local int next_lsb = fields[i - 1].lsb;
-                if (next_lsb > lsb) {
-                    fields[i] = fields[i - 1];
-                } else {
-                    break;
-                }
-            }
-            fields[i] = f;
+            lsbs[lsb] = 1;
             unmapped[lsb + f.bitsize - 1 : lsb] = 0;
             ++n;
         }
-        assert n <= 64;
+
+        foreach f in (_set_fields) {
+            fields[bit_count64(lsbs[f.lsb : 0]) - 1] = f;
+        }
         return (n, unmapped);
     }
 
@@ -2881,26 +2872,21 @@ template register is (_conf_attribute, get, set, shown_desc,
     // the number of elements and a bitmask showing bits not covered by fields.
     shared method _get_write_fields(_write_field *fields) -> (int, uint64) /* n, unmapped */ {
         local uint64 unmapped;
-        unmapped[this.bitsize-1:0] = -1;
+        unmapped[this.bitsize - 1 : 0 ] = -1;
         local int n = 0;
-        // TODO: it is inefficient to re-generate the field list each call
-        foreach f in (this._write_fields) {
+        local uint64 lsbs = 0;
+
+        // counting sort
+        foreach f in (_write_fields) {
             local int lsb = f.lsb;
-            // sort 'fields' by lsb
-            local int i;
-            for (i = n; i > 0; --i) {
-                local int next_lsb = fields[i - 1].lsb;
-                if (next_lsb > lsb) {
-                    fields[i] = fields[i - 1];
-                } else {
-                    break;
-                }
-            }
-            fields[i] = f;
+            lsbs[lsb] = 1;
             unmapped[lsb + f.bitsize - 1 : lsb] = 0;
             ++n;
         }
-        assert n <= 64;
+
+        foreach f in (_write_fields) {
+            fields[bit_count64(lsbs[f.lsb : 0]) - 1] = f;
+        }
         return (n, unmapped);
     }
 
@@ -2908,26 +2894,21 @@ template register is (_conf_attribute, get, set, shown_desc,
     // the number of elements and a bitmask showing bits not covered by fields.
     shared method _get_read_fields(_read_field *fields) -> (int, uint64) /* n, unmapped */ {
         local uint64 unmapped;
-        unmapped[this.bitsize-1:0] = -1;
+        unmapped[this.bitsize - 1 : 0 ] = -1;
         local int n = 0;
-        // TODO: it is inefficient to re-generate the field list each call
-        foreach f in (this._read_fields) {
+        local uint64 lsbs = 0;
+
+        // counting sort
+        foreach f in (_read_fields) {
             local int lsb = f.lsb;
-            // sort 'fields' by lsb
-            local int i;
-            for (i = n; i > 0; --i) {
-                local int next_lsb = fields[i - 1].lsb;
-                if (next_lsb > lsb) {
-                    fields[i] = fields[i - 1];
-                } else {
-                    break;
-                }
-            }
-            fields[i] = f;
+            lsbs[lsb] = 1;
             unmapped[lsb + f.bitsize - 1 : lsb] = 0;
             ++n;
         }
-        assert n <= 64;
+
+        foreach f in (_read_fields) {
+            fields[bit_count64(lsbs[f.lsb : 0]) - 1] = f;
+        }
         return (n, unmapped);
     }
 
