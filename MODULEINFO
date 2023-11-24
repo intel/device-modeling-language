@@ -5,19 +5,15 @@
 # docs: None
 # comment:
 
-Group: dmllib-6(name)
+Group: dmllib(name)
   $(HOST)/bin/dml/{name}.dml
   $(HOST)/bin/dml/{name}.dmlast
-  $(HOST)/bin/dml-old-4.8/{name}.dml
-  $(HOST)/bin/dml-old-4.8/{name}.dmlast
-
-Group: dmllib-7(name)
-  $(HOST)/bin/dml/{name}.dml
-  $(HOST)/bin/dml/{name}.dmlast
+  @6-only($(HOST)/bin/dml-old-4.8/{name}.dml)
+  @6-only($(HOST)/bin/dml-old-4.8/{name}.dmlast)
 
 Group: dmllib-old-4.8(name)
-  $(HOST)/bin/dml-old-4.8/{name}.dml
-  $(HOST)/bin/dml-old-4.8/{name}.dmlast
+  @6-only($(HOST)/bin/dml-old-4.8/{name}.dml)
+  @6-only($(HOST)/bin/dml-old-4.8/{name}.dmlast)
 
 Group: dml-1.2-reference-manual
 Require-tokens: public
@@ -28,11 +24,6 @@ Group: dml-1.4-reference-manual
 Require-tokens: public
 Directory: $(HOST)/doc/html/dml-1.4-reference-manual/[filelist.json]
 Directory-Suffixes: .css, .js, .html, .png, .json, .svg
-
-Group: dmlc
-Require-tokens: public
-Make: dmlc
-    @dmlc/6
 
 Group: dmlc-py
 Require-tokens: public
@@ -79,47 +70,58 @@ Make: dmlc
     $(HOST)/bin/dml/python/port_dml.py
     $(HOST)/bin/dml/python/dead_dml_methods.py
 
+# TODO: once all branches of the base repo use @dmlc, we can remove
+# the dmlc/6 and dmlc/7 groups
 Group: dmlc/6
 Require-tokens: public
+  @dmlc
+
+Group: dmlc/7
+Require-tokens: public
+  @dmlc
+
+Group: dmlc
+Require-tokens: public
 Make: dmlc
-    @dmlc-lib/6
+    @dmlc-lib
     @dml-1.2-reference-manual
     @dml-1.4-reference-manual
     @dmlc-py
-    
-Group: dmlc-lib/6
+
+Group: dmlc-lib
 Require-tokens: public
 Make: dmlc
     $(HOST)/bin/dml/include/simics/LICENSE
     $(HOST)/bin/dml/include/simics/dmllib.h
-    $(HOST)/bin/dml-old-4.8/1.2/LICENSE
-    $(HOST)/bin/dml-old-4.8/1.4/LICENSE
+    @6-only($(HOST)/bin/dml-old-4.8/1.2/LICENSE)
+    @6-only($(HOST)/bin/dml-old-4.8/1.4/LICENSE)
     $(HOST)/bin/dml/1.2/LICENSE
     $(HOST)/bin/dml/1.4/LICENSE
     # dml files available in all APIs
-    @dmllib-6(1.2/arinc-429)
-    @dmllib-6(1.2/crc)
-    @dmllib-6(1.2/dml-builtins)
-    @dmllib-6(1.2/dml12-compatibility)
-    @dmllib-6(1.2/ethernet)
-    @dmllib-6(1.2/io-memory)
-    @dmllib-6(1.2/mil-std-1553)
-    @dmllib-6(1.2/rapidio)
-    @dmllib-6(1.2/rapidio-device)
-    @dmllib-6(1.2/simics-api)
-    @dmllib-6(1.2/simics-breakpoints)
-    @dmllib-6(1.2/simics-configuration)
-    @dmllib-6(1.2/simics-event)
-    @dmllib-6(1.2/simics-memory)
-    @dmllib-6(1.2/simics-device)
-    @dmllib-6(1.2/simics-hindsight)
-    @dmllib-6(1.2/simics-processor)
-    @dmllib-6(1.2/simics-types)
-    @dmllib-6(1.2/utility)
-    @dmllib-6(1.4/dml-builtins)
-    @dmllib-6(1.4/dml12-compatibility)
-    @dmllib-6(1.4/internal)
-    @dmllib-6(1.4/utility)
+    @dmllib(1.2/arinc-429)
+    @dmllib(1.2/crc)
+    @dmllib(1.2/dml-builtins)
+    @dmllib(1.2/dml12-compatibility)
+    @dmllib(1.2/ethernet)
+    @dmllib(1.2/io-memory)
+    @dmllib(1.2/simics-api)
+    @dmllib(1.2/simics-breakpoints)
+    @dmllib(1.2/simics-configuration)
+    @dmllib(1.2/simics-event)
+    @dmllib(1.2/simics-memory)
+    @dmllib(1.2/simics-device)
+    @dmllib(1.2/simics-hindsight)
+    @dmllib(1.2/simics-processor)
+    @dmllib(1.2/simics-types)
+    @dmllib(1.2/utility)
+    @dmllib(1.4/dml-builtins)
+    @dmllib(1.4/dml12-compatibility)
+    @dmllib(1.4/internal)
+    @dmllib(1.4/utility)
+    # deprecated interfaces
+    @6-only(@dmllib(1.2/mil-std-1553))
+    @6-only(@dmllib(1.2/rapidio))
+    @6-only(@dmllib(1.2/rapidio-device))
     # dml files available in 4.8 API
     @dmllib-old-4.8(1.2/i2c)
     @dmllib-old-4.8(1.2/ieee-802-3)
@@ -135,40 +137,3 @@ Make: dmlc
     @dmllib-old-4.8(1.2/serial-peripheral-interface)
     @dmllib-old-4.8(1.2/usb)
     @dmllib-old-4.8(1.2/x86)
-
-Group: dmlc/7
-Require-tokens: public
-Make: dmlc
-    @dmlc-lib/7
-    @dml-1.2-reference-manual
-    @dml-1.4-reference-manual
-    @dmlc-py
-
-Group: dmlc-lib/7
-Require-tokens: public
-Make: dmlc
-    $(HOST)/bin/dml/include/simics/LICENSE
-    $(HOST)/bin/dml/include/simics/dmllib.h
-    $(HOST)/bin/dml/1.2/LICENSE
-    $(HOST)/bin/dml/1.4/LICENSE
-    # dml files available in all APIs
-    @dmllib-7(1.2/arinc-429)
-    @dmllib-7(1.2/crc)
-    @dmllib-7(1.2/dml-builtins)
-    @dmllib-7(1.2/dml12-compatibility)
-    @dmllib-7(1.2/ethernet)
-    @dmllib-7(1.2/io-memory)
-    @dmllib-7(1.2/simics-api)
-    @dmllib-7(1.2/simics-breakpoints)
-    @dmllib-7(1.2/simics-configuration)
-    @dmllib-7(1.2/simics-event)
-    @dmllib-7(1.2/simics-memory)
-    @dmllib-7(1.2/simics-device)
-    @dmllib-7(1.2/simics-hindsight)
-    @dmllib-7(1.2/simics-processor)
-    @dmllib-7(1.2/simics-types)
-    @dmllib-7(1.2/utility)
-    @dmllib-7(1.4/dml-builtins)
-    @dmllib-7(1.4/dml12-compatibility)
-    @dmllib-7(1.4/internal)
-    @dmllib-7(1.4/utility)
