@@ -53,12 +53,14 @@ stest.expect_equal(obj.outsig_signal_high, True)
 obj.outsig = stub
 stest.expect_equal(stub.level, 1)
 
-# reverse execution doesn't cause signal pulsing
-transitions = stub.transitions
-simics.SIM_run_command('enable-reverse-execution')
-simics.SIM_run_command('continue 1000')
-simics.SIM_run_command('reverse')
-stest.expect_equal(stub.transitions, transitions)
+# Reverse execution is removed in Simics 7
+if 'rev-execution' in simics.SIM_get_all_classes():
+    # reverse execution doesn't cause signal pulsing
+    transitions = stub.transitions
+    simics.SIM_run_command('enable-reverse-execution')
+    simics.SIM_run_command('continue 1000')
+    simics.SIM_run_command('reverse')
+    stest.expect_equal(stub.transitions, transitions)
 
 obj.test_outsig = False
 stest.expect_equal(stub.level, 0)
