@@ -11,7 +11,8 @@ device test;
 
 // for the dead_dml_methods.py script
 
-import "dead_methods_imported.dml";
+// Relative path to test that DMLC resolves the path in the sources list
+import "../misc/dead_methods_imported.dml";
 
 // DEAD
 method dead() { }
