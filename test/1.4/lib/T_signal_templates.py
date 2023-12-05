@@ -54,6 +54,7 @@ obj.outsig = stub
 stest.expect_equal(stub.level, 1)
 
 # Reverse execution is removed in Simics 7
+# TODO: re-enable test using the new snapshot primitives, SIMICS-21789
 if 'rev-execution' in simics.SIM_get_all_classes():
     # reverse execution doesn't cause signal pulsing
     transitions = stub.transitions
