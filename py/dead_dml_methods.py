@@ -56,10 +56,11 @@ blah blah''') == ['/a/b.dml', '/c/d.dml']
 
 
 def dml_sources(c_file: Path) -> set[Path]:
-    '''Given a DMLC-generated C file, return the set of DML files that
-    were used to generate it'''
-    return {(c_file.parent / Path(p)).resolve()
-            for p in dml_sources_from_body(c_file.read_text())}
+    """Given a DMLC-generated C file, return the set of DML files that
+    were used to generate it"""
+    for p in map(Path, dml_sources_from_body(c_file.read_text())):
+        assert p.is_absolute(), f'{p} is not an absolute path'
+        yield p
 
 
 def traverse_ast(ast):
