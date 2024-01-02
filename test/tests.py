@@ -1759,24 +1759,21 @@ this_year = time.gmtime().tm_year
 
 class CopyrightTestCase(BaseTestCase):
     __slots__ = ()
+    class Error(Exception): pass
     def validate_file(self, path, regexp):
         match = regexp.match(path.read_bytes())
         if not match:
-            return 'did not find copyright banner'
-        start = int(match.group(1))
-        end = start if match.group(2) is None else int(match.group(2))
-        if end != this_year:
-            return 'copyright year too old'
-        if not 2000 < start <= end:
-            return f'strange copyright year: {start}'
-        return None
+            raise self.Error('did not find copyright banner')
+        year = int(match.group(1))
+        if not 2000 < year <= this_year:
+            raise self.Error(f'strange copyright year: {year}')
     def test(self):
         mpl_lines = '''\
-© (2[0-9]*)(?:-(2[0-9]*))? Intel Corporation
+© (2[0-9]+) Intel Corporation
 SPDX-License-Identifier: MPL-2.0
 '''.encode('utf-8').splitlines()
         bsd0_copyright_re = re.compile('''/[*]
-  © (2[0-9]*)(?:-(2[0-9]*))? Intel Corporation
+  © (2[0-9]+) Intel Corporation
   SPDX-License-Identifier: 0BSD
 [*]/'''.encode('utf-8'))
         dml_copyright_re = re.compile(
@@ -1828,27 +1825,22 @@ SPDX-License-Identifier: MPL-2.0
         nonexisting = ignorelist.difference(files)
         assert not nonexisting, nonexisting
         for f in files:
-            if f in ignorelist:
-                continue
-            if f.startswith(('lib', 'include')):
-                assert f.endswith(('.dml', '.h'))
-                error = self.validate_file(root / f, bsd0_copyright_re)
-                if error:
-                    errors.append((f, error))
-            elif f.endswith(('.dml', '.h')):
-                error = self.validate_file(root / f, dml_copyright_re)
-                if error:
-                    errors.append((f, error))
-            elif f.endswith('.py') or f == 'Makefile':
-                error = self.validate_file(root / f, py_copyright_re)
-                if error:
-                    errors.append((f, error))
-            elif f.endswith(('.md', '.docu')):
-                error = self.validate_file(root / f, xml_copyright_re)
-                if error:
-                    errors.append((f, error))
-            else:
-                errors.append((f, 'unknown file type'))
+            try:
+                if f in ignorelist:
+                    continue
+                if f.startswith(('lib', 'include')):
+                    assert f.endswith(('.dml', '.h'))
+                    self.validate_file(root / f, bsd0_copyright_re)
+                elif f.endswith(('.dml', '.h')):
+                    self.validate_file(root / f, dml_copyright_re)
+                elif f.endswith('.py') or f == 'Makefile':
+                    self.validate_file(root / f, py_copyright_re)
+                elif f.endswith(('.md', '.docu')):
+                    self.validate_file(root / f, xml_copyright_re)
+                else:
+                    raise self.Error('unknown file type')
+            except self.Error as exc:
+                errors.append((f, str(exc)))
         for (f, error) in errors:
             self.pr(f'{root / f}:1: error: {error}')
         if errors:
