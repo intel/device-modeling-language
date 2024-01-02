@@ -1,4 +1,4 @@
-# © 2021-2023 Intel Corporation
+# © 2021-2024 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 # Convert .md files tailored for dodoc, into files suitable for
@@ -46,7 +46,7 @@ tving vattenpass
 ''').groups() == ('skruv spik hammare',)
 
 copyright = '''<!--
-  © 2021-2023 Intel Corporation
+  © 2021-2024 Intel Corporation
   SPDX-License-Identifier: MPL-2.0
 -->
 '''
