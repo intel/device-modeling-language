@@ -1,4 +1,4 @@
-# © 2021-2023 Intel Corporation
+# © 2021-2024 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 from simics import Sim_PE_No_Exception
