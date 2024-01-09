@@ -1,5 +1,5 @@
 /*
-  © 2010-2024 Intel Corporation
+  © 2010 Intel Corporation
   SPDX-License-Identifier: 0BSD
 */
 
