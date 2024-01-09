@@ -1,4 +1,4 @@
-# © 2021-2024 Intel Corporation
+# © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 import builtins
