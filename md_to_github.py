@@ -46,7 +46,7 @@ tving vattenpass
 ''').groups() == ('skruv spik hammare',)
 
 copyright = '''<!--
-  © 2021-2024 Intel Corporation
+  © 2024 Intel Corporation
   SPDX-License-Identifier: MPL-2.0
 -->
 '''
