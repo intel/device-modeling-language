@@ -2346,6 +2346,11 @@ class PBITNEQ(PortingMessage):
     field values are 64 bit, and thus require an explicit `!= 0`"""
     fmt = ""
 
+class PZEROCOND(PortingMessage):
+    """DML 1.2 permits using the literals `0` and `1` as booleans. In DML 1.4,
+    this should be replaced with `false` and `true`, respectively"""
+    fmt = ""
+
 class PVAL(PortingMessage):
     """The value of a `register`, `field` or `attribute`
     object, and the interface struct of a `interface` object, is now

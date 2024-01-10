@@ -393,6 +393,8 @@ event ev2 is (evt) {
     parameter timebase = "seconds";
 }
 
+parameter zero = 0;
+
 method init() {
     local int1 i1;
 
@@ -427,5 +429,10 @@ method init() {
         if (!$c.signal.signal_lower) {
             $c.signal.signal_raise();
         }
+    }
+    if (1) {
+        assert $zero;
+    } else {
+        assert 0;
     }
 }
