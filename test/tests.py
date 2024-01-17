@@ -1816,7 +1816,6 @@ SPDX-License-Identifier: MPL-2.0
             'test/XFAIL',
             'spelling-passlist',
             # config files
-            '.github/workflows/dependent-issues.yml',
             '.gitignore',
             '_config.yml',
         }
