@@ -3252,7 +3252,7 @@ method](#shared-methods). The only exception to this is that the [`send_now`
 operation of hooks](#hook-declarations) is also supported for use as a callback.
 
 All method calls suspended via an `after` statement are *associated* with the
-object that contain the method containing the statement. It is possible to
+object that contains the method containing the statement. It is possible to
 cancel all suspended method calls associated with an object through that
 object's `cancel_after()` method, as provided by the [`object`
 template](dml-builtins.html#object).
