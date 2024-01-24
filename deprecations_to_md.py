@@ -11,7 +11,7 @@ from dml.env import api_versions, default_api_version
 
 by_version = {}
 for feature in compat.features.values():
-    if (feature.last_api_version in api_versions()
+    if (feature.last_api_version.str in api_versions()
         # don't document features that are unconditionally disabled in
         # this Simics version
         or feature.last_api_version > compat.apis[default_api_version()]):
@@ -21,9 +21,9 @@ with open(outfile, 'w') as f:
     f.write(Path(header).read_text())
     for (ver, features) in sorted(by_version.items()):
         f.write(
-            f"### Features available up to --simics-api={ver.str}\n")
+            f"\n### Features available up to --simics-api={ver.str}\n")
         f.write("<dl>\n")
-        for feature in sorted(compat.features.values(), key=lambda f: f.tag()):
+        for feature in sorted(features, key=lambda f: f.tag()):
             assert feature.__doc__
             f.write(f"  <dt>{feature.tag()}</dt>\n")
             doc = '\n'.join(line[4:] if line.startswith('    ') else line
