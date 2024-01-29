@@ -7,6 +7,9 @@ device test;
 
 /// COMPILE-ONLY
 
+/// DMLC-FLAG --simics-api=6
+/// DMLC-FLAG --no-compat=suppress_WLOGMIXUP
+
 loggroup lg;
 
 session bool b;

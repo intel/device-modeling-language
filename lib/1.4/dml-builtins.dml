@@ -546,6 +546,7 @@ template device {
     param _compat_port_obj_param auto;
     param _compat_io_memory auto;
     param _compat_shared_logs_on_device auto;
+    param _compat_suppress_WLOGMIXUP auto;
     param _compat_dml12_inline auto;
     param _compat_dml12_not auto;
     param _compat_dml12_goto auto;
