@@ -1748,4 +1748,13 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
       are themselves constant inlined method parameters (i.e. an inline method
       call propagates an inline parameter to an inline method call of its own.)
   </add-note></build-id>
+  <build-id _6="next" _7="next"><add-note> The DMLC behaviour of suppressing the
+      warning <tt>WLOGMIXUP</tt> by default below Simics API version 7 is now
+      controlled by the compatibility feature <tt>suppress_WLOGMIXUP</tt>.
+      This is in order to increase visibility of the API-dependent behaviour,
+      and to provide migration documentation about it.
+      As a consequence, <tt>WLOGMIXUP</tt> can be enabled below Simics API
+      version 7 by passing either <tt>--warn=WLOGMIXUP</tt> (as before) or
+      <tt>--no-compat=suppress_WLOGMIXUP</tt> to DMLC.</add-note>
+  </build-id>
 </rn>

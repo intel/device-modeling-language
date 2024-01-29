@@ -534,27 +534,6 @@ def main(argv):
         parser.error("dmlc: the -m option is only valid together with --api=4.8"
                      " or older")
 
-    # This warning is disabled by default below Simics 7 due to sheer
-    # prominence of the issue it warns about in existing code.
-    # By only enabling the warning in Simics 7, we allow existing codebases
-    # to handle the bugs as part of migration, instead of suddenly
-    # overwhelming them with a truly massive amount of warnings in an
-    # intermediate release.
-    if api <= compat.api_6:
-        ignore_warning('WLOGMIXUP')
-
-    for w in options.disabled_warnings:
-        if not is_warning_tag(w):
-            prerr("dmlc: the tag '%s' is not a valid warning tag" % w)
-            sys.exit(1)
-        ignore_warning(w)
-
-    for w in options.enabled_warnings:
-        if not is_warning_tag(w):
-            prerr("dmlc: the tag '%s' is not a valid warning tag" % w)
-            sys.exit(1)
-        enable_warning(w)
-
     if options.werror:
         DMLWarning.enable_werror()
 
@@ -616,6 +595,21 @@ def main(argv):
             if tag in features:
                 del features[tag]
     dml.globals.enabled_compat = set(features.values())
+
+    if compat.suppress_WLOGMIXUP in dml.globals.enabled_compat:
+        ignore_warning('WLOGMIXUP')
+
+    for w in options.disabled_warnings:
+        if not is_warning_tag(w):
+            prerr("dmlc: the tag '%s' is not a valid warning tag" % w)
+            sys.exit(1)
+        ignore_warning(w)
+
+    for w in options.enabled_warnings:
+        if not is_warning_tag(w):
+            prerr("dmlc: the tag '%s' is not a valid warning tag" % w)
+            sys.exit(1)
+        enable_warning(w)
 
     inputfilename = options.input_filename
 

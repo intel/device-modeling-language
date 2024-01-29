@@ -119,6 +119,32 @@ class shared_logs_on_device(CompatFeature):
 
 
 @feature
+class suppress_WLOGMIXUP(CompatFeature):
+    '''This compatibility feature makes it so the warning `WLOGMIXUP` is
+    suppressed by default. `WLOGMIXUP` warns about usages of a common faulty
+    pattern which results in broken log statements &mdash; for more
+    information, see the documentation of `WLOGMIXUP` in the
+    [Messages](messages.html) section.
+
+    `WLOGMIXUP` is suppressed by default below Simics API version 7 in order
+    to avoid overwhelming users with warnings, as the faulty pattern that
+    `WLOGMIXUP` reports is very prevalent within existing code. Addressing
+    applications of the faulty pattern should be done before or as part of
+    migration to Simics API version 7.
+
+    Passing `--no-compat=suppress_WLOGMIXUP` to DMLC has almost the same effect
+    as passing `--warn=WLOGMIXUP`; either will cause DMLC to report the warning
+    even when the Simics API version in use is below 7. The only difference
+    between these two options is that if `--no-compat=suppress_WLOGMIXUP` is
+    used (and `--warn=WLOGMIXUP` is not), then `WLOGMIXUP` may still be
+    explicitly suppressed via `--no-warn=WLOGMIXUP`. In contrast,
+    `--warn=WLOGMIXUP` doesn't allow for `WLOGMIXUP` to be suppressed at
+    all.'''
+    short = "Suppress the warning 'WLOGMIXUP' by default"
+    last_api_version = api_6
+
+
+@feature
 class dml12_inline(CompatFeature):
     '''When using `inline` to inline a method in a DML 1.2 device,
     constant arguments passed in typed parameters are inlined as

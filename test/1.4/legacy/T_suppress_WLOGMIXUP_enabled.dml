@@ -1,0 +1,32 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+/// COMPILE-ONLY
+
+/// DMLC-FLAG --simics-api=6
+
+loggroup lg;
+
+session bool b;
+session int i;
+
+method init() {
+    // no warning
+    log info, lg: "log";
+    log info, lg, i: "log";
+    log info, (lg | 0): "log";
+    log info, b ? (cast(lg | i, uint32) | i) : i: "log";
+    log info, b ? (cast(i | i, uint32) | i) : 0: "log";
+
+    log info, i, 1: "log";
+    log info, i, 5: "log";
+    log info, i, b ? cast(1, uint32) : i: "log";
+
+    log info, 2, 3: "log";
+    log info, i then lg: "log";
+    log info, lg then 3: "log";
+}
