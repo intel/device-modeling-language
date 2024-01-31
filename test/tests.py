@@ -1203,7 +1203,8 @@ class DmlDep(DmlDepBase):
             join(testdir, '1.2', 'misc', 'rel', 'a', 'x.h'),
             join(testdir, '1.2', 'misc', 'rel', 'a', 'y.h')]
         for exp in expected_subset:
-            if all(os.path.normpath(p) != os.path.normpath(exp)
+            if all(os.path.normpath(os.path.realpath(p))
+                   != os.path.normpath(os.path.realpath(exp))
                    for p in prereqs):
                 raise TestFail('missing prerequisite: ' + exp)
 
