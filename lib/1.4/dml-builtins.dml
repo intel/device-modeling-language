@@ -2808,7 +2808,7 @@ template register is (_conf_attribute, get, set, shown_desc,
     param mapped : bool;
     param mapped = offset != unmapped_offset;
 
-    shared method _size() -> (int) { return this.bitsize / 8; }
+    shared independent method _size() -> (int) { return this.bitsize / 8; }
     shared method _num_fields() -> (uint32) {
         local uint32 num_fields = 0;
         foreach f in (fields) {
@@ -2817,7 +2817,7 @@ template register is (_conf_attribute, get, set, shown_desc,
         return num_fields;
     }
 
-    shared method _field_bits() -> (uint64) {
+    shared independent method _field_bits() -> (uint64) {
         local uint64 bits = 0;
         foreach f in (this.fields) {
             bits[f.lsb + f.bitsize - 1 : f.lsb] = -1;
