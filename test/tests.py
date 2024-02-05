@@ -65,8 +65,8 @@ else:
 bat_sfx = batch_suffix()
 exe_sfx = '.exe' if is_windows() else ""
 
-mini_python = [join(simics_base_path(), host_type(), "bin",
-                    "mini-python" + exe_sfx)]
+mini_python = [join(testparams.project_path(), "bin",
+                    f"mini-python{batch_suffix()}")]
 dmlc_py = [join(project_host_path(), "bin", "dml", "python")]
 main_dmlc = mini_python + dmlc_py
 # Alternative python interpreter for DMLC including args,
