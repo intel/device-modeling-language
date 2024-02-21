@@ -2444,91 +2444,99 @@ template bank is (object, shown_desc) {
         }
     }
 
-    implement register_view {
-        method description() -> (const char *) {
-            // TODO: it would make sense to return NULL for no desc, but
-            // iface docs doesn't explicitly specify whether this is
-            // allowed.
-            return bank.shown_desc == NULL ? "" : bank.shown_desc;
-        }
-        method big_endian_bitorder() -> (bool) {
-            return bank.be_bitorder;
-        }
-        method number_of_registers() -> (uint32) {
-            return _num_registers();
-        }
-        method register_info(uint32 reg) -> (attr_value_t) {
-            local register r;
-            try {
-                r = bank._get_register(reg);
-            } catch {
-                return SIM_make_attr_nil();
+    // Warning: This parameter is meant for enabling some experiments with
+    // custom register_view implementations. It should not be used in
+    // production code.
+    param _provide_register_view default true;
+    #if (_provide_register_view) {
+        implement register_view {
+            method description() -> (const char *) {
+                // TODO: it would make sense to return NULL for no desc, but
+                // iface docs doesn't explicitly specify whether this is
+                // allowed.
+                return bank.shown_desc == NULL ? "" : bank.shown_desc;
             }
+            method big_endian_bitorder() -> (bool) {
+                return bank.be_bitorder;
+            }
+            method number_of_registers() -> (uint32) {
+                return _num_registers();
+            }
+            method register_info(uint32 reg) -> (attr_value_t) {
+                local register r;
+                try {
+                    r = bank._get_register(reg);
+                } catch {
+                    return SIM_make_attr_nil();
+                }
 
-            local attr_value_t fields = SIM_alloc_attr_list(
-                r._num_fields());
+                local attr_value_t fields = SIM_alloc_attr_list(
+                    r._num_fields());
 
-            local uint32 idx = 0;
-            foreach f in (r.fields) {
-                local attr_value_t elem = SIM_make_attr_list(
-                    4,
-                    SIM_make_attr_string(f._qname() + strlen(r._qname()) + 1),
+                local uint32 idx = 0;
+                foreach f in (r.fields) {
+                    local attr_value_t elem = SIM_make_attr_list(
+                        4,
+                        SIM_make_attr_string(
+                            f._qname() + strlen(r._qname()) + 1),
+                        // TODO: NULL should give a nil value
+                        SIM_make_attr_string(f.shown_desc == NULL ? ""
+                                             : f.shown_desc),
+                        SIM_make_attr_uint64(f.lsb),
+                        SIM_make_attr_uint64(f.lsb + f.bitsize - 1));
+                    SIM_attr_list_set_item(&fields, idx, elem);
+                    idx++;
+                }
+
+                local attr_value_t ret;
+                ret = SIM_make_attr_list(
+                    6,
+                    SIM_make_attr_string(
+                        r._qname() + strlen(bank._qname()) + 1),
                     // TODO: NULL should give a nil value
-                    SIM_make_attr_string(f.shown_desc == NULL ? ""
-                                         : f.shown_desc),
-                    SIM_make_attr_uint64(f.lsb),
-                    SIM_make_attr_uint64(f.lsb + f.bitsize - 1));
-                SIM_attr_list_set_item(&fields, idx, elem);
-                idx++;
+                    SIM_make_attr_string(r.shown_desc == NULL ? ""
+                                         : r.shown_desc),
+                    SIM_make_attr_uint64(r._size()),
+                    SIM_make_attr_uint64(r.offset),
+                    fields,
+                    SIM_make_attr_boolean(
+                        byte_order == "big-endian" #? true #: false));
+
+                return ret;
             }
+            method get_register_value(uint32 reg) -> (uint64) {
+                local register r;
+                try {
+                    r = bank._get_register(reg);
+                } catch {
+                    return 0;
+                }
 
-            local attr_value_t ret;
-            ret = SIM_make_attr_list(
-                6,
-                SIM_make_attr_string(r._qname() + strlen(bank._qname()) + 1),
-                // TODO: NULL should give a nil value
-                SIM_make_attr_string(r.shown_desc == NULL ? ""
-                                     : r.shown_desc),
-                SIM_make_attr_uint64(r._size()),
-                SIM_make_attr_uint64(r.offset),
-                fields,
-                SIM_make_attr_boolean(
-                    byte_order == "big-endian" #? true #: false));
+                return r.get();
+            }
+            method set_register_value(uint32 reg, uint64 val) {
+                local register r;
+                try {
+                    r = bank._get_register(reg);
+                } catch {
+                    return;
+                }
 
-            return ret;
+                r.set(val);
+            }
         }
-        method get_register_value(uint32 reg) -> (uint64) {
-            local register r;
-            try {
-                r = bank._get_register(reg);
-            } catch {
-                return 0;
+
+        implement register_view_read_only {
+            method is_read_only(uint32 reg) -> (bool) {
+                local register r;
+                try {
+                    r = bank._get_register(reg);
+                } catch {
+                    return false;
+                }
+
+                return r._is_read_only;
             }
-
-            return r.get();
-        }
-        method set_register_value(uint32 reg, uint64 val) {
-            local register r;
-            try {
-                r = bank._get_register(reg);
-            } catch {
-                return;
-            }
-
-            r.set(val);
-        }
-    }
-
-    implement register_view_read_only {
-        method is_read_only(uint32 reg) -> (bool) {
-            local register r;
-            try {
-                r = bank._get_register(reg);
-            } catch {
-                return false;
-            }
-
-            return r._is_read_only;
         }
     }
 
