@@ -764,7 +764,7 @@ class EDEVICE(DMLError):
 
 class ELTYPE(DMLError):
     """
-    Log-statement type must be one of `info`, `error`,
+    Log-statement type must be one of `info`, `warning`, `error`,
     `spec_viol`, and `unimpl`.
     """
     fmt = "invalid log type: '%s'"

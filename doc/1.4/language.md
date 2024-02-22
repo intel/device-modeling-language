@@ -3503,7 +3503,7 @@ messages, by matching on the three main properties of each message:
 
 * The *`log-type`* specifies the general category
   of the message. The value must be one of the identifiers
-  `info`, `error`, `critical`,
+  `info`, `warning`, `error`, `critical`,
   `spec_viol`, or `unimpl`.
 
 * The *`level`* specifies at what verbosity level the log

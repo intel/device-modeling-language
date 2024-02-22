@@ -13,6 +13,8 @@ method test -> (bool ok) {
     log spec_viol: "SPEC_VIOL_";
     /// GREP \[obj unimpl\] UNIMPL_
     log unimpl: "UNIMPL_";
+    /// GREP \[obj warning\] WARNING
+    log warning: "WARNING";
     /// GREP \[obj error\] ERROR
     log error: "ERROR";
     /// GREP \[obj critical\] CRITICAL

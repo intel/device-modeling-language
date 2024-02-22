@@ -1761,4 +1761,6 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
       <tt>typeof</tt> within a method signature would lead to incorrect
       compile-time errors when the method is overridden.</add-note>
   </build-id>
+  <build-id _6="next" _7="next"><add-note> Added support for the
+      <tt>log warning</tt> statement.</add-note></build-id>
 </rn>

@@ -2272,7 +2272,8 @@ def statement_assert(t):
     t[0] = ast.assert_(site(t), t[2])
 
 log_types = {'spec_viol': 'spec_violation', 'error': 'error', 'info': 'info',
-             'unimpl': 'unimplemented', 'critical': 'critical'}
+             'unimpl': 'unimplemented', 'critical': 'critical',
+             'warning': 'warning'}
 @prod
 def log_kind(t):
     '''log_kind : ID
