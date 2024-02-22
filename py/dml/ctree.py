@@ -5200,7 +5200,7 @@ def log_object(site, node, indices):
                  TPtr(TNamed("conf_object_t")))
 
 def log_statement(site, logobj, logtype, level, groups, fmt, *args):
-    if logtype in ['error', 'critical']:
+    if logtype in ['warning', 'error', 'critical']:
         lvl = []
     else:
         if level is None:
