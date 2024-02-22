@@ -1757,4 +1757,6 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
       version 7 by passing either <tt>--warn=WLOGMIXUP</tt> (as before) or
       <tt>--no-compat=suppress_WLOGMIXUP</tt> to DMLC.</add-note>
   </build-id>
+  <build-id _6="next" _7="next"><add-note> Added support for the
+      <tt>log warning</tt> statement.</add-note></build-id>
 </rn>
