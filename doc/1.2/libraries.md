@@ -1347,6 +1347,15 @@ validate\_port(conf\_object\_t \*obj, const char \*port) -> (bool valid)
 
 Called before updating the value. If the return value is false,
 the attribute assignment will fail.
+
+<div class="note">
+
+**Note:** `validate` should be used instead, since `validate_port` is removed
+in DML 1.4.
+
+</div>
+
+
 </dd><dt>
 
 validate(conf\_object\_t \*obj) -> (bool valid)
@@ -1354,14 +1363,6 @@ validate(conf\_object\_t \*obj) -> (bool valid)
 
 Called before updating the value. If the return value is false,
 the attribute assignment will fail.
-
-<div class="note">
-
-**Note:** New code should
-use `validate_port` instead, since `validate` does
-not get a *port* argument.
-
-</div>
 
 </dd><dt>
 
