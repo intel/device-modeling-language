@@ -627,7 +627,7 @@ def merge_parameters(defs, obj_specs):
 
     return param0
 
-def typecheck_method_override(m1, m2):
+def typecheck_method_override(m1, m2, location):
     '''check that m1 can override m2'''
     assert m1.kind == m2.kind == 'method'
     (_, (inp1, outp1, throws1, qualifiers1, _), _, _, _) \
@@ -653,7 +653,7 @@ def typecheck_method_override(m1, m2):
                 if t1 is None and logging.show_porting:
                     try:
                         (struct_defs, type2) = eval_type(
-                            t2, a2.site, None, global_scope)
+                            t2, a2.site, location, global_scope)
                     except DMLError:
                         # uncommon but can happen, e.g. an argument
                         # with static array length that depends on a
@@ -667,8 +667,8 @@ def typecheck_method_override(m1, m2):
             and a1.site.dml_version() != (1, 2)
             and a2.site.dml_version() != (1, 2)):
             # TODO move to caller
-            (_, type1) = eval_type(t1, a1.site, None, global_scope)
-            (_, type2) = eval_type(t2, a2.site, None, global_scope)
+            (_, type1) = eval_type(t1, a1.site, location, global_scope)
+            (_, type2) = eval_type(t2, a2.site, location, global_scope)
             if safe_realtype(type1).cmp(safe_realtype(type2)) != 0:
                 raise EMETH(a1.site, a2.site,
                             f"mismatching types in input argument {n1}")
@@ -676,8 +676,8 @@ def typecheck_method_override(m1, m2):
     for (i, (a1, a2)) in enumerate(zip(outp1, outp2)):
         if a1.site.dml_version() != (1, 2) and a2.site.dml_version() != (1, 2):
             ((n1, t1), (n2, t2)) = (a1.args, a2.args)
-            (_, type1) = eval_type(t1, a1.site, None, global_scope)
-            (_, type2) = eval_type(t2, a2.site, None, global_scope)
+            (_, type1) = eval_type(t1, a1.site, location, global_scope)
+            (_, type2) = eval_type(t2, a2.site, location, global_scope)
             if safe_realtype(type1).cmp(safe_realtype(type2)) != 0:
                 msg = "mismatching types in return value"
                 if len(outp1) > 1:
@@ -1343,6 +1343,8 @@ def process_method_implementations(obj, name, implementations,
     (default_map, method_order) = sort_method_implementations(
         unshared_methods + shared_methods, obj_specs)
 
+    location = Location(obj, static_indices(obj))
+
     impl_to_method = {}
     for (default_level, impl) in reversed(list(enumerate(
             method_order))):
@@ -1394,7 +1396,8 @@ def process_method_implementations(obj, name, implementations,
                 # captured with ETMETH above
                 assert not impl.shared
                 typecheck_method_override(impl.method_ast,
-                                          overridden.method_ast)
+                                          overridden.method_ast,
+                                          location)
             if (impl.method_ast.site.dml_version() == (1, 2) and throws
                 and not overridden.throws
                 and overridden.method_ast.site.dml_version() == (1, 4)):
@@ -1424,7 +1427,7 @@ def process_method_implementations(obj, name, implementations,
                                 "different nothrow annotations")
 
         method = mkmethod(impl.site, rbrace_site,
-                          Location(obj, static_indices(obj)),
+                          location,
                           obj, name, inp_ast,
                           outp_ast, throws, independent, startup, memoized,
                           body, default, default_level)

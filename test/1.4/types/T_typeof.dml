@@ -1,0 +1,25 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+template negative_checker {
+    param int_type_carrier;
+    method is_negative(typeof(int_type_carrier) i) -> (bool) default {
+        return false;
+    }
+}
+
+group int64_checker is negative_checker {
+    param int_type_carrier = *cast(NULL, int64 *);
+    method is_negative(int64 i) -> (bool) {
+        return i < 0;
+    }
+}
+
+
+method init() {
+    assert int64_checker.is_negative(-1);
+}
