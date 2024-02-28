@@ -1757,7 +1757,7 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
       version 7 by passing either <tt>--warn=WLOGMIXUP</tt> (as before) or
       <tt>--no-compat=suppress_WLOGMIXUP</tt> to DMLC.</add-note>
   </build-id>
-  <build-id _6="next" _7="next"><add-note> Fixed an issue where leveraging
+  <build-id _6="6283" _7="next"><add-note> Fixed an issue where leveraging
       <tt>typeof</tt> within a method signature would lead to incorrect
       compile-time errors when the method is overridden.</add-note>
   </build-id>
