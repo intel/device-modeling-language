@@ -1833,7 +1833,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
     # Fixup some parameters and stuff
 
     if obj.objtype == 'device':
-        banks = obj.get_components('bank')
+        banks = obj.get_recursive_components('bank')
         if dml.globals.dml_version == (1, 2):
             # Check for duplicate bank functions
             used = {}
@@ -2287,10 +2287,13 @@ def sort_registers(bank):
         all_offsets = []
         mask = (1 << 64) - 1
         for reg in bank.get_recursive_components('register'):
-            size = param_int(reg, 'size')
-            all_offsets.extend((offset & mask, (offset + size) & mask,
-                                reg, coord)
-                               for (offset, coord) in explode_offsets(reg))
+            try:
+                size = param_int(reg, 'size')
+                all_offsets.extend((offset & mask, (offset + size) & mask,
+                                    reg, coord)
+                                   for (offset, coord) in explode_offsets(reg))
+            except DMLError as e:
+                report(e)
         all_offsets.sort(key=lambda t: t[0])
         while all_offsets and all_offsets[-1][0] == mask:
             del all_offsets[-1]
