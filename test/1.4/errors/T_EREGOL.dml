@@ -72,47 +72,22 @@ bank b8[i < 2] {
 
 // Banks under groups and subdevices should also be subject to overlap checks
 group g[i < 2] {
-    bank b1 {
-        /// ERROR EREGOL
-        register a size 4 @ 8;
-        /// ERROR EREGOL
-        register b size 4 @ 11;
-        // no error
-        register c size 4 @ 18;
-        register d size 4 @ 22;
-    }
-
-    bank b2 {
-        /// ERROR EIDXVAR
-        register r size 4 @ i;
-    }
-}
-
-subdevice sd[i < 2] {
-    bank b {
-        /// ERROR EREGOL
-        register a size 4 @ 8;
-        /// ERROR EREGOL
-        register b size 4 @ 11;
-        // no error
-        register c size 4 @ 18;
-        register d size 4 @ 22;
-    }
-
-    group g {
-        bank b1 {
-            /// ERROR EREGOL
-            register a size 4 @ 8;
-            /// ERROR EREGOL
-            register b size 4 @ 11;
-            // no error
-            register c size 4 @ 18;
-            register d size 4 @ 22;
-        }
-
-        bank b2 {
-            /// ERROR EIDXVAR
-            register r size 4 @ i;
+    subdevice sd[j < 2] {
+        group g[k < 2] {
+            bank b {
+                /// ERROR EREGOL
+                register a size 4 @ 8;
+                /// ERROR EREGOL
+                register b size 4 @ 11;
+                // no error
+                register c[l < 2] size 4 @ 18 + l*4;
+                /// ERROR EIDXVAR
+                register d size 4 @ i;
+                /// ERROR EIDXVAR
+                register e size 4 @ j;
+                /// ERROR EIDXVAR
+                register f size 4 @ k;
+            }
         }
     }
 }
