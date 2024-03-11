@@ -8,7 +8,7 @@ device test;
 
 /// COMPILE-ONLY
 
-// bug 7099
+// SIMICS-8806
 method m1(bar) {
     local char *x = bar;
 }

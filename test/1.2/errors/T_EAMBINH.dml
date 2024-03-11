@@ -76,7 +76,7 @@ trait k {
 }
 
 // name clash between methods from unrelated traits, instantiated directly
-// by an object, bug 22980
+// by an object, SIMICS-9681
 /// ERROR EAMBINH
 port p {
     is i;

@@ -46,7 +46,7 @@ method init() {
 
 method test -> (bool ok) {
     // ! is a magic operator for comparing interface methods to NULL
-    // see also bug 24144
+    // see also SIMICS-9868
     if (!$c.foo.f2) {
         ok = $c.foo.f1(2) == 3;
     } else {

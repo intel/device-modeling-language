@@ -5,7 +5,7 @@
 dml 1.2;
 device eassign;
 
-// bug 5090
+// SIMICS-8783
 method init {
     local int i;
     /// ERROR EASSIGN

@@ -29,7 +29,7 @@ typedef struct {
     x_t *x;
 } x_t;
 
-// bug 25178
+// SIMICS-10177
 typedef struct {
     const y_t *x;
 } y_t;

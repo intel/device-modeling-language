@@ -13,7 +13,7 @@ extern FOO;
 
 method bar(i) {}
 
-// ICE, bug 17847
+// ICE, SIMICS-9125
 method init {
     inline $bar(FOO);
 }

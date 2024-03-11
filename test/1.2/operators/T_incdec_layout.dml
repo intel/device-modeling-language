@@ -13,7 +13,7 @@ typedef layout "big-endian" {
 } l_t;
 
 method init {
-    // Compile breaks, bug 17728. Todo: when it compiles, incorporate it into
+    // Compile breaks, SIMICS-9114. Todo: when it compiles, incorporate it into
     // T_incdec and test that it does what it should.
     local l_t l;
     ++l.i;

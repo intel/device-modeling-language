@@ -239,7 +239,7 @@ class DMLType(metaclass=abc.ABCMeta):
         3. when judging whether a method override is allowed, as an inaccurate
         replacement of TPtr(self).canstore(TPtr(other))[0]
 
-        See bug 21900 for further discussions.
+        See SIMICS-9504 for further discussions.
 
         """
         return NotImplemented
@@ -253,7 +253,7 @@ class DMLType(metaclass=abc.ABCMeta):
         would be a const violation.
 
         The correctness of the return value can not be trusted; see
-        bug 21900 for further discussions.
+        SIMICS-9504 for further discussions.
         """
         return (self.cmp(other) == 0, False, False)
 
