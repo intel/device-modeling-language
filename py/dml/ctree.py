@@ -39,7 +39,8 @@ __all__ = (
     'param_bool_fixup',
 
     'mkCompound',
-    'mkNull', 'Null',
+    'mkNull',
+    'mkNoop',
     'mkLabel',
     'mkUnrolledLoop',
     'mkGoto',
@@ -68,7 +69,7 @@ __all__ = (
     'mkVectorForeach',
     'mkBreak',
     'mkContinue',
-    'mkAssignStatement',
+    'mkAssignStatement', 'AssignStatement',
     'mkCopyData',
     'mkIfExpr', 'IfExpr',
     #'BinOp',
@@ -128,6 +129,7 @@ __all__ = (
     'mkEachIn', 'EachIn',
     'mkBoolConstant',
     'mkUndefined', 'Undefined',
+    'mkDiscardRef',
     'TraitParameter',
     'TraitSessionRef',
     'TraitHookRef',
@@ -424,6 +426,9 @@ def mkCompound(site, statements, rbrace_site=None):
         return Compound(site, collapsed, rbrace_site)
 
 class Null(Statement):
+    '''Should only be used to represent stand-alone ; present in DML code. For
+       all other purposes (artificially created empty statements) Noop should
+       be used instead.'''
     is_empty = True
     def toc_stmt(self):
         self.linemark()
@@ -432,6 +437,19 @@ class Null(Statement):
         pass
 
 mkNull = Null
+
+class Noop(Statement):
+    '''An empty statement represented by a pair of braces in generated C. This
+       avoids certain GCC and Coverity warnings that could manifest if ';' were
+       used instead.'''
+    is_empty = True
+    def toc_stmt(self):
+        self.linemark()
+        out('{}\n')
+    def toc(self):
+        pass
+
+mkNoop = Noop
 
 class Label(Statement):
     def __init__(self, site, label, unused=False):
@@ -630,21 +648,24 @@ def mkDelete(site, expr):
 
 class ExpressionStatement(Statement):
     @auto_init
-    def __init__(self, site, expr): pass
+    def __init__(self, site, expr, explicit_discard): pass
     def toc_stmt(self):
         self.linemark()
-        out(self.expr.discard()+';\n')
+        out(self.expr.discard(explicit=self.explicit_discard)+';\n')
 
-def mkExpressionStatement(site, expr):
-    if isinstance(expr, Constant):
-        return mkNull(site)
-    return ExpressionStatement(site, expr)
+def mkExpressionStatement(site, expr, explicit_discard=False):
+    if expr.constant and explicit_discard:
+        return mkNoop(site)
+    return ExpressionStatement(site, expr, explicit_discard)
 
 def toc_constsafe_pointer_assignment(site, source, target, typ):
     target_val = mkDereference(site,
         Cast(site, mkLit(site, target, TPtr(void)), TPtr(typ)))
-    mkAssignStatement(site, target_val,
-                      ExpressionInitializer(mkLit(site, source, typ))).toc()
+
+    init = ExpressionInitializer(
+        source_for_assignment(site, typ, mkLit(site, source, typ)))
+
+    return AssignStatement(site, target_val, init).toc()
 
 class After(Statement):
     @auto_init
@@ -813,7 +834,7 @@ def mkIf(site, cond, truebranch, falsebranch = None, else_site=None):
         elif falsebranch:
             return falsebranch
         else:
-            return mkNull(site)
+            return mkNoop(site)
     return If(site, cond, truebranch, falsebranch, else_site)
 
 class While(Statement):
@@ -878,7 +899,8 @@ class For(Statement):
         if all(isinstance(post, ExpressionStatement) for post in self.posts):
             # common case: all post statements are expressions, so
             # traditional for loop can be produced
-            out(', '.join(post.expr.discard() for post in self.posts))
+            out(', '.join(post.expr.discard(explicit=post.explicit_discard)
+                          for post in self.posts))
         else:
             # general case: arbitrary statements in post code;
             # encapsulate in a statement expression
@@ -1069,22 +1091,44 @@ class AssignStatement(Statement):
     @auto_init
     def __init__(self, site, target, initializer):
         assert isinstance(initializer, Initializer)
+
     def toc_stmt(self):
         self.linemark()
-        out('{\n', postindent=1)
-        self.toc_inline()
-        self.linemark()
-        out('}\n', preindent=-1)
-    def toc_inline(self):
-        self.linemark()
-        self.initializer.assign_to(self.target, self.target.ctype())
+        out(self.target.write(self.initializer) + ';\n')
 
-mkAssignStatement = AssignStatement
+def mkAssignStatement(site, target, init):
+    if isinstance(target, InlinedParam):
+        raise EASSINL(target.site, target.name)
+    if not target.writable:
+        raise EASSIGN(site, target)
+
+    if isinstance(target, NonValue):
+        if not isinstance(init, ExpressionInitializer):
+            raise EDATAINIT(target.site,
+                            f'{target} can only be used as the target of an '
+                            + 'assignment if its initializer is a simple '
+                            + 'expression or a return value of a method call')
+    else:
+        target_type = target.ctype()
+
+        if deep_const(target_type):
+            raise ECONST(site)
+
+        if isinstance(init, ExpressionInitializer):
+            init = ExpressionInitializer(
+                source_for_assignment(site, target_type, init.expr))
+
+    return AssignStatement(site, target, init)
+
 
 def mkCopyData(site, source, target):
     "Convert a copy statement to intermediate representation"
-    assignexpr = mkAssignOp(site, target, source)
-    return mkExpressionStatement(site, assignexpr)
+    # HACK-y, but it's fine
+    if (isinstance(target, Variable) and target.sym.name == '_'
+        and target.site.dml_version() != (1, 2)):
+        return mkExpressionStatement(site, source, explicit_discard=True)
+
+    return mkAssignStatement(site, target, ExpressionInitializer(source))
 
 #
 # Expressions
@@ -1143,21 +1187,12 @@ def truncate_int_bits(value, signed, bits=64):
         return value & mask
 
 class LValue(Expression):
-    "Somewhere to read or write data"
+    """An expression whose C representation is always an LValue, whose address
+    is always safe to take, in the sense that the duration that address
+    remains valid is intuitively predictable by the user"""
     writable = True
-
-    def write(self, source):
-        rt = realtype(self.ctype())
-        if isinstance(rt, TEndianInt):
-            return (f'{rt.dmllib_fun("copy")}(&{self.read()},'
-                    + f' {source.read()})')
-        return '%s = %s' % (self.read(), source.read())
-
-    @property
-    def is_stack_allocated(self):
-        '''Returns true only if it's known that writing to the lvalue will
-           write to stack-allocated data'''
-        return False
+    addressable = True
+    c_lval = True
 
 class IfExpr(Expression):
     priority = 30
@@ -2493,8 +2528,8 @@ class AssignOp(BinOp):
     def __str__(self):
         return "%s = %s" % (self.lh, self.rh)
 
-    def discard(self):
-        return self.lh.write(self.rh)
+    def discard(self, explicit=False):
+        return self.lh.write(ExpressionInitializer(self.rh))
 
     def read(self):
         return '((%s), (%s))' % (self.discard(), self.lh.read())
@@ -2573,13 +2608,13 @@ class AddressOf(UnaryOp):
                                TPtr(TVoid())],
                               TVoid())))
         if (compat.dml12_misc not in dml.globals.enabled_compat
-            and not isinstance(rh, LValue)):
+            and not rh.addressable):
             raise ERVAL(rh.site, '&')
         return AddressOf(site, rh)
 
     @property
     def is_pointer_to_stack_allocation(self):
-        return isinstance(self.rh, LValue) and self.rh.is_stack_allocated
+        return self.rh.is_stack_allocated
 
 def mkAddressOf(site, rh):
     if dml.globals.compat_dml12_int(site):
@@ -2617,7 +2652,8 @@ class Dereference(UnaryOp, LValue):
 
     @property
     def is_pointer_to_stack_allocation(self):
-        return isinstance(self.type, TArray) and self.is_stack_allocated
+        return (isinstance(safe_realtype_shallow(self.type), TArray)
+                and self.is_stack_allocated)
 
 mkDereference = Dereference.make
 
@@ -2739,7 +2775,7 @@ def mkUnaryPlus(site, rh):
         rh, _ = promote_integer(rh, rhtype)
     else:
         raise ICE(site, "Unexpected arith argument to unary +")
-    if isinstance(rh, LValue):
+    if rh.addressable or rh.writable:
         # +x is a rvalue
         rh = mkRValue(rh)
     return rh
@@ -2765,7 +2801,7 @@ class IncDec(UnaryOp):
         rhtype = safe_realtype(rh.ctype())
         if not isinstance(rhtype, (IntegerType, TPtr)):
             raise EINCTYPE(site, cls.op)
-        if not isinstance(rh, LValue):
+        if not rh.addressable:
             if isinstance(rh, BitSlice):
                 hint = 'try %s= 1' % (cls.base_op[0],)
             else:
@@ -2971,7 +3007,8 @@ class BitSlice(Expression):
         return self.expr.writable
 
     def write(self, source):
-        source_expr = source
+        assert isinstance(source, ExpressionInitializer)
+        source_expr = source.expr
         # if not self.size.constant or source.ctype() > self.type:
         #     source = mkBitAnd(source, self.mask)
 
@@ -2993,7 +3030,7 @@ class BitSlice(Expression):
         target_type = realtype(self.expr.ctype())
         if target_type.is_int and target_type.is_endian:
             expr = mkCast(self.site, expr, target_type)
-        return self.expr.write(expr)
+        return self.expr.write(ExpressionInitializer(expr))
 
 def mkBitSlice(site, expr, msb, lsb, bitorder):
     # lsb == None means that only one bit number was given (expr[i]
@@ -3515,6 +3552,18 @@ class Undefined(NonValue):
         return EUNDEF(self)
 
 mkUndefined = Undefined
+
+class DiscardRef(NonValue):
+    writable = True
+
+    def __str__(self):
+        return '_'
+
+    def write(self, source):
+        assert isinstance(source, ExpressionInitializer)
+        return source.expr.discard(explicit=True)
+
+mkDiscardRef = DiscardRef
 
 def endian_convert_expr(site, idx, endian, size):
     """Convert a bit index to little-endian (lsb=0) numbering.
@@ -4342,13 +4391,27 @@ class StaticVariable(Variable):
 
 mkStaticVariable = StaticVariable
 
-class StructMember(LValue):
+class StructMember(Expression):
     priority = 160
     explicit_type = True
     @auto_init
     def __init__(self, site, expr, sub, type, op):
+        # Write of StructMembers rely on them being C lvalues
+        assert not expr.writable or expr.c_lval
         assert_type(site, expr, Expression)
         assert_type(site, sub, str)
+
+    @property
+    def writable(self):
+        return self.expr.writable
+
+    @property
+    def addressable(self):
+        return self.expr.addressable
+
+    @property
+    def c_lval(self):
+        return self.expr.c_lval
 
     def __str__(self):
         s = str(self.expr)
@@ -4363,11 +4426,12 @@ class StructMember(LValue):
 
     @property
     def is_stack_allocated(self):
-        return isinstance(self.expr, LValue) and self.expr.is_stack_allocated
+        return self.expr.is_stack_allocated
 
     @property
     def is_pointer_to_stack_allocation(self):
-        return isinstance(self.type, TArray) and self.is_stack_allocated
+        return (isinstance(safe_realtype_shallow(self.type), TArray)
+                and self.is_stack_allocated)
 
 def mkSubRef(site, expr, sub, op):
     if isinstance(expr, NodeRef):
@@ -4474,18 +4538,28 @@ class ArrayRef(LValue):
 
     @property
     def is_pointer_to_stack_allocation(self):
-        return isinstance(self.type, TArray) and self.is_stack_allocated
+        return (isinstance(safe_realtype_shallow(self.type), TArray)
+                and self.is_stack_allocated)
 
-class VectorRef(LValue):
+class VectorRef(Expression):
     slots = ('type',)
     @auto_init
     def __init__(self, site, expr, idx):
+        assert not expr.writable or expr.c_lval
         self.type = realtype(self.expr.ctype()).base
     def read(self):
         return 'VGET(%s, %s)' % (self.expr.read(), self.idx.read())
-    def write(self, source):
-        return "VSET(%s, %s, %s)" % (self.expr.read(), self.idx.read(),
-                                     source.read())
+    # No need for write, VGET results in an lvalue
+
+    @property
+    def writable(self):
+        return self.expr.writable
+    @property
+    def addressable(self):
+        return self.expr.addressable
+    @property
+    def c_lval(self):
+        return self.expr.c_lval
 
 def mkIndex(site, expr, idx):
     if isinstance(idx, NonValue):
@@ -4559,7 +4633,7 @@ class Cast(Expression):
 
     @property
     def is_pointer_to_stack_allocation(self):
-        return (isinstance(self.type, TPtr)
+        return (isinstance(safe_realtype_shallow(self.type), TPtr)
                 and self.expr.is_pointer_to_stack_allocation)
 
 def mkCast(site, expr, new_type):
@@ -4702,7 +4776,6 @@ def mkCast(site, expr, new_type):
 class RValue(Expression):
     '''Wraps an lvalue to prohibit write. Useful when a composite
     expression is reduced down to a single variable.'''
-    writable = False
     @auto_init
     def __init__(self, site, expr): pass
     def __str__(self):
@@ -4711,14 +4784,23 @@ class RValue(Expression):
         return self.expr.ctype()
     def read(self):
         return self.expr.read()
-    def discard(self): pass
+    def discard(self, explicit=False):
+        return self.expr.discard(explicit)
     def incref(self):
         self.expr.incref()
     def decref(self):
         self.expr.decref()
+    # Since addressable and readable are False this may only ever be leveraged
+    # by DMLC for optimization purposes
+    @property
+    def c_lval(self):
+        return self.expr.c_lval
+    @property
+    def is_pointer_to_stack_allocation(self):
+        return self.expr.is_pointer_to_stack_allocation
 
 def mkRValue(expr):
-    if isinstance(expr, LValue) or expr.writable:
+    if expr.addressable or expr.writable:
         return RValue(expr.site, expr)
     return expr
 
@@ -4900,15 +4982,35 @@ class ExpressionInitializer(Initializer):
         # be UB as long as the session variable hasn't been initialized
         # previously.
         site = self.expr.site
-        if deep_const(typ):
-            out('memcpy((void *)&%s, (%s){%s}, sizeof %s);\n'
-                % (dest.read(),
-                   TArray(typ, mkIntegerLiteral(site, 1)).declaration(''),
-                   mkCast(site, self.expr, typ).read(),
-                   dest.read()))
+        rt = safe_realtype_shallow(typ)
+        # There is a reasonable implementation for this case (memcpy), but it
+        # never occurs today
+        assert not isinstance(rt, TArray)
+        if isinstance(rt, TEndianInt):
+            return (f'{rt.dmllib_fun("copy")}((void *)&{dest},'
+                    + f' {self.expr.read()})')
+        elif deep_const(typ):
+            shallow_deconst_typ = safe_realtype_unconst(typ)
+            # a const-qualified ExternStruct can be leveraged by the user as a
+            # sign that there is some const-qualified member unknown to DMLC
+            if (isinstance(shallow_deconst_typ, TExternStruct)
+                or deep_const(shallow_deconst_typ)):
+                # Expression statement to delimit lifetime of compound literal
+                # TODO it's possible to improve the efficiency of this by not
+                # using a compound literal if self.expr is c_lval. However,
+                # this requires require strict cmp to ensure safety, and it's
+                # unclear if that path could ever be taken.
+                return ('({ memcpy((void *)&%s, (%s){%s}, sizeof(%s)); })'
+                        % (dest,
+                           TArray(typ,
+                                  mkIntegerLiteral(site, 1)).declaration(''),
+                           mkCast(site, self.expr, typ).read(),
+                           dest))
+            else:
+                return (f'*({TPtr(shallow_deconst_typ).declaration("")})'
+                        + f'&{dest} = {self.expr.read()}')
         else:
-            with disallow_linemarks():
-                mkCopyData(site, self.expr, dest).toc()
+            return f'{dest} = {self.expr.read()}'
 
 class CompoundInitializer(Initializer):
     '''Initializer for a variable of struct or array type, using the
@@ -4936,21 +5038,12 @@ class CompoundInitializer(Initializer):
         '''output C statements to assign an lvalue'''
         # (void *) cast to avoid GCC erroring if the target type is (partially)
         # const-qualified. See ExpressionInitializer.assign_to
-        if isinstance(typ, TNamed):
-            out('memcpy((void *)&%s, &(%s)%s, sizeof %s);\n' %
-                (dest.read(), typ.declaration(''), self.read(),
-                 dest.read()))
-        elif isinstance(typ, TArray):
-            out('memcpy((void *)%s, (%s)%s, sizeof %s);\n'
-                % (dest.read(), typ.declaration(''),
-                   self.read(), dest.read()))
-        elif isinstance(typ, TStruct):
-            out('memcpy((void *)&%s, (%s){%s}, sizeof %s);\n' % (
-                dest.read(),
-                TArray(typ, mkIntegerLiteral(self.site, 1)).declaration(''),
-                self.read(), dest.read()))
+        if isinstance(typ, (TNamed, TArray, TStruct)):
+            # Expression statement to delimit lifetime of compound literal
+            return ('({ memcpy((void *)&%s, &(%s)%s, sizeof(%s)); })'
+                    % (dest, typ.declaration(''), self.read(), dest))
         else:
-            raise ICE(self.site, 'strange type %s' % typ)
+            raise ICE(self.site, f'unexpected type for initializer: {typ}')
 
 class DesignatedStructInitializer(Initializer):
     '''Initializer for a variable of an extern-declared struct type, using
@@ -4990,10 +5083,11 @@ class DesignatedStructInitializer(Initializer):
         if isinstance(typ, StructType):
             # (void *) cast to avoid GCC erroring if the target type is
             # (partially) const-qualified. See ExpressionInitializer.assign_to
-            out('memcpy((void *)&%s, (%s){%s}, sizeof %s);\n' % (
-                dest.read(),
-                TArray(typ, mkIntegerLiteral(self.site, 1)).declaration(''),
-                self.read(), dest.read()))
+            return ('({ memcpy((void *)&%s, (%s){%s}, sizeof(%s)); })'
+                    % (dest,
+                       TArray(typ,
+                              mkIntegerLiteral(self.site, 1)).declaration(''),
+                       self.read(), dest))
         else:
             raise ICE(self.site, f'unexpected type for initializer: {typ}')
 
@@ -5032,8 +5126,7 @@ class MemsetInitializer(Initializer):
                            THook))
         # (void *) cast to avoid GCC erroring if the target type is
         # (partially) const-qualified. See ExpressionInitializer.assign_to
-        out('memset((void *)&%s, 0, sizeof(%s));\n'
-            % (dest.read(), typ.declaration('')))
+        return f'memset((void *)&{dest}, 0, sizeof({typ.declaration("")}))'
 
 class CompoundLiteral(Expression):
     @auto_init
@@ -5092,8 +5185,7 @@ class Declaration(Statement):
             # zero-initialize VLAs
             self.type.print_declaration(self.name, unused = self.unused)
             site_linemark(self.init.site)
-            self.init.assign_to(mkLit(self.site, self.name, self.type),
-                                self.type)
+            out(self.init.assign_to(self.name, self.type) + ';\n')
         else:
             self.type.print_declaration(
                 self.name, init=self.init.read() if self.init else None,
@@ -5137,7 +5229,15 @@ def sym_declaration(sym):
         # dbg('ignoring %r (init = %r)' % (sym.value, sym.init))
         if sym.init:
             sym.init.decref()
-        return None
+        return mkNoop(sym.site)
+
+    if sym.name == '_' and not (sym.site and sym.site.dml_version() == (1, 2)):
+        if sym.init:
+            return mkExpressionStatement(sym.site, sym.init.as_expr(sym.type),
+                                         explicit_discard=True)
+        else:
+            return mkNoop(sym.site)
+
 
     # This will prevent warnings from the C compiler
     # HACK: Always True to not rely on the broken symbol usage tracking

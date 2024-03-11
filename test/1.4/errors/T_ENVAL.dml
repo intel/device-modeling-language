@@ -46,6 +46,14 @@ method init() {
     b.r1;
     /// ERROR ENVAL
     b.r2.f;
+
+    // Discard identifier; not added to scope
+    local int _;
+    // ... so this resolves to the discard reference
+    /// ERROR ENVAL
+    _;
+    // no error
+    _ = true;
 }
 
 // dev is not a value in 1.4.  Need to capture this with a rather unnatural

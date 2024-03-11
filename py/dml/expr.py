@@ -109,10 +109,18 @@ class Expression(Code):
     # bitslicing.
     explicit_type = False
 
-    # Can the expression be assigned to?
-    # If writable is True, there is a method write() which returns a C
-    # expression to make the assignment.
+    # Can the expression be safely assigned to in DML?
+    # This implies write() can be safely used.
     writable = False
+
+    # Can the address of the expression be taken safely in DML?
+    # This implies c_lval, and typically implies writable.
+    addressable = False
+
+    # Is the C representation of the expression an lvalue?
+    # If True, then the default implementation of write() must not be
+    # overridden.
+    c_lval = False
 
     def __init__(self, site):
         assert not site or isinstance(site, Site)
@@ -128,8 +136,16 @@ class Expression(Code):
         raise ICE(self.site, "can't read %r" % self)
 
     # Produce a C expression but don't worry about the value.
-    def discard(self):
-        return self.read()
+    def discard(self, explicit=False):
+        if not explicit or safe_realtype_shallow(self.ctype()).void:
+            return self.read()
+
+        if self.constant:
+            return '(void)0'
+        from .ctree import Cast
+        expr = (f'({self.read()})'
+                if self.priority < Cast.priority else self.read())
+        return f'(void){expr}'
 
     def ctype(self):
         '''The corresponding DML type of this expression'''
@@ -140,9 +156,15 @@ class Expression(Code):
         return mkApplyInits(self.site, self, inits, location, scope)
 
     @property
+    def is_stack_allocated(self):
+        '''Returns true only if it's known that the storage for the value that
+           this expression evaluates to is temporary to a method scope'''
+        return False
+
+    @property
     def is_pointer_to_stack_allocation(self):
         '''Returns True only if it's known that the expression is a pointer
-           to stack-allocated data'''
+           to storage that is temporary to a method scope'''
         return False
 
     def incref(self):
@@ -155,6 +177,15 @@ class Expression(Code):
         "Create an identical expression, but with a different site."
         return type(self)(
             site, *(getattr(self, name) for name in self.init_args[2:]))
+
+    # Return a (principally) void-typed C expression that write a source to the
+    # storage this expression represents
+    # This should only be called if either writable or c_lval is True
+    def write(self, source):
+        assert self.c_lval, repr(self)
+        # Wrap .read() in parantheses if its priority is less than that of &
+        dest = self.read() if self.priority >= 150 else f'({self.read()})'
+        return source.assign_to(dest, self.ctype())
 
 class NonValue(Expression):
     '''An expression that is not really a value, but which may validly
@@ -202,11 +233,14 @@ class Lit(Expression):
         return self.str or self.cexpr
     def read(self):
         return self.cexpr
-    def write(self, source):
-        assert self.writable
-        return "%s = %s" % (self.cexpr, source.read())
     @property
     def writable(self):
+        return self.c_lval
+    @property
+    def addressable(self):
+        return self.c_lval
+    @property
+    def c_lval(self):
         return self.type is not None
 
 mkLit = Lit

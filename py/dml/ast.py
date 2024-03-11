@@ -54,6 +54,7 @@ astkinds = {
     'default',
     'default_dml12',
     'delete',
+    'discardref',
     'dml',
     'dml_typedef',
     'dowhile',

@@ -523,4 +523,37 @@
       <tt>--no-compat=shared_logs_on_device</tt> to DMLC.</add-note></build-id>
   <build-id _6="6262" _7="7006"><add-note> Improved the run-time performance
       of accesses to registers with many fields.</add-note></build-id>
+  <build-id _6="next" _7="next"><add-note> Added the <em>discard reference</em>
+      '<tt>_</tt>' &mdash; a non-value expression which may be used as an assign
+      target in order to explictly discard the result of an evaluated expression
+      or return value of a method call <bug number="SIMICS-21584"/>.
+      Example usage:
+      <pre>
+      _ = any_expression;
+      _ = throwing_method();
+      (_, x, _) = method_with_multiple_return_values();
+      </pre></add-note></build-id>
+  <build-id value="next"><add-note> '_' can no longer be used as the name for
+      arbitrary declarations. Instead, it is now only permitted in particular
+      contexts, and in these contexts, '_' will affect the declaration in a way
+      suitable for when the declaration is <em>unused</em>.
+      These contexts are:
+      <dl>
+        <dt>Method-local bindings (e.g. variables and input parameters)</dt>
+            <dd>When a method-local binding is given the name '_', it will not
+                be added to scope. This is useful for e.g. unused method
+                parameters.</dd>
+        <dt>Index variables for object arrays</dt>
+            <dd>When '_' is specified as an index variable, a parameter will
+                not be created for it, meaning it cannot conflict with any
+                other definition, and it cannot be referenced in the code in
+                order to get the value of the index in question.
+                It also isn't considered to conflict with any other definition
+                that gives the index variable a different name.
+                This is useful when defining an object array specification which
+                does not depend on the index.</dd>
+      </dl>
+      Note that as a consequence of these semantics, any reference to
+      '<tt>_</tt>' in code will <em>always</em> resolve to the discard
+      reference.<add-note></build-id>
 </rn>

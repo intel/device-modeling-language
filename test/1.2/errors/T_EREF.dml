@@ -5,6 +5,8 @@
 dml 1.2;
 device test;
 
+import "EREF_dml14.dml";
+
 data int x;
 bank b0 {
     parameter register_size = 4;
@@ -33,6 +35,10 @@ method init {
     // Bug 4970, don't look up stuff in anonymous banks
     /// ERROR EREF
     $b1.r1;
+    /// ERROR EREF
+    $g1[1]._;
+    // no error
+    $g2[1]._;
 }
 
 
@@ -55,3 +61,5 @@ bank b3 {
 
 /// ERROR EREF
 parameter p = $garbage;
+
+group g2[_ in 0..3];

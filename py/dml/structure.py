@@ -757,7 +757,13 @@ def merge_subobj_defs(def1, def2, parent):
         parent_scope = Location(parent, static_indices(parent))
 
         for ((idxvar1, len1), (idxvar2, len2)) in zip(arrayinfo, arrayinfo2):
-            if idxvar1 != idxvar2:
+            if (idxvar1 == '_'
+                and not (len1 and len1.site.dml_version() == (1, 2))):
+                idxvar1 = idxvar2
+            elif (idxvar1 != idxvar2
+                  and not (idxvar2 == '_'
+                           and not (len2
+                                    and len2.site.dml_version() == (1, 2)))):
                 raise EAINCOMP(site1, site2, name,
                                "mismatching index variables")
 
@@ -767,6 +773,8 @@ def merge_subobj_defs(def1, def2, parent):
                                        != eval_arraylen(len2, parent_scope)):
                 raise EAINCOMP(site1, site2, name, "mismatching array sizes")
             else:
+                if len2 and len2.site.dml_version() == (1, 2):
+                    len1 = len2
                 merged_arrayinfo.append((idxvar1, len1))
 
 
@@ -992,12 +1000,13 @@ def make_autoparams(obj, index_vars, index_var_sites):
     # Handle array information
     for (dim, (index_var, var_site)) in enumerate(
             zip(index_vars, index_var_sites)):
-        idx_param = IndexParamExpr(var_site, obj.parent.dimensions + dim,
-                                   index_var)
-        index_params += (idx_param,)
-        # This will refer to the index coupled with the idxvar,
-        # innermost overrides
-        autoparams[index_var] = idx_param
+        index_param = IndexParamExpr(var_site, obj.parent.dimensions + dim,
+                                     index_var)
+        index_params += (index_param,)
+        if not (index_var == '_' and var_site.dml_version() != (1, 2)):
+            # This will refer to the index coupled with the idxvar,
+            # innermost overrides
+            autoparams[index_var] = index_param
 
     # Assign auto parameters related to array info
     # In 1.4; The 'indices' auto-param is a list containing local indices
@@ -1008,14 +1017,17 @@ def make_autoparams(obj, index_vars, index_var_sites):
     #         local index is stored in if in a simple array, undefined otherwise
     if dml.globals.dml_version == (1, 2):
         if len(index_vars) == 1:
-            [index_var] = index_vars
+            ([index_var], [var_site], [index_param]) = (
+                index_vars, index_var_sites, index_params)
+            if index_var == '_' and var_site.dml_version() != (1, 2):
+                index_var = ''
             # TODO: Add this documentation to dml.docu
             # If in a multi-dimensional array, this will be set to undefined
             # So in 1.2 you can verify if you are in a multi-dimensional
             # array by checking if this is defined
             autoparams['indexvar'] = SimpleParamExpr(
                 mkStringConstant(site, index_var))
-            autoparams['index'] = autoparams[index_var]
+            autoparams['index'] = index_param
         elif index_vars:
             autoparams['index'] = IndexListParamExpr(site, index_params)
         else:
@@ -1099,13 +1111,17 @@ def make_autoparams(obj, index_vars, index_var_sites):
 
     return autoparams
 
-def implicit_params(obj, index_vars):
+def implicit_params(obj, index_vars, index_sites):
     # Find index_vars collisions here
-    sorted_ivars = sorted(index_vars)
+    sorted_ivars = sorted(var
+                          for (var, site) in zip(index_vars, index_sites)
+                          if var != '_' or site.dml_version() == (1, 2))
     for v1, v2 in zip(sorted_ivars, sorted_ivars[1:]):
         if v1 == v2:
             report(ENAMECOLL(obj.site, obj.site, v1))
-    params = [(var, (None, None, 'auto')) for var in index_vars]
+    params = [(var, (None, None, 'auto'))
+              for (var, site) in zip(index_vars, index_sites)
+              if var != '_' or site.dml_version() == (1, 2)]
 
     if (dml.globals.dml_version == (1, 2)
         and obj.objtype == 'field'
@@ -1128,7 +1144,8 @@ def create_parameters(obj, obj_specs, index_vars, index_sites):
                                          '<implicit parameter block>'))
     # map parameter name -> list of (Rank, ast.parameter object)
     parameters = {name: [(implicit_rank, ast.parameter(obj.site, name, v))]
-                  for (name, v) in implicit_params(obj, index_vars)}
+                  for (name, v) in implicit_params(obj, index_vars,
+                                                   index_sites)}
     for obj_spec in obj_specs:
         for s in obj_spec.params:
             assert s.kind == 'parameter'
@@ -1918,7 +1935,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                         # implicitly added above. Needed when importing 1.4
                         # code from 1.2 with --no-compat=dml12_misc
                         dml.globals.dml_version != (1, 2)
-                        or p.site.dml_version == (1, 2)
+                        or p.site.dml_version() == (1, 2)
                         or p.site != sym.site):
                     report(ENAMECOLL(p.site, sym.site, p.name))
 
@@ -2940,7 +2957,8 @@ def mkmethod(site, rbrace_site, location, parent_obj, name, inp_ast,
     for (_, tsite, n, t) in named_args:
         if n in argnames:
             raise EARGD(tsite, n)
-        argnames.add(n)
+        if n != '_' or body.site.dml_version == (1, 2):
+            argnames.add(n)
 
     if logging.show_porting and body.site.dml_version() == (1, 2):
         # Untyped output args are forbidden in 1.4; make sure to

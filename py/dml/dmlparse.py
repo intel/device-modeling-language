@@ -398,23 +398,31 @@ def object_session(t):
 @prod
 def session_decl(t):
     'session_decl : data named_cdecl SEMI'
-    t[0] = ast.session(site(t), [t[2]], None)
+    decl = t[2]
+    if site(t).dml_version() != (1, 2):
+        decl = cdecl_enforce_not_underscore(decl)
+    t[0] = ast.session(site(t), [decl], None)
 
 @prod
 def session_decl_init(t):
     'session_decl : data named_cdecl EQUALS initializer SEMI'
-    t[0] = ast.session(site(t), [t[2]], t[4])
+    decl = t[2]
+    if site(t).dml_version() != (1, 2):
+        decl = cdecl_enforce_not_underscore(decl)
+    t[0] = ast.session(site(t), [decl], t[4])
 
 @prod_dml14
 def session_decl_many(t):
     'session_decl : data LPAREN cdecl_list_nonempty RPAREN SEMI'
     cdecl_list_enforce_named(t[3])
+    cdecl_list_enforce_not_underscore(t[3])
     t[0] = ast.session(site(t), t[3], None)
 
 @prod_dml14
 def session_decl_many_init(t):
     'session_decl : data LPAREN cdecl_list_nonempty RPAREN EQUALS initializer SEMI'
     cdecl_list_enforce_named(t[3])
+    cdecl_list_enforce_not_underscore(t[3])
     t[0] = ast.session(site(t), t[3], t[6])
 
 @prod_dml14
@@ -424,18 +432,19 @@ def object_saved(t):
 
 @prod_dml14
 def saved_decl(t):
-    'saved_decl : SAVED named_cdecl SEMI'
+    'saved_decl : SAVED named_cdecl_except_underscore SEMI'
     t[0] = ast.saved(site(t), [t[2]], None)
 
 @prod_dml14
 def saved_decl_init(t):
-    'saved_decl : SAVED named_cdecl EQUALS initializer SEMI'
+    'saved_decl : SAVED named_cdecl_except_underscore EQUALS initializer SEMI'
     t[0] = ast.saved(site(t), [t[2]], t[4])
 
 @prod_dml14
 def saved_decl_many(t):
     'saved_decl : SAVED LPAREN cdecl_list_nonempty RPAREN SEMI'
     cdecl_list_enforce_named(t[3])
+    cdecl_list_enforce_not_underscore(t[3])
     t[0] = ast.saved(site(t), t[3], None)
 
 @prod_dml14
@@ -641,12 +650,12 @@ def arraydef2(t):
 
 @prod_dml14
 def arraydef(t):
-    '''arraydef : ident LT expression'''
+    '''arraydef : ident_or_underscore LT expression'''
     t[0] = (t[1], t[3])
 
 @prod_dml14
 def arraydef_implicit(t):
-    '''arraydef : ident LT ELLIPSIS'''
+    '''arraydef : ident_or_underscore LT ELLIPSIS'''
     t[0] = (t[1], None)
 
 # Traits
@@ -830,17 +839,17 @@ def extern(t):
 
 @prod_dml14
 def extern(t):
-    'toplevel : EXTERN cdecl SEMI'
+    'toplevel : EXTERN named_cdecl_except_underscore SEMI'
     t[0] = ast.extern(site(t), t[2])
 
 @prod
 def typedef(t):
-    'toplevel : TYPEDEF named_cdecl SEMI'
+    'toplevel : TYPEDEF named_cdecl_except_underscore SEMI'
     t[0] = ast.dml_typedef(site(t), t[2])
 
 @prod
 def extern_typedef(t):
-    'toplevel : EXTERN TYPEDEF named_cdecl SEMI'
+    'toplevel : EXTERN TYPEDEF named_cdecl_except_underscore SEMI'
     t[0] = ast.extern_typedef(site(t), t[3])
 
 @prod_dml12
@@ -1096,6 +1105,21 @@ def cdecl_list_enforce_named(decls):
                            'name omitted in parameter declaration'))
             decls[i] = ast.cdecl(psite, '_name_omitted%d' % (i,), typ)
 
+def cdecl_enforce_not_underscore(decl):
+    (kind, psite, name, typ) = decl
+    assert kind == 'cdecl'
+    if name == '_':
+        underscore_error(psite)
+        return ast.cdecl(psite, '__', typ)
+    return decl
+
+def cdecl_list_enforce_not_underscore(decls):
+    for (i, (kind, psite, name, typ)) in enumerate(decls):
+        assert kind == 'cdecl'
+        if name == '_':
+            underscore_error(psite)
+            decls[i] = ast.cdecl(psite, '__', typ)
+
 @prod
 def method_params_typed(t):
     'method_params_typed : LPAREN cdecl_list RPAREN method_outparams throws'
@@ -1221,6 +1245,12 @@ def named_cdecl(t):
         report(ESYNTAX(site, None, "missing name in declaration"))
         t[0] = ast.cdecl(site, '_name_omitted', typ)
 
+@prod
+def named_cdecl_except_underscore(t):
+    '''named_cdecl_except_underscore : named_cdecl'''
+    t[0] = cdecl_enforce_not_underscore(t[1])
+
+
 # A C-like declaration
 @prod
 def cdecl(t):
@@ -1308,7 +1338,7 @@ def cdecl3(t):
 
 @prod_dml14
 def cdecl3(t):
-    'cdecl3 : ident'
+    'cdecl3 : ident_or_underscore'
     t[0] = [t[1]]
 
 @prod
@@ -1754,9 +1784,14 @@ def expression_ident(t):
 
 @prod_dml14
 def expression_ident(t):
-    '''expression : objident
+    '''expression : objident_base
                   | DEFAULT'''
     t[0] = ast.variable(site(t), t[1])
+
+@prod_dml14
+def expression_discardref(t):
+    '''expression : _'''
+    t[0] = ast.discardref(site(t))
 
 @prod_dml14
 def expression_this(t):
@@ -1765,8 +1800,8 @@ def expression_this(t):
 
 @prod
 def expression_member(t):
-    '''expression : expression PERIOD objident
-                  | expression ARROW objident'''
+    '''expression : expression PERIOD objident_base
+                  | expression ARROW objident_base'''
     t[0] = ast.member(site(t, 2), t[1], t[2], t[3])
 
 @prod
@@ -2200,32 +2235,36 @@ def statement_delay(t):
 
 @prod_dml14
 def ident_list_empty(t):
-    'ident_list : '
+    'ident_or_underscore_list : '
     t[0] = []
 
 @prod_dml14
 def ident_list_nonempty(t):
-    'ident_list : nonempty_ident_list'
+    'ident_or_underscore_list : nonempty_ident_or_underscore_list'
     t[0] = t[1]
 
 @prod_dml14
 def ident_list_one(t):
-    'nonempty_ident_list : ident'
+    'nonempty_ident_or_underscore_list : ident_or_underscore'
     t[0] = [(site(t, 1), t[1])]
 
 @prod_dml14
 def ident_list_many(t):
-    'nonempty_ident_list : nonempty_ident_list COMMA ident'
+    'nonempty_ident_or_underscore_list : nonempty_ident_or_underscore_list COMMA ident_or_underscore'
     t[0] = t[1] + [(site(t, 3), t[3])]
 
 @prod_dml14
 def statement_delay_hook(t):
-    'statement_except_hashif : AFTER expression ARROW LPAREN ident_list RPAREN COLON expression SEMI'
+    'statement_except_hashif : AFTER expression ARROW LPAREN ident_or_underscore_list RPAREN COLON expression SEMI'
     t[0] = ast.afteronhook(site(t), t[2], t[5], t[8])
 
 @prod_dml14
 def statement_delay_hook_one_msg_param(t):
-    'statement_except_hashif : AFTER expression ARROW ident COLON expression SEMI %prec bind'
+    # Not using ident_or_underscore in order to avoid reduce/reduce conflict
+    # with expression_member
+    '''statement_except_hashif : AFTER expression ARROW ident COLON expression SEMI %prec bind
+                               | AFTER expression ARROW _ COLON expression SEMI'''
+
     t[0] = ast.afteronhook(site(t), t[2], [(site(t, 4), t[4])], t[6])
 
 
@@ -2349,7 +2388,7 @@ def hashselect(t):
 
 @prod
 def select(t):
-    'statement_except_hashif : hashselect ident IN LPAREN expression RPAREN WHERE LPAREN expression RPAREN statement hashelse statement'
+    'statement_except_hashif : hashselect ident_or_underscore IN LPAREN expression RPAREN WHERE LPAREN expression RPAREN statement hashelse statement'
     t[0] = ast.select(site(t), t[2], t[5], t[9], t[11], t[13])
 
 @prod_dml12
@@ -2361,12 +2400,12 @@ def foreach(t):
 
 @prod_dml14
 def foreach(t):
-    'statement_except_hashif : FOREACH ident IN LPAREN expression RPAREN statement'
+    'statement_except_hashif : FOREACH ident_or_underscore IN LPAREN expression RPAREN statement'
     t[0] = ast.foreach(site(t), t[2], t[5], t[7])
 
 @prod_dml14
 def hashforeach(t):
-    'statement_except_hashif : HASHFOREACH ident IN LPAREN expression RPAREN statement'
+    'statement_except_hashif : HASHFOREACH ident_or_underscore IN LPAREN expression RPAREN statement'
     t[0] = ast.hashforeach(site(t), t[2], t[5], t[7])
 
 @prod_dml12
@@ -2551,6 +2590,8 @@ def local_decl_multiple(t):
     '''local : local_decl_kind LPAREN cdecl_list_nonempty RPAREN
              | SAVED LPAREN cdecl_list_nonempty RPAREN'''
     cdecl_list_enforce_named(t[3])
+    if t[1] in ('session', 'saved'):
+        cdecl_list_enforce_not_underscore(t[3])
     t[0] = ast.get(t[1])(site(t), t[3], None)
 
 @prod_dml14
@@ -2558,6 +2599,8 @@ def local_one_multiple_init(t):
     '''local : local_decl_kind LPAREN cdecl_list_nonempty RPAREN EQUALS initializer
              | SAVED LPAREN cdecl_list_nonempty RPAREN EQUALS initializer'''
     cdecl_list_enforce_named(t[3])
+    if t[1] in ('session', 'saved'):
+        cdecl_list_enforce_not_underscore(t[3])
     t[0] = ast.get(t[1])(site(t), t[3], t[6])
 
 @prod_dml14
@@ -2602,18 +2645,48 @@ def objident_list(t):
 
 # Object/parameter names may use some additional keywords for now...
 @prod_dml12
-def objident(t):
-    '''objident : ident
-                | THIS
-                | REGISTER
-                | SIGNED
-                | UNSIGNED'''
+def objident_base(t):
+    '''objident_base : ident
+                     | THIS
+                     | REGISTER
+                     | SIGNED
+                     | UNSIGNED'''
     t[0] = t[1]
 
 @prod_dml14
+def objident_base(t):
+    '''objident_base : ident
+                     | REGISTER'''
+    t[0] = t[1]
+
+@prod
 def objident(t):
-    '''objident : ident
-                | REGISTER'''
+    'objident : objident_base'
+    t[0] = t[1]
+
+@prod_dml14
+def objident_underscore(t):
+    'objident : _'
+    underscore_error(site(t))
+    t[0] = '__'
+
+def underscore_error(site):
+    report(ESYNTAX(site,
+                   "_",
+                   "'_' can only be used as an expression or as an unused "
+                   + "identifier for an index variable of an object array or "
+                   + "a method-local binding (e.g. local variable or method "
+                   + "parameter)"))
+
+@prod_dml12
+def ident_or_underscore(t):
+    'ident_or_underscore : ident'
+    t[0] = t[1]
+
+@prod_dml14
+def ident_or_underscore(t):
+    '''ident_or_underscore : ident
+                           | _'''
     t[0] = t[1]
 
 def ident_rule(idents):

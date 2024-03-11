@@ -208,10 +208,17 @@ class TraitMethod(TraitVTableItem):
 
     def declaration(self):
         implicit_inargs = self.vtable_trait.implicit_args()
+        inp = list(self.inp)
+        discarded = 0
+        for (i, (n, t)) in enumerate(inp):
+            if n == '_':
+                inp[i] = (f'_unused_{discarded}', t)
+                discarded += 1
         args = ", ".join(t.declaration(n)
+                         + ' UNUSED'*(n.startswith('_unused_'))
                          for (n, t) in c_inargs(
                                  crep.maybe_dev_arg(self.independent)
-                                 + implicit_inargs + list(self.inp),
+                                 + implicit_inargs + inp,
                                  self.outp, self.throws))
         return c_rettype(self.outp, self.throws).declaration(
             '%s(%s)' % (self.cname(), args))
@@ -317,8 +324,15 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
         del sessions[name]
 
     bad_methods = set()
-    for (name, (msite, inp, outp, throws, independent, startup, memoized, overridable,
-                body, rbrace_site)) in list(methods.items()):
+    for (name, (msite, inp, outp, throws, independent, startup, memoized,
+                overridable, body, rbrace_site)) in list(methods.items()):
+        argnames = set()
+        for (n, _) in inp:
+            if n in argnames:
+                report(EARGD(msite, n))
+                bad_methods.add(name)
+            if n != '_':
+                argnames.add(n)
         for ancestor in direct_parents:
             coll = ancestor.member_declaration(name)
             if coll:

@@ -195,7 +195,7 @@ class CatchFailure(Failure):
 class IgnoreFailure(Failure):
     '''Ignore exceptions'''
     def fail(self, site):
-        return mkNull(site)
+        return mkNoop(site)
 
 class ExitHandler(ABC):
     current = None
@@ -704,9 +704,9 @@ class AfterOnHookIntoMethodInfo(AfterOnHookInfo):
             site, val_expr, targets, error_out_at_index,
             f'deserialization of arguments to {self.method.name}')
         if self.args_type:
-            ctree.mkAssignStatement(site, out_expr,
-                                    ctree.ExpressionInitializer(
-                                        tmp_out_ref)).toc()
+            ctree.AssignStatement(site, out_expr,
+                                  ctree.ExpressionInitializer(
+                                      tmp_out_ref)).toc()
 
     @property
     def args_type(self):
@@ -822,8 +822,8 @@ class AfterOnHookIntoSendNowInfo(AfterOnHookInfo):
                 'deserialization of arguments to a send_now')
 
 
-        ctree.mkAssignStatement(site, out_expr,
-                                ctree.ExpressionInitializer(tmp_out_ref)).toc()
+        ctree.AssignStatement(site, out_expr,
+                              ctree.ExpressionInitializer(tmp_out_ref)).toc()
 
     @property
     def args_type(self):
@@ -952,7 +952,7 @@ def declarations(scope):
         if sym.stmt:
             continue
         decl = sym_declaration(sym)
-        if decl:
+        if not decl.is_empty:
             decls.append(decl)
 
     return decls
@@ -1148,7 +1148,7 @@ def expr_unop(tree, location, scope):
     elif op == 'post--':  return mkPostDec(tree.site, rh)
     elif op == 'sizeof':
         if (compat.dml12_misc not in dml.globals.enabled_compat
-            and not isinstance(rh, ctree.LValue)):
+            and not rh.addressable):
             raise ERVAL(rh.site, 'sizeof')
         return codegen_sizeof(tree.site, rh)
     elif op == 'defined': return mkBoolConstant(tree.site, True)
@@ -1209,6 +1209,10 @@ def expr_variable(tree, location, scope):
     if e is None:
         raise EIDENT(tree.site, name)
     return e
+
+@expression_dispatcher
+def expr_discardref(tree, location, scope):
+    return mkDiscardRef(tree.site)
 
 @expression_dispatcher
 def expr_objectref(tree, location, scope):
@@ -1538,7 +1542,7 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
                     etype = expr.node_type
                 else:
                     raise expr.exc()
-            elif (not isinstance(expr, ctree.LValue)
+            elif (not expr.addressable
                   and compat.dml12_misc not in dml.globals.enabled_compat):
                 raise ERVAL(expr.site, 'typeof')
             else:
@@ -1925,9 +1929,10 @@ def codegen_statements(trees, *args):
     return stmts
 
 def codegen_statement(tree, *args):
-    rbrace_site = tree.args[1] if tree.kind == 'compound' else None
-    return mkCompound(tree.site, codegen_statements([tree], *args),
-                      rbrace_site)
+    stmts = codegen_statements([tree], *args)
+    if len(stmts) == 1 and not stmts[0].is_declaration:
+        return stmts[0]
+    return mkCompound(tree.site, stmts)
 
 @statement_dispatcher
 def stmt_compound(stmt, location, scope):
@@ -2031,11 +2036,11 @@ def stmt_local(stmt, location, scope):
                                                    tgts, location, scope)
         if method_invocation is not None and stmt.site.dml_version != (1, 2):
             for sym in syms_to_add:
-                scope.add(sym)
+                if sym.name != '_':
+                    scope.add(sym)
             stmts.extend(sym_declaration(sym) for sym in tgt_syms)
             stmts.append(method_invocation)
-            stmts.extend(sym_declaration(sym)
-                         for sym in late_declared_syms)
+            stmts.extend(sym_declaration(sym) for sym in late_declared_syms)
         else:
             if len(tgts) != 1:
                 report(ERETLVALS(stmt.site, 1, len(tgts)))
@@ -2043,7 +2048,8 @@ def stmt_local(stmt, location, scope):
                 sym = syms_to_add[0]
                 sym.init = ExpressionInitializer(
                     codegen_expression(inits[0].args[0], location, scope))
-                scope.add(sym)
+                if not (sym.name == '_' and stmt.site.dml_version() != (1, 2)):
+                    scope.add(sym)
                 stmts.append(sym_declaration(sym))
     else:
         # Initializer evaluation and variable declarations are done in separate
@@ -2052,9 +2058,13 @@ def stmt_local(stmt, location, scope):
         inits = [get_initializer(stmt.site, typ, init, location, scope)
                  for ((_, typ), init) in zip(decls, inits)]
         for ((name, typ), init) in zip(decls, inits):
-            sym = scope.add_variable(
-                name, type = typ, site = stmt.site, init = init, stmt = True,
-                make_unique=not dml.globals.debuggable)
+            if not (name == '_' and stmt.site.dml_version() != (1, 2)):
+                sym = scope.add_variable(
+                    name, type = typ, site = stmt.site, init = init,
+                    stmt = True, make_unique=not dml.globals.debuggable)
+            else:
+                sym = mk_sym(name, typ)
+
             stmts.append(sym_declaration(sym))
 
     return stmts
@@ -2131,8 +2141,8 @@ def make_static_var(site, location, static_sym_type, name, init=None,
         with init_code:
             if deep_const(static_sym_type):
                 coverity_marker('store_writes_const_field', 'FALSE')
-            init.assign_to(mkStaticVariable(site, static_sym),
-                           static_sym_type)
+            out(init.assign_to(mkStaticVariable(site, static_sym).read(),
+                               static_sym_type) + ';\n')
         c_init = init_code.buf
     else:
         c_init = None
@@ -2200,7 +2210,7 @@ def stmt_saved(stmt, location, scope):
 
 @statement_dispatcher
 def stmt_null(stmt, location, scope):
-    return []
+    return [mkNull(stmt.site)]
 
 @statement_dispatcher
 def stmt_if(stmt, location, scope):
@@ -2340,21 +2350,31 @@ def try_codegen_invocation(site, init_ast, outargs, location, scope):
     else:
         return common_inline(site, meth_node, indices, inargs, outargs)
 
+def codegen_src_for_nonvalue_target(site, tgt, src_ast, location, scope):
+    if not tgt.writable:
+        raise EASSIGN(site, tgt)
+    if src_ast.kind != 'initializer_scalar':
+        raise EDATAINIT(tgt.site,
+                        f'{tgt} can only be used as the target '
+                        + 'of an assignment if its initializer is a '
+                        + 'simple expression or a return value of a '
+                        + 'method call')
+    return codegen_expression(src_ast.args[0], location, scope)
+
 @statement_dispatcher
 def stmt_assign(stmt, location, scope):
     (_, site, tgt_ast, src_asts) = stmt
     assert tgt_ast.kind in ('assign_target_chain', 'assign_target_tuple')
-    tgts = [codegen_expression(ast, location, scope)
+    tgts = [codegen_expression_maybe_nonvalue(ast, location, scope)
             for ast in tgt_ast.args[0]]
     for tgt in tgts:
-        if deep_const(tgt.ctype()):
+        if not isinstance(tgt, NonValue) and deep_const(tgt.ctype()):
             raise ECONST(tgt.site)
     if tgt_ast.kind == 'assign_target_chain':
         method_tgts = [tgts[0]]
     else:
         method_tgts = tgts
 
-    # TODO support multiple assign sources. It should be generalized.
     method_invocation = try_codegen_invocation(site, src_asts, method_tgts,
                                                location, scope)
     if method_invocation:
@@ -2370,19 +2390,33 @@ def stmt_assign(stmt, location, scope):
                            + f'initializer: Expected {src_asts}, got 1'))
             return []
 
-        stmts = []
-        lscope = Symtab(scope)
-        init = eval_initializer(
-            site, tgts[-1].ctype(), src_asts[0], location, scope, False)
+        if isinstance(tgts[-1], NonValue):
+            if len(tgts) != 1:
+                raise tgts[-1].exc()
+            expr = codegen_src_for_nonvalue_target(site, tgts[0], src_asts[0],
+                                                   location, scope)
+            return [mkCopyData(site, expr, tgts[0])]
 
-        for (i, tgt) in enumerate(reversed(tgts[1:])):
-            name = 'tmp%d' % (i,)
-            sym = lscope.add_variable(
-                name, type=tgt.ctype(), site=tgt.site, init=init, stmt=True)
-            init = ExpressionInitializer(mkLocalVariable(tgt.site, sym))
-            stmts.extend([sym_declaration(sym),
-                          mkAssignStatement(tgt.site, tgt, init)])
-        return stmts + [mkAssignStatement(tgts[0].site, tgts[0], init)]
+        init_typ = tgts[-1].ctype()
+        init = eval_initializer(
+            tgts[-1].site, init_typ, src_asts[0], location, scope, False)
+
+        if len(tgts) == 1:
+            return [mkAssignStatement(tgts[0].site, tgts[0], init)]
+
+        lscope = Symtab(scope)
+        sym = lscope.add_variable(
+            '_tmp', type=init_typ, site=init.site, init=init,
+            stmt=True)
+        init_expr = mkLocalVariable(init.site, sym)
+        stmts = [sym_declaration(sym)]
+        for tgt in reversed(tgts[1:]):
+            stmts.append(mkCopyData(tgt.site, init_expr, tgt))
+            init_expr = (tgt if isinstance(tgt, NonValue)
+                         else source_for_assignment(tgt.site, tgt.ctype(),
+                                                    init_expr))
+        stmts.append(mkCopyData(tgts[0].site, init_expr, tgts[0]))
+        return [mkCompound(site, stmts)]
     else:
         # Guaranteed by grammar
         assert tgt_ast.kind == 'assign_target_tuple' and len(tgts) > 1
@@ -2399,53 +2433,66 @@ def stmt_assign(stmt, location, scope):
 
         stmts = []
         lscope = Symtab(scope)
-        syms = []
+        stmt_pairs = []
         for (i, (tgt, src_ast)) in enumerate(zip(tgts, src_asts)):
-            init = eval_initializer(site, tgt.ctype(), src_ast, location,
-                                    scope, False)
-            name = 'tmp%d' % (i,)
-            sym = lscope.add_variable(
-                    name, type=tgt.ctype(), site=tgt.site, init=init,
-                    stmt=True)
-            syms.append(sym)
+            if isinstance(tgt, NonValue):
+                expr = codegen_src_for_nonvalue_target(site, tgt, src_ast,
+                                                       location, scope)
+                stmt_pairs.append((mkCopyData(tgt.site, expr, tgt), None))
+            else:
+                init = eval_initializer(site, tgt.ctype(), src_ast, location,
+                                        scope, False)
+                name = '_tmp%d' % (i,)
+                sym = lscope.add_variable(
+                        name, type=tgt.ctype(), site=tgt.site, init=init,
+                        stmt=True)
+                write = AssignStatement(
+                    tgt.site, tgt,
+                    ExpressionInitializer(mkLocalVariable(tgt.site, sym)))
+                stmt_pairs.append((sym_declaration(sym), write))
 
-        stmts.extend(map(sym_declaration, syms))
-        stmts.extend(
-            mkAssignStatement(
-                tgt.site, tgt, ExpressionInitializer(mkLocalVariable(tgt.site,
-                                                                     sym)))
-            for (tgt, sym) in zip(tgts, syms))
-        return stmts
+        stmts.extend(first for (first, _) in stmt_pairs)
+        stmts.extend(second for (_, second) in stmt_pairs
+                     if second is not None)
+        return [mkCompound(site, stmts)]
 
 @statement_dispatcher
 def stmt_assignop(stmt, location, scope):
-    (kind, site, tgt_ast, op, src_ast) = stmt
+    (_, site, tgt_ast, op, src_ast) = stmt
 
     tgt = codegen_expression(tgt_ast, location, scope)
-    if deep_const(tgt.ctype()):
-        raise ECONST(tgt.site)
-    if isinstance(tgt, ctree.BitSlice):
-        # destructive hack
-        return stmt_assign(
-            ast.assign(site, ast.assign_target_chain(site, [tgt_ast]),
-                       [ast.initializer_scalar(
-                           site,
-                           ast.binop(site, tgt_ast, op[:-1], src_ast))]),
-            location, scope)
-    src = codegen_expression(src_ast, location, scope)
-    ttype = tgt.ctype()
-    lscope = Symtab(scope)
-    sym = lscope.add_variable(
-        'tmp', type = TPtr(ttype), site = tgt.site,
-        init = ExpressionInitializer(mkAddressOf(tgt.site, tgt)), stmt=True)
-    # Side-Effect Free representation of the tgt lvalue
-    tgt_sef = mkDereference(site, mkLocalVariable(tgt.site, sym))
-    return [
-        sym_declaration(sym), mkExpressionStatement(
-        site,
-            mkAssignOp(site, tgt_sef, arith_binops[op[:-1]](
-                site, tgt_sef, src)))]
+    if isinstance(tgt, ctree.InlinedParam):
+        raise EASSINL(tgt.site, tgt.name)
+    if not tgt.writable:
+        raise EASSIGN(site, tgt)
 
+    ttype = tgt.ctype()
+    if deep_const(ttype):
+        raise ECONST(tgt.site)
+
+    src = codegen_expression(src_ast, location, scope)
+
+    if tgt.addressable:
+        lscope = Symtab(scope)
+        tmp_tgt_sym = lscope.add_variable(
+            '_tmp_tgt', type = TPtr(ttype), site = tgt.site,
+            init = ExpressionInitializer(mkAddressOf(tgt.site, tgt)),
+            stmt=True)
+        # Side-Effect Free representation of the tgt lvalue
+        tgt = mkDereference(site, mkLocalVariable(tgt.site, tmp_tgt_sym))
+    else:
+        # TODO Not ideal. This path is needed to deal with writable
+        # expressions that do not correspond to C lvalues; such as bit slices.
+        # The incurred repeated evaluation is painful.
+        tmp_tgt_sym = None
+
+    assign_src = source_for_assignment(site, ttype,
+                                       arith_binops[op[:-1]](site, tgt, src))
+
+    return [mkCompound(site,
+        ([sym_declaration(tmp_tgt_sym)] if tmp_tgt_sym else [])
+        + [mkExpressionStatement(site,
+                                 ctree.AssignOp(site, tgt, assign_src))])]
 @statement_dispatcher
 def stmt_expression(stmt, location, scope):
     [expr] = stmt.args
@@ -2888,6 +2935,9 @@ def stmt_afteronhook(stmt, location, scope):
 
     msg_comp_params = {}
     for (idx, (mcp_site, mcp_name)) in enumerate(msg_comp_param_asts):
+        if mcp_name == '_':
+            continue
+
         if mcp_name in msg_comp_params:
             raise EDVAR(mcp_site, msg_comp_params[mcp_name][1],
                         mcp_name)
@@ -3037,7 +3087,8 @@ def stmt_select(stmt, location, scope):
             clauses = []
             for it in l:
                 condscope = Symtab(scope)
-                condscope.add(ExpressionSymbol(itername, it, stmt.site))
+                if not (itername == '_' and stmt.site.dml_version() != (1, 2)):
+                    condscope.add(ExpressionSymbol(itername, it, stmt.site))
                 cond = as_bool(codegen_expression(
                     cond_ast, location, condscope))
                 if cond.constant and not cond.value:
@@ -3073,9 +3124,10 @@ def foreach_each_in(site, itername, trait, each_in,
                     body_ast, location, scope):
     inner_scope = Symtab(scope)
     trait_type = TTrait(trait)
-    inner_scope.add_variable(
-        itername, type=trait_type, site=site,
-        init=ForeachSequence.itervar_initializer(site, trait))
+    if itername != '_':
+        inner_scope.add_variable(
+            itername, type=trait_type, site=site,
+            init=ForeachSequence.itervar_initializer(site, trait))
     context = GotoLoopContext()
     with context:
         inner_body = mkCompound(site, declarations(inner_scope)
@@ -3156,8 +3208,9 @@ def foreach_constant_list(site, itername, lst, statement, location, scope):
                                    TInt(32, True))
                              for dim in range(len(items.dimsizes)))
             loopscope = Symtab(scope)
-            loopscope.add(ExpressionSymbol(
-                itername, items.expr(loopvars), site))
+            if not (itername == '_' and site.dml_version() != (1, 2)):
+                loopscope.add(ExpressionSymbol(
+                    itername, items.expr(loopvars), site))
             stmt = codegen_statement(statement, location, loopscope)
 
             if stmt.is_empty:
@@ -3187,7 +3240,7 @@ def stmt_while(stmt, location, scope):
     [cond, statement] = stmt.args
     cond = as_bool(codegen_expression(cond, location, scope))
     if stmt.site.dml_version() == (1, 2) and cond.constant and not cond.value:
-        return [mkNull(stmt.site)]
+        return [mkNoop(stmt.site)]
     else:
         with CLoopContext():
             res = mkWhile(stmt.site, cond,
@@ -3328,7 +3381,7 @@ def mkcall_method(site, func, indices):
 
 def common_inline(site, method, indices, inargs, outargs):
     if not verify_args(site, method.inp, method.outp, inargs, outargs):
-        return mkNull(site)
+        return mkNoop(site)
 
     if dml.globals.debuggable:
         if method.fully_typed and (
@@ -3542,6 +3595,7 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
             # call is safe.
             return codegen_call(site, meth_node, indices,
                                 inargs, outargs)
+        pre = []
         for (arg, (parmname, parmtype), argno) in zip(inargs, meth_node.inp,
                                                       list(range(len(inargs)))):
             # Create an alias
@@ -3562,7 +3616,12 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
                     raise ECONSTP(site, parmname, "method call")
                 arg = coerce_if_eint(arg)
 
-            if inhibit_copyin or undefined(arg):
+            if (parmname == '_'
+                and meth_node.astcode.site.dml_version() != (1, 2)):
+                if not arg.constant:
+                    pre.append(mkExpressionStatement(arg.site, arg,
+                                                     explicit_discard=True))
+            elif inhibit_copyin or undefined(arg):
                 param_scope.add(ExpressionSymbol(parmname, arg, arg.site))
             elif arg.constant and (
                     parmtype is None
@@ -3601,7 +3660,7 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
                                 parmtype if parmtype else arg.ctype(),
                                 meth_node.name)
                     for (arg, var, (parmname, parmtype)) in zip(
-                            outargs, outvars, meth_node.outp)] 
+                            outargs, outvars, meth_node.outp)]
             exit_handler = GotoExit_dml12()
             with exit_handler:
                 code = [codegen_statement(meth_node.astcode,
@@ -3619,13 +3678,13 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
             exit_handler = GotoExit_dml14(outargs)
             with exit_handler:
                 code = codegen_statements(subs, location, param_scope)
-            decls = declarations(param_scope)
+            pre.extend(declarations(param_scope))
             post = ([mkLabel(site, exit_handler.label)]
                     if exit_handler.used else [])
-            body = mkCompound(site, decls + code, rbrace_site)
+            body = mkCompound(site, pre + code, rbrace_site)
             if meth_node.outp and body.control_flow().fallthrough:
                 report(ENORET(meth_node.astcode.site))
-            return mkInlinedMethod(site, meth_node, decls, code, post)
+            return mkInlinedMethod(site, meth_node, pre, code, post)
 
 def c_rettype(outp, throws):
     if throws:
@@ -3683,14 +3742,24 @@ class MethodFunc(object):
 
         # rettype is the return type of the C function
         self.rettype = c_rettype(outp, throws)
+        cparams = list(cparams)
+
+        if method.astcode.site.dml_version() != (1, 2):
+            discarded = 0
+            for (i, (n, t)) in enumerate(cparams):
+                if n == '_':
+                    cparams[i] = (f'_unused_{discarded}', t)
+                    discarded += 1
+
         self.cparams = c_inargs(
-            implicit_params(method) + list(cparams), outp, throws)
+            implicit_params(method) + cparams, outp, throws)
 
     @property
     def prototype(self):
         return self.rettype.declaration(
             "%s(%s)" % (self.get_cname(),
                         ", ".join([t.declaration(n)
+                                   + ' UNUSED'*n.startswith('_unused_')
                                    for (n, t) in self.cparams])))
 
     def cfunc_expr(self, site):
@@ -3784,7 +3853,9 @@ def codegen_method_func(func):
         if dml.globals.dml_version == (1, 2) and (
                 compat.dml12_misc not in dml.globals.enabled_compat):
             check_varname(method.site, name)
-        if isinstance(e, Expression):
+        if (isinstance(e, Expression)
+            and not (name == '_'
+                     and method.astcode.site.dml_version() != (1, 2))):
             inlined_arg = (
                 mkInlinedParam(method.site, e, name, e.ctype())
                 if defined(e) else e)
@@ -3839,7 +3910,9 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
     with (crep.DeviceInstanceContext() if not independent
           else contextlib.nullcontext()):
         for (arg, etype) in inp:
-            fnscope.add_variable(arg, type=etype, site=site, make_unique=False)
+            if not (arg == '_' and ast.site.dml_version() != (1, 2)):
+                fnscope.add_variable(arg, type=etype, site=site,
+                                     make_unique=False)
         initializers = [get_initializer(site, parmtype, None, None, None)
                         for (_, parmtype) in outp]
 
@@ -3885,7 +3958,7 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
                         param = mkDereference(site,
                                               mkLit(site, name, TPtr(typ)))
                         fnscope.add(ExpressionSymbol(name, param, site))
-                        code.append(mkAssignStatement(site, param, init))
+                        code.append(AssignStatement(site, param, init))
                 else:
                     code = []
 
@@ -3976,7 +4049,7 @@ def codegen_call_traitmethod(site, expr, inargs, outargs):
     if not isinstance(expr, TraitMethodRef):
         raise ICE(site, "cannot call %r: not a trait method" % (expr,))
     if not verify_args(site, expr.inp, expr.outp, inargs, outargs):
-        return mkNull(site)
+        return mkNoop(site)
     def mkcall(args):
         rettype = c_rettype(expr.outp, expr.throws)
         # implicitly convert endian int arguments to integers
@@ -3988,7 +4061,7 @@ def codegen_call_traitmethod(site, expr, inargs, outargs):
 def codegen_call(site, meth_node, indices, inargs, outargs):
     '''Generate a call using a direct reference to the method node'''
     if not verify_args(site, meth_node.inp, meth_node.outp, inargs, outargs):
-        return mkNull(site)
+        return mkNoop(site)
     require_fully_typed(site, meth_node)
     func = method_instance(meth_node)
 
@@ -4025,15 +4098,20 @@ def copy_outarg(arg, var, parmname, parmtype, method_name):
     an exception. We would be able to skip the proxy variable for
     calls to non-throwing methods when arg.ctype() and parmtype are
     equivalent types, but we don't do this today.'''
-    argtype = arg.ctype()
-
-    if not argtype:
-        raise ICE(arg.site, "unknown expression type")
+    if isinstance(arg, NonValue):
+        if not arg.writable:
+            raise arg.exc()
     else:
-        ok, trunc, constviol = realtype(parmtype).canstore(realtype(argtype))
-        if not ok:
-            raise EARGT(arg.site, 'call', method_name,
-                         arg.ctype(), parmname, parmtype, 'output')
+        argtype = arg.ctype()
+
+        if not argtype:
+            raise ICE(arg.site, "unknown expression type")
+        else:
+            ok, trunc, constviol = realtype(parmtype).canstore(
+                realtype(argtype))
+            if not ok:
+                raise EARGT(arg.site, 'call', method_name,
+                             arg.ctype(), parmname, parmtype, 'output')
 
     return mkCopyData(var.site, var, arg)
 

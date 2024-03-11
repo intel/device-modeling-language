@@ -5,6 +5,8 @@
 dml 1.2;
 device test;
 
+import "ENAMECOLL_dml14.dml";
+
 /// ERROR ENAMECOLL
 parameter c0 = 5;
 /// ERROR ENAMECOLL
@@ -270,6 +272,10 @@ bank b3 {
     register r1[4][4] size 4 @ undefined;
     /// ERROR ENAMECOLL
     register r2[i in 0..3][i in 0..3] size 4 @ undefined;
+    /// ERROR ENAMECOLL
+    register r3[_ in 0..3][_ in 0..3] size 4 @ undefined;
+    // no error, despite the declaration in ENAMECOLL_dml14.dml
+    register r4[_ in 0..3][j in 0..3] size 4 @ undefined;
 }
 
 method init() {

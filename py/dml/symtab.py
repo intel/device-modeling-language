@@ -91,6 +91,9 @@ class Symtab(object):
     def add(self, sym):
         if not isinstance(sym, Symbol):
             raise TypeError(repr(sym) + " is not a Symbol")
+        if (sym.name == '_' and sym.site is not None
+            and sym.site.dml_version() != (1, 2)):
+            raise ICE(sym.site, "Symbol with name '_' added to Symbtab")
         if sym.name in self.symdict:
             raise ICE(sym.site, "duplicate symbol %s" % sym.name)
         self.symdict[sym.name] = sym

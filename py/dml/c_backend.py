@@ -720,7 +720,15 @@ def wrap_method(meth, wrapper_name, indices=()):
     is a port object
     """
 
-    inparams = [t.declaration(p) for p, t in meth.inp]
+    inp = list(meth.inp)
+    if meth.astcode.site.dml_version() != (1, 2):
+        discarded = 0
+        for (i, (n, t)) in enumerate(inp):
+            if n == '_':
+                inp[i] = (f'_unused_{discarded}', t)
+                discarded += 1
+    inparams = [t.declaration(p) + ' UNUSED'*(p.startswith('_unused_'))
+                for p, t in inp]
     if not meth.outp:
         retvar = None
         rettype = TVoid()
@@ -1837,7 +1845,7 @@ def generate_init_data_objs(device):
     start_function_definition(
         'void _init_data_objs(%s *_dev)' % (crep.structtype(device),))
     out('{\n', postindent = 1)
-    with crep.DeviceInstanceContext():
+    with crep.DeviceInstanceContext(), allow_linemarks():
         for node in device.initdata:
             # Usually, the initializer is constant, but we permit that it
             # depends on index. When the initializer is constant, we use a loop
@@ -1859,25 +1867,26 @@ def generate_init_data_objs(device):
             # mainly meant to capture EIDXVAR; for other errors, the error will
             # normally re-appear when evaluating per instance
             except DMLError:
-                with allow_linemarks():
-                    for indices in node.all_indices():
-                        index_exprs = tuple(mkIntegerLiteral(node.site, i)
-                                            for i in indices)
-                        nref = mkNodeRef(node.site, node, index_exprs)
-                        try:
-                            init = eval_initializer(
-                                node.site, node._type, node.astinit,
-                                Location(node.parent, index_exprs),
-                                global_scope, True)
-                        except DMLError as e:
-                            report(e)
-                        else:
-                            markers = ([('store_writes_const_field', 'FALSE')]
-                                       if deep_const(node._type) else [])
-                            coverity_markers(markers, init.site)
-                            init.assign_to(nref, node._type)
+                for indices in node.all_indices():
+                    index_exprs = tuple(mkIntegerLiteral(node.site, i)
+                                        for i in indices)
+                    nref = mkNodeRef(node.site, node, index_exprs)
+                    try:
+                        init = eval_initializer(
+                            node.site, node._type, node.astinit,
+                            Location(node.parent, index_exprs),
+                            global_scope, True)
+                    except DMLError as e:
+                        report(e)
+                    else:
+                        markers = ([('store_writes_const_field', 'FALSE')]
+                                   if deep_const(node._type) else [])
+                        coverity_markers(markers, init.site)
+                        out(init.assign_to(nref.read(), node._type) + ';\n')
             else:
                 index_exprs = ()
+                if node.dimensions:
+                    reset_line_directive()
                 for (i, sz) in enumerate(node.dimsizes):
                     var = 'i%d' % (i,)
                     out(('for (int %s = 0; %s < %s; ++%s) {\n'
@@ -1885,11 +1894,12 @@ def generate_init_data_objs(device):
                         postindent=1)
                     index_exprs += (mkLit(node.site, var, TInt(64, True)),)
                 nref = mkNodeRef(node.site, node, index_exprs)
-                with allow_linemarks():
-                    markers = ([('store_writes_const_field', 'FALSE')]
-                               if deep_const(node._type) else [])
-                    coverity_markers(markers, init.site)
-                    init.assign_to(nref, node._type)
+                markers = ([('store_writes_const_field', 'FALSE')]
+                           if deep_const(node._type) else [])
+                coverity_markers(markers, init.site)
+                out(init.assign_to(nref.read(), node._type) + ';\n')
+                if node.dimensions:
+                    reset_line_directive()
                 for _ in range(node.dimensions):
                     out('}\n', postindent=-1)
     out('}\n\n', preindent = -1)
@@ -3114,12 +3124,7 @@ def generate_startup_trait_calls(data, idxvars):
         ref = ObjTraitRef(site, node, trait, indices)
         out(f'_tref = {ref.read()};\n')
         for method in trait_methods:
-            outargs = [mkLit(method.site,
-                             ('*((%s) {0})'
-                              % ((TArray(t, mkIntegerLiteral(method.site, 1))
-                                  .declaration('')),)),
-                             t)
-                       for (_, t) in method.outp]
+            outargs = [mkDiscardRef(method.site) for _ in method.outp]
 
             method_ref = TraitMethodDirect(
                 method.site, mkLit(method.site, '_tref', TTrait(trait)), method)
@@ -3131,12 +3136,7 @@ def generate_startup_trait_calls(data, idxvars):
 def generate_startup_regular_call(method, idxvars):
     site = method.site
     indices = tuple(mkLit(site, idx, TInt(32, False)) for idx in idxvars)
-    outargs = [mkLit(site,
-                     ('*((%s) {0})'
-                      % ((TArray(t, mkIntegerLiteral(site, 1))
-                          .declaration('')),)),
-                     t)
-               for (_, t) in method.outp]
+    outargs = [mkDiscardRef(method.site) for _ in method.outp]
     # startup memoized methods can throw, which is ignored during startup.
     # Memoization of the throw then allows for the user to check whether
     # or not the method did throw during startup by calling the method

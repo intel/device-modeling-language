@@ -20,7 +20,7 @@ t_HASHCOLON = r'\#:'
 
 keywords_dml14 = dict(keywords_common)
 for kw in ['param', 'saved', 'async', 'await', 'with', 'shared', 'stringify',
-           'export', 'as', 'independent', 'startup', 'memoized', 'hook']:
+           'export', 'as', 'independent', 'startup', 'memoized', 'hook', '_']:
     keywords_dml14[kw] = kw.upper()
     tokens += (kw.upper(),)
 
