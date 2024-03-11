@@ -2909,7 +2909,7 @@ DML deviates from the C language in a number of ways:
     header file included from this section.
 
   * In order for the C *linker* to resolve the symbol, a function
-    definition must be present, either in a separate C file or in a header or 
+    definition must be present, either in a separate C file or in a header or
     [`footer`](#footer-declarations) section.
 
 
@@ -3097,6 +3097,9 @@ method m() -> (bool, int) {
 ```
 local (bool a, int i) = m();
 ```
+
+In the absence of explicit initializer expressions, a default
+"all zero" initializer will be applied to each declared object.
 
 ### Session Statements
 <pre>
