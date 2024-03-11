@@ -200,7 +200,7 @@ def node_storage_type_dml12(node, site):
     elif node.objtype == 'field':
         # TODO: this access to ctree is unholy. We should probably
         # make bitsize a property of the field object instead, but for
-        # that to be done cleanly, we first need to fix bug 21250.
+        # that to be done cleanly, we first need to fix SIMICS-9411.
         from . import ctree
         # structure.register_fields() verifies that bitsize is
         # constant across register indices; it could however happen that

@@ -5,7 +5,7 @@
 dml 1.2;
 device test;
 
-// bug 19496. Maybe it should give a new kind of error instead of EASSIGN.
+// SIMICS-9224. Maybe it should give a new kind of error instead of EASSIGN.
 method init {
     /// ERROR EASSIGN
     local void *x;

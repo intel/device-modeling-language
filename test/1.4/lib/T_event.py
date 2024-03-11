@@ -111,7 +111,7 @@ for cycle in sorted(cycles):
             1 if 'simple' in changed_attr else infos[cycles[cycle]] - 1},
         'cycle %d' % (cycle,))
     setattr(obj, changed_attr, 0)
-# event info is not automatically destroyed after event() (see bug 17765)
+# event info is not automatically destroyed after event() (see SIMICS-9120)
 stest.expect_equal((obj.custom_cycle_destroyed, obj.custom_time_destroyed),
                    (0, 0))
 

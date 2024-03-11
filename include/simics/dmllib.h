@@ -2242,7 +2242,7 @@ _DML_make_regname(const _dml_reg_t *regs, const _dml_reg_number_t *map)
                 return name;                 /* statically allocated */
         else {
                 /* Here we leak memory! We should probably put it in a
-                   per-instance hash table instead. See bug 16901. */
+                   per-instance hash table instead. See SIMICS-9055. */
                 return _DML_regname_indexed(regs, map);
         }
 }

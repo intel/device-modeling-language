@@ -18,7 +18,7 @@ bank b {
         method m() {
             if ($z == 1) {
                 // should be no error!
-                // currently gives an error, bug 23542
+                // currently gives an error, SIMICS-9783
                 error;
             }
         }

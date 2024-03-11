@@ -1777,7 +1777,7 @@ class WSYSTEMC(DMLWarning):
     """ SystemC specific warnings """
     fmt = "%s"
 
-    # This message should be removed, bug 24234
+    # This message should be removed, SIMICS-9886
 class WREF(DMLWarning):
     """An unused parameter refers to an object that has not been declared.
 

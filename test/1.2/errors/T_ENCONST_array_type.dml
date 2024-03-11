@@ -8,7 +8,7 @@ device test;
 
 extern int i;
 
-// bug 25200
+// SIMICS-10184
 /// ERROR ENCONST
 data int d[i];
 /// ERROR ENCONST

@@ -1108,7 +1108,7 @@ def expr_unop(tree, location, scope):
             if isinstance(rh, (NodeRef, NonValueArrayRef, AbstractList)):
                 return mkBoolConstant(tree.site, True)
         if op == '!' and isinstance(rh, InterfaceMethodRef):
-            # see bug 24144
+            # see SIMICS-9868
             return mkNot(tree.site, mkMethodPresent(tree.site, rh))
         if (op == '&' and isinstance(rh, NodeRef)
             and tree.site.dml_version() != (1, 2)):
@@ -4060,7 +4060,7 @@ def codegen_call_stmt(site, name, mkcall, inp, outp, throws, inargs, outargs):
             outargs[return_first_outarg:], outp[return_first_outarg:]):
         # It would make sense to pass output arguments directly, but
         # the mechanisms to detect whether this is safe are
-        # broken. See bug 21900.
+        # broken. See SIMICS-9504.
         # if (isinstance(arg, (
         #         Variable, ctree.Dereference, ctree.ArrayRef, ctree.SubRef))
         #     and TPtr(parmtype).canstore(TPtr(arg.ctype()))):

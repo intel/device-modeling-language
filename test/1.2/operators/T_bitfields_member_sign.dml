@@ -12,7 +12,7 @@ method test() -> (bool ok) {
     local bitfields 8 { int8 i @ [7:0]; } b;
     b.i = -1;
     local int32 i = b.i;
-    // bug 10671, 255 instead of -1
+    // SIMICS-8857, 255 instead of -1
     log info: "%d", i;
     ok = i == -1;
 }
