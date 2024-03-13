@@ -358,7 +358,7 @@ def sort_type_declarations(new_typedefs, anonymous_structs):
         return sort_type_declarations(
             new_typedefs.difference(e.cycle), anonymous_structs)
     # TODO: we could check that no extern typedef depends on a
-    # non-extern typedef, bug 24617
+    # non-extern typedef, SIMICS-9987
     return [n for n in type_order
             # exclude extern typedefs
             if n in new_typedefs or n in anonymous_structs]
@@ -641,7 +641,7 @@ def typecheck_method_override(m1, m2, location):
                                            'startup' in qualifiers2,
                                            'memoized' in qualifiers2)
 
-    # We should also check parameter types here (bug 20686)
+    # We should also check parameter types here (SIMICS-9337)
     if len(inp1) != len(inp2):
         raise EMETH(m1.site, m2.site, "different number of input parameters")
     if len(outp1) != len(outp2):
@@ -1833,7 +1833,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
     # Fixup some parameters and stuff
 
     if obj.objtype == 'device':
-        banks = obj.get_components('bank')
+        banks = obj.get_recursive_components('bank')
         if dml.globals.dml_version == (1, 2):
             # Check for duplicate bank functions
             used = {}
@@ -1902,7 +1902,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                         # errors will be suppressed as well.
                         #
                         # In future versions, we should not forgive
-                        # broken dead parameters. This is bug 24234.
+                        # broken dead parameters. This is SIMICS-9886.
                         WREF.instances.append(WREF(
                             param.site, param.logname(), e))
                     else:
@@ -2287,10 +2287,13 @@ def sort_registers(bank):
         all_offsets = []
         mask = (1 << 64) - 1
         for reg in bank.get_recursive_components('register'):
-            size = param_int(reg, 'size')
-            all_offsets.extend((offset & mask, (offset + size) & mask,
-                                reg, coord)
-                               for (offset, coord) in explode_offsets(reg))
+            try:
+                size = param_int(reg, 'size')
+                all_offsets.extend((offset & mask, (offset + size) & mask,
+                                    reg, coord)
+                                   for (offset, coord) in explode_offsets(reg))
+            except DMLError as e:
+                report(e)
         all_offsets.sort(key=lambda t: t[0])
         while all_offsets and all_offsets[-1][0] == mask:
             del all_offsets[-1]

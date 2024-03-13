@@ -8,7 +8,7 @@ device test;
 
 import "testing.dml";
 
-// Failing part of T_vect.dml, bug 21873
+// Failing part of T_vect.dml, SIMICS-9502
 
 method test() -> (bool ok) {
     local int vect v;

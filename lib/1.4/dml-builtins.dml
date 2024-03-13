@@ -3395,7 +3395,7 @@ Provides a single abstract method
 
 The method reads from a field or register, possibly with
 side-effects. The returned value is represented in the host's native
-endianness. The `enabled_bytes` argument defines which bits of the
+endianness. The `enabled_bits` argument defines which bits of the
 register is accessed, as a bitmask; each bit of the returned value has
 significance only if the corresponding bit in `enabled_bits` is 1. If
 the access covers more than one field, then the parts of
@@ -3424,7 +3424,7 @@ Provides a single abstract method
 
 The method writes to a field or register, possibly with
 side-effects. The value is represented in the host's native
-endianness. The `enabled_bytes` argument is defined as in the
+endianness. The `enabled_bits` argument is defined as in the
 `read_field` method.
 
 The `write_field` template is *not* implemented by fields or registers
