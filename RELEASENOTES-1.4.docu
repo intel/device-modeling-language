@@ -523,7 +523,7 @@
       <tt>--no-compat=shared_logs_on_device</tt> to DMLC.</add-note></build-id>
   <build-id _6="6262" _7="7006"><add-note> Improved the run-time performance
       of accesses to registers with many fields.</add-note></build-id>
-  <build-id _6="next" _7="7012"><add-note> Fixed a bug where overlapping
+  <build-id _6="6287" _7="7012"><add-note> Fixed a bug where overlapping
       registers would not be rejected if they were part of a bank within a group
       or subdevice.</add-note></build-id>
 </rn>
