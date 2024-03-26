@@ -21,6 +21,8 @@ saved float saved_float = 0.5;
 
 saved size_t saved_size = 2;
 
+saved uint64_t saved_uint64_t = 3;
+
 saved long saved_long = -5;
 
 // Storage types
@@ -211,6 +213,7 @@ attribute test_initial is write_only_attr {
         assert saved_bool == true;
         assert saved_float == 0.5;
         assert saved_size == 2;
+        assert saved_uint64_t == 3;
         assert saved_long == -5;
         // No initial test for the struct or array
         for (local int i = 0; i < 4; i++) {
@@ -268,6 +271,7 @@ attribute test_later is write_only_attr {
         assert saved_bool == false;
         assert saved_float == -0.5;
         assert saved_size == 4;
+        assert saved_uint64_t == 6;
         assert saved_long == -8388608;
 
         assert saved_struct.i == 4;

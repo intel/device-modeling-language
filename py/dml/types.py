@@ -482,6 +482,8 @@ class IntegerType(DMLType):
             return NotImplemented
         if isinstance(self, TSize) != isinstance(other, TSize):
             return NotImplemented
+        if isinstance(self, TInt64_t) != isinstance(other, TInt64_t):
+            return NotImplemented
         if (dml.globals.dml_version == (1, 2)
             and compat.dml12_int in dml.globals.enabled_compat):
             # Ignore signedness
@@ -609,6 +611,29 @@ class TSize(IntegerType):
 
     def declaration(self, var):
         return ('ssize_t ' if self.signed else 'size_t ') + var
+
+class TInt64_t(IntegerType):
+    '''The '[u]int64_t' type from ISO C. For compatibility with C
+    APIs, e.g., calling an externally defined C function that takes a
+    `uint64_t *` arg. We find `uint64` a generally more useful type
+    primarily because it works better with format strings; "%lld" works
+    for `uint64` on both linux64 and win64.
+    '''
+    __slots__ = ()
+    def __init__(self, signed, const=False):
+        IntegerType.__init__(self, 64, signed, const=const)
+
+    def describe(self):
+        return self.declaration('').rstrip()
+
+    def __repr__(self):
+        return 'TInt64_t(%r, %r)' % (self.signed, self.const)
+
+    def clone(self):
+        return TInt64_t(self.signed, self.const)
+
+    def declaration(self, var):
+        return ('int64_t ' if self.signed else 'uint64_t ') + var
 
 class TEndianInt(IntegerType):
     '''An integer where the byte storage order is defined.
@@ -1270,6 +1295,13 @@ for (name, typ) in [
         ('ssize_t', TSize(True)),
         ('size_t', TSize(False))]:
     typedefs[name] = typ
+
+if dml.globals.dml_version != (1, 2):
+    # skipped in 1.2 for vague compat reasons
+    for (name, typ) in [
+        ('int64_t', TInt64_t(True)),
+        ('uint64_t', TInt64_t(False))]:
+        typedefs[name] = typ
 
 for sym in __all__:
     cls = globals()[sym]

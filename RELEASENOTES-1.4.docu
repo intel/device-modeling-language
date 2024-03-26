@@ -526,4 +526,8 @@
   <build-id _6="6287" _7="7012"><add-note> Fixed a bug where overlapping
       registers would not be rejected if they were part of a bank within a group
       or subdevice.</add-note></build-id>
+  <build-id _6="next" _7="next"><add-note> Added support
+      for <tt>uint64_t</tt> and <tt>int64_t</tt> types from C. These
+      types are needed for C interoperability, e.g., calling a function
+      that takes an argument of type <tt>uint64_t *</tt>.</add-note></build-id>
 </rn>
