@@ -529,4 +529,8 @@
   <build-id _6="6295" _7="7016"><add-note> Fixed a bug where executed callbacks
       posted via immediate after statements would not trigger the device state
       change notifier.</add-note></build-id>
+  <build-id _6="next" _7="next"><add-note> Added support
+      for <tt>uint64_t</tt> and <tt>int64_t</tt> types from C. These
+      types are needed for C interoperability, e.g., calling a function
+      that takes an argument of type <tt>uint64_t *</tt>.</add-note></build-id>
 </rn>
