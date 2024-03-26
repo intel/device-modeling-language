@@ -292,16 +292,17 @@ class ExprTests(GccTests):
         s = types.TLong(True)
         z = types.TSize(False)
         sz = types.TSize(True)
-        # long is incompatible with all TInts
-        for i in [types.TInt(64, False), types.TInt(32, False)]:
-            self.assertEqual(tcmp(i, u), NotImplemented)
-        self.assertEqual(tcmp(u, types.TLong(False)), 0)
-        self.assertEqual(tcmp(u, s), NotImplemented)
-        self.assertEqual(tcmp(z, sz), NotImplemented)
-        self.assertEqual(tcmp(z, u), NotImplemented)
-        self.assertEqual(tcmp(z, types.TInt(64, False)), NotImplemented)
-        self.assertEqual(tcmp(sz, s), NotImplemented)
-        self.assertEqual(tcmp(sz, types.TInt(64, True)), NotImplemented)
+        u64t = types.TInt64_t(False)
+        s64t = types.TInt64_t(True)
+        int_types = [u, s, z, sz, u64t, s64t,
+                 types.TInt(64, False), types.TInt(32, False)]
+        # all alternative spellings of integer types are potentially
+        # incompatible in C, and therefore defensively considered by DML as
+        # incompatible
+        for t1 in int_types:
+            for t2 in int_types:
+                self.assertEqual(tcmp(t1, t2),
+                                 0 if t1 is t2 else NotImplemented, (t1, t2))
 
         return [u.declaration('u') + ';',
                 'unsigned long *up UNUSED = &u;',
@@ -310,7 +311,11 @@ class ExprTests(GccTests):
                 z.declaration('z') + ';',
                 'size_t *zp UNUSED = &z;',
                 sz.declaration('sz')  + ';',
-                'ssize_t *szp UNUSED = &sz;',]
+                'ssize_t *szp UNUSED = &sz;',
+                u64t.declaration('u64t') + ';',
+                'uint64_t *u64tp UNUSED = &u64t;',
+                s64t.declaration('s64t')  + ';',
+                'int64_t *s64tp UNUSED = &s64t;']
 
     @subtest([(0, False),
               (0, True),

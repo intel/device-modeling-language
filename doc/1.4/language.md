@@ -1316,7 +1316,7 @@ The familiar integer types `char` and `int` are
 available as aliases for `int8` and `int32`,
 respectively. The C keywords `short`, `signed`, `unsigned`
 and `long` are reserved words in DML and not allowed in type
-declarations.  The types `size_t` and `uintptr_t` are
+declarations.  The types `uint64_t`, `int64_t`, `size_t` and `uintptr_t` are
 defined as in C.
 </dd><dt>
 
