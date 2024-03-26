@@ -39,8 +39,8 @@ method test -> (bool ok) {
           (sizeoftype size_t == sizeoftype void *));
 
     // check that all sizeof invocations return a size_t
-    log "info": "%zd %zd %zd %zd", sizeof x, sizeof $x,
-        sizeoftype uint32, sizeoftype (t);
+    SIM_log_info(1, $dev.obj, 0, "%zd %zd %zd %zd", sizeof x, sizeof $x,
+            sizeoftype uint32, sizeoftype t);
 
     // check that sizeof have no sideeffects
     x = sizeof (ok = false);
