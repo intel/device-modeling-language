@@ -1955,6 +1955,10 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             mark_method_referenced(func)
             mark_method_exported(func, name, export.site)
 
+        if dml.globals.dml_version != (1, 2):
+            dml.globals.thread_aware = param_bool_fixup(
+                obj, 'thread_aware', False)
+
     elif obj.objtype == 'bank':
         set_confidential_object(obj)
         if logging.show_porting:

@@ -529,4 +529,9 @@
   <build-id _6="next" _7="next"><add-note> Fixed a bug where executed callbacks
       posted via immediate after statements would not trigger the device state
       change notifier.</add-note></build-id>
+  <build-id _6="next" _7="next"><add-note> Added the `thread_aware` device
+      template to provide support for writing thread-aware device models.
+      For more information, see the Device templates subsection of the
+      Libraries and Built-ins section of the DML 1.4 Reference
+      Manual.</add-note></build-id>
 </rn>

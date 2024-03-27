@@ -701,9 +701,14 @@ class After(Statement):
             data = '(lang_void *)_data'
         else:
             data = 'NULL'
+        if dml.globals.thread_aware:
+            lm_out(f'domain_lock_t *_cell_lock;\n')
+            lm_out(f'SIM_ACQUIRE_CELL({objarg}, &_cell_lock);\n')
         lm_out(f'SIM_event_post_{self.unit}(SIM_object_clock({objarg}), '
                + f'{crep.get_evclass(self.info.key)}, {objarg}, '
                + f'{self.delay.read()}, {data});\n')
+        if dml.globals.thread_aware:
+            lm_out(f'SIM_RELEASE_CELL({objarg}, &_cell_lock);\n')
         lm_out("}\n", preindent = -1)
 
 mkAfter = After
@@ -2880,9 +2885,14 @@ class InterfaceMethodApply(Expression):
             self.node_expr, self.method_name,
             '(' + ", ".join(str(e) for e in self.args) + ')')
     def read(self):
-        return "(%s)->%s(%s)" % (
+        call = "(%s)->%s(%s)" % (
             read_iface_struct(self.node_expr), self.method_name,
             ", ".join(e.read() for e in self.args))
+        if not dml.globals.thread_aware:
+            return call
+
+        maybe_void = '_VOID' * realtype_shallow(self.type).void
+        return f'DML_THREAD_AWARE_IFACE_CALL{maybe_void}({args[0]}, {call})'
 
 class InterfaceMethodRef(NonValue):
     '''Reference to an interface method'''

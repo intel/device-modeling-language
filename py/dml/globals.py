@@ -69,6 +69,10 @@ coverity = False
 
 coverity_pragmas = {}
 
+# Whether the device instantiates the `thread_aware` template, and should be
+# generating lock acquisition and releases
+thread_aware = False
+
 # Enable features that are not supported in any capacity, for testing purposes.
 # This is reserved for features that are fully implemented, but whose design
 # cannot be finalized until later in the future.
