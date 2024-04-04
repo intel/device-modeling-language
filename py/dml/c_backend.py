@@ -1222,6 +1222,7 @@ def generate_immediate_after_callbacks(device):
         indices_lit = 'indices' if info.dimensions else None
         args_lit = 'args' if info.args_type else None
         info.generate_callback_call(indices_lit, args_lit)
+        output_dml_state_change('_dev')
         out('}\n\n', preindent = -1)
         splitting_point()
 

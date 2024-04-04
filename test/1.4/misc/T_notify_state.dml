@@ -100,6 +100,16 @@ attribute ev is write_only_attr {
     }
 }
 
+attribute immediate_after is write_only_attr {
+    param type = "n";
+    method event() {
+        log info, 1: "Immediate after triggered";
+    }
+    method set(attr_value_t val) throws default {
+        after: event();
+    }
+}
+
 implement signal {
     method signal_raise() {
         log info, 1: "Interface method called";
