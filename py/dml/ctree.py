@@ -2885,9 +2885,10 @@ class InterfaceMethodApply(Expression):
             self.node_expr, self.method_name,
             '(' + ", ".join(str(e) for e in self.args) + ')')
     def read(self):
+        args = [e.read() for e in self.args]
         call = "(%s)->%s(%s)" % (
             read_iface_struct(self.node_expr), self.method_name,
-            ", ".join(e.read() for e in self.args))
+            ", ".join(args))
         if not dml.globals.thread_aware:
             return call
 
