@@ -1269,13 +1269,14 @@ def generate_simple_events_control_methods(device):
     out('{\n', postindent = 1)
     out(crep.structtype(device) + ' *_dev UNUSED = ('
         + crep.structtype(device) + '*)_obj;\n')
-    output_domain_lock_decl('_lock')
-    output_acquire_cell('_obj', '_lock')
-    for key in dml.globals.after_delay_infos:
-        out('SIM_event_cancel_time('
-            + f'SIM_object_clock(_obj), {crep.get_evclass(key)}, _obj, '
-            + '_simple_event_predicate, (lang_void *) &domain);\n')
-    output_release_cell('_obj', '_lock')
+    if dml.globals.after_delay_infos:
+        output_domain_lock_decl('_lock')
+        output_acquire_cell('_obj', '_lock')
+        for key in dml.globals.after_delay_infos:
+            out('SIM_event_cancel_time('
+                + f'SIM_object_clock(_obj), {crep.get_evclass(key)}, _obj, '
+                + '_simple_event_predicate, (lang_void *) &domain);\n')
+        output_release_cell('_obj', '_lock')
 
     site = logging.SimpleSite('<_cancel_simple_events>')
     by_dims = {}
@@ -1336,25 +1337,27 @@ def generate_register_events(device):
     if not events and not dml.globals.after_delay_infos:
         out('return;\n')
     else:
+        flags = 'Sim_EC_No_Serialize' if dml.globals.thread_aware else '0'
         for event in events:
             if (dml.globals.dml_version == (1, 2)
                 and param_str(event, 'timebase') == 'stacked'
                 and event.dimensions > 0):
                 raise ICE(event, "stacked event array not supported")
             for indices in event.all_indices():
-                out('%s%s = SIM_register_event("%s", class, 0, %s);\n'
+                out('%s%s = SIM_register_event("%s", class, %s, %s);\n'
                     % (crep.get_evclass(event),
-                    ''.join('[' + str(i) + ']' for i in indices),
-                    event.logname_anonymized(indices),
-                    ', '.join(
-                        cname
-                        for (_, cname) in event_callbacks(event,
+                       ''.join('[' + str(i) + ']' for i in indices),
+                       event.logname_anonymized(indices),
+                       flags,
+                       ', '.join(
+                           cname
+                           for (_, cname) in event_callbacks(event,
                                                           indices))))
         for (key, info) in dml.globals.after_delay_infos.items():
-            out(('%s = SIM_register_event(%s, class, 0, %s, %s, %s, %s, '
+            out(('%s = SIM_register_event(%s, class, %s, %s, %s, %s, %s, '
                 + 'NULL);\n')
                 % (crep.get_evclass(key), string_literal(info.string_key),
-                   info.cident_callback, '_destroy_simple_event_data',
+                   flags, info.cident_callback, '_destroy_simple_event_data',
                    info.cident_get_value, info.cident_set_value))
     out('}\n\n', preindent = -1)
     splitting_point()

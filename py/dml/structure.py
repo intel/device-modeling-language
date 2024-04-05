@@ -1491,6 +1491,13 @@ def mkobj2(obj, obj_specs, params, each_stmts):
         for (issite, tpl) in obj_spec.templates:
             if tpl.trait:
                 obj_traits.append((issite, tpl.trait))
+            # TODO remove once thread-awareness support is public.
+            # Determining thread-awareness via the _thread_aware param is
+            # cleaner, but doesn't provide is-site info.
+            if (obj.objtype == 'device'
+                and tpl.name == '_thread_aware'
+                and dml.globals.dml_version != (1, 2)):
+                report(WEXPERIMENTAL(issite, 'thread-aware device model'))
 
     for obj_spec in obj_specs:
         for (templates, spec) in obj_spec.in_eachs:
@@ -1956,8 +1963,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             mark_method_exported(func, name, export.site)
 
         if dml.globals.dml_version != (1, 2):
-            dml.globals.thread_aware = param_bool_fixup(
-                obj, 'thread_aware', False)
+            dml.globals.thread_aware = param_bool(obj, '_thread_aware')
 
     elif obj.objtype == 'bank':
         set_confidential_object(obj)
