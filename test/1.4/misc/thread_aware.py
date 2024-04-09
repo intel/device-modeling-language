@@ -18,12 +18,6 @@ for cpu in (cpu1, cpu2):
 for dev in (obj, buddy):
     stest.expect_equal(dev.iface.concurrency_mode.current_mode(),
                        Sim_Concurrency_Mode_Serialized_Memory)
-    stest.expect_equal(
-        sorted(dev.iface.concurrency_group.execution_group(0)),
-        sorted([dev,
-                dev.bank.b, dev.sd.bank.b, dev.sd.sd.bank.b,
-                dev.port.p, dev.sd.port.p, dev.sd.sd.port.p,
-                dev.sd, dev.sd.sd]))
 
 obj.setup_main = None
 buddy.setup_buddy = None

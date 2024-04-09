@@ -608,12 +608,12 @@ standard library (`utility.dml`) also defines the device templates [`poreset`,
 `hreset`, and `sreset`](utility.html#templates-for-reset), which declare device
 support for different kinds of resets.
 
-The `_thread_aware` template is offered as a means of writing *thread-aware* DML
-device models, in the sense defined by the *Simics API Reference Manual* (in
-section 2.7). This can be necessary in a multicore-acceleration setting, if the
-models would otherwise present a bottleneck in the simulation. The
-`_thread_aware` template **must be** and **should only be** used for this
-purpose.
+The `_thread_aware` template is offered as a means of writing *thread-aware*
+DML device models, in the sense defined by the *Simics API Reference Manual*
+(in section 2.7). This can be necessary in a multicore-acceleration or
+subsystem-threading setting, if the models would otherwise present a bottleneck
+in the simulation. The `_thread_aware` template **must be** and **should only
+be** used for this purpose.
 
 Instantiating the `_thread_aware` template on top-level declares the device
 model as being thread-aware, which carries a large number of ramifications and
@@ -628,9 +628,7 @@ The consequences of instantiating the `_thread_aware` template are as follows:
   statement/declaration](language.html#error-statements) if some piece of code
   does not support thread-aware device models.
 * An implementation of the `concurrency_mode` interface is provided for the
-  device object, together with an implementation of the `concurrency_group`
-  interface to explicitly group all ports, banks, and subdevices together
-  with the device.
+  device object
     * The `_thread_aware` template declares the top-level `supported_modes`
       parameter to allow the modeller to configure the supported concurrency
       modes that the device reports. Its default value is
@@ -641,8 +639,8 @@ The consequences of instantiating the `_thread_aware` template are as follows:
       to switch modes. Its default value is `Sim_Concurrency_Mode_Serialized`.
     * The current concurrency mode of the device can be accessed within DML via
       `dev.concurrency_mode.current`.
-* All events (including those generated for `after` statements) of the device
-  model are registered with the `Sim_EC_No_Serialize` flag.
+* All events of the device model (including those generated for `after`
+  statements) are registered with the `Sim_EC_No_Serialize` flag.
 * **DMLC will insert code to automatically acquire and release locks required
   by any feature directly provided by DML.** The following is guaranteed:
     * DMLC will ensure that the thread domain associated with the device object
@@ -659,10 +657,9 @@ The consequences of instantiating the `_thread_aware` template are as follows:
     * Any operations performed on the device clock by `event` objects, the
       `after` statement, or the `cancel_after()` operation will automatically
       hold the cell domain of the device clock as the operation is performed.
-      (Note: *only* over the course of the operation itself. For example,
-      posting an event will only hold the cell domain while the post operation
-      is performed; it will *not* keep it held for as long as the event is
-      pending.)
+      (Note: *only* as the operation is performed. If an event is posted, then
+      cell domain is held only for the post operation &mdash; it will *not*
+      then keep being held while the event is pending.)
     * Any built-in template or template provided by the DML standard library
       can be used with thread-aware device models unless explicitly noted
       otherwise (in which case trying to use that template in a thread-aware
@@ -675,38 +672,26 @@ The consequences of instantiating the `_thread_aware` template are as follows:
       function is cell context, the cell thread domain must be held when the
       call is made.
     * Any calls to DML methods must ensure that any lock the methods require
-      to be held are indeed held (except for the thread domain of the device
-      object, as DMLC automatically esnures ensures it's acquired.)
+      to be held are indeed being held (except for the thread domain of the
+      device object, as DMLC automatically ensures it's acquired.)
         * For example, any manual calls to `set()` and `validate()` methods
           of connects must ensure that the cell domain of the passed target is
           acquired (if non-`NULL`) before the call is made.
-    * All DML libraries used by the model must be able to support thread-aware
-      models.
+    * **Each DML library used by the model must be able to support
+      thread-aware models**, unless the modeller can **trivially** ensure
+      that the library is used safely.
+        * If the DML library is not written to support thread-aware devices,
+          then usage of it is only safe if the modeller can ensure that every
+          method of the DML library is only called in contexts when the
+          relevant locks the method requires be held are indeed are being held
+          (as stated previously.)
+            * As libraries may feature object declarations, templates, and
+              `in each` declarations that may override and invoke methods
+              in ways that might not be clear to the modeller, safe usage is
+              very difficult to ensure for all but the simplest of libraries.
+              It is therefore better to prefer libraries have been
+              intentionally written to support thread-aware devices.
 */
-template _subdevice_thread_aware is subdevice {
-    param _each_subdevice_thread_aware : sequence(_subdevice_thread_aware);
-    param _each_subdevice_thread_aware =
-        each _subdevice_thread_aware in (this);
-
-    shared method _concurrency_group_attr_list_len() -> (uint32) {
-        local uint32 len = 1;
-        foreach sd in (_each_subdevice_thread_aware) {
-            len += sd._concurrency_group_attr_list_len();
-        }
-        return len;
-    }
-
-    shared method _populate_concurrency_group_attr_list(attr_value_t *vals)
-        -> (uint64) {
-        local uint64 i = 0;
-        vals[i++] = SIM_make_attr_object(this._port_obj());
-        foreach sd in (_each_subdevice_thread_aware) {
-            i += sd._populate_concurrency_group_attr_list(vals + i);
-        }
-        return i;
-    }
-}
-
 template _thread_aware is device {
     param __thread_aware = true;
     param init_concurrency_mode default Sim_Concurrency_Mode_Serialized;
@@ -726,55 +711,18 @@ template _thread_aware is device {
     implement concurrency_mode {
         saved concurrency_mode_t current;
 
-        method supported_modes() -> (concurrency_mode_t) {
+        method supported_modes() -> (concurrency_mode_t) default {
             return dev.supported_modes;
         }
 
-        method switch_mode(concurrency_mode_t mode) {
+        method switch_mode(concurrency_mode_t mode) default {
             assert (mode & mode - 1) == 0;
             assert (mode & dev.supported_modes) != 0;
             current = mode;
         }
 
-        method current_mode() -> (concurrency_mode_t) {
+        method current_mode() -> (concurrency_mode_t) default {
             return current;
-        }
-    }
-
-    in each (subdevice) { is _subdevice_thread_aware; }
-
-    implement concurrency_group {
-        method execution_group(uint32 group_index) -> (attr_value_t) {
-            if (group_index > 0) return SIM_make_attr_nil();
-
-            local uint32 len = 1
-                             + (each bank in (dev)).len
-                             + (each port in (dev)).len;
-            foreach sd in (each _subdevice_thread_aware in (dev)) {
-                len += sd._concurrency_group_attr_list_len();
-            }
-
-            local attr_value_t list = SIM_alloc_attr_list(len);
-            local attr_value_t *vals = SIM_attr_list(list);
-
-            local uint64 i = 0;
-            vals[i++] = SIM_make_attr_object(dev.obj);
-            foreach x in (each bank in (dev)) {
-                vals[i++] = SIM_make_attr_object(x._bank_obj());
-            }
-            foreach x in (each port in (dev)) {
-                vals[i++] = SIM_make_attr_object(x._port_obj());
-            }
-
-            foreach x in (each _subdevice_thread_aware in (dev)) {
-                i += x._populate_concurrency_group_attr_list(vals + i);
-            }
-
-            return list;
-        }
-
-        method serialized_memory_group(uint32 group_index) -> (attr_value_t) {
-            return execution_group(group_index);
         }
     }
 }
@@ -1595,8 +1543,7 @@ template init_as_subobj is (connect, init) {
     param classname : const char *;
     param configuration default "none";
     #if (dev._thread_aware) {
-        error "`init_as_subobj` can't be used with a thread-aware device "
-            + "model";
+        error "`init_as_subobj` can't be used in a thread-aware device model";
     }
     method init() default {
         local int portname_len = this._nongroup_parent.objtype == "device"

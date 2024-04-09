@@ -69,7 +69,7 @@ coverity = False
 
 coverity_pragmas = {}
 
-# Whether the device instantiates the `thread_aware` template, and should be
+# Whether the device instantiates the `_thread_aware` template, and should be
 # generating lock acquisition and releases
 thread_aware = False
 
