@@ -526,7 +526,7 @@
   <build-id _6="6287" _7="7012"><add-note> Fixed a bug where overlapping
       registers would not be rejected if they were part of a bank within a group
       or subdevice.</add-note></build-id>
-  <build-id _6="next" _7="next"><add-note> Fixed a bug where executed callbacks
+  <build-id _6="6295" _7="next"><add-note> Fixed a bug where executed callbacks
       posted via immediate after statements would not trigger the device state
       change notifier.</add-note></build-id>
 </rn>
