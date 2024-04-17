@@ -581,8 +581,11 @@ class TLong(IntegerType):
         IntegerType.__init__(self, 32 if is_windows() else 64, signed,
                              const=const)
 
+    def c_name(self):
+        return 'long' if self.signed else 'unsigned long'
+
     def describe(self):
-        return self.declaration('').rstrip()
+        return self.c_name()
 
     def __repr__(self):
         return 'TLong(%r, %r)' % (self.signed, self.const)
@@ -591,8 +594,7 @@ class TLong(IntegerType):
         return TLong(self.signed, self.const)
 
     def declaration(self, var):
-        decl = 'long ' + var
-        return decl if self.signed else 'unsigned ' + decl
+        return f'{self.c_name()} {var}'
 
 class TSize(IntegerType):
     '''The 'size_t' type from C'''
@@ -600,8 +602,11 @@ class TSize(IntegerType):
     def __init__(self, signed, const=False):
         IntegerType.__init__(self, 64, signed, const=const)
 
+    def c_name(self):
+        return 'ssize_t' if self.signed else 'size_t'
+
     def describe(self):
-        return self.declaration('').rstrip()
+        return self.c_name()
 
     def __repr__(self):
         return 'TSize(%r, %r)' % (self.signed, self.const)
@@ -610,7 +615,7 @@ class TSize(IntegerType):
         return TSize(self.signed, self.const)
 
     def declaration(self, var):
-        return ('ssize_t ' if self.signed else 'size_t ') + var
+        return f'{self.c_name()} {var}'
 
 class TInt64_t(IntegerType):
     '''The '[u]int64_t' type from ISO C. For compatibility with C
