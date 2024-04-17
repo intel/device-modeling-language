@@ -3897,6 +3897,13 @@ template itself contain a method that descends into subobjects; the
 implementation of `hard_reset` in `utility.dml`
 demonstrates how this can be done.
 
+The order in which objects are given by a specific `each`-`in` expression is not
+defined, except for that it is deterministic. That is, for a particular choice
+of template `X` and object `Y` in an `each X in (Y)` expression, for a
+particular iteration of the device model, and for the particular DMLC build
+used, the order in which objects are given by that expression is guaranteed to
+be consistent.
+
 ### List Expressions
 
 <pre>
