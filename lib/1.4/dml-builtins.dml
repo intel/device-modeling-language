@@ -365,7 +365,12 @@ device is created, *before* any attributes have been
 initialized. Typically used to initialize a default value, or to set up data
 structures.
 
-The method `init` is automatically called on all objects that implement the `init` template.
+The method `init` is automatically called on all objects that implement the
+`init` template. The order in which `init` of objects are called is not
+defined, except that `init` of a particular object is guaranteed to be called
+before `init` of any of its parent objects. In particular, `init` of the device
+object will be called only after all other implementations of `init`.
+
 */
 template init {
     param _each_init : sequence(init);
