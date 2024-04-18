@@ -94,6 +94,26 @@ def output_dml_state_change(device_ref):
         f"{device_ref});\n")
     out("}\n", preindent = -1)
 
+def output_domain_lock_decl(lock_name):
+    if dml.globals.thread_aware:
+        out(f'domain_lock_t *{lock_name};\n')
+
+def output_acquire_object(device_ref, lock):
+    if dml.globals.thread_aware:
+        out(f'SIM_ACQUIRE_OBJECT({device_ref}, &{lock});\n')
+
+def output_release_object(device_ref, lock):
+    if dml.globals.thread_aware:
+        out(f'SIM_RELEASE_OBJECT({device_ref}, &{lock});\n')
+
+def output_acquire_cell(device_ref, lock):
+    if dml.globals.thread_aware:
+        out(f'SIM_ACQUIRE_CELL({device_ref}, &{lock});\n')
+
+def output_release_cell(device_ref, lock):
+    if dml.globals.thread_aware:
+        out(f'SIM_RELEASE_CELL({device_ref}, &{lock});\n')
+
 registered_attribute_names = {}
 def register_attribute(site, port, name):
     '''remember that attribute 'name' is registered on port 'port',
@@ -402,6 +422,9 @@ def generate_attr_setter(fname, node, port, dimsizes, cprefix, loopvars,
         out(crep.structtype(device)+' *_dev UNUSED = ('
             + crep.structtype(device)+'*)_obj;\n')
         port_indices = ()
+
+    output_domain_lock_decl('_lock')
+    output_acquire_object('&_dev->obj', '_lock')
     out('set_error_t _status = Sim_Set_Illegal_Value;\n')
     if loopvars:
         out('uint32 ' + ','.join(v.str for v in loopvars) + ';\n')
@@ -442,6 +465,7 @@ def generate_attr_setter(fname, node, port, dimsizes, cprefix, loopvars,
             out('}\n', preindent = -1)
         out('exit:\n')
     output_dml_state_change('_dev')
+    output_release_object('&_dev->obj', '_lock')
     out('return _status;\n')
     out('}\n\n', preindent = -1)
     splitting_point()
@@ -464,6 +488,8 @@ def generate_attr_getter(fname, node, port, dimsizes, cprefix, loopvars):
         out(crep.structtype(device)+' *_dev UNUSED = ('
             + crep.structtype(device)+'*)_obj;\n')
         port_indices = ()
+    output_domain_lock_decl('_lock')
+    output_acquire_object('&_dev->obj', '_lock')
     out('attr_value_t _val0;\n')
 
     if loopvars:
@@ -497,6 +523,7 @@ def generate_attr_getter(fname, node, port, dimsizes, cprefix, loopvars):
         out('}\n', preindent = -1)
 
     output_dml_state_change('_dev')
+    output_release_object('&_dev->obj', '_lock')
     out('return _val0;\n')
     out('}\n\n', preindent = -1)
     splitting_point()
@@ -744,6 +771,8 @@ def wrap_method(meth, wrapper_name, indices=()):
         assert meth.dimensions == len(indices)
         out(devstruct+' *_dev UNUSED = ('+devstruct+'*)_obj;\n')
         indices = tuple(mkIntegerLiteral(meth.site, i) for i in indices)
+    output_domain_lock_decl('_lock')
+    output_acquire_object('&_dev->obj', '_lock')
     with crep.DeviceInstanceContext():
         if retvar:
             mkDeclaration(meth.site, retvar, rettype,
@@ -757,6 +786,7 @@ def wrap_method(meth, wrapper_name, indices=()):
                          indices,
                          inargs, outargs).toc()
     output_dml_state_change('_dev')
+    output_release_object('&_dev->obj', '_lock')
     if retvar:
         out('return '+retvar+';\n')
     out('}\n', preindent = -1)
@@ -1036,6 +1066,8 @@ def generate_simple_events(device):
         out('_simple_event_data_t *data = '
             + '(_simple_event_data_t *)_data;\n')
 
+        output_domain_lock_decl('_lock')
+        output_acquire_object('_obj', '_lock')
         # If data is NULL, report it and use emergency indices/args
         if info.dimensions or info.args_type:
             out('if (!data) {', postindent=1)
@@ -1066,6 +1098,7 @@ def generate_simple_events(device):
         out('MM_FREE(data);\n')
         out('}\n', preindent=-1)
         output_dml_state_change('_dev')
+        output_release_object('_obj', '_lock')
         out('}\n\n', preindent = -1)
         splitting_point()
 
@@ -1222,6 +1255,10 @@ def generate_immediate_after_callbacks(device):
         indices_lit = 'indices' if info.dimensions else None
         args_lit = 'args' if info.args_type else None
         info.generate_callback_call(indices_lit, args_lit)
+        # Minor HACK: this callback function takes care of state change
+        # notification, but not lock acquisition and release. That's because
+        # that must be taken care of by _DML_execute_immediate_afters,
+        # as it does its own inspection on the device state.
         output_dml_state_change('_dev')
         out('}\n\n', preindent = -1)
         splitting_point()
@@ -1232,10 +1269,14 @@ def generate_simple_events_control_methods(device):
     out('{\n', postindent = 1)
     out(crep.structtype(device) + ' *_dev UNUSED = ('
         + crep.structtype(device) + '*)_obj;\n')
-    for key in dml.globals.after_delay_infos:
-        out('SIM_event_cancel_time('
-            + f'SIM_object_clock(_obj), {crep.get_evclass(key)}, _obj, '
-            + '_simple_event_predicate, (lang_void *) &domain);\n')
+    if dml.globals.after_delay_infos:
+        output_domain_lock_decl('_lock')
+        output_acquire_cell('_obj', '_lock')
+        for key in dml.globals.after_delay_infos:
+            out('SIM_event_cancel_time('
+                + f'SIM_object_clock(_obj), {crep.get_evclass(key)}, _obj, '
+                + '_simple_event_predicate, (lang_void *) &domain);\n')
+        output_release_cell('_obj', '_lock')
 
     site = logging.SimpleSite('<_cancel_simple_events>')
     by_dims = {}
@@ -1296,25 +1337,27 @@ def generate_register_events(device):
     if not events and not dml.globals.after_delay_infos:
         out('return;\n')
     else:
+        flags = 'Sim_EC_No_Serialize' if dml.globals.thread_aware else '0'
         for event in events:
             if (dml.globals.dml_version == (1, 2)
                 and param_str(event, 'timebase') == 'stacked'
                 and event.dimensions > 0):
                 raise ICE(event, "stacked event array not supported")
             for indices in event.all_indices():
-                out('%s%s = SIM_register_event("%s", class, 0, %s);\n'
+                out('%s%s = SIM_register_event("%s", class, %s, %s);\n'
                     % (crep.get_evclass(event),
-                    ''.join('[' + str(i) + ']' for i in indices),
-                    event.logname_anonymized(indices),
-                    ', '.join(
-                        cname
-                        for (_, cname) in event_callbacks(event,
+                       ''.join('[' + str(i) + ']' for i in indices),
+                       event.logname_anonymized(indices),
+                       flags,
+                       ', '.join(
+                           cname
+                           for (_, cname) in event_callbacks(event,
                                                           indices))))
         for (key, info) in dml.globals.after_delay_infos.items():
-            out(('%s = SIM_register_event(%s, class, 0, %s, %s, %s, %s, '
+            out(('%s = SIM_register_event(%s, class, %s, %s, %s, %s, %s, '
                 + 'NULL);\n')
                 % (crep.get_evclass(key), string_literal(info.string_key),
-                   info.cident_callback, '_destroy_simple_event_data',
+                   flags, info.cident_callback, '_destroy_simple_event_data',
                    info.cident_get_value, info.cident_set_value))
     out('}\n\n', preindent = -1)
     splitting_point()
@@ -1429,9 +1472,12 @@ def generate_state_notify(device):
     out("if (!dev->_issuing_state_callbacks) {\n",
         postindent = 1)
     out("dev->_issuing_state_callbacks = true;\n")
+    output_domain_lock_decl('_cell_lock')
+    output_acquire_cell('&dev->obj', '_cell_lock')
     out("SIM_notify(&dev->obj, Sim_Notify_State_Change)"
         ";\n")
     out("dev->_issuing_state_callbacks = false;\n")
+    output_release_cell('&dev->obj', '_cell_lock')
     out("}\n", preindent = -1)
     out("}\n", preindent = -1)
 
@@ -1654,9 +1700,13 @@ def generate_deinit(device):
             for i in range(len(dims)):
                 out('}\n', preindent=-1)
 
-        for key in dml.globals.after_delay_infos:
-            out(f'SIM_event_cancel_time(_obj, {crep.get_evclass(key)}, _obj, '
-                + '0, NULL);\n')
+        if dml.globals.after_delay_infos:
+            output_domain_lock_decl('_cell_lock')
+            output_acquire_cell('_obj', '_cell_lock')
+            for key in dml.globals.after_delay_infos:
+                out(f'SIM_event_cancel_time(_obj, {crep.get_evclass(key)}, '
+                    + '_obj, 0, NULL);\n')
+            output_release_cell('_obj', '_cell_lock')
 
         with LogFailure(
                 device.get_component('destroy', 'method').site, device, ()):
@@ -1996,6 +2046,8 @@ def generate_static_trampoline(func):
         "%s(%s)" % ("_trampoline" + func.get_cname(), params_string)))
     out("{\n", postindent=1)
     out('ASSERT(_obj);\n')
+    output_domain_lock_decl('_lock')
+    output_acquire_object('_obj', '_lock')
     out('ASSERT(SIM_object_class(_obj) == _dev_class);\n')
     (name, typ) = func.cparams[0]
     out("%s = (%s)_obj;\n" % (typ.declaration(name), typ.declaration("")))
@@ -2004,6 +2056,7 @@ def generate_static_trampoline(func):
                          func.get_cname(),
                          ", ".join(n for (n, t) in func.cparams)))
     output_dml_state_change(name)
+    output_release_object('_obj', '_lock')
     if not func.rettype.void:
         out("return result;\n")
     out("}\n", preindent=-1)

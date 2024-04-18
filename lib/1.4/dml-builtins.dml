@@ -16,6 +16,7 @@ header %{
 import "simics/C.dml";
 import "simics/devs/io-memory.dml";
 import "simics/model-iface/bank-instrumentation.dml";
+import "simics/model-iface/concurrency.dml";
 import "simics/model-iface/int-register.dml";
 import "simics/model-iface/register-view.dml";
 import "simics/model-iface/register-view-read-only.dml";
@@ -45,6 +46,15 @@ extern char *_DML_describe_uint64_event(const char *base, uint64 data);
 extern size_t strlen(const char *s);
 extern char *strcpy(char *s, const char *s);
 extern void *memcpy(void *dest, const void *src, size_t n);
+
+extern void SIM_ACQUIRE_OBJECT(conf_object_t *obj, domain_lock_t **lock);
+extern void SIM_RELEASE_OBJECT(conf_object_t *obj, domain_lock_t **lock);
+
+extern void SIM_ACQUIRE_CELL(conf_object_t *obj, domain_lock_t **lock);
+extern void SIM_RELEASE_CELL(conf_object_t *obj, domain_lock_t **lock);
+
+extern void SIM_ACQUIRE_TARGET(conf_object_t *obj, domain_lock_t **lock);
+extern void SIM_RELEASE_TARGET(conf_object_t *obj, domain_lock_t **lock);
 
 extern typedef struct {
 } _callback_entry_t;
@@ -528,6 +538,9 @@ The `device` template contains the following parameters:
   this device, as specified by the `--simics-api` command-line argument;
   e.g. `"6"` for the Simics 6 API.
 
+* `_thread_aware` *[bool]*: Whether the device model is declared to be
+  *thread-aware*. This is `true` if and only if the [`_thread_aware`
+  template](#device-templates) has been instantiated for the device.
 */
 template device {
     is object;
@@ -570,12 +583,148 @@ template device {
     // this carried semantics in DML 1.2; deprecated in 1.4
     param _confidentiality          = undefined;
 
+    param __thread_aware default false;
+    param _thread_aware = __thread_aware;
+
     method _init() { _rec_init(); }
     method _post_init() { _rec_post_init(); }
     method init() default {}
     method post_init() default {}
 
     method destroy() default { }
+}
+
+/**
+## Device templates
+
+As the top-level scope defines the device object, device templates are
+templates intended to be instantiated on the top-level. Such templates are
+typically written in order to describe logic which affects the entire device
+model as a whole.
+
+The only built-in device template (save for the `device` template which defines
+the object type itself) is the `_thread_aware` template; however, the DML
+standard library (`utility.dml`) also defines the device templates [`poreset`,
+`hreset`, and `sreset`](utility.html#templates-for-reset), which declare device
+support for different kinds of resets.
+
+The `_thread_aware` template is offered as a means of writing *thread-aware*
+DML device models, in the sense defined by the *Simics API Reference Manual*
+(in section 2.7). This can be necessary in a multicore-acceleration or
+subsystem-threading setting, if the models would otherwise present a bottleneck
+in the simulation. The `_thread_aware` template **must be** and **should only
+be** used for this purpose.
+
+Instantiating the `_thread_aware` template on top-level declares the device
+model as being thread-aware, which carries a large number of ramifications and
+responsibilities.
+
+The consequences of instantiating the `_thread_aware` template are as follows:
+* The [`_thread_aware` parameter](#device-objects) of the device will resolve
+  to constant `true` rather than `false`. This can be leveraged by model code:
+  `dev._thread_aware` is suitable for use together with `#if` to either
+  conditionally generate additional code needed to support thread-aware device
+  models, or to conditionally raise compile-time errors via the [`error`
+  statement/declaration](language.html#error-statements) if some piece of code
+  does not support thread-aware device models.
+* An implementation of the `concurrency_mode` interface is provided for the
+  device object
+    * The `_thread_aware` template declares the top-level `supported_modes`
+      parameter to allow the modeller to configure the supported concurrency
+      modes that the device reports. Its default value is
+      `Sim_Concurrency_Mode_Serialized | Sim_Concurrency_Mode_Serialized_Memory`.
+    * The `_thread_aware` template declares the top-level
+      `init_concurrency_mode` parameter to allow the modeller to configure
+      the default concurrency mode the device places itself if never told
+      to switch modes. Its default value is `Sim_Concurrency_Mode_Serialized`.
+    * The current concurrency mode of the device can be accessed within DML via
+      `dev.concurrency_mode.current`.
+* All events of the device model (including those generated for `after`
+  statements) are registered with the `Sim_EC_No_Serialize` flag.
+* **DMLC will insert code to automatically acquire and release locks required
+  by any feature directly provided by DML.** The following is guaranteed:
+    * DMLC will ensure that the thread domain associated with the device object
+      is automatically acquired and later released together with **any** entry
+      into the device. This includes interface and attribute implementations,
+      callbacks of event objects and `after` statements, exported methods,
+      and method references converted to function pointers (except if the
+      method is `independent`.)
+    * Any call to an interface of a `connect` is automatically enclosed by
+      `SIM_ACQUIRE_TARGET`/`SIM_RELEASE_TARGET` on the connected object.
+    * When a connect is being configured by Simics, the cell domain of the
+      connected device is guaranteed to be acquired over the course of the
+      subsequent calls to `set()` and `validate()` of the `connect` object.
+    * Any operations performed on the device clock by `event` objects, the
+      `after` statement, or the `cancel_after()` operation will automatically
+      hold the cell domain of the device clock as the operation is performed.
+      (Note: *only* as the operation is performed. If an event is posted, then
+      cell domain is held only for the post operation &mdash; it will *not*
+      then keep being held while the event is pending.)
+    * Any built-in template or template provided by the DML standard library
+      can be used with thread-aware device models unless explicitly noted
+      otherwise (in which case trying to use that template in a thread-aware
+      model will lead to a compile-time error.)
+* **For all other cases, it is the modeller's responsibility to ensure that all
+  DML code used by the model acquires and releases locks as needed.**
+    * Any direct invocation of a Simics API function (`SIM_` functions) must
+      be guarded by acquiring any relevant locks as given by API Reference
+      Manual. For example, if the specified execution contet of a Simics API
+      function is cell context, the cell thread domain must be held when the
+      call is made.
+    * Any calls to DML methods must ensure that any lock the methods require
+      to be held are indeed being held (except for the thread domain of the
+      device object, as DMLC automatically ensures it's acquired.)
+        * For example, any manual calls to `set()` and `validate()` methods
+          of connects must ensure that the cell domain of the passed target is
+          acquired (if non-`NULL`) before the call is made.
+    * **Each DML library used by the model must be able to support
+      thread-aware models**, unless the modeller can **trivially** ensure
+      that the library is used safely.
+        * If the DML library is not written to support thread-aware devices,
+          then usage of it is only safe if the modeller can ensure that every
+          method of the DML library is only called in contexts when the
+          relevant locks the method requires be held are indeed are being held
+          (as stated previously.)
+            * As libraries may feature object declarations, templates, and
+              `in each` declarations that may override and invoke methods
+              in ways that might not be clear to the modeller, safe usage is
+              very difficult to ensure for all but the simplest of libraries.
+              It is therefore better to prefer libraries have been
+              intentionally written to support thread-aware devices.
+*/
+template _thread_aware is device {
+    param __thread_aware = true;
+    param init_concurrency_mode default Sim_Concurrency_Mode_Serialized;
+    param supported_modes default Sim_Concurrency_Mode_Serialized
+                                  | Sim_Concurrency_Mode_Serialized_Memory;
+
+    group _init_current_concurrency_mode is init {
+        method init() {
+            dev.concurrency_mode.current = dev.init_concurrency_mode;
+            assert (dev.concurrency_mode.current
+                    & dev.concurrency_mode.current - 1) == 0;
+            assert (dev.concurrency_mode.current
+                    & dev.supported_modes) != 0;
+        }
+    }
+
+    implement concurrency_mode {
+        saved concurrency_mode_t current;
+
+        method supported_modes() -> (concurrency_mode_t) default {
+            return dev.supported_modes;
+        }
+
+        method switch_mode(concurrency_mode_t mode) default {
+            assert (mode & mode - 1) == 0;
+            assert (mode & dev.supported_modes) != 0;
+            current = mode;
+        }
+
+        method current_mode() -> (concurrency_mode_t) default {
+            return current;
+        }
+    }
 }
 
 /**
@@ -1308,8 +1457,11 @@ template connect is _conf_attribute {
                 : (port != NULL && strcmp(port, this.port) == 0)))
             return Sim_Set_Ok;
 
+        local domain_lock_t *lock;
+
         // Check if the new setting is valid
         if (obj) {
+            #if (dev._thread_aware) SIM_ACQUIRE_CELL(obj, &lock);
             local bool valid = true;
             foreach iface in (this._each_interface) {
                 if (iface._required) {
@@ -1329,13 +1481,16 @@ template connect is _conf_attribute {
                     }
                 }
             }
-            if (!valid)
+            if (!valid) {
+                #if (dev._thread_aware) SIM_RELEASE_CELL(obj, &lock);
                 return Sim_Set_Interface_Not_Found;
+            }
             local const char *old_port = this.port;
             this.port = port;
             local bool ok = validate(obj);
             this.port = old_port;
             if (!ok) {
+                #if (dev._thread_aware) SIM_RELEASE_CELL(obj, &lock);
                 return Sim_Set_Illegal_Value;
             }
         }
@@ -1346,6 +1501,7 @@ template connect is _conf_attribute {
         this.port = port ? MM_STRDUP(port) : NULL;
         /*% COVERITY var_deref_model %*/
         this.set(obj);
+        #if (dev._thread_aware) if (obj) SIM_RELEASE_CELL(obj, &lock);
         return Sim_Set_Ok;
     }
 
@@ -1386,6 +1542,9 @@ The `init_as_subobj` inherits the [`init`](#init) and
 template init_as_subobj is (connect, init) {
     param classname : const char *;
     param configuration default "none";
+    #if (dev._thread_aware) {
+        error "`init_as_subobj` can't be used in a thread-aware device model";
+    }
     method init() default {
         local int portname_len = this._nongroup_parent.objtype == "device"
             #? 0 #: strlen(this._nongroup_parent._qname()) + 1;
@@ -3640,7 +3799,10 @@ template event is (object, shown_desc) {
         if (!SIM_object_clock(dev.obj))
             // without a clock, we cannot have posted any events
             return;
+        local domain_lock_t *lock;
+        #if (dev._thread_aware) SIM_ACQUIRE_CELL(dev.obj, &lock);
         SIM_event_cancel_time(dev.obj, evclass, dev.obj, NULL, NULL);
+        #if (dev._thread_aware) SIM_RELEASE_CELL(dev.obj, &lock);
     }
     // internal callbacks, invoked by auto-generated callback functions
     method __describe_event(void *data) -> (char *) default {
@@ -3785,12 +3947,20 @@ template _time_event is _event {
         if (clk == NULL)
             log error: "The 'queue' attribute is not set,"
                 + " cannot post event";
-        else
+        else {
+            local domain_lock_t *lock;
+            #if (dev._thread_aware) SIM_ACQUIRE_CELL(dev.obj, &lock);
             SIM_event_post_time(clk, *_pevclass, dev.obj, when, data);
+            #if (dev._thread_aware) SIM_RELEASE_CELL(dev.obj, &lock);
+        }
     }
     shared method _next(void *data) -> (double) {
-        return SIM_event_find_next_time(dev.obj, *_pevclass,
-                                        dev.obj, DML_pointer_eq, data);
+        local domain_lock_t *lock;
+        #if (dev._thread_aware) SIM_ACQUIRE_CELL(dev.obj, &lock);
+        local double upcoming = SIM_event_find_next_time(
+            dev.obj, *_pevclass, dev.obj, DML_pointer_eq, data);
+        #if (dev._thread_aware) SIM_RELEASE_CELL(dev.obj, &lock);
+        return upcoming;
     }
 }
 
@@ -3800,12 +3970,20 @@ template _cycle_event is _event {
         if (clk == NULL)
             log error: "The 'queue' attribute is not set,"
                 + " cannot post event";
-        else
+        else {
+            local domain_lock_t *lock;
+            #if (dev._thread_aware) SIM_ACQUIRE_CELL(dev.obj, &lock);
             SIM_event_post_cycle(clk, *_pevclass, dev.obj, when, data);
+            #if (dev._thread_aware) SIM_RELEASE_CELL(dev.obj, &lock);
+        }
     }
     shared method _next(void *data) -> (uint64) {
-        return SIM_event_find_next_cycle(dev.obj, *_pevclass,
-                                         dev.obj, DML_pointer_eq, data);
+        local domain_lock_t *lock;
+        #if (dev._thread_aware) SIM_ACQUIRE_CELL(dev.obj, &lock);
+        local double upcoming = SIM_event_find_next_cycle(
+            dev.obj, *_pevclass, dev.obj, DML_pointer_eq, data);
+        #if (dev._thread_aware) SIM_RELEASE_CELL(dev.obj, &lock);
+        return upcoming;
     }
 }
 
@@ -3834,13 +4012,20 @@ template _simple_event is _event {
     shared method _destroy(void *data) {}
 
     shared method posted() -> (bool) {
-        return SIM_event_find_next_cycle(dev.obj, *_pevclass,
-                                         dev.obj, DML_pointer_eq, NULL) >= 0;
+        local domain_lock_t *lock;
+        #if (dev._thread_aware) SIM_ACQUIRE_CELL(dev.obj, &lock);
+        local double upcoming = SIM_event_find_next_cycle(
+            dev.obj, *_pevclass, dev.obj, DML_pointer_eq, NULL);
+        #if (dev._thread_aware) SIM_RELEASE_CELL(dev.obj, &lock);
+        return upcoming >= 0;
     }
 
     shared method remove() {
+        local domain_lock_t *lock;
+        #if (dev._thread_aware) SIM_ACQUIRE_CELL(dev.obj, &lock);
         SIM_event_cancel_time(dev.obj, *_pevclass, dev.obj,
                               DML_pointer_eq, NULL);
+        #if (dev._thread_aware) SIM_RELEASE_CELL(dev.obj, &lock);
     }
 }
 
@@ -3940,14 +4125,20 @@ template _uint64_event is _event {
     }
 
     shared method posted(uint64 data) -> (bool) {
-        return SIM_event_find_next_cycle(dev.obj, *_pevclass,
-                                         dev.obj, DML_pointer_eq,
-                                         _int_to_voidp(data)) >= 0;
+        local domain_lock_t *lock;
+        #if (dev._thread_aware) SIM_ACQUIRE_CELL(dev.obj, &lock);
+        local double upcoming = SIM_event_find_next_cycle(
+            dev.obj, *_pevclass, dev.obj, DML_pointer_eq, _int_to_voidp(data));
+        #if (dev._thread_aware) SIM_RELEASE_CELL(dev.obj, &lock);
+        return upcoming >= 0;
     }
 
     shared method remove(uint64 data) {
+        local domain_lock_t *lock;
+        #if (dev._thread_aware) SIM_ACQUIRE_CELL(dev.obj, &lock);
         SIM_event_cancel_time(dev.obj, *_pevclass, dev.obj,
                               DML_pointer_eq, _int_to_voidp(data));
+        #if (dev._thread_aware) SIM_RELEASE_CELL(dev.obj, &lock);
     }
 
     shared method event(uint64 data);

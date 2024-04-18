@@ -16,6 +16,7 @@
 #include <simics/base/conf-object.h>
 #include <simics/base/version.h>
 #include <simics/util/swabber.h>
+#include <simics/base/object-locks.h>
 #include <simics/model-iface/bank-instrumentation.h>
 #include <simics/simulator/conf-object.h>
 #include <simics/util/alloc.h>
@@ -632,6 +633,22 @@ FOR_ENDIAN_VARIANTS(DEFINE_PRECHANGE);
 
 #undef FOR_ALL_BITSIZES
 #undef FOR_ENDIAN_VARIANTS
+
+
+#define DML_THREAD_AWARE_IFACE_CALL(target_obj, call_expr) (({                \
+        domain_lock_t *__lock;                                                 \
+        SIM_ACQUIRE_TARGET(target_obj, &__lock);                              \
+        __auto_type __iface_ret = call_expr;                                  \
+        SIM_RELEASE_TARGET(target_obj, &__lock);                              \
+        __iface_ret;                                                          \
+    }))
+
+#define DML_THREAD_AWARE_IFACE_CALL_VOID(target_obj, call_expr) (({           \
+        domain_lock_t *__lock;                                                 \
+        SIM_ACQUIRE_TARGET(target_obj, &__lock);                              \
+        call_expr;                                                            \
+        SIM_RELEASE_TARGET(target_obj, &__lock);                              \
+    }))
 
 UNUSED static attr_value_t
 _serialize_identity(const _id_info_t *id_info_array, const _identity_t id) {
@@ -1293,15 +1310,23 @@ _DML_execute_immediate_afters_now(conf_object_t *dev,
 UNUSED static void
 _DML_execute_immediate_afters(conf_object_t *dev, lang_void *aux) {
     _dml_immediate_after_state_t *state = (_dml_immediate_after_state_t *)aux;
-    ASSERT(state->posted);
+    // Only acquire the device if it hasn't been deleted to avoid a
+    // use-after-free. There's no possibility of a data race on state->deleted
+    // (nor any other part of the state if state->deleted is true) as the
+    // device can only be deleted in global context.
     if (unlikely(state->deleted)) {
+        ASSERT(state->posted);
         ASSERT(QEMPTY(state->queue));
         // No need to call QFREE, already done
         MM_FREE(state);
         return;
     }
+    domain_lock_t *lock;
+    SIM_ACQUIRE_OBJECT(dev, &lock);
+    ASSERT(state->posted);
     if (unlikely(QEMPTY(state->queue))) {
         state->posted = false;
+        SIM_RELEASE_OBJECT(dev, &lock);
         return;
     }
     _dml_immediate_after_queue_elem_t elem = QREMOVE(state->queue);
@@ -1314,6 +1339,7 @@ _DML_execute_immediate_afters(conf_object_t *dev, lang_void *aux) {
     }
     elem.callback(dev, elem.data.indices, elem.data.args);
     _free_simple_event_data(elem.data);
+    SIM_RELEASE_OBJECT(dev, &lock);
 }
 
 UNUSED static void

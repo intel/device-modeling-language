@@ -193,7 +193,9 @@ class DMLFileTestCase(BaseTestCase):
         'simics_stderr',
         'extraenv',                     # Extra environment variables
 
-        'status'                        # Expected status
+        'status',                       # Expected status
+
+        'thread_safe',                  # If the device module is considered thread-safe
         )
     def __init__(self, fullname, filename, **info):
         BaseTestCase.__init__(self, fullname)
@@ -205,6 +207,7 @@ class DMLFileTestCase(BaseTestCase):
         self.cc_extraargs = []
         self.status = 0
         self.extraenv = {}
+        self.thread_safe = False
         # Override defaults
         for k,v in info.items():
             setattr(self, k, v)
@@ -649,7 +652,7 @@ class CTestCase(DMLFileTestCase):
             cpumod = None
             date = None
             product = None
-            thread_safe = "no"
+            thread_safe = "yes" if self.thread_safe else "no"
             host_type = host_type()
             py_version = None
             py_iface_lists = []
@@ -1076,6 +1079,11 @@ all_tests.append(CTestCase(
          join(testdir, "1.2", "werror", "T_WUNUSEDDEFAULT.dml"),
          status = 2,
          dmlc_extraargs = ["--werror"]))
+
+all_tests.append(CTestCase(
+         ["1.4", "misc", "thread_aware"],
+         join(testdir, "1.4", "misc", "thread_aware.dml"),
+         thread_safe=True))
 
 if get_simics_major() == "6":
     all_tests.append(CTestCase(

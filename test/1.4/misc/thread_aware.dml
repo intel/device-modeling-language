@@ -1,0 +1,241 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+device test;
+
+import "utility.dml";
+import "simics/util/os.dml";
+
+saved int s;
+
+// This test should accomplish two things:
+// 1. Only pass if the device is actually considered thread-aware, and is
+//    entered without the cell domain being taken.
+// 2. Only pass if the device acquires and releases locks correctly
+//
+// Accomplished by two cooperative devices that have a piece of shared state:
+// 1. is accomplished by manipulating the shared state without locking,
+//    relying on sleeps for one thread to observe the changes made by the
+//    other, and performing tests on that state that can only succeed if
+//    the two devices are entered concurrently.
+// 2. is accomplished by manipulations on the shared state while holding
+//    an object lock; then having a device entry to inspect the
+//    state be blocked by an existing entry that modifies it. This blocking is
+//    ensured by also leveraging sleeps. The test is practically guaranteed to
+//    succeed only if object locking is done correctly.
+
+/// WARNING WEXPERIMENTAL
+is _thread_aware;
+
+header %{
+    static volatile int32 shared_state = 0;
+%}
+
+extern int32 shared_state;
+
+connect buddy {
+    session int32 *state;
+    param configuration = "optional";
+    interface pulse;
+}
+
+attribute setup_main is write_only_attr {
+    param type = "n";
+    method set(attr_value_t val) throws default {
+        after 1 cycles: event();
+    }
+
+    method event() {
+        os_millisleep(50);
+        // Second resolved (due to the sleep in setup_buddy.event() being
+        // longer)
+
+        // This essentially serves as a check that setup_buddy.event() is
+        // ongoing; and thus the buddy is holding its own lock
+        assert shared_state == 1;
+        // Modify shared state without acquiring lock.
+        shared_state = 2;
+        // Then try to enter the buddy, and become blocked
+        buddy.pulse.pulse();
+    }
+}
+
+attribute setup_buddy is write_only_attr {
+    param type = "n";
+    method set(attr_value_t val) throws default {
+        after 1 cycles: event();
+    }
+
+    method event() {
+        // First resolved (due to the sleep in setup_main.event())
+        shared_state = 1;
+        os_millisleep(100);
+        // Third resolved.
+        assert shared_state == 2;
+        shared_state = 3;
+        // Once this is left, the object lock of the buddy will be released
+    }
+}
+
+implement pulse {
+    method pulse() {
+        // Last resolved, when setup_main.event() becomes unblocked and may
+        // enter the buddy
+        assert shared_state == 3;
+    }
+}
+
+attribute shared_state_attr {
+    param type = "i";
+    method get() -> (attr_value_t) {
+        return SIM_make_attr_int64(shared_state);
+    }
+    method set(attr_value_t val) throws {
+        shared_state = SIM_attr_integer(val);
+    }
+}
+
+bank b;
+port p;
+subdevice sd {
+    subdevice sd {
+        bank b;
+        port p;
+    }
+    bank b;
+    port p;
+}
+
+// Remainder is skeleton code stolen from 1.4/misc/notify_state.
+// We have to do similar tests that object locking is done for the various ways
+// the device may be entered.
+// ... That, or write those tests via ctree_tests.py
+
+header %{
+    #include <assert.h>
+    extern uint64 *get_count_pointer(conf_object_t *obj);
+    void state_cb(conf_object_t *obj, conf_object_t *_, lang_void *__) {
+        (*get_count_pointer(obj))++;
+    }
+    extern void exported_method(conf_object_t *);
+    void exported_trampoline(conf_object_t * obj, conf_object_t *_,
+                            lang_void *__) {
+        exported_method(obj);
+    }
+    extern void independent_exported_method(conf_object_t *);
+    void independent_exported_trampoline(conf_object_t * obj, conf_object_t *_,
+                                        lang_void *__) {
+        independent_exported_method(obj);
+    }
+    void register_callbacks(conf_object_t *obj) {
+        SIM_add_notifier(obj,
+                         Sim_Notify_State_Change,
+                         obj,
+                         state_cb,
+                         NULL);
+        notifier_type_t notifier_type = SIM_notifier_type("exported-entry");
+        SIM_register_notifier(SIM_object_class(obj), notifier_type,
+                              "exported entry");
+        SIM_add_notifier(obj, notifier_type, obj, exported_trampoline, NULL);
+
+        notifier_type = SIM_notifier_type("statically-exported-entry");
+        SIM_register_notifier(SIM_object_class(obj), notifier_type,
+                              "statically exported entry");
+        SIM_add_notifier(obj, notifier_type, obj,
+                         independent_exported_trampoline, NULL);
+    }
+%}
+
+extern void register_callbacks(conf_object_t *obj);
+
+method init() {
+    register_callbacks(dev.obj);
+}
+
+// These will both only be called from the callbacks registered
+// so, we do not need to be concerned with this being called twice
+method get_count() -> (uint64 *) {
+    return &count.count;
+}
+export get_count as "get_count_pointer";
+
+attribute count is read_only_attr {
+    param type = "i";
+    session uint64 count;
+    method get() -> (attr_value_t) {
+        // The count is incremented at exit of this method, so we
+        // must compensate
+        return SIM_make_attr_int64(count--);
+    }
+}
+
+method exposed_method() {
+    log info, 1: "Exposed method called";
+}
+export exposed_method as "exported_method";
+
+method indirectly_exposed_method() {
+    log info, 1: "Indirectly exposed method called";
+}
+
+independent method indie_exposed_method(conf_object_t *obj) {
+    (&indirectly_exposed_method)(obj);
+}
+export indie_exposed_method as "independent_exported_method";
+
+attribute a is pseudo_attr {
+    param type = "n";
+    method set(attr_value_t val) throws default {
+        log info, 1: "Attribute set called";
+    }
+    method get() -> (attr_value_t) {
+        log info, 1: "Attribute get called";
+        return SIM_make_attr_nil();
+    }
+}
+
+attribute ev is write_only_attr {
+    param type = "n";
+    method event() {
+        log info, 1: "Event triggered";
+    }
+    method set(attr_value_t val) throws default {
+        after 0.1 s: event();
+    }
+}
+
+attribute immediate_after is write_only_attr {
+    param type = "n";
+    method event() {
+        log info, 1: "Immediate after triggered";
+    }
+    method set(attr_value_t val) throws default {
+        after: event();
+    }
+}
+
+implement signal {
+    method signal_raise() {
+        log info, 1: "Interface method called";
+    }
+    method signal_lower() {
+        // noop
+    }
+}
+
+
+// port insig is signal_port;
+// connect outsig is signal_connect;
+
+// attribute test_outsig is (pseudo_attr, bool_attr) {
+//     method set(attr_value_t value) throws {
+//         default(value);
+//         if (this.val)
+//             outsig.set_level(1);
+//         else
+//             outsig.set_level(0);
+//     }
+// }
