@@ -10,7 +10,7 @@ import math
 import shlex
 from pathlib import Path
 
-from dml import ctree, types, logging, messages, output, symtab
+from dml import ctree, types, logging, messages, output, symtab, traits
 from dml.ctree import string_escape, mkCompound, dmldir_macro
 from dml.env import is_windows
 
@@ -1377,6 +1377,69 @@ class ExprTests(GccTests):
         return ['%s;' % (target_type.declaration('x'),),
                 code.buf,
                 'EXPECT(x == -1);']
+
+    @subtest()
+    def const_types(self):
+        type_objs = [
+            types.TVoid(),
+            types.TDevice('struct_t'),
+            types.TNamed('struct_t'),
+            types.TBool(),
+            types.TInt(24, True),
+            types.TEndianInt(24, True, 'big-endian'),
+            types.TLong(False),
+            types.TSize(True),
+            types.TInt64_t(True),
+            types.TFloat('double'),
+            types.TArray(types.TBool(), int_const(3)),
+            types.TPtr(types.TBool()),
+            types.TPtr(types.TFunction([], types.TVoid())),
+            types.TPtr(types.TArray(types.TBool(), int_const(3))),
+            types.TTrait(traits.Trait(
+                site, 'struct_t', set(), {}, {}, {}, {}, {}, {}, {})),
+            types.TTraitList('struct_t'),
+            types.TExternStruct({}, 'struct_t', 'struct_t'),
+            types.TStruct({'x': types.TBool()}, 'struct_label'),
+            types.TLayout(
+                'big-endian', {
+                    'x': (site, types.TEndianInt(24, True, 'big-endian'))},
+                'struct_label'),
+            types.THook([]),
+        ]
+        covered_types = {type(o) for o in type_objs}
+        all_types = {t for t in types.__dict__.values()
+                     if isinstance(t, type) and issubclass(t, types.DMLType)}
+        assert covered_types <= all_types, covered_types - all_types
+        untested_types = {
+            # abstract type
+            types.DMLType,
+            # abstract type
+            types.IntegerType,
+            # abstract type
+            types.StructType,
+            # 1.2, weird
+            types.TUnknown,
+            # known to be broken, hard to fix
+            types.TVector,
+            # function types don't allow const qualification
+            types.TFunction,
+        }
+        assert all_types - untested_types <= covered_types, (
+            all_types - covered_types)
+        ret = ['typedef struct struct_label { bool x; } struct_t;']
+        for (i, t) in enumerate(type_objs):
+            t.resolve()
+            assert not t.const
+            ct = t.clone()
+            ct.const = True
+            # ct is const
+            ret.append(
+                f'void (*p{i})(typeof({ct.declaration("")}) *) UNUSED'
+                f' = (void (*)(const typeof({t.declaration("")}) *))NULL;')
+            # t is not const
+            ret.append(f'void *v{i} UNUSED'
+                       f' = (typeof({t.declaration("")}) *)NULL;')
+        return ret
 
     def test(self):
         self.run_gcc_tests()
