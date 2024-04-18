@@ -337,6 +337,8 @@ class TDevice(DMLType):
         self.name = name
     def __repr__(self):
         return 'TDevice(%s)' % repr(self.name)
+    def c_name(self):
+        return f'{self.name} *{self.const_str}'
     def describe(self):
         return 'pointer to %s' % self.name
     def key(self):
@@ -350,10 +352,10 @@ class TDevice(DMLType):
         if isinstance(other, TDevice):
             return (True, False, constviol)
         return (False, False, constviol)
-    def declaration(self, var):
-        return (self.name + ' *' + var)
     def clone(self):
         return TDevice(self.name, self.const)
+    def declaration(self, var):
+        return f'{self.c_name()}{var}'
 
 # Hack: some identifiers that are valid in DML are not allowed in C,
 # either because they are reserved words or because they clash with
@@ -587,7 +589,7 @@ class TLong(IntegerType):
                              const=const)
 
     def c_name(self):
-        return 'long' if self.signed else 'unsigned long'
+        return self.const_str + ('long' if self.signed else 'unsigned long')
 
     def describe(self):
         return self.c_name()
@@ -608,7 +610,7 @@ class TSize(IntegerType):
         IntegerType.__init__(self, 64, signed, const=const)
 
     def c_name(self):
-        return 'ssize_t' if self.signed else 'size_t'
+        return self.const_str + ('ssize_t' if self.signed else 'size_t')
 
     def describe(self):
         return self.c_name()
@@ -668,9 +670,14 @@ class TEndianInt(IntegerType):
     def big_endian(self):
         return self.byte_order == 'big-endian'
 
+    def c_name(self):
+        return '%s%sint%d_%s_t' % (
+            self.const_str, "" if self.signed else "u", self.bits,
+            "be" if self.big_endian else "le")
+
     def describe(self):
-        return '%sint%d_%s_t' % ("" if self.signed else "u", self.bits,
-                                 "be" if self.big_endian else "le")
+        return self.c_name()
+
     def __repr__(self):
         return 'TEndianInt(%r,%r,%r,%r,%r)' % (
             self.bits, self.signed, self.byte_order, self.members, self.const)
@@ -709,8 +716,7 @@ class TEndianInt(IntegerType):
                           self.byte_order, self.members, self.const)
 
     def declaration(self, var):
-        return '%sint%d_%s_t %s' % (("u", "")[self.signed], self.bits,
-                                    ("le", "be")[self.big_endian], var)
+        return f'{self.c_name()} {var}'
 
 class TFloat(DMLType):
     __slots__ = ('name',)
@@ -846,9 +852,9 @@ class TPtr(DMLType):
 
     def declaration(self, var):
         if isinstance(self.base, (TFunction, TArray)):
-            var = "(*"+var+")"
+            var = f'(*{self.const_str}{var})'
         else:
-            var = "*"+self.const_str+var
+            var = f'*{self.const_str}{var}'
         return self.base.declaration(var)
     def resolve(self):
         self.base.resolve()
@@ -904,11 +910,15 @@ class TTrait(DMLType):
 
     def key(self):
         return f'{self.const_str}trait({self.trait.name})'
+
+    def c_name(self):
+        return f'{self.const_str}{cident(self.trait.name)}'
+
     def describe(self):
         return 'trait ' + self.trait.name
 
     def declaration(self, var):
-        return '%s %s' % (cident(self.trait.name), var)
+        return f'{self.c_name()} {var}'
 
 class TTraitList(DMLType):
     __slots__ = ('traitname')
@@ -932,6 +942,9 @@ class TTraitList(DMLType):
     def key(self):
         return f'{self.const_str}sequence({self.traitname})'
 
+    def c_type(self):
+        return f'{self.const_str}_each_in_t'
+
     def describe(self):
         return 'list of trait ' + self.traitname
 
@@ -940,7 +953,7 @@ class TTraitList(DMLType):
         # a trait list. The trait type is only visible to DML; in the
         # C representation, a void pointer is used and the type
         # information is discarded.
-        return '_each_in_t %s' % (var,)
+        return f'{self.c_type()} {var}'
 
 class StructType(DMLType):
     '''common superclass for DML-defined structs and extern structs'''
