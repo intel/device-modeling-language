@@ -1376,6 +1376,19 @@ class ECONST(DMLError):
     def __init__(self, site):
         DMLError.__init__(self, site);
 
+class EFUNSTRUCT(DMLError):
+    """
+    A member of a struct cannot have a function type.
+    """
+    fmt = "struct member is a function"
+
+class EFUNARRAY(DMLError):
+    """
+    It is illegal to express an array type where the base type is a
+    function type.
+    """
+    fmt = "illegal type: array of functions"
+
 class EDISCONST(DMLError):
     """
     A pointer to a constant value has been assigned to a pointer to a

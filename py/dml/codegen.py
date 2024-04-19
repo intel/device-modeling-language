@@ -1479,6 +1479,8 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
             for (_, msite, name, type_ast) in info:
                 (member_struct_defs, member_type) = eval_type(
                     type_ast, msite, location, scope, extern)
+                if isinstance(member_type, TFunction):
+                    raise EFUNSTRUCT(msite)
                 members[name] = member_type
                 struct_defs.extend(member_struct_defs)
             if extern:
@@ -1501,6 +1503,8 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
             for (_, msite, name, type_ast) in fields:
                 (member_struct_defs, member_type) = eval_type(
                     type_ast, msite, location, scope, False)
+                if isinstance(member_type, TFunction):
+                    raise EFUNSTRUCT(msite)
                 members[name] = (msite, member_type)
                 struct_defs.extend(member_struct_defs)
             if not members:
@@ -1585,6 +1589,8 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
         elif asttype[0] == 'array':
             if etype.void:
                 raise EVOID(site)
+            if isinstance(etype, TFunction):
+                raise EFUNARRAY(site)
             alen = codegen_expression(asttype[1], location, scope)
             etype = TArray(etype, as_int(alen))
             asttype = asttype[2:]
