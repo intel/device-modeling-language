@@ -39,3 +39,44 @@ port p is t {
     method int_args(int_alias_t a, uint32 b) {}
     method int_return_2() -> (uint32, int_alias_t) {}
 }
+
+header %{
+    typedef struct {
+        void (*m)(conf_object_t *o, int i);
+        void (*vararg)(conf_object_t *o, ...);
+    } m_interface_t;
+    %}
+extern typedef struct {
+    void (*m)(conf_object_t *o, int i);
+    void (*vararg)(conf_object_t *o, ...);
+} m_interface_t;
+
+port p0 {
+    implement m {
+        /// ERROR EMETH
+        method m() {}
+    }
+}
+
+port p1 {
+    implement m {
+        /// ERROR EMETH
+        method m(int i) -> (int) {
+            return 0;
+        }
+    }
+}
+
+port p2 {
+    implement m {
+        /// ERROR EARGT
+        method m(char *c) { }
+    }
+}
+
+port p1 {
+    implement m {
+        /// ERROR EMETH
+        method vararg() { }
+    }
+}
