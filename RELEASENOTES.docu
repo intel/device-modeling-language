@@ -1763,4 +1763,7 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
   </build-id>
   <build-id _6="6297" _7="next"><add-note> Added support for the
       <tt>log warning</tt> statement.</add-note></build-id>
+  <build-id _6="next" _7="next"><add-note> DMLC will now report errors
+      for some uses of function types that are illegal in C. These
+      would previously yield broken C code.</add-note></build-id>
 </rn>

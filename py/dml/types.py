@@ -100,6 +100,8 @@ def realtype_shallow(t):
         if not t2:
             raise DMLUnknownType(t)
         if t.const and not t2.const:
+            if isinstance(t2, TFunction):
+                raise ECONSTFUN(t.declaration_site)
             t = t2.clone()
             t.const = True
         else:

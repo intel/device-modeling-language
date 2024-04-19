@@ -1572,6 +1572,8 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
     asttype = asttype[1:]
     while asttype:
         if asttype[0] == 'const':
+            if isinstance(etype, TFunction):
+                raise ECONSTFUN(site)
             etype.const = True
             asttype = asttype[1:]
         elif asttype[0] == 'pointer':
