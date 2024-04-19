@@ -1202,14 +1202,11 @@ class TFunction(DMLType):
                          self.const)
 
     def declaration(self, var):
-        params = [ t.declaration("arg%d" % n)
-                   for (n, t) in enumerate(self.input_types) ]
+        arglist = ', '.join(t.declaration("arg%d" % n)
+                            for (n, t) in enumerate(self.input_types))
         if self.varargs:
-            varargs = ", ..."
-        else:
-            varargs = ""
-        return self.output_type.declaration(
-            "%s(%s%s)" % (var, ", ".join(params), varargs))
+            arglist += ", ..."
+        return self.output_type.declaration(f'{var}({arglist})')
 
 class THook(DMLType):
     __slots__ = ('msg_types', 'validated')
