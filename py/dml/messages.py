@@ -1389,6 +1389,12 @@ class EFUNARRAY(DMLError):
     """
     fmt = "illegal type: array of functions"
 
+class ECONSTFUN(DMLError):
+    """
+    A function type cannot be `const` qualified;
+    """
+    fmt = "const qualified function type"
+
 class EDISCONST(DMLError):
     """
     A pointer to a constant value has been assigned to a pointer to a
