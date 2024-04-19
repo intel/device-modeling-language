@@ -156,6 +156,10 @@ def safe_realtype_shallow(t):
         raise ETYPE(e.type.declaration_site or None, e.type)
 
 def conv_const(const, t):
+    # Functions cannot be const. Usually function types cannot happen
+    # where conv_const is called, but if they can, then that deserves
+    # that the caller handles it explicitly.
+    assert not isinstance(t, TFunction)
     if const and not t.const:
         t = t.clone()
         t.const = True
@@ -327,9 +331,8 @@ class TDevice(DMLType):
     """
     __slots__ = ('name',)
     def __init__(self, name, const=False):
-        DMLType.__init__(self)
+        DMLType.__init__(self, const)
         self.name = name
-        self.const = const
     def __repr__(self):
         return 'TDevice(%s)' % repr(self.name)
     def describe(self):
@@ -1157,6 +1160,13 @@ class TFunction(DMLType):
         self.varargs = varargs
     def __repr__(self):
         return "TFunction(%r,%r)" % (self.input_types, self.output_type)
+
+    @property
+    def const(self): return False
+
+    @const.setter
+    def const(self, value):
+        assert not value
 
     def key(self):
         return ('%sfunction(%s%s)->(%s)'

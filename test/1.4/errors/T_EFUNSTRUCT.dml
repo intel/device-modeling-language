@@ -1,0 +1,19 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+extern typedef struct {
+    /// ERROR EFUNSTRUCT
+    void (member)(void);
+} ext_t;
+
+method init() {
+    /// ERROR EFUNSTRUCT
+    local struct { void (member)(void); } x;
+    /// ERROR EFUNSTRUCT
+    local layout "little-endian" { void (member)(void); } y;
+}

@@ -39,6 +39,12 @@ typedef int vect int_vect;
 /// ERROR ESERIALIZE
 saved int_vect x;
 
+// ESERIALIZE causes the compiler to omit the faulty declarations in further
+// analyses; if this didn't happen, function types would cause some sneaky
+// crashes.
+/// ERROR ESERIALIZE
+saved void function(void);
+
 // make sure method is not dead
 method init() {
     m();

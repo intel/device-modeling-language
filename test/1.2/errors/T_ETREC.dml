@@ -25,7 +25,7 @@ struct bar {
 
 // no error. Used to be an error, which was SIMICS-10177
 typedef struct {
-    fun f(fun x);
+    fun (*f)(fun x);
     fun vect v;
 } fun;
 
