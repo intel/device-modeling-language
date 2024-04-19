@@ -8,13 +8,6 @@ device test;
 /// ERROR EBTYPE
 parameter classname = 17;
 
-extern typedef struct { int i; } foo_interface_t;
-
-implement foo {
-    /// ERROR EBTYPE
-    method i() {}
-}
-
 bank B {
     register r1 size 4 @ undefined {
         field f[1] {

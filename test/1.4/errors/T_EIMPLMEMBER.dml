@@ -1,0 +1,27 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// ERROR EIMPLMEMBER
+extern typedef struct {
+    int i;
+} foo_interface_t;
+
+implement foo {
+    /// ERROR EIMPLMEMBER
+    method i() {}
+}
+
+/// ERROR EIMPLMEMBER
+typedef struct {
+    int *i;
+} bar_interface_t;
+
+implement bar {
+    // ERROR EIMPLMEMBER
+    method i() {}
+}
