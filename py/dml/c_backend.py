@@ -778,17 +778,22 @@ def generate_implement_method(device, ifacestruct, meth, indices):
         require_fully_typed(None, meth)
 
         # Calculate the expected method signature
-        ifacemethtype = ifacestruct.get_member_qualified(meth.name)
-        if not ifacemethtype:
+        member_type = ifacestruct.get_member_qualified(meth.name)
+        if not member_type:
             raise EMEMBER(meth.site, meth.parent.name, meth.name)
-        ifacemethtype = safe_realtype(ifacemethtype)
-        if isinstance(ifacemethtype, TPtr):
-            ifacemethtype = ifacemethtype.base
-        if not isinstance(ifacemethtype, TFunction):
-            raise EBTYPE(meth.site, ifacemethtype,
-                         TPtr(TFunction([], TVoid())))
-        iface_input_types = ifacemethtype.input_types[1:]
-        iface_num_outputs = 0 if ifacemethtype.output_type.void else 1
+        member_type = safe_realtype(member_type)
+        if not isinstance(member_type, TPtr):
+            raise EIMPLMEMBER(
+                meth.site,
+                f'{meth.parent.name}_interface_t.{meth.name}',
+                ifacestruct.declaration_site)
+        func_type = member_type.base
+        if not isinstance(func_type, TFunction):
+            raise EIMPLMEMBER(meth.site,
+                              f'{meth.parent.name}_interface_t.{meth.name}',
+                              ifacestruct.declaration_site)
+        iface_input_types = func_type.input_types[1:]
+        iface_num_outputs = 0 if func_type.output_type.void else 1
 
         # Check the signature
         if len(meth.inp) != len(iface_input_types):
@@ -797,7 +802,7 @@ def generate_implement_method(device, ifacestruct, meth, indices):
         if len(meth.outp) != iface_num_outputs:
             raise EMETH(meth.site, None,
                         'different number of output parameters')
-        if ifacemethtype.varargs:
+        if func_type.varargs:
             # currently impossible to implement a varargs interface
             # method in DML
             raise EMETH(meth.site, None, 'interface method is variadic')
@@ -808,9 +813,9 @@ def generate_implement_method(device, ifacestruct, meth, indices):
         if iface_num_outputs and dml.globals.dml_version != (1, 2):
             [(_, mt)] = meth.outp
             if safe_realtype(mt).cmp(
-                    safe_realtype(ifacemethtype.output_type)) != 0:
+                    safe_realtype(func_type.output_type)) != 0:
                 raise EARGT(meth.site, 'implement', meth.name,
-                            mt, '<return value>', ifacemethtype.output_type,
+                            mt, '<return value>', func_type.output_type,
                             'method')
         if indices is PORTOBJ:
             name = '_DML_PIFACE_' + crep.cref_method(meth)

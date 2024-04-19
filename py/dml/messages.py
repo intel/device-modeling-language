@@ -1239,6 +1239,19 @@ class EMETH(DMLError):
         if self.othersite:
             self.print_site_message(self.othersite, "conflicting definition")
 
+class EIMPLMEMBER(DMLError):
+    """
+    A method in an `implement` object corresponds to a struct member
+    that isn't a function pointer
+    """
+    fmt = "The interface struct member %s is not a function pointer"
+    def __init__(self, site, name, othersite):
+        DMLError.__init__(self, site, name)
+        self.othersite = othersite
+    def log(self):
+        DMLError.log(self)
+        self.print_site_message(self.othersite, "interface struct definition")
+
 class EANONPORT(DMLError):
     """
     An `implement` definition can only exist in a port or bank
