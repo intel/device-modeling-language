@@ -1480,7 +1480,12 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
                 (member_struct_defs, member_type) = eval_type(
                     type_ast, msite, location, scope, extern)
                 if isinstance(member_type, TFunction):
-                    raise EFUNSTRUCT(msite)
+                    if (compat.function_in_extern_struct
+                        in dml.globals.enabled_compat
+                        and extern):
+                        member_type = TPtr(member_type)
+                    else:
+                        raise EFUNSTRUCT(msite)
                 members[name] = member_type
                 struct_defs.extend(member_struct_defs)
             if extern:

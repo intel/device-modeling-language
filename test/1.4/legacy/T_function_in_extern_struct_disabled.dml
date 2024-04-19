@@ -1,0 +1,13 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// DMLC-FLAG --simics-api=7
+/// DMLC-FLAG --no-compat=function_in_extern_struct
+
+/// SCAN-FOR-TAGS function_in_extern_struct.dml
+import "function_in_extern_struct.dml";

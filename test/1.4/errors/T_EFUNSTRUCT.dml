@@ -6,11 +6,6 @@ dml 1.4;
 
 device test;
 
-extern typedef struct {
-    /// ERROR EFUNSTRUCT
-    void (member)(void);
-} ext_t;
-
 method init() {
     /// ERROR EFUNSTRUCT
     local struct { void (member)(void); } x;

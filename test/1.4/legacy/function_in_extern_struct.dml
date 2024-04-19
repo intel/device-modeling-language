@@ -1,0 +1,11 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+extern typedef struct {
+    // this expectation is selectively enabled using SCAN-FOR-TAGS
+    /// ERROR EFUNSTRUCT
+    void (member)(void);
+} ext_t;

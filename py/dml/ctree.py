@@ -2921,13 +2921,12 @@ def mkInterfaceMethodRef(site, iface_node, indices, method_name):
     if not ftype:
         raise EMEMBER(site, struct_name, method_name)
     ftype = safe_realtype(ftype)
-    if isinstance(ftype, TPtr):
-        ftype = ftype.base
 
-    if (not isinstance(ftype, TFunction)
-        or not ftype.input_types
+    if (not isinstance(ftype, TPtr)
+        or not isinstance(ftype.base, TFunction)
+        or not ftype.base.input_types
         or TPtr(safe_realtype(TNamed('conf_object_t'))).cmp(
-            safe_realtype(ftype.input_types[0])) != 0):
+            safe_realtype(ftype.base.input_types[0])) != 0):
         # non-method members are not accessible
         raise EMEMBER(site, struct_name, method_name)
 
@@ -2936,7 +2935,8 @@ def mkInterfaceMethodRef(site, iface_node, indices, method_name):
         raise ICE(site, 'connect without obj')
     obj_ref = mkNodeRef(site, obj_node, indices)
     return InterfaceMethodRef(
-        site, mkNodeRef(site, iface_node, indices), method_name, obj_ref, ftype)
+        site, mkNodeRef(site, iface_node, indices), method_name, obj_ref,
+        ftype.base)
 
 class BitSlice(Expression):
     # msb and lsb are expressed using le bitorder
