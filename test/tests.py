@@ -1507,6 +1507,11 @@ begin_linemarks_func_re = re.compile(r'^// BEGIN-LINEMARKS-FUNC((?:\s+\S+)+)$')
 class Linemarks(CTestCase):
     __slots__ = ()
 
+    class Error(Exception):
+        def __init__(self, messages: list[(str, int, str)]):
+            super().__init__(messages)
+            self.messages = messages
+
     def dml_lines_iter(self, c_file, c_lines_iter):
         reset = True
         dml_lineno = None
@@ -1607,12 +1612,16 @@ class Linemarks(CTestCase):
                     if curr_cblock_expected:
                         (expected_dml_lineno,
                          expected_c_lineno) = curr_cblock_expected.pop()
-                        assert ((dml_lineno, c_lineno)
-                                == (expected_dml_lineno, expected_c_lineno)), \
-                               (f'In {curr_file}: Expected DML line '
-                                + f'{expected_dml_lineno} at '
-                                + f'{expected_c_lineno}, not DML line '
-                                + f'{dml_lineno} at {c_lineno}')
+                        if ((dml_lineno, c_lineno)
+                            != (expected_dml_lineno, expected_c_lineno)):
+                            raise self.Error(
+                                [(curr_file, expected_c_lineno,
+                                  f"Redirected to wrong DML line"),
+                                 (Path(self.filename).resolve(),
+                                  expected_dml_lineno,
+                                  "Expected redirection to this line,"
+                                  f" was redirected to {dml_lineno}"
+                                  " instead")])
                         continue
                     if dml_lineno in cblock_spans:
                         found_cblocks.add(dml_lineno)
@@ -1624,12 +1633,16 @@ class Linemarks(CTestCase):
                         # Need to reverse as .pop() pops from the end
                         curr_cblock_expected.reverse()
                         continue
-                    assert (curr_func in expected_func_lines
-                            and dml_lineno in expected_func_lines[curr_func]),\
-                           (f'In {curr_file}: Unexpected DML line '
-                            + f'{dml_lineno} at {c_lineno} '
-                            + (f'(inside {curr_func})' if curr_func else
-                               '(top-level)'))
+                    if (curr_func not in expected_func_lines
+                        or dml_lineno not in expected_func_lines[curr_func]):
+                        where = (f'inside {curr_func}'
+                                 if curr_func else 'top-level')
+                        raise self.Error([
+                            (curr_file, c_lineno,
+                             f"This line ({where}) redirected to"
+                             " unexpected DML line"),
+                            (Path(self.filename).resolve(), dml_lineno,
+                             "Unexpected DML line")])
                     expected_func_lines[curr_func][dml_lineno] = True
 
                 assert not curr_cblock_expected, \
@@ -1643,16 +1656,21 @@ class Linemarks(CTestCase):
             f'Linemarked C blocks missing: {remaining_cblocks}'
         for (func_name, lines) in expected_func_lines.items():
             for (line, was_linemarked) in lines.items():
-                assert was_linemarked, \
-                    f'DML line {line} not found inside {func_name}'
+                if not was_linemarked:
+                    raise self.Error([(Path(self.filename).resolve(), line,
+                                       f'Line not found inside {func_name}')])
 
     def test(self):
         super().test()
         c_file = Path(f'{self.cfilename}.c').resolve()
         h_file = Path(f'{self.cfilename}.h').resolve()
-        self.analyze_c_files((c_file, h_file),
-                             *self.parse_annotations())
-
+        try:
+            self.analyze_c_files((c_file, h_file),
+                                 *self.parse_annotations())
+        except self.Error as e:
+            for (path, line, msg) in e.messages:
+                self.pr(f'{path}:{line}: error: {msg}')
+            raise TestFail('error')
 
 all_tests.append(Linemarks(["linemarks"],
                            join(testdir, "1.4", "misc", "linemarks.dml")))
