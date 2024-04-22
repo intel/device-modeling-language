@@ -213,6 +213,20 @@ method init()
         3);
     assert x == 7;
 
+    // members of struct declarations are linemarked
+    local
+      // NOT-LINEMARKED
+      struct {
+        int
+        // NOT-LINEMARKED
+            member;
+        struct {
+            int substruct_member;
+        // NOT-LINEMARKED
+        } m2;
+    // NOT-LINEMARKED
+    } y;
+
     test_brace_linemarks();
 }
 // END-LINEMARKS

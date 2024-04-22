@@ -57,6 +57,7 @@ from .output import out
 from .messages import *
 from .logging import *
 from . import compat
+from . import output
 import dml .globals
 import abc
 
@@ -1022,20 +1023,20 @@ def add_late_global_struct_defs(decls):
                                            for (site, t) in decls)
 
 class TStruct(StructType):
-    __slots__ = ('label', 'anonymous',)
+    __slots__ = ('label', 'anonymous')
     # Anonymous struct types defined in global scope, but outside typedef
     # declarations, e.g. 'session struct { int x; } y;'.
     # These types can depend on typedefs, but typedefs cannot depend on them.
     late_global_struct_defs = []
     num_anon_structs = 0
-    def __init__(self, members, label = None, const = False):
+    def __init__(self, members, label=None, const=False):
         assert members is None or members
         self.anonymous = label is None
         if self.anonymous:
             label = '_anon_struct_%d' % (TStruct.num_anon_structs,)
             TStruct.num_anon_structs += 1
         self.label = label
-        super(TStruct, self).__init__(members, const)
+        super().__init__(members, const)
 
     def __repr__(self):
         return 'TStruct(%r,%r,%r)' % (self.members, self.label, self.const)
@@ -1056,9 +1057,12 @@ class TStruct(StructType):
                                    var)
 
     def print_struct_definition(self):
+        output.site_linemark(self.declaration_site)
         out("struct %s {\n" % (cident(self.label),), postindent = 1)
         for (n, t) in self.members.items():
+            output.site_linemark(t.declaration_site)
             t.print_declaration(n)
+        output.site_linemark(self.declaration_site)
         out("};\n", preindent = -1)
 
     def cmp(self, other):
