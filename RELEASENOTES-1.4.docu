@@ -529,11 +529,11 @@
   <build-id _6="6295" _7="7016"><add-note> Fixed a bug where executed callbacks
       posted via immediate after statements would not trigger the device state
       change notifier.</add-note></build-id>
-  <build-id _6="next" _7="next"><add-note> Added support
+  <build-id _6="6297" _7="next"><add-note> Added support
       for <tt>uint64_t</tt> and <tt>int64_t</tt> types from C. These
       types are needed for C interoperability, e.g., calling a function
       that takes an argument of type <tt>uint64_t *</tt>.</add-note></build-id>
-  <build-id _6="next" _7="next"><add-note> The <tt>miss_pattern_bank</tt>
+  <build-id _6="6297" _7="next"><add-note> The <tt>miss_pattern_bank</tt>
       template now allows for its implementations of <tt>unmapped_read</tt>,
       <tt>unmapped_write</tt>, and <tt>unmapped_get</tt> to be
       overridden. </add-note></build-id>
