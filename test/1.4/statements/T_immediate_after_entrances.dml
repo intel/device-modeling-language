@@ -21,6 +21,13 @@ attribute count is uint64_attr {
     }
 }
 
+attribute post_inc_attr is write_only_attr {
+    param type = "n";
+    method set(attr_value_t val) throws {
+        post_inc();
+    }
+}
+
 method post_inc() {
     // test the after call is actually delayed, and that repeated entrance
     // doesn't muck things up.
@@ -36,18 +43,26 @@ method init() {
     post_inc();
 }
 
+attribute error_on_post_init is bool_attr;
 
 method post_init() {
-    // assert count.val == 1;
+    assert count.val == 0;
     post_inc();
     after 0.1 s: post_inc();
     ev.post(0.2, NULL);
     // Will get destroyed
     ev.post(0.3, NULL);
+    if (error_on_post_init.val) {
+        after: never_called();
+        SIM_attribute_error("Requested to error");
+    }
+}
+
+method never_called() {
+    assert false;
 }
 
 method destroy() {
-    assert count.val == 10;
     after: after_destroy("dev");
 }
 
@@ -135,4 +150,12 @@ group notifiers[i < 2] is init {
 
 method on_notify(conf_object_t *_notifier, void *_data) {
     post_inc();
+}
+
+
+attribute post_never_called is write_only_attr {
+    param type = "n";
+    method set(attr_value_t val) throws {
+        after: never_called();
+    }
 }
