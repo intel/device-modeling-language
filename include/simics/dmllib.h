@@ -1274,8 +1274,13 @@ typedef struct {
     // Invariant: nonempty queue implies posted (but not vice versa)
     _dml_immediate_after_queue_t queue;
     bool posted;
-    // Invariant: deleted implies posted and empty queue
+    // Invariant: deleted implies posted and freed, empty queue
     bool deleted;
+    // If _DML_deinit_cancel_immediate_afters should warn if it cancels any
+    // callbacks. This flag is set when the device object reaches
+    // objects_finalized. If it's deleted before then, then that must be
+    // because of configuration creation failure and rollback.
+    bool warn_upon_deletion;
 } _dml_immediate_after_state_t;
 
 // Execute all pending immediate afters without relying on VT_stacked_post
@@ -1288,6 +1293,28 @@ _DML_execute_immediate_afters_now(conf_object_t *dev,
         elem.callback(dev, elem.data.indices, elem.data.args);
         _free_simple_event_data(elem.data);
     }
+}
+
+// Run at the beginning of device deinit. Drops all pending immediate afters
+// and warns if there were any.
+UNUSED static void
+_DML_deinit_cancel_immediate_afters(conf_object_t *dev,
+                                    _dml_immediate_after_state_t *state) {
+    if (QEMPTY(state->queue)) return;
+
+    if (state->warn_upon_deletion) {
+        SIM_LOG_WARNING(
+            dev, 0,
+            "DML device deleted while immediate after callbacks of it are "
+            "still pending! These are now canceled. "
+            "Resolve this warning by calling 'SIM_process_pending_work()' "
+            "before deleting the device or any objects it may interact with.");
+    }
+
+    do {
+        _dml_immediate_after_queue_elem_t elem = QREMOVE(state->queue);
+        _free_simple_event_data(elem.data);
+    } while (!QEMPTY(state->queue));
 }
 
 UNUSED static void

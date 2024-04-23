@@ -1624,6 +1624,17 @@ def generate_finalize(device):
     code.toc_inline()
     out('}\n\n', preindent = -1)
 
+def generate_objects_finalized(device):
+    start_function_definition(
+        f'void {crep.cname(device)}_objects_finalized(conf_object_t *_obj)')
+    out('{\n', postindent = 1)
+    out(crep.structtype(device) + ' *_dev UNUSED = ('
+        + crep.structtype(device) + ' *)_obj;\n')
+    out('_dev->_immediate_after_state->warn_upon_deletion = true;\n')
+    out('_DML_execute_immediate_afters_now(_obj, '
+        + '_dev->_immediate_after_state);\n')
+    out('}\n\n', preindent = -1)
+
 def generate_deinit(device):
     start_function_definition(
         'void %s_deinit(conf_object_t *_obj)' % (
@@ -1631,7 +1642,7 @@ def generate_deinit(device):
     out('{\n', postindent = 1)
     out(crep.structtype(device) + ' *_dev UNUSED = ('
         + crep.structtype(device) + ' *)_obj;\n')
-    out('_DML_execute_immediate_afters_now(_obj, '
+    out('_DML_deinit_cancel_immediate_afters(_obj, '
         + '_dev->_immediate_after_state);\n')
 
     with crep.DeviceInstanceContext():
@@ -1688,6 +1699,9 @@ def generate_deinit(device):
                 out('}\n', preindent=-1)
 
         # Execute all immediate afters posted by destruction code
+        # Unlike immediate afters pending from before destruction, these
+        # callbacks are executed and not warned about, as they can be assumed
+        # to be aware that they are called in a deletion context.
         out('_DML_execute_immediate_afters_now(_obj, '
             + '_dev->_immediate_after_state);\n')
 
@@ -1932,6 +1946,7 @@ def generate_init(device, initcode, outprefix):
     out('.alloc = '+crep.cname(device)+'_alloc,\n')
     out('.init = '+crep.cname(device)+'_init,\n')
     out('.finalize = '+crep.cname(device)+'_finalize,\n')
+    out('.objects_finalized = '+crep.cname(device)+'_objects_finalized,\n')
     if dml.globals.api_version >= compat.api_7:
         out('.deinit = '+crep.cname(device)+'_deinit,\n')
     out('.dealloc = '+crep.cname(device)+'_dealloc,\n')
@@ -3304,6 +3319,7 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     generate_alloc(device)
     generate_initialize(device)
     generate_finalize(device)
+    generate_objects_finalized(device)
     generate_deinit(device)
     generate_dealloc(device)
     generate_events(device)
