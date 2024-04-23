@@ -1,0 +1,19 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+typedef void fun_t(void);
+
+extern void (*f)(void);
+
+method init() {
+    /// ERROR ECONSTFUN
+    local const typeof(*f) *fp;
+    /// ERROR ECONSTFUN
+    local int (*g)(const typeof(*f) *);
+    /// ERROR ECONSTFUN
+    local int (*g)(const fun_t *);
+}

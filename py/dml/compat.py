@@ -81,6 +81,28 @@ class port_proxy_attrs(CompatFeature):
 
 
 @feature
+class function_in_extern_struct(CompatFeature):
+    '''
+    This compatibility feature enables a traditionally allowed syntax for
+    function pointer members of `extern typedef struct` declarations, where
+    the `*` is omitted in the pointer type. When disabling this feature,
+    any declarations on this form:
+    ```
+    extern typedef struct {
+        void m(conf_object_t *);
+    } my_interface_t;
+    ```
+    need to be changed to the standard C form:
+    ```
+    extern typedef struct {
+        void (*m)(conf_object_t *);
+    } my_interface_t;
+    ```
+    '''
+    short = 'Disallow non-pointer function members in extern structs'
+    last_api_version = api_7
+
+@feature
 class io_memory(CompatFeature):
     '''The `transaction` interface was introduced in 6, and will
     eventually replace the `io_memory` interface. When this feature is

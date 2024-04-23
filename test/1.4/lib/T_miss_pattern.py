@@ -121,7 +121,35 @@ def test_partial():
     r5.write(0xabcd)
     expect_equal(ru.read(), 0xcdab)
 
+
+def test_overrides():
+    r_override_get = mkR(obj.bank.override_get, 0x00, size=4)
+    r_override_read_write = mkR(obj.bank.override_read_write, 0x00, size=4)
+
+    # Regular writes
+    r_override_get.write(0xc0ffee)
+    with stest.expect_exception_mgr(dev_util.MemoryError):
+        r_override_read_write.write(0xc0ffee)
+
+
+    # Regular reads
+    stest.expect_equal(r_override_get.read(), 0xdeadbeef)
+    stest.expect_equal(r_override_read_write.read(), 0xdeadbeef)
+
+    for r in (r_override_get, r_override_read_write):
+        r.read_transaction.inquiry = True
+        r.write_transaction.inquiry = True
+
+    # Inquiry writes (uncustomizable)
+    r_override_get.write(0xc0ffee)
+    r_override_read_write.write(0xc0ffee)
+
+    # Inquiry reads
+    stest.expect_equal(r_override_get.read(), 0xdeadbeef)
+    stest.expect_equal(r_override_read_write.read(), 0xffffffff)
+
 #conf.obj.log_level = 4
 
 test_overlap()
 test_partial()
+test_overrides()

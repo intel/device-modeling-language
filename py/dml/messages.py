@@ -764,7 +764,7 @@ class EDEVICE(DMLError):
 
 class ELTYPE(DMLError):
     """
-    Log-statement type must be one of `info`, `error`,
+    Log-statement type must be one of `info`, `warning`, `error`,
     `spec_viol`, and `unimpl`.
     """
     fmt = "invalid log type: '%s'"
@@ -1239,6 +1239,19 @@ class EMETH(DMLError):
         if self.othersite:
             self.print_site_message(self.othersite, "conflicting definition")
 
+class EIMPLMEMBER(DMLError):
+    """
+    A method in an `implement` object corresponds to a struct member
+    that isn't a function pointer
+    """
+    fmt = "The interface struct member %s is not a function pointer"
+    def __init__(self, site, name, othersite):
+        DMLError.__init__(self, site, name)
+        self.othersite = othersite
+    def log(self):
+        DMLError.log(self)
+        self.print_site_message(self.othersite, "interface struct definition")
+
 class EANONPORT(DMLError):
     """
     An `implement` definition can only exist in a port or bank
@@ -1375,6 +1388,25 @@ class ECONST(DMLError):
     fmt = "assignment to constant"
     def __init__(self, site):
         DMLError.__init__(self, site);
+
+class EFUNSTRUCT(DMLError):
+    """
+    A member of a struct cannot have a function type.
+    """
+    fmt = "struct member is a function"
+
+class EFUNARRAY(DMLError):
+    """
+    It is illegal to express an array type where the base type is a
+    function type.
+    """
+    fmt = "illegal type: array of functions"
+
+class ECONSTFUN(DMLError):
+    """
+    A function type cannot be `const` qualified;
+    """
+    fmt = "const qualified function type"
 
 class EDISCONST(DMLError):
     """

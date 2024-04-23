@@ -25,7 +25,6 @@ class TestClone(unittest.TestCase):
                     dt.TTrait(object()),
                     dt.TStruct({"name": types.TInt(32, False)}),
                     dt.TLayout("big-endian", {}),
-                    dt.TFunction([], dt.TVoid()),
                     dt.TDevice("a")):
             typ_clone = typ.clone()
             self.assertEqual(

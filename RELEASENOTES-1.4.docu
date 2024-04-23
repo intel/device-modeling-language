@@ -523,7 +523,18 @@
       <tt>--no-compat=shared_logs_on_device</tt> to DMLC.</add-note></build-id>
   <build-id _6="6262" _7="7006"><add-note> Improved the run-time performance
       of accesses to registers with many fields.</add-note></build-id>
-  <build-id _6="next" _7="next"><add-note> Fixed a bug where overlapping
+  <build-id _6="6287" _7="7012"><add-note> Fixed a bug where overlapping
       registers would not be rejected if they were part of a bank within a group
       or subdevice.</add-note></build-id>
+  <build-id _6="6295" _7="7016"><add-note> Fixed a bug where executed callbacks
+      posted via immediate after statements would not trigger the device state
+      change notifier.</add-note></build-id>
+  <build-id _6="6297" _7="next"><add-note> Added support
+      for <tt>uint64_t</tt> and <tt>int64_t</tt> types from C. These
+      types are needed for C interoperability, e.g., calling a function
+      that takes an argument of type <tt>uint64_t *</tt>.</add-note></build-id>
+  <build-id _6="6297" _7="next"><add-note> The <tt>miss_pattern_bank</tt>
+      template now allows for its implementations of <tt>unmapped_read</tt>,
+      <tt>unmapped_write</tt>, and <tt>unmapped_get</tt> to be
+      overridden. </add-note></build-id>
 </rn>

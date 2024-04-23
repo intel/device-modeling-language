@@ -17,6 +17,8 @@ obj.saved_float = -0.5
 stest.expect_equal(obj.saved_float, -0.5)
 obj.saved_size = 4
 stest.expect_equal(obj.saved_size, 4)
+obj.saved_uint64_t = 6
+stest.expect_equal(obj.saved_uint64_t, 6)
 obj.saved_long = -8388608
 stest.expect_equal(obj.saved_long, -8388608)
 obj.saved_array = [3, 2, 1, 0]

@@ -1314,11 +1314,15 @@ and `layout`.
 
 The familiar integer types `char` and `int` are
 available as aliases for `int8` and `int32`,
-respectively. The C keywords `short`, `signed`, `unsigned`
-and `long` are reserved words in DML and not allowed in type
-declarations.  The types `size_t` and `uintptr_t` are
-defined as in C.
-</dd><dt>
+respectively. The C keywords `short`, `signed` and `unsigned`
+are reserved words in DML and not allowed in type
+declarations.
+
+The types `size_t` and `uintptr_t`, `long`, `uint64_t`, `int64_t`, are defined
+as in C. The types `long`, `uint64_t` and `int64_t` are provided mainly for
+compatibility with third party libraries; they are needed because they are
+incompatible with the corresponding Simics types (`uint64`, etc) on some
+platforms.  </dd><dt>
 
 Endian integers
 </dt><dd>
@@ -3499,7 +3503,7 @@ messages, by matching on the three main properties of each message:
 
 * The *`log-type`* specifies the general category
   of the message. The value must be one of the identifiers
-  `info`, `error`, `critical`,
+  `info`, `warning`, `error`, `critical`,
   `spec_viol`, or `unimpl`.
 
 * The *`level`* specifies at what verbosity level the log

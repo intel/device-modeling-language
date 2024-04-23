@@ -543,6 +543,7 @@ template device {
 
     param _compat_port_proxy_ifaces auto;
     param _compat_port_proxy_attrs auto;
+    param _compat_function_in_extern_struct auto;
     param _compat_port_obj_param auto;
     param _compat_io_memory auto;
     param _compat_shared_logs_on_device auto;
@@ -2929,7 +2930,8 @@ template register is (_conf_attribute, get, set, shown_desc,
         return this.val & enabled_bits;
     }
 
-    shared method read_register(uint64 enabled_bytes, void *aux)-> (uint64) default {
+    // TODO: stand-in for SIMICS-22264. Inline and remove when longer needed
+    shared method _base_read_register(uint64 enabled_bytes, void *aux)-> (uint64) {
         if (enabled_bytes == 0) {
             return 0;
         }
@@ -2967,6 +2969,10 @@ template register is (_conf_attribute, get, set, shown_desc,
                 (read_unmapped_bits(unmapped_bits & enabled_bytes, aux)
                  & (unmapped_bits & enabled_bytes));
         return val;
+    }
+
+    shared method read_register(uint64 enabled_bytes, void *aux)-> (uint64) default {
+        return _base_read_register(enabled_bytes, aux);
     }
 
     shared method write_unmapped_bits(uint64 value,
@@ -3019,8 +3025,9 @@ template register is (_conf_attribute, get, set, shown_desc,
         }
     }
 
-    shared method write_register(uint64 value, uint64 enabled_bytes,
-                                 void *aux) default {
+    // TODO: stand-in for SIMICS-22264. Inline and remove when longer needed
+    shared method _base_write_register(uint64 value, uint64 enabled_bytes,
+                                       void *aux) {
         local uint64 field_bits = _field_bits();
         if (field_bits == 0) {
             this.val = (this.val & ~enabled_bytes) | (value & enabled_bytes);
@@ -3056,6 +3063,11 @@ template register is (_conf_attribute, get, set, shown_desc,
         if ((unmapped_bits & enabled_bytes) != 0)
             write_unmapped_bits(value & unmapped_bits,
                                 unmapped_bits & enabled_bytes, aux);
+    }
+
+    shared method write_register(uint64 value, uint64 enabled_bytes,
+                                 void *aux) default {
+        _base_write_register(value, enabled_bytes, aux);
     }
 
     // Do not allow values larger than register to be set

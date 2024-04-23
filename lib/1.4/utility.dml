@@ -1176,9 +1176,10 @@ template function_io_memory {
 
 #### Description
 
-Only valid in `bank` objects. Handles unmapped accesses by
-ignoring write accesses, and returning a given value for each unmapped
-byte.
+Only valid in `bank` objects. Handles unmapped accesses by ignoring write
+accesses, and returning a given value for each unmapped byte. If you want to
+customize this behaviour, overriding `unmapped_get` is sufficient to also
+customize `unmapped_read`.
 
 #### Parameters
 
@@ -1189,14 +1190,15 @@ miss\_pattern: each missed byte in a miss read is set to this value
 template miss_pattern_bank is bank {
     param miss_pattern : uint8;
     shared method unmapped_read(uint64 offset, uint64 bits, void *aux)
-        -> (uint64) throws {
-        return miss_pattern * 0x0101010101010101;
+        -> (uint64) throws default {
+        return this.unmapped_get(offset, bits);
     }
-    shared method unmapped_get(uint64 offset, uint64 bits) -> (uint64) throws {
+    shared method unmapped_get(uint64 offset, uint64 bits)
+        -> (uint64) throws default {
         return miss_pattern * 0x0101010101010101;
     }
     shared method unmapped_write(uint64 offset, uint64 value, uint64 bits,
-                          void *aux) throws {
+                                 void *aux) throws default {
     }
 }
 

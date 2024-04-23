@@ -44,3 +44,22 @@ bank pb {
     is b;
     param partial = true;
 }
+
+bank override_get is miss_pattern_bank {
+    param miss_pattern = 0xff;
+    method unmapped_get(uint64 offset, uint64 bits) -> (uint64) throws {
+        return 0xdeadbeef & bits;
+    }
+}
+
+bank override_read_write is miss_pattern_bank {
+    param miss_pattern = 0xff;
+    method unmapped_read(uint64 offset, uint64 bits, void *aux)
+        -> (uint64) throws {
+        return 0xdeadbeef & bits;
+    }
+    method unmapped_write(uint64 offset, uint64 bits, uint64 val, void *aux)
+        throws {
+        throw;
+    }
+}

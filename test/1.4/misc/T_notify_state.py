@@ -39,3 +39,11 @@ stest.expect_equal(obj.count, 6)
 SIM_notify(obj, SIM_notifier_type("statically-exported-entry"))
 
 stest.expect_equal(obj.count, 7)
+
+obj.immediate_after = None
+
+stest.expect_equal(obj.count, 8)
+
+SIM_process_pending_work()
+
+stest.expect_equal(obj.count, 9)

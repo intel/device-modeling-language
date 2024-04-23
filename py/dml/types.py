@@ -100,6 +100,8 @@ def realtype_shallow(t):
         if not t2:
             raise DMLUnknownType(t)
         if t.const and not t2.const:
+            if isinstance(t2, TFunction):
+                raise ECONSTFUN(t.declaration_site)
             t = t2.clone()
             t.const = True
         else:
@@ -156,6 +158,10 @@ def safe_realtype_shallow(t):
         raise ETYPE(e.type.declaration_site or None, e.type)
 
 def conv_const(const, t):
+    # Functions cannot be const. Usually function types cannot happen
+    # where conv_const is called, but if they can, then that deserves
+    # that the caller handles it explicitly.
+    assert not isinstance(t, TFunction)
     if const and not t.const:
         t = t.clone()
         t.const = True
@@ -327,11 +333,12 @@ class TDevice(DMLType):
     """
     __slots__ = ('name',)
     def __init__(self, name, const=False):
-        DMLType.__init__(self)
+        DMLType.__init__(self, const)
         self.name = name
-        self.const = const
     def __repr__(self):
         return 'TDevice(%s)' % repr(self.name)
+    def c_name(self):
+        return f'{self.name} *{self.const_str}'
     def describe(self):
         return 'pointer to %s' % self.name
     def key(self):
@@ -345,10 +352,10 @@ class TDevice(DMLType):
         if isinstance(other, TDevice):
             return (True, False, constviol)
         return (False, False, constviol)
-    def declaration(self, var):
-        return (self.name + ' *' + var)
     def clone(self):
         return TDevice(self.name, self.const)
+    def declaration(self, var):
+        return f'{self.c_name()}{var}'
 
 # Hack: some identifiers that are valid in DML are not allowed in C,
 # either because they are reserved words or because they clash with
@@ -482,6 +489,8 @@ class IntegerType(DMLType):
             return NotImplemented
         if isinstance(self, TSize) != isinstance(other, TSize):
             return NotImplemented
+        if isinstance(self, TInt64_t) != isinstance(other, TInt64_t):
+            return NotImplemented
         if (dml.globals.dml_version == (1, 2)
             and compat.dml12_int in dml.globals.enabled_compat):
             # Ignore signedness
@@ -579,8 +588,11 @@ class TLong(IntegerType):
         IntegerType.__init__(self, 32 if is_windows() else 64, signed,
                              const=const)
 
+    def c_name(self):
+        return self.const_str + ('long' if self.signed else 'unsigned long')
+
     def describe(self):
-        return self.declaration('').rstrip()
+        return self.c_name()
 
     def __repr__(self):
         return 'TLong(%r, %r)' % (self.signed, self.const)
@@ -589,8 +601,7 @@ class TLong(IntegerType):
         return TLong(self.signed, self.const)
 
     def declaration(self, var):
-        decl = 'long ' + var
-        return decl if self.signed else 'unsigned ' + decl
+        return f'{self.c_name()} {var}'
 
 class TSize(IntegerType):
     '''The 'size_t' type from C'''
@@ -598,8 +609,11 @@ class TSize(IntegerType):
     def __init__(self, signed, const=False):
         IntegerType.__init__(self, 64, signed, const=const)
 
+    def c_name(self):
+        return self.const_str + ('ssize_t' if self.signed else 'size_t')
+
     def describe(self):
-        return self.declaration('').rstrip()
+        return self.c_name()
 
     def __repr__(self):
         return 'TSize(%r, %r)' % (self.signed, self.const)
@@ -608,7 +622,34 @@ class TSize(IntegerType):
         return TSize(self.signed, self.const)
 
     def declaration(self, var):
-        return ('ssize_t ' if self.signed else 'size_t ') + var
+        return f'{self.c_name()} {var}'
+
+class TInt64_t(IntegerType):
+    '''The '[u]int64_t' type from ISO C. For compatibility with C
+    APIs, e.g., calling an externally defined C function that takes a
+    `uint64_t *` arg. We find `uint64` a generally more useful type
+    primarily because it works better with format strings; "%lld" works
+    for `uint64` on both linux64 and win64.
+    '''
+    __slots__ = ()
+    def __init__(self, signed, const=False):
+        IntegerType.__init__(self, 64, signed, const=const)
+
+    def c_name(self):
+        name = 'int64_t' if self.signed else 'uint64_t'
+        return f'const {name}' if self.const else name
+
+    def describe(self):
+        return self.c_name()
+
+    def __repr__(self):
+        return 'TInt64_t(%r, %r)' % (self.signed, self.const)
+
+    def clone(self):
+        return TInt64_t(self.signed, self.const)
+
+    def declaration(self, var):
+        return f'{self.c_name()} {var}'
 
 class TEndianInt(IntegerType):
     '''An integer where the byte storage order is defined.
@@ -629,9 +670,14 @@ class TEndianInt(IntegerType):
     def big_endian(self):
         return self.byte_order == 'big-endian'
 
+    def c_name(self):
+        return '%s%sint%d_%s_t' % (
+            self.const_str, "" if self.signed else "u", self.bits,
+            "be" if self.big_endian else "le")
+
     def describe(self):
-        return '%sint%d_%s_t' % ("" if self.signed else "u", self.bits,
-                                 "be" if self.big_endian else "le")
+        return self.c_name()
+
     def __repr__(self):
         return 'TEndianInt(%r,%r,%r,%r,%r)' % (
             self.bits, self.signed, self.byte_order, self.members, self.const)
@@ -670,8 +716,7 @@ class TEndianInt(IntegerType):
                           self.byte_order, self.members, self.const)
 
     def declaration(self, var):
-        return '%sint%d_%s_t %s' % (("u", "")[self.signed], self.bits,
-                                    ("le", "be")[self.big_endian], var)
+        return f'{self.c_name()} {var}'
 
 class TFloat(DMLType):
     __slots__ = ('name',)
@@ -807,9 +852,9 @@ class TPtr(DMLType):
 
     def declaration(self, var):
         if isinstance(self.base, (TFunction, TArray)):
-            var = "(*"+var+")"
+            var = f'(*{self.const_str}{var})'
         else:
-            var = "*"+self.const_str+var
+            var = f'*{self.const_str}{var}'
         return self.base.declaration(var)
     def resolve(self):
         self.base.resolve()
@@ -865,11 +910,15 @@ class TTrait(DMLType):
 
     def key(self):
         return f'{self.const_str}trait({self.trait.name})'
+
+    def c_name(self):
+        return f'{self.const_str}{cident(self.trait.name)}'
+
     def describe(self):
         return 'trait ' + self.trait.name
 
     def declaration(self, var):
-        return '%s %s' % (cident(self.trait.name), var)
+        return f'{self.c_name()} {var}'
 
 class TTraitList(DMLType):
     __slots__ = ('traitname')
@@ -893,6 +942,9 @@ class TTraitList(DMLType):
     def key(self):
         return f'{self.const_str}sequence({self.traitname})'
 
+    def c_type(self):
+        return f'{self.const_str}_each_in_t'
+
     def describe(self):
         return 'list of trait ' + self.traitname
 
@@ -901,7 +953,7 @@ class TTraitList(DMLType):
         # a trait list. The trait type is only visible to DML; in the
         # C representation, a void pointer is used and the type
         # information is discarded.
-        return '_each_in_t %s' % (var,)
+        return f'{self.c_type()} {var}'
 
 class StructType(DMLType):
     '''common superclass for DML-defined structs and extern structs'''
@@ -1124,6 +1176,13 @@ class TFunction(DMLType):
     def __repr__(self):
         return "TFunction(%r,%r)" % (self.input_types, self.output_type)
 
+    @property
+    def const(self): return False
+
+    @const.setter
+    def const(self, value):
+        assert not value
+
     def key(self):
         return ('%sfunction(%s%s)->(%s)'
                 % (self.const_str,
@@ -1158,14 +1217,11 @@ class TFunction(DMLType):
                          self.const)
 
     def declaration(self, var):
-        params = [ t.declaration("arg%d" % n)
-                   for (n, t) in enumerate(self.input_types) ]
+        arglist = ', '.join(t.declaration("arg%d" % n)
+                            for (n, t) in enumerate(self.input_types))
         if self.varargs:
-            varargs = ", ..."
-        else:
-            varargs = ""
-        return self.output_type.declaration(
-            "%s(%s%s)" % (var, ", ".join(params), varargs))
+            arglist += ", ..."
+        return self.output_type.declaration(f'{var}({arglist})')
 
 class THook(DMLType):
     __slots__ = ('msg_types', 'validated')
@@ -1268,7 +1324,9 @@ for (name, typ) in [
         ('long', TLong(True)),
         ('ulong', TLong(False)),
         ('ssize_t', TSize(True)),
-        ('size_t', TSize(False))]:
+        ('size_t', TSize(False)),
+        ('int64_t', TInt64_t(True)),
+        ('uint64_t', TInt64_t(False))]:
     typedefs[name] = typ
 
 for sym in __all__:

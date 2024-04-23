@@ -10,7 +10,7 @@ import math
 import shlex
 from pathlib import Path
 
-from dml import ctree, types, logging, messages, output, symtab
+from dml import ctree, types, logging, messages, output, symtab, traits
 from dml.ctree import string_escape, mkCompound, dmldir_macro
 from dml.env import is_windows
 
@@ -292,16 +292,17 @@ class ExprTests(GccTests):
         s = types.TLong(True)
         z = types.TSize(False)
         sz = types.TSize(True)
-        # long is incompatible with all TInts
-        for i in [types.TInt(64, False), types.TInt(32, False)]:
-            self.assertEqual(tcmp(i, u), NotImplemented)
-        self.assertEqual(tcmp(u, types.TLong(False)), 0)
-        self.assertEqual(tcmp(u, s), NotImplemented)
-        self.assertEqual(tcmp(z, sz), NotImplemented)
-        self.assertEqual(tcmp(z, u), NotImplemented)
-        self.assertEqual(tcmp(z, types.TInt(64, False)), NotImplemented)
-        self.assertEqual(tcmp(sz, s), NotImplemented)
-        self.assertEqual(tcmp(sz, types.TInt(64, True)), NotImplemented)
+        u64t = types.TInt64_t(False)
+        s64t = types.TInt64_t(True)
+        int_types = [u, s, z, sz, u64t, s64t,
+                 types.TInt(64, False), types.TInt(32, False)]
+        # all alternative spellings of integer types are potentially
+        # incompatible in C, and therefore defensively considered by DML as
+        # incompatible
+        for t1 in int_types:
+            for t2 in int_types:
+                self.assertEqual(tcmp(t1, t2),
+                                 0 if t1 is t2 else NotImplemented, (t1, t2))
 
         return [u.declaration('u') + ';',
                 'unsigned long *up UNUSED = &u;',
@@ -310,7 +311,11 @@ class ExprTests(GccTests):
                 z.declaration('z') + ';',
                 'size_t *zp UNUSED = &z;',
                 sz.declaration('sz')  + ';',
-                'ssize_t *szp UNUSED = &sz;',]
+                'ssize_t *szp UNUSED = &sz;',
+                u64t.declaration('u64t') + ';',
+                'uint64_t *u64tp UNUSED = &u64t;',
+                s64t.declaration('s64t')  + ';',
+                'int64_t *s64tp UNUSED = &s64t;']
 
     @subtest([(0, False),
               (0, True),
@@ -1372,6 +1377,69 @@ class ExprTests(GccTests):
         return ['%s;' % (target_type.declaration('x'),),
                 code.buf,
                 'EXPECT(x == -1);']
+
+    @subtest()
+    def const_types(self):
+        type_objs = [
+            types.TVoid(),
+            types.TDevice('struct_t'),
+            types.TNamed('struct_t'),
+            types.TBool(),
+            types.TInt(24, True),
+            types.TEndianInt(24, True, 'big-endian'),
+            types.TLong(False),
+            types.TSize(True),
+            types.TInt64_t(True),
+            types.TFloat('double'),
+            types.TArray(types.TBool(), int_const(3)),
+            types.TPtr(types.TBool()),
+            types.TPtr(types.TFunction([], types.TVoid())),
+            types.TPtr(types.TArray(types.TBool(), int_const(3))),
+            types.TTrait(traits.Trait(
+                site, 'struct_t', set(), {}, {}, {}, {}, {}, {}, {})),
+            types.TTraitList('struct_t'),
+            types.TExternStruct({}, 'struct_t', 'struct_t'),
+            types.TStruct({'x': types.TBool()}, 'struct_label'),
+            types.TLayout(
+                'big-endian', {
+                    'x': (site, types.TEndianInt(24, True, 'big-endian'))},
+                'struct_label'),
+            types.THook([]),
+        ]
+        covered_types = {type(o) for o in type_objs}
+        all_types = {t for t in types.__dict__.values()
+                     if isinstance(t, type) and issubclass(t, types.DMLType)}
+        assert covered_types <= all_types, covered_types - all_types
+        untested_types = {
+            # abstract type
+            types.DMLType,
+            # abstract type
+            types.IntegerType,
+            # abstract type
+            types.StructType,
+            # 1.2, weird
+            types.TUnknown,
+            # known to be broken, hard to fix
+            types.TVector,
+            # function types don't allow const qualification
+            types.TFunction,
+        }
+        assert all_types - untested_types <= covered_types, (
+            all_types - covered_types)
+        ret = ['typedef struct struct_label { bool x; } struct_t;']
+        for (i, t) in enumerate(type_objs):
+            t.resolve()
+            assert not t.const
+            ct = t.clone()
+            ct.const = True
+            # ct is const
+            ret.append(
+                f'void (*p{i})(typeof({ct.declaration("")}) *) UNUSED'
+                f' = (void (*)(const typeof({t.declaration("")}) *))NULL;')
+            # t is not const
+            ret.append(f'void *v{i} UNUSED'
+                       f' = (typeof({t.declaration("")}) *)NULL;')
+        return ret
 
     def test(self):
         self.run_gcc_tests()
