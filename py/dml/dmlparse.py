@@ -171,19 +171,23 @@ def prod(f):
     in all DML grammars'''
     return prod_dml12(prod_dml14(f))
 
-# Normal entry point for device files
 
 @prod
-def device(t):
-    'dml : DEVICE objident SEMI maybe_bitorder device_statements'
-    t[0] = ast.dml(site(t), t[2], t[5])
+def dml(t):
+    'dml : maybe_device maybe_bitorder device_statements'
+    t[0] = ast.dml(site(t), t[1], t[3])
 
-# Entry point for imported files
 
 @prod
-def import_file(t):
-    'dml : maybe_bitorder device_statements'
-    t[0] = ast.dml(site(t), None, t[2])
+def maybe_device_yes(t):
+    'maybe_device : DEVICE objident SEMI'
+    t[0] = t[2]
+
+
+@prod
+def maybe_device_no(t):
+    'maybe_device : '
+    t[0] = None
 
 @prod
 def maybe_bitorder_no(t):
