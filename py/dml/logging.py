@@ -270,6 +270,8 @@ class Site(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def dml_version(self): pass
     @abc.abstractmethod
+    def provisional_enabled(self, feature): pass
+    @abc.abstractmethod
     def bitorder(self): pass
     is_site = None
 
@@ -290,6 +292,8 @@ class SimpleSite(Site):
         return self._dml_version
     def bitorder(self):
         return 'le'
+    def provisional_enabled(self, feature):
+        return False
     lineno = 1
 
 def accumulate(iterable):
@@ -304,8 +308,9 @@ class FileInfo(object):
     with a unique FileInfo instance, which is accessible via all sites
     of the AST.'''
     __slots__ = ('name', 'version', 'bitorder', '_line_offsets',
-                 'utf8_columns')
-    def __init__(self, name, version, bitorder='le', content_lines=None):
+                 'utf8_columns', 'provisional')
+    def __init__(self, name, version, bitorder='le', content_lines=None,
+                 provisional=None):
         name = str(name)
         self.name = name
         self.version = version
@@ -325,6 +330,7 @@ class FileInfo(object):
             utf8_columns = {}
             self.utf8_columns = utf8_columns
         self.set_name(name)
+        self.provisional = provisional or {}
 
     alias = os.getenv('DMLC_PATHSUBST')
 
@@ -344,10 +350,10 @@ class FileInfo(object):
 
     def __getstate__(self):
         return (self.name, self.version, self.bitorder, self._line_offsets,
-                self.utf8_columns)
+                self.utf8_columns, self.provisional)
     def __setstate__(self, data):
         (self.name, self.version, self.bitorder, self._line_offsets,
-         self.utf8_columns) = data
+         self.utf8_columns, self.provisional) = data
     def loc_from_offset(self, offset):
         '''Calculate a file location as a (line, col) pair'''
         line = bisect.bisect_right(self._line_offsets, offset) - 1
@@ -387,6 +393,8 @@ class DumpableSite(Site):
         return (self.file_info, self._offs)
     def __setstate__(self, data):
         (self.file_info, self._offs) = data
+    def provisional_enabled(self, feature):
+        return feature in self.file_info.provisional
 
 class TemplateSite(Site):
     '''A source code location after template expansion'''
@@ -405,6 +413,8 @@ class TemplateSite(Site):
     def bitorder(self): return self.site.bitorder()
     @property
     def lineno(self): return self.site.lineno
+    def provisional_enabled(self, feature):
+        return self.site.provisional_enabled(feature)
 
 store_errors = None
 

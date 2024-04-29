@@ -12,6 +12,7 @@ from . import ast, logging
 import dml.globals
 from . import dmllex12
 from . import dmllex14
+from . import provisional
 
 assert lex.__version__ == yacc.__version__ == "3.4"
 
@@ -174,8 +175,19 @@ def prod(f):
 
 @prod
 def dml(t):
-    'dml : maybe_device maybe_bitorder device_statements'
-    t[0] = ast.dml(site(t), t[1], t[3])
+    'dml : maybe_provisional maybe_device maybe_bitorder device_statements'
+    t[0] = ast.dml(site(t), t[2], t[4])
+
+
+@prod_dml14
+def maybe_provisional_yes(t):
+    'maybe_provisional : PROVISIONAL ident_list SEMI'
+    t.parser.file_info.provisional = provisional.parse_provisional(t[2])
+
+
+@prod
+def maybe_provisional_no(t):
+    'maybe_provisional : '
 
 
 @prod

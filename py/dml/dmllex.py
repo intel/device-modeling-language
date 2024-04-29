@@ -13,7 +13,7 @@ reserved_idents_common = (
     'ATTRIBUTE', 'BANK', 'BITORDER', 'CONNECT', 'CONSTANT', 'DATA',
     'DEVICE', 'EVENT', 'FIELD', 'FOOTER', 'GROUP', 'HEADER', 'IMPLEMENT',
     'IMPORT', 'INTERFACE', 'LOGGROUP', 'METHOD', 'PORT', 'SIZE',
-    'SUBDEVICE', 'NOTHROW', 'THEN', 'THROWS', '_HEADER',
+    'SUBDEVICE', 'NOTHROW', 'THEN', 'THROWS', '_HEADER', 'PROVISIONAL',
 )
 
 reserved = reserved_idents_common + (

@@ -53,6 +53,7 @@ Make: dmlc
     $(HOST)/bin/dml/python/dml/messages.py
     $(HOST)/bin/dml/python/dml/objects.py
     $(HOST)/bin/dml/python/dml/output.py
+    $(HOST)/bin/dml/python/dml/provisional.py
     $(HOST)/bin/dml/python/dml/reginfo.py
     $(HOST)/bin/dml/python/dml/serialize.py
     $(HOST)/bin/dml/python/dml/set.py

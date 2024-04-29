@@ -36,7 +36,8 @@ PYFILES := dml/__init__.py			\
           dml/messages.py			\
           dml/objects.py			\
           dml/output.py				\
-	  dml/reginfo.py			\
+          dml/provisional.py			\
+          dml/reginfo.py			\
           dml/serialize.py			\
           dml/set.py				\
           dml/slotsmeta.py			\
