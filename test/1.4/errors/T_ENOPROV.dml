@@ -1,0 +1,13 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+provisional
+/// ERROR ENOPROV
+    invalid,
+/// ERROR ENOPROV
+      bad;
+
+device test;

@@ -1639,6 +1639,14 @@ class ELOGGROUPS(DMLError):
     fmt = ("Too many loggroup declarations. A maximum of 63 log groups (61 "
            + "excluding builtins) may be declared per device.")
 
+
+class ENOPROV(DMLError):
+    """
+    An invalid identifier was passed in the `provisional` statement.
+    """
+    fmt = "No such provisional feature %s. Valid values are: %s"
+
+
 class ETQMIC(DMLError):
     """A template-qualified method implementation call can only be done if
     the specified template is actually instantiated by the object."""
