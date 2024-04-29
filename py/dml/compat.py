@@ -99,7 +99,7 @@ class function_in_extern_struct(CompatFeature):
     } my_interface_t;
     ```
     '''
-    short = 'Disallow non-pointer function members in extern structs'
+    short = 'Allow non-pointer function members in extern structs'
     last_api_version = api_7
 
 
