@@ -1,0 +1,8 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+/// DMLC-FLAG --no-compat=optional_version_statement
+/// ERROR ESYNTAX T_optional_version_statement_disabled.dml
+
+device test;

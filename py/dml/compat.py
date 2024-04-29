@@ -102,6 +102,18 @@ class function_in_extern_struct(CompatFeature):
     short = 'Disallow non-pointer function members in extern structs'
     last_api_version = api_7
 
+
+@feature
+class optional_version_statement(CompatFeature):
+    '''When this compatibility feature is enabled, the version
+    specification statement (`dml 1.4;`) statement at the start of
+    each file is optional (but the compiler warns if it is
+    omitted). Also, `dml 1.3;` is permitted as a deprecated alias for
+    `dml 1.4;`, with a warning.'''
+    short = "Make the DML version statement optional"
+    last_api_version = api_7
+
+
 @feature
 class io_memory(CompatFeature):
     '''The `transaction` interface was introduced in 6, and will

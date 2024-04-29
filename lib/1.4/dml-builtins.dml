@@ -544,6 +544,7 @@ template device {
     param _compat_port_proxy_ifaces auto;
     param _compat_port_proxy_attrs auto;
     param _compat_function_in_extern_struct auto;
+    param _compat_optional_version_statement auto;
     param _compat_port_obj_param auto;
     param _compat_io_memory auto;
     param _compat_shared_logs_on_device auto;
