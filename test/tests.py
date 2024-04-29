@@ -15,9 +15,9 @@ from os.path import join, isdir, exists
 import glob
 import json
 from simicsutils.host import host_type, is_windows, batch_suffix
-from simicsutils.internal import package_path, get_simics_major
+from simicsutils.internal import get_simics_major
 import testparams
-from testparams import simics_base_path
+from testparams import package_path, simics_base_path
 import traceback
 from depfile import parse_depfile
 import pstats
