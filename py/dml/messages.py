@@ -1645,7 +1645,7 @@ class ELOGGROUPS(DMLError):
 
 class WNOVER(DMLWarning):
     """
-    A DML file must start with a version statement, such as `dml 1.2;`
+    A DML file must start with a version statement, such as `dml 1.4;`
     """
     fmt = "file has no version tag, assuming version 1.2"
 

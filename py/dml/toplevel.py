@@ -28,7 +28,7 @@ __all__ = ('produce_dmlast', 'get_parser', 'parse_main_file')
 sys.path.append('.')
 
 version_warning = True
-supported_versions = [(1, 2), (1, 3), (1, 4)]
+supported_versions = [(1, 2), (1, 4)]
 
 space_and_comments = r'\s*(?:(?:(?://.*$)|(?:/\*(?:[^*]|\*+[^/*])*\*+/))\s*)*'
 
@@ -74,33 +74,41 @@ def determine_version(filestr, filename):
             raise ESYNTAX(SimpleSite(f"{filename}:{lineno}:{column}"),
                           None, "malformed DML version tag")
         version = (int(m.group('major')), int(m.group('minor')))
-        # Remove the language version tag, but preserve newlines.
-        # This helps us avoid having to parse the version tag in the
-        # grammar.
+        # Remove the language version tag, but preserve the correct
+        # number of characters. Note that some newlines may be
+        # converted to spaces in the string fed to the parser; this is
+        # OK since sites re-read the DML file to derive line numbers
+        # from file offsets
         ver_end = m.end(0)
         filestr = ' ' * ver_end + filestr[ver_end:]
     else:
-        # TODO: make this an error
-        report(WNOVER(SimpleSite(f"{filename}:1")))
-        version = (1, 2)
-        lineno = 1
-        column = 1
+        if compat.optional_version_statement in dml.globals.enabled_compat:
+            report(WNOVER(SimpleSite(f"{filename}:1")))
+            version = (1, 2)
+            lineno = 1
+            column = 1
+        else:
+            raise ESYNTAX(
+                SimpleSite(f"{filename}:1"), None,
+                "missing DML version statement")
+
+    if (compat.optional_version_statement in dml.globals.enabled_compat
+        and version == (1, 3)):
+        report(WDEPRECATED(
+            SimpleSite(f"{filename}:{lineno}:{column}"),
+            "'dml 1.3' is a deprecated alias of dml 1.4"))
+        version = (1, 4)
 
     if version not in supported_versions:
         raise ESYNTAX(SimpleSite(f"{filename}:{lineno}:{column}"), None,
                       "DML version %s not supported; allowed: %s"
                       % (fmt_version(version),
                          ", ".join(map(fmt_version, supported_versions))))
-    if version == (1, 3):
-        report(WDEPRECATED(
-            SimpleSite(f"{filename}:{lineno}:{column}"),
-            "'dml 1.3' is a deprecated alias of dml 1.4"))
-        version = (1, 4)
 
     if logging.show_porting and version == (1, 2):
         report(PVERSION(SimpleSite(f"{filename}:{lineno}:{column}")))
 
-    return version, filestr
+    return (version, filestr)
 
 def parse(s, file_info, filename, version):
     #sys.stderr.write("parsing %s\n" % filename)
