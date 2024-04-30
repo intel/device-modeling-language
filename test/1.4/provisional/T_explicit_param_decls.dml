@@ -1,0 +1,30 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+provisional explicit_param_decls;
+
+device test;
+
+/// COMPILE-ONLY
+
+param walrus := 1;
+param walrus_default :default 2;
+template param_assign {
+    // TODO: '= 3' does not yet have effect
+    //param p1: int = 3;
+    param p2: int default 4;
+}
+
+group g is param_assign {
+    param p2 = 5;
+
+    //#if (p1 != 3) { error; }
+    #if (p2 != 5) { error; }
+}
+
+#if (walrus != 1) { error; }
+#if (walrus_default != 2) { error; }

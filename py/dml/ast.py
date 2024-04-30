@@ -95,7 +95,7 @@ astkinds = {
     'null',
     'object',
     'objectref',
-    'parameter',
+    'param',
     'return',
     'return_dml12',
     'select',

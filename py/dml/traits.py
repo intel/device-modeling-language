@@ -83,7 +83,7 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                     check_namecoll(sname, ast.site)
                     sessions[sname] = (ast.site, stype)
             elif ast.kind == 'typedparam':
-                (declsite, pname, type_ast) = ast.args
+                (declsite, pname, type_ast, _) = ast.args
                 (struct_defs, ptype) = eval_type(type_ast, declsite, None,
                                                  global_scope)
                 # this would be trivial to support, but completely meaningless
@@ -789,10 +789,11 @@ class Trait(SubTrait):
             yield name
 
     def member_declaration(self, name):
-        '''In 'name' is defined in this trait, then return a pair (site,
-        kind), where kind is one of the strings 'method', 'parameter'
-        or 'session'. If 'name' is not defined in this trait, return
-        None.'''
+        '''In 'name' is defined by this trait, then return a pair (site, t),
+        where t is the trait (this or a supertrait) where the name is
+        defined.  If 'name' is not defined in this trait, return
+        None.
+        '''
 
         if name in self.method_impl_traits:
             return (self.method_impl_traits[name][0].method_impls[name].site,

@@ -441,8 +441,8 @@ def wrap_sites(spec, issite, tname):
        return corresponding arguments for the construction of an ObjectSpec'''
     templates = [(TemplateSite(site, issite, tname), t)
                  for (site, t) in spec.templates]
-    params = [ast.parameter(TemplateSite(site, issite, tname), name, value)
-              for (_, site, name, value) in spec.params]
+    params = [ast.param(TemplateSite(site, issite, tname), name, colon, value)
+              for (_, site, name, colon, value) in spec.params]
 
     blocks = []
     for (preconds, shallow, composite) in spec.blocks:
@@ -544,22 +544,22 @@ def add_templates(obj_specs, each_stmts):
 
 def merge_parameters(defs, obj_specs):
     '''Given a list of parameters along with the templates they are
-    defined in, as (rank, ast.parameter) pairs, return the
+    defined in, as (rank, ast.param) pairs, return the
     declaration to use for the parameter, or raise a DMLError.'''
 
     # Handle declarations ("parameter x;") separately
-    decls = [(rank, p) for (rank, p) in defs if p.args[1] == (None, None, None)]
-    defs = [(rank, p) for (rank, p) in defs if p.args[1] != (None, None, None)]
+    decls = [(rank, p) for (rank, p) in defs if p.args[2] == (None, None, None)]
+    defs = [(rank, p) for (rank, p) in defs if p.args[2] != (None, None, None)]
 
     if not defs:
         (_, decl) = decls[0]
-        (name, _) = decl.args
+        (name, _, _) = decl.args
         raise ENPARAM(decl.site, name)
 
     # Handle 'auto' declarations separately. It's easy; an 'auto'
     # declaration must be alone.
     for (_, param) in defs:
-        (name, (_, _, auto)) = param.args
+        (name, _, (_, _, auto)) = param.args
         if auto:
             if len(defs) == 1:
                 return param
@@ -575,7 +575,7 @@ def merge_parameters(defs, obj_specs):
         # instantiation relations and give the non-default definition
         # precedence
         nondefault = [(r, p) for (r, p) in defs
-                      if p.args[1][0]]
+                      if p.args[2][0]]
         if len(nondefault) == 1:
             [(nd_rank, nd_param)] = nondefault
             # Add 'is' declaration in 1.4. In the odd case where
@@ -592,13 +592,13 @@ def merge_parameters(defs, obj_specs):
     if len(superior) > 1:
         def is_default(decl):
             (_, p) = decl
-            (_, (_, default, _)) = p.args
+            (_, _, (_, default, _)) = p.args
             return default is not None
 
         # If two declarations are non-default, then blame them (bug 24322)
         [(rank1, p1), (rank2, p2)] = sorted(
             superior, key=is_default)[:2]
-        (name, _) = p1.args
+        (name, _, _) = p1.args
         if rank1 is rank2:
             # If the two conflicting default definitions are in the
             # same template/file, then the message in EAMBINH is
@@ -613,7 +613,7 @@ def merge_parameters(defs, obj_specs):
     [(rank0, param0)] = superior
 
     for (rank, param) in defs:
-        (name, (final, _, _)) = param.args
+        (name, _, (final, _, _)) = param.args
         if final and rank is not rank0:
             # Attempt to override non-default parameter
             report(EINVOVER(param0.site, param.site, name))
@@ -622,7 +622,7 @@ def merge_parameters(defs, obj_specs):
     if dml.globals.dml_version == (1, 2):
         # New inheritance rules are kept internal for now
         if len(defs) == 2:
-            (_, (_, default, _)) = param0.args
+            (_, _, (_, default, _)) = param0.args
             if default:
                 report(WEXPERIMENTAL(
                     param0.site, "parameter with two default declarations"))
@@ -1134,13 +1134,13 @@ def create_parameters(obj, obj_specs, index_vars, index_sites):
     # declaration is magically added by the compiler
     implicit_rank = Rank(set(), RankDesc('verbatim',
                                          '<implicit parameter block>'))
-    # map parameter name -> list of (Rank, ast.parameter object)
-    parameters = {name: [(implicit_rank, ast.parameter(obj.site, name, v))]
+    # map parameter name -> list of (Rank, ast.param object)
+    parameters = {name: [(implicit_rank, ast.param(obj.site, name, False, v))]
                   for (name, v) in implicit_params(obj, index_vars)}
     for obj_spec in obj_specs:
         for s in obj_spec.params:
-            assert s.kind == 'parameter'
-            (name, _) = s.args
+            assert s.kind == 'param'
+            (name, _, _) = s.args
             parameters.setdefault(name, []).append((obj_spec.rank, s))
 
     autoparams = make_autoparams(obj, index_vars, index_sites)
@@ -2716,7 +2716,7 @@ class InterfacesDocParamExpr(objects.ParamExpr):
         return self.cached
 
 def mkparam(obj, autoparams, param):
-    _, site, name, (value, default, auto) = param
+    _, site, name, _, (value, default, auto) = param
 
     # auto-parameters are like normal "hard" assignments
     if name in autoparams:

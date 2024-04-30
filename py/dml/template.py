@@ -73,7 +73,7 @@ class ObjectSpec(object):
         self.templates = templates
         # list of (name, ObjectSpec)
         self.in_eachs = in_eachs
-        # list of ast.parameter
+        # list of ast.param
         self.params = params
         # list of tuples (preconds, shallow-stmts, composite-stmts),
         # where preconds is a (possibly empty) list of expression
@@ -270,7 +270,7 @@ def object_spec_from_asts(site, stmts, templates, inferior, in_each_structure,
         in_eachs = []
         rest = []
         for stmt in stmts:
-            if stmt.kind == 'parameter':
+            if stmt.kind == 'param':
                 params.append(stmt)
             elif stmt.kind == 'is':
                 (template_refs,) = stmt.args
@@ -355,7 +355,7 @@ def rank_structure(asts):
             queue.extend((s, True) for s in t)
             queue.extend((s, True) for s in f)
         else:
-            assert spec.kind in {'error', 'method', 'parameter',
+            assert spec.kind in {'error', 'method', 'param',
                                  'session', 'saved', 'export', 'hook'}
     return (inferior, unconditional, in_each_structure)
 

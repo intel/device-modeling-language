@@ -58,6 +58,18 @@ param bigbin
 /// ERROR ESYNTAX
  = 0b1_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
 
+// syntax requiring `provisional explicit_param_decls`
+/// ERROR ESYNTAX
+param walrus := 3;
+/// ERROR ESYNTAX
+param walrus_default :default 3;
+template param_assign {
+    /// ERROR ESYNTAX
+    param p1: int = 3;
+    /// ERROR ESYNTAX
+    param p2: int default 4;
+}
+
 method d(int a, int b) { return (0, 0); }
 
 method throwing() -> (int) throws { return 0; }

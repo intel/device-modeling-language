@@ -174,7 +174,7 @@ def prod(f):
 
 
 @prod
-def dml(t):
+def top(t):
     'dml : maybe_provisional maybe_device maybe_bitorder device_statements'
     t[0] = ast.dml(site(t), t[2], t[4])
 
@@ -344,20 +344,20 @@ def bitrange_1(t):
     'bitrange : LBRACKET expression RBRACKET'
     bit_expr = endian_translate_bit(t[2], parent_bitsize(t[2].site),
                                     t.parser.file_info.bitorder)
-    t[0] = [ast.parameter(site(t), 'msb', (bit_expr, None, None)),
-            ast.parameter(site(t), 'lsb', (bit_expr, None, None))]
+    t[0] = [ast.param(site(t), 'msb', False, (bit_expr, None, None)),
+            ast.param(site(t), 'lsb', False, (bit_expr, None, None))]
 
 @prod
 def bitrange_2(t):
     'bitrange : LBRACKET expression COLON expression RBRACKET'
     bitorder = t.parser.file_info.bitorder
     t[0] = [
-        ast.parameter(
-            site(t), 'msb',
+        ast.param(
+            site(t), 'msb', False,
             (endian_translate_bit(t[2], parent_bitsize(t[2].site), bitorder),
              None, None)),
-        ast.parameter(
-            site(t), 'lsb',
+        ast.param(
+            site(t), 'lsb', False,
             (endian_translate_bit(t[4], parent_bitsize(t[4].site), bitorder),
              None, None))]
 
@@ -773,22 +773,10 @@ def shared_method_final(t):
     t[0] = (t[1], t[2], False, t[3], lex_end_site(t, -1))
 
 @prod_dml12
-def param_(t):
-    '''param_ : PARAMETER'''
-    if logging.show_porting:
-        report(PPARAMETER(site(t)))
-    t[0] = t[1]
-
-@prod_dml14
-def param_(t):
-    '''param_ : PARAM'''
-    t[0] = t[1]
-
-@prod_dml12
 def trait_param(t):
-    '''trait_param : param_ named_cdecl SEMI'''
+    '''trait_param : PARAMETER named_cdecl SEMI'''
     (name, typ) = t[2].args
-    t[0] = ast.typedparam(site(t), t[2].site, name, typ)
+    t[0] = ast.typedparam(site(t), t[2].site, name, typ, (None, None, None))
 
 # Templates
 
@@ -878,8 +866,8 @@ def import_str(t):
 @prod
 def object_desc(t):
     'object_desc : composed_string_literal'
-    t[0] = [ast.parameter(site(t), 'desc',
-                          (ast.string(site(t), t[1]), None, None))]
+    t[0] = [ast.param(site(t), 'desc', False,
+                      (ast.string(site(t), t[1]), None, None))]
 @prod
 def object_desc_none(t):
     'object_desc :'
@@ -970,7 +958,7 @@ def validate_if_body(stmts):
     for stmt in stmts:
         if stmt.kind in allowed_in_hashif:
             result.append(stmt)
-        elif stmt.kind == 'parameter':
+        elif stmt.kind == 'param':
             report(ECONDP(stmt.site))
         elif stmt.kind == 'is':
             report(ECONDT(stmt.site))
@@ -1032,9 +1020,11 @@ def object_else_if(t):
     t[0] = [t[2]]
 
 # Parameter specification
-@prod
+@prod_dml12
 def object_parameter(t):
-    '''parameter : param_ objident paramspec'''
+    '''parameter : PARAMETER objident paramspec'''
+    if logging.show_porting:
+        report(PPARAMETER(site(t)))
     if logging.show_porting:
         if t[2] == 'hard_reset_value':
             report(PHARD_RESET_VALUE(site(t, 2)))
@@ -1042,32 +1032,57 @@ def object_parameter(t):
             report(PSOFT_RESET_VALUE(site(t)))
         if t[2] == 'miss_pattern':
             report(PMISS_PATTERN(site(t, 2)))
-    t[0] = ast.parameter(site(t), t[2], t[3])
+    t[0] = ast.param(site(t), t[2], False, t[3] + (None,))
+
+@prod_dml12
+def object_parameter_auto(t):
+    '''parameter : PARAMETER objident AUTO SEMI'''
+    t[0] = ast.param(site(t), t[2], False, (None, None, 1))
 
 @prod_dml14
-def object_typedparam(t):
-    '''parameter : param_ objident COLON ctypedecl SEMI'''
-    t[0] = ast.typedparam(site(t), site(t, 2), t[2], t[4])
+def object_param(t):
+    '''parameter : PARAM objident paramspec'''
+    t[0] = ast.param(site(t), t[2], False, t[3] + (None,))
+
+@prod_dml14
+def object_param_auto(t):
+    '''parameter : PARAM objident AUTO SEMI'''
+    t[0] = ast.param(site(t), t[2], False, (None, None, 1))
+
+@prod_dml14
+def object_param_walrus(t):
+    '''parameter : PARAM objident COLON paramspec'''
+    if provisional.explicit_param_decls not in t.parser.file_info.provisional:
+        report(ESYNTAX(site(t, 3), ':', "expected '=' or 'default'"))
+    t[0] = ast.param(site(t), t[2], True, t[4] + (None,))
+
+@prod_dml14
+def object_param_typed(t):
+    '''parameter : PARAM objident COLON ctypedecl paramspec'''
+    (assign, default) = t[5]
+    if ((assign or default)
+        and (provisional.explicit_param_decls
+             not in t.parser.file_info.provisional)):
+        report(ESYNTAX(site(t, 5), '=' if assign else 'default',
+                       'expected ;'))
+        assign = default = None
+    t[0] = ast.typedparam(site(t), site(t, 2), t[2], t[4],
+                          (assign, default, None))
 
 @prod
 def paramspec_empty(t):
     'paramspec : SEMI'
-    t[0] = (None, None, None)
+    t[0] = (None, None)
 
 @prod
 def paramspec_value(t):
     'paramspec : EQUALS expression SEMI'
-    t[0] = (t[2], None, None)
+    t[0] = (t[2], None)
 
 @prod
 def paramspec_default(t):
     'paramspec : DEFAULT expression SEMI'
-    t[0] = (None, t[2], None)
-
-@prod
-def paramspec_auto(t):
-    'paramspec : AUTO SEMI'
-    t[0] = (None, None, 1)
+    t[0] = (None, t[2])
 
 # Method parameters
 @prod
@@ -1182,7 +1197,7 @@ def istemplate_list_multi(t):
 @prod
 def sizespec(t):
     'sizespec : SIZE expression'
-    t[0] = [ast.parameter(site(t), 'size', (t[2], None, None))]
+    t[0] = [ast.param(site(t), 'size', False, (t[2], None, None))]
 
 @prod
 def sizespec_empty(t):
@@ -1193,7 +1208,7 @@ def sizespec_empty(t):
 @prod
 def offsetspec(t):
     'offsetspec : AT expression'
-    t[0] = [ast.parameter(site(t), 'offset', (t[2], None, None))]
+    t[0] = [ast.param(site(t), 'offset', False, (t[2], None, None))]
 
 @prod
 def offsetspec_empty(t):
