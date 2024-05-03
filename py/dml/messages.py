@@ -1138,6 +1138,28 @@ class EAUTOPARAM(DMLError):
     library, and they may not be overridden."""
     fmt = "bad declaration of automatic parameter '%s'"
 
+class ENOVERRIDE(DMLError):
+    """When the `explict_param_decls` provisional feature is enabled, parameter
+    declarations that do not override existing declarations must be
+    declared using the `:=` or `:default` syntax.
+    """
+    fmt = ("non-overriding param should use :%s syntax"
+           " (from explicit_param_decls feature)")
+
+class EOVERRIDE(DMLError):
+    """When the `explict_param_decls` provisional feature is enabled,
+    parameters declared using `:=` or `:default` syntax may not override
+    other parameters.
+    """
+    fmt = ("use of :%s to override existing param"
+           " (from explicit_param_decls feature)")
+    def __init__(self, site, other_site, token):
+        super().__init__(site, token)
+        self.other_site = other_site
+    def log(self):
+        DMLError.log(self)
+        self.print_site_message(self.other_site, "overridden parameter")
+
 class EVARPARAM(DMLError):
     """
     The value assigned to the parameter is not a well-defined constant.

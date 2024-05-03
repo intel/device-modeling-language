@@ -34,6 +34,7 @@ from . import dmlparse
 from .set import Set
 from . import compat
 from .slotsmeta import auto_init
+from . import provisional
 
 __all__ = (
     'mkglobals', 'mkdev'
@@ -142,10 +143,11 @@ def mkglobals(stmts):
                         if (type_info is not None
                             and type_info.kind == 'paramtype'):
                             trait_body.append(tstmt)
-                            if value is not None:
-                                # the form "param x: int = value;" has
-                                # aspects of both trait and template
-                                template_body.append(tstmt)
+                            # the form "param x: int = value;" has
+                            # aspects of both trait and template,
+                            # and the form "param x: int;" has some effect
+                            # when explicit_param_decls is enabled
+                            template_body.append(tstmt)
                         else:
                             template_body.append(tstmt)
                     elif tstmt.kind in ('session', 'saved'):
@@ -635,6 +637,31 @@ def merge_parameters(params, obj_specs):
             raise EAMBINH(
                 p1.site, p2.site, name, rank1.desc, rank2.desc,
                 decl_is_default((rank1, p1)))
+
+    decl_ranks = {rank for (rank, _) in decls}
+    decl_or_def_ranks = decl_ranks.union(rank for (rank, _) in defs)
+    for (rank, p) in defs:
+        if p.site.provisional_enabled(provisional.explicit_param_decls):
+            (_, type_info, is_default, _) = p.args
+            if type_info is None:
+                declared_as_override = True
+            else:
+                assert type_info.kind in {'walrus', 'paramtype'}
+                declared_as_override = False
+            is_override = (not decl_or_def_ranks.isdisjoint(rank.inferior)
+                           or rank in decl_ranks)
+            if not declared_as_override and is_override:
+                [parent, *_] = [
+                    other for (other_rank, other) in decls + defs
+                    if other_rank in rank.inferior] + [
+                    other for (other_rank, other) in decls
+                    if other_rank is rank]
+                report(EOVERRIDE(type_info.site, parent.site,
+                                 'default' if is_default else '='))
+            elif (not is_override and declared_as_override
+                  and not any(r is rank for (r, _) in decls)):
+                report(ENOVERRIDE(
+                    p.site, 'default' if is_default else '='))
 
     [(rank0, param0)] = superior
 
