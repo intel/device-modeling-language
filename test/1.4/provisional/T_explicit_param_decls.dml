@@ -11,18 +11,25 @@ device test;
 
 /// COMPILE-ONLY
 
+// Params defined on argv can be either new or pre-existing
+/// DMLC-FLAG -Dnewly_defined_param=4
+#if (newly_defined_param != 4) { error; }
+
+/// DMLC-FLAG -Dexisting_param=6
+param existing_param :default 5;
+#if (existing_param != 6) { error; }
+
 param walrus := 1;
 param walrus_default :default 2;
 template param_assign {
-    // TODO: '= 3' does not yet have effect
-    //param p1: int = 3;
+    param p1: int = 3;
     param p2: int default 4;
 }
 
 group g is param_assign {
     param p2 = 5;
 
-    //#if (p1 != 3) { error; }
+    #if (p1 != 3) { error; }
     #if (p2 != 5) { error; }
 }
 

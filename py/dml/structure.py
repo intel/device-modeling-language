@@ -135,8 +135,19 @@ def mkglobals(stmts):
                 template_body = []
                 trait_body = []
                 for tstmt in body:
-                    if tstmt.kind in ('sharedmethod', 'typedparam'):
+                    if tstmt.kind == 'sharedmethod':
                         trait_body.append(tstmt)
+                    elif tstmt.kind == 'param':
+                        (_, type_info, _, value) = tstmt.args
+                        if (type_info is not None
+                            and type_info.kind == 'paramtype'):
+                            trait_body.append(tstmt)
+                            if value is not None:
+                                # the form "param x: int = value;" has
+                                # aspects of both trait and template
+                                template_body.append(tstmt)
+                        else:
+                            template_body.append(tstmt)
                     elif tstmt.kind in ('session', 'saved'):
                         template_body.append(tstmt)
                         if stmt.kind == 'template':
@@ -441,8 +452,10 @@ def wrap_sites(spec, issite, tname):
        return corresponding arguments for the construction of an ObjectSpec'''
     templates = [(TemplateSite(site, issite, tname), t)
                  for (site, t) in spec.templates]
-    params = [ast.param(TemplateSite(site, issite, tname), name, colon, value)
-              for (_, site, name, colon, value) in spec.params]
+    params = [ast.param(TemplateSite(site, issite, tname),
+                        name, typeinfo, is_default, value)
+              for (_, site, name, typeinfo, is_default, value)
+              in spec.params]
 
     blocks = []
     for (preconds, shallow, composite) in spec.blocks:
@@ -542,29 +555,43 @@ def add_templates(obj_specs, each_stmts):
 
     return (obj_specs, used_templates)
 
-def merge_parameters(defs, obj_specs):
+def merge_parameters(params, obj_specs):
     '''Given a list of parameters along with the templates they are
     defined in, as (rank, ast.param) pairs, return the
     declaration to use for the parameter, or raise a DMLError.'''
 
-    # Handle declarations ("parameter x;") separately
-    decls = [(rank, p) for (rank, p) in defs if p.args[2] == (None, None, None)]
-    defs = [(rank, p) for (rank, p) in defs if p.args[2] != (None, None, None)]
+    decls = []
+    defs = []
+    autos = []
+    for (rank, param) in params:
+        (_, type_info, _, value) = param.args
+        if value is None:
+            if type_info is None or type_info.kind == 'paramtype':
+                # "parameter x;", "parameter x: type;", handled separately
+                decls.append((rank, param))
+            elif type_info.kind == 'auto':
+                autos.append((rank, param))
+            else:
+                assert type_info.kind == 'walrus'
+                defs.append((rank, param))
+        else:
+            defs.append((rank, param))
 
-    if not defs:
+    if not defs and not autos:
         (_, decl) = decls[0]
-        (name, _, _) = decl.args
+        (name, _, _, _) = decl.args
         raise ENPARAM(decl.site, name)
 
     # Handle 'auto' declarations separately. It's easy; an 'auto'
     # declaration must be alone.
-    for (_, param) in defs:
-        (name, _, (_, _, auto)) = param.args
-        if auto:
-            if len(defs) == 1:
-                return param
-            else:
-                raise EAUTOPARAM(param.site, name)
+    if autos:
+        if defs:
+            raise EAUTOPARAM(defs[0][1].site, defs[0][1].args[0])
+        elif len(autos) == 1:
+            [(_, p)] = autos
+            return p
+        else:
+            raise EAUTOPARAM(autos[0][1].site, autos[0][1].args[0])
 
     all_inferior = set().union(*(rank.inferior for (rank, _) in defs))
     superior = [(rank, p) for (rank, p) in defs if rank not in all_inferior]
@@ -574,8 +601,7 @@ def merge_parameters(defs, obj_specs):
         # non-default definition, then disregard template
         # instantiation relations and give the non-default definition
         # precedence
-        nondefault = [(r, p) for (r, p) in defs
-                      if p.args[2][0]]
+        nondefault = [(r, p) for (r, p) in defs if not p.args[2]]
         if len(nondefault) == 1:
             [(nd_rank, nd_param)] = nondefault
             # Add 'is' declaration in 1.4. In the odd case where
@@ -590,15 +616,15 @@ def merge_parameters(defs, obj_specs):
             return nd_param
 
     if len(superior) > 1:
-        def is_default(decl):
+        def decl_is_default(decl):
             (_, p) = decl
-            (_, _, (_, default, _)) = p.args
-            return default is not None
+            (_, _, is_default, _) = p.args
+            return is_default
 
         # If two declarations are non-default, then blame them (bug 24322)
         [(rank1, p1), (rank2, p2)] = sorted(
-            superior, key=is_default)[:2]
-        (name, _, _) = p1.args
+            superior, key=decl_is_default)[:2]
+        (name, _, _, _) = p1.args
         if rank1 is rank2:
             # If the two conflicting default definitions are in the
             # same template/file, then the message in EAMBINH is
@@ -608,13 +634,13 @@ def merge_parameters(defs, obj_specs):
         else:
             raise EAMBINH(
                 p1.site, p2.site, name, rank1.desc, rank2.desc,
-                is_default((rank1, p1)))
+                decl_is_default((rank1, p1)))
 
     [(rank0, param0)] = superior
 
     for (rank, param) in defs:
-        (name, _, (final, _, _)) = param.args
-        if final and rank is not rank0:
+        (name, _, is_default, _) = param.args
+        if not is_default and rank is not rank0:
             # Attempt to override non-default parameter
             report(EINVOVER(param0.site, param.site, name))
             return param
@@ -622,8 +648,8 @@ def merge_parameters(defs, obj_specs):
     if dml.globals.dml_version == (1, 2):
         # New inheritance rules are kept internal for now
         if len(defs) == 2:
-            (_, _, (_, default, _)) = param0.args
-            if default:
+            (_, _, is_default, _) = param0.args
+            if is_default:
                 report(WEXPERIMENTAL(
                     param0.site, "parameter with two default declarations"))
         elif len(defs) > 2:
@@ -1113,15 +1139,17 @@ def implicit_params(obj, index_vars):
     for v1, v2 in zip(sorted_ivars, sorted_ivars[1:]):
         if v1 == v2:
             report(ENAMECOLL(obj.site, obj.site, v1))
-    params = [(var, (None, None, 'auto')) for var in index_vars]
+    params = [ast.param(obj.site, var, ast.auto(obj.site), False, None)
+              for var in index_vars]
 
     if (dml.globals.dml_version == (1, 2)
         and obj.objtype == 'field'
         and obj.ident is None):
         site = obj.site
         regsize = param_int(obj.parent, 'size')
-        params.extend([('msb', (ast.int(site, regsize * 8 - 1), None, None)),
-                       ('lsb', (ast.int(site, 0), None, None))])
+        params.extend([
+            ast.param(obj.site, 'msb', None, False, ast.int(site, regsize * 8 - 1)),
+            ast.param(obj.site, 'lsb', None, False, ast.int(site, 0))])
     return params
 
 def create_parameters(obj, obj_specs, index_vars, index_sites):
@@ -1135,12 +1163,12 @@ def create_parameters(obj, obj_specs, index_vars, index_sites):
     implicit_rank = Rank(set(), RankDesc('verbatim',
                                          '<implicit parameter block>'))
     # map parameter name -> list of (Rank, ast.param object)
-    parameters = {name: [(implicit_rank, ast.param(obj.site, name, False, v))]
-                  for (name, v) in implicit_params(obj, index_vars)}
+    parameters = {param.args[0]: [(implicit_rank, param)]
+                  for param in implicit_params(obj, index_vars)}
     for obj_spec in obj_specs:
         for s in obj_spec.params:
             assert s.kind == 'param'
-            (name, _, _) = s.args
+            (name, _, _, _) = s.args
             parameters.setdefault(name, []).append((obj_spec.rank, s))
 
     autoparams = make_autoparams(obj, index_vars, index_sites)
@@ -2716,11 +2744,12 @@ class InterfacesDocParamExpr(objects.ParamExpr):
         return self.cached
 
 def mkparam(obj, autoparams, param):
-    _, site, name, _, (value, default, auto) = param
+    (_, site, name, type_info, is_default, value) = param
+    auto = type_info is not None and type_info.kind == 'auto'
 
     # auto-parameters are like normal "hard" assignments
     if name in autoparams:
-        if not auto and not default:
+        if not auto and not (dml.globals.dml_version == (1, 2) and is_default):
             # seems that dml-builtins lacks a declaration
             # 'parameter ... auto;'
             raise ICE(site, 'missing auto declaration: %s' % (name,))
@@ -2729,9 +2758,6 @@ def mkparam(obj, autoparams, param):
     elif auto:
         # user-supplied 'auto' declaration
         raise EAUTOPARAM(site, name)
-
-    if value is None:
-        value = default
 
     # caught earlier, ENPARAM
     assert value is not None

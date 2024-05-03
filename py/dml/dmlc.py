@@ -81,8 +81,9 @@ def process(devname, global_defs, top_tpl, extra_params):
                               dml_version=dml.globals.dml_version)
         global_defs.append(ast.template_dml12(
             top_site, param_tpl, [
-                ast.param(param_site, name, False,
-                          (extra_params[name], None, None))
+                ast.param(param_site, name, None, True, None)
+                for name in extra_params] + [
+                ast.param(param_site, name, None, False, extra_params[name])
                 for name in extra_params]
             + [ast.is_(top_site, [(top_site, top_tpl)])]))
         top_tpl = param_tpl
