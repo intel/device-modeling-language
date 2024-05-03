@@ -12,23 +12,23 @@ port p0 {
 }
 
 port p1 {
-    /// ERROR EAUTOPARAM
     parameter bar auto;
+    /// ERROR EAUTOPARAM
     parameter bar = 1;
 }
 
-/// ERROR EAUTOPARAM
 port p2 {
+    /// ERROR EAUTOPARAM
     parameter qname default "";
 }
 
-/// ERROR EAUTOPARAM
 port p3 {
+    /// ERROR EAUTOPARAM
     parameter qname = "";
 }
 
-/// ERROR EAUTOPARAM
 attribute a1[i in 0..3] {
+    /// ERROR EAUTOPARAM
     parameter i = 1;
 }
 

@@ -82,9 +82,11 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                     add_late_global_struct_defs(struct_defs)
                     check_namecoll(sname, ast.site)
                     sessions[sname] = (ast.site, stype)
-            elif ast.kind == 'typedparam':
-                (declsite, pname, type_ast, _) = ast.args
-                (struct_defs, ptype) = eval_type(type_ast, declsite, None,
+            elif ast.kind == 'param':
+                (pname, type_info, _, _) = ast.args
+                assert type_info.kind == 'paramtype'
+                (type_ast,) = type_info.args
+                (struct_defs, ptype) = eval_type(type_ast, type_info.site, None,
                                                  global_scope)
                 # this would be trivial to support, but completely meaningless
                 for (err_site, _) in struct_defs:
