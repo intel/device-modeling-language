@@ -41,8 +41,10 @@ def test_register_value(bank, register):
     expect_equal(bank.get_register_value(0), 0x01020304)
 
 def test_array_names(bg):
+    regnames = [bg.iface.register_view.register_info(i)[0]
+                for i in range(bg.iface.register_view.number_of_registers())]
     expect_equal(
-        sorted([bg.register_info(i)[0] for i in range(0, bg.number_of_registers())]),
+        sorted(regnames),
         ['g[0].h.i[0].r',
          'g[0].h.i[0].rma[0][0]',
          'g[0].h.i[0].rma[0][1]',
@@ -71,6 +73,11 @@ def test_array_names(bg):
          'g[1].h.i[1].rma[1][1]',
          'g[1].h.i[1].ru[0]',
          'g[1].h.i[1].ru[2]'])
+    expect_equal(bg.iface.register_view_catalog.register_names(), regnames)
+    expect_equal(
+        bg.iface.register_view_catalog.register_offsets(),
+        [bg.iface.register_view.register_info(i)[3]
+         for i in range(bg.iface.register_view.number_of_registers())])
 
 def test(obj):
     test_description(obj.bank.b.iface.register_view, "Description for b")
@@ -90,7 +97,7 @@ def test(obj):
     test_register_info(obj.bank.baa[1][1].iface.register_view)
     test_register_info(obj.bank.u.iface.register_view)
 
-    test_array_names(obj.bank.bg.iface.register_view)
+    test_array_names(obj.bank.bg)
 
     test_register_value(obj.bank.le.iface.register_view,
                         dev_util.Register_LE(obj.bank.le, 0x0, 4))

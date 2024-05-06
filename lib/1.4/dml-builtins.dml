@@ -2622,6 +2622,29 @@ template bank is (object, shown_desc) {
         }
     }
 
+    implement register_view_catalog {
+        method register_names() -> (attr_value_t) {
+            local (const register *table, uint64 table_size) = _reginfo_table();
+            local attr_value_t ret = SIM_alloc_attr_list(table_size);
+            local size_t bank_prefix_len = strlen(bank._qname()) + 1;
+            for (local int i = 0; i < table_size; i++) {
+                SIM_attr_list_set_item(
+                    &ret, i, SIM_make_attr_string(
+                        table[i]._qname() + bank_prefix_len));
+            }
+            return ret;
+        }
+        method register_offsets() -> (attr_value_t) {
+            local (const register *table, uint64 table_size) = _reginfo_table();
+            local attr_value_t ret = SIM_alloc_attr_list(table_size);
+            for (local int i = 0; i < table_size; i++) {
+                SIM_attr_list_set_item(
+                    &ret, i, SIM_make_attr_uint64(table[i].offset));
+            }
+            return ret;
+        }
+    }
+
     // TODO: we should implement int_register automatically; define a dummy
     // parameter to reserve the name
     param int_register = undefined;
