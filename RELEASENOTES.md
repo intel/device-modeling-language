@@ -192,3 +192,7 @@
   (equivalent to `ATOM_list_end(0)`) (fixes SIMICS-22363).
 - `release 6 6336`
 - `release 7 7045`
+- `note 6` Added the new `register_view_catalog` interface to all banks. This speeds up
+  various operations that rely on the `register_view` interface, such as the
+  `dev_util.bank_regs` function and the `write-device-reg` and `probe-address`
+  CLI commands.

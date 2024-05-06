@@ -338,8 +338,8 @@ A *register bank* (or simply *bank*) is an abstraction that is used to
 group *registers* in DML, and to expose these to the outside
 world. Registers are exposed to the rest of the simulated system
 through the Simics interface `io_memory`, and exposed to scripting and
-user interfaces through the `register_view`, `register_view_read_only`
-and `bank_instrumentation_subscribe` Simics interfaces.
+user interfaces through the `register_view`, `register_view_read_only`,
+`register_view_catalog` and `bank_instrumentation_subscribe` Simics interfaces.
 
 It is possible to define *bank arrays* to model a row of similar banks. Each
 element in the bank array is a separate configuration object in Simics, and can
