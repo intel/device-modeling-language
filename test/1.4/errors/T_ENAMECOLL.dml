@@ -7,6 +7,128 @@ dml 1.4;
 device test;
 
 /// ERROR ENAMECOLL
+param c0 = 5;
+/// ERROR ENAMECOLL
+connect c0;
+
+/// ERROR ENAMECOLL
+param c1 = 5;
+/// ERROR ENAMECOLL
+method c1() {
+}
+
+/// ERROR ENAMECOLL
+param c2 = 1;
+/// ERROR ENAMECOLL
+session int c2;
+
+/// ERROR ENAMECOLL
+connect c3;
+/// ERROR ENAMECOLL
+attribute c3;
+
+/// ERROR ENAMECOLL
+connect c4;
+/// ERROR ENAMECOLL
+method c4() { }
+
+/// ERROR ENAMECOLL
+method c5() { }
+/// ERROR ENAMECOLL
+session int c5;
+
+/// ERROR ENAMECOLL
+connect c6;
+/// ERROR ENAMECOLL
+session int c6;
+
+
+/// ERROR ENAMECOLL
+template c7 { }
+/// ERROR ENAMECOLL
+template c7 { }
+
+/// ERROR ENAMECOLL
+session int c8;
+/// ERROR ENAMECOLL
+session int c8;
+
+/// ERROR ENAMECOLL
+template c9 {}
+/// ERROR ENAMECOLL
+typedef int c9;
+
+// no error!
+extern typedef int t0;
+extern int t0;
+
+/// ERROR ENAMECOLL
+typedef int t1;
+/// ERROR ENAMECOLL
+typedef int t1;
+
+/// ERROR ENAMECOLL
+extern int t2;
+/// ERROR ENAMECOLL
+extern int t2;
+
+/// ERROR ENAMECOLL
+typedef struct { int i; } s;
+/// ERROR ENAMECOLL
+typedef struct { int i; } s;
+
+/// ERROR ENAMECOLL
+method bar() default { }
+/// ERROR ENAMECOLL
+method bar() default { }
+
+typedef struct {
+    /// ERROR ENAMECOLL
+    int i;
+    /// ERROR ENAMECOLL
+    int i;
+} strange_struct;
+
+loggroup g;
+/// ERROR ENAMECOLL
+loggroup g;
+
+bank b {
+    /// ERROR ENAMECOLL
+    register x[i < 4] size 1 @ i;
+    /// ERROR ENAMECOLL
+    group x[i < 4];
+}
+
+port p0 {
+    /// ERROR ENAMECOLL
+    param foo = 1; 
+    /// ERROR ENAMECOLL
+    param foo = 1;
+}
+
+port p2 {
+    /// ERROR ENAMECOLL
+    param baz default 1;
+    /// ERROR ENAMECOLL
+    param baz default 1;
+}
+
+template structural_clash {
+    // EAMBINH might be a better description of this clash
+    /// ERROR ENAMECOLL
+    param p default 1;
+    group g {
+        /// ERROR ENAMECOLL
+        param p default 2;
+    }
+}
+group gg is (structural_clash) {
+    group g is (structural_clash);
+}
+
+
+/// ERROR ENAMECOLL
 extern int x;
 /// ERROR ENAMECOLL
 bank x;
@@ -39,6 +161,94 @@ typedef layout "big-endian" {
     /// ERROR ENAMECOLL
     uint32 i;
 } strange_layout;
+
+template clashing_shared_methods {
+    /// ERROR ENAMECOLL
+    shared method m() default {}
+    /// ERROR ENAMECOLL
+    shared method m() default {}
+
+    /// ERROR ENAMECOLL
+    param i: int;
+    /// ERROR ENAMECOLL
+    param i: int;
+
+    /// ERROR ENAMECOLL
+    shared method mp() default {}
+    /// ERROR ENAMECOLL
+    param mp: int;
+
+    /// ERROR ENAMECOLL
+    param pm: int;
+    /// ERROR ENAMECOLL
+    shared method pm() default {}
+
+    /// ERROR ENAMECOLL
+    session int ses;
+    /// ERROR ENAMECOLL
+    session int ses;
+}
+
+// a method cannot override a parameter, and a parameter cannot override
+// anything.
+template abstract_param {
+    /// ERROR ENAMECOLL
+    param p0: int;
+}
+template shared_method_override is abstract_param {
+    /// ERROR ENAMECOLL
+    shared method p0();
+}
+template method_override is abstract_param {
+    /// ERROR ENAMECOLL
+    method p0() {}
+}
+template param_override is abstract_param {
+    /// ERROR ENAMECOLL
+    param p0: int;
+}
+group po is method_override { param p0 = 1; }
+template abstract_method {
+    /// ERROR ENAMECOLL
+    shared method am();
+    /// ERROR ENAMECOLL
+    shared method dm() default {}
+    /// ERROR ENAMECOLL
+    shared method dm2() default {}
+    /// ERROR ENAMECOLL
+    session int ses;
+}
+template param_override2 is abstract_method {
+    /// ERROR ENAMECOLL
+    param am: int;
+    /// ERROR ENAMECOLL
+    param dm: int;
+    /// ERROR ENAMECOLL
+    session int dm2;
+    /// ERROR ENAMECOLL
+    session int ses;
+}
+template param_untyped_override is abstract_method {
+    /// ERROR ENAMECOLL
+    param am = 5;
+    /// ERROR ENAMECOLL
+    param dm = 6;
+}
+
+group gg is param_untyped_override;
+
+template sm {
+    /// ERROR ENAMECOLL
+    shared method m() default {}
+}
+
+bank tb is sm {
+    /// ERROR ENAMECOLL
+    register m size 1 @ 0;
+}
+
+/// ERROR ENAMECOLL
+group ga[i < 4][i < 4];
 
 method m1() { }
 method m2() { }

@@ -6,6 +6,12 @@ dml 1.4;
 
 device test;
 
+template t1 {
+    /// ERROR EABSTEMPLATE
+    shared method m();
+}
+
 /// ERROR EABSTEMPLATE
-connect con is init_as_subobj {
+port p {
+    is t1;
 }
