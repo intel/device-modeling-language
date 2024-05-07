@@ -1,0 +1,26 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+group g1 {
+    /// ERROR ENPARAM
+    param x;
+}
+
+template t {
+    /// ERROR ENPARAM
+    param p: int;
+}
+
+/// ERROR ENPARAM
+group g2 {
+    is t;
+}
+
+/// ERROR ENPARAM
+connect con is init_as_subobj {
+}
