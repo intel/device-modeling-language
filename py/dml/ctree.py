@@ -4345,8 +4345,7 @@ def mkTemplateQualifiedMethodRef(site, templates_subref, method_name):
     trait = dml.globals.traits.get(template_name)
     shared_method = None
     if trait is not None:
-        impl_trait = trait.method_impl_traits.get(method_name)
-        if impl_trait is not None:
+        for impl_trait in trait.method_impl_traits.get(method_name, []):
             impl_template = dml.globals.templates[impl_trait.name]
             shared_method = impl_trait.method_impls[method_name]
             rank_to_candidate[impl_template.spec.rank] = (
@@ -4356,7 +4355,8 @@ def mkTemplateQualifiedMethodRef(site, templates_subref, method_name):
     studied_templates = set()
     pending_templates = Set((dml.globals.templates[template_name],)
                             # don't bother going through regular methods
-                            # if the found shared method impl. is unoverridable
+                            # if if some shared method impl. is
+                            # unoverridable (can only be one if so)
                             * (shared_method is None
                                or shared_method.overridable))
 
@@ -4404,7 +4404,7 @@ def mkTemplateQualifiedMethodRef(site, templates_subref, method_name):
         raise EMEMBER(site, templates_subref, method_name)
 
     if len(candidates) > 1:
-        report(EAMBTQMIC(site, template_name, method_name, candidates))
+        raise EAMBTQMIC(site, template_name, method_name, candidates)
 
     (tmpl, method) = candidates[0]
 
@@ -4450,8 +4450,8 @@ def mkTraitTemplatesSubRef(site, templates_ref, template_name):
 
 def mkTraitTemplateQualifiedMethodRef(site, templates_subref, method_name):
     trait = templates_subref.trait
-    impl_trait = trait.method_impl_traits.get(method_name)
-    if impl_trait is None:
+    impl_traits = trait.method_impl_traits.get(method_name)
+    if not impl_traits:
         if (trait.member_declaration(method_name) is not None
             and trait.member_kind(method_name) == 'method'):
             raise ENSHAREDTQMIC(site, trait, method_name)
@@ -4461,6 +4461,12 @@ def mkTraitTemplateQualifiedMethodRef(site, templates_subref, method_name):
     if method_name in dml.globals.templates[trait.name].spec.defined_symbols():
         raise ENSHAREDTQMIC(site, trait, method_name)
 
+    if len(impl_traits) > 1:
+        raise EAMBTQMIC(site, trait.name, method_name,
+                         [(impl_trait, impl_trait.method_impls[method_name])
+                          for impl_trait in impl_traits])
+
+    impl_trait = impl_traits[0]
     method = impl_trait.method_impls[method_name]
     traitref = templates_subref.templates_ref.traitref
     if templates_subref.templates_ref.trait is not impl_trait:

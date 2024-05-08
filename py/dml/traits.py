@@ -144,11 +144,11 @@ class TraitVTableItem(metaclass=abc.ABCMeta):
 
 class TraitMethod(TraitVTableItem):
     __slots__ = ('site', 'inp', 'outp', 'throws', 'independent', 'startup',
-                 'memoized', 'astbody', 'name', 'trait', 'default_trait',
+                 'memoized', 'astbody', 'name', 'trait', 'default_traits',
                  'overridable', 'rbrace_site', '_memo_outs_struct', 'id')
 
     def __init__(self, site, inp, outp, throws, independent, startup, memoized,
-                 overridable, astbody, trait, name, default_trait,
+                 overridable, astbody, trait, name, default_traits,
                  rbrace_site):
         self.site = site
         self.inp = inp
@@ -161,8 +161,8 @@ class TraitMethod(TraitVTableItem):
         self.astbody = astbody
         self.trait = trait
         self.name = name
-        # the trait whose implementation we override, or None
-        self.default_trait = default_trait
+        # the traits whose implementation we override
+        self.default_traits = default_traits
         self.rbrace_site = rbrace_site
         self._memo_outs_struct = None
 
@@ -222,8 +222,13 @@ class TraitMethod(TraitVTableItem):
             scope = MethodParamScope(self.trait.scope(global_scope))
             implicit_inargs = self.vtable_trait.implicit_args()
             site = SimpleSite(self.site.loc())
-            if self.default_trait:
-                default_method = self.default_trait.method_impls[self.name]
+            if len(self.default_traits) > 1:
+                default = AmbiguousDefaultSymbol(
+                    [trait.method_impls[self.name].site
+                     for trait in self.default_traits])
+            elif self.default_traits:
+                [default_trait] = self.default_traits
+                default_method = default_trait.method_impls[self.name]
                 [(name, typ)] = implicit_inargs
                 default = ExpressionSymbol(
                     'default',
@@ -234,7 +239,6 @@ class TraitMethod(TraitVTableItem):
                     site)
             else:
                 default = NoDefaultSymbol(self.site)
-                # TODO: we should also have a clause for AmbiguousDefault here
 
             for (n, t) in self.outp:
                 # See SIMICS-19028
@@ -417,37 +421,74 @@ def typecheck_method_override(left, right):
     qualifier_check('memoized', memoized0, memoized1)
 
 def merge_method_impl_maps(site, parents):
-    '''Return a dictionary mapping method name to the most specific trait
-    in which the method is defined, i.e., the trait whose
-    implementation of the method will be used.'''
+    '''Return a dictionary mapping method name to the most specific traits
+    in which the method is defined. Multiple traits represent hierarchally
+    unrelated traits each providing an implementation, indicating ambiguity
+    as to what implementation should be used.'''
 
     # DML does not have a method resolution order. Instead we require
     # that the resolution order of overridden members are uniquely
     # determined by the partial order defined by trait inheritance. In
     # other words, if a member is inherited from two different traits,
-    # then one of the traits must be a subtrait of the other.
+    # then one of the traits must be a subtrait of the other. If that is not
+    # true, then the conflict must be resolved though any usage of both traits
+    # together must also (eventually) provide an overriding definition of both
+    # implementations.
 
     # TODO: we should merge this method resolution mechanism into
-    # structure.sort_method_implementations, and also make it more
-    # permissive: It should be OK for a method to have ambiguous
-    # ancestry as long as the method doesn't call default.
+    # structure.sort_method_implementations
     merged_impls = {}
     for parent in parents:
-        for (mname, unmerged_impl) in list(parent.method_impl_traits.items()):
+        for (mname, unmerged_impls) in list(parent.method_impl_traits.items()):
             if mname not in merged_impls:
-                merged_impls[mname] = unmerged_impl
+                merged_impls[mname] = list(unmerged_impls)
             else:
-                # The method is multiply inherited. If the
-                # implementations come from traits that don't have an
-                # ancestry relation, then report an error. Otherwise,
-                # merge by picking the method implementation that
-                # overrides the other one.
-                if unmerged_impl.implements(merged_impls[mname]):
-                    merged_impls[mname] = unmerged_impl
-                elif not merged_impls[mname].implements(unmerged_impl):
-                    report(EAMBINH(
-                        site, None, mname,
-                        unmerged_impl.name, merged_impls[mname].name))
+                # The method is multiply inherited. If the parent
+                # implementation has an ancestry relation with a previous
+                # implementation, then merge by picking the method
+                # implementation that overrides the other one. Otherwise,
+                # report an error if any implementation is not overridable;
+                # if not, add the new implementation as a novel, unrelated
+                # implementation.
+                # This naive algorithm is on the order of O(n³ * log(n))
+                # (assuming all variable lengths are equal)
+                existing_impls = merged_impls[mname]
+                new = []
+                for unmerged_impl in unmerged_impls:
+                    for (i, existing_impl) in enumerate(existing_impls):
+                        # If there are conflicting implementations,
+                        # then merging could only work out if the new
+                        # implementation is also overridable
+                        if unmerged_impl.implements(existing_impl):
+                            if (len(existing_impls) > 1
+                                and not unmerged_impl.method_impls[
+                                    mname].overridable):
+                                report(EAMBINH(
+                                    site, None, mname,
+                                    unmerged_impl.name,
+                                    existing_impls[0 if i else 1].name))
+                            else:
+                                existing_impls[i] = unmerged_impl
+                            break
+                        if existing_impl.implements(unmerged_impl):
+                            break
+                    else:
+                        # Novel implementation. Error if new or previous
+                        # implementation is unoverridable
+                        # Need only check if existing is unoverridable if there
+                        # aren't already multiple conflicting
+                        if (not unmerged_impl.method_impls[mname].overridable
+                            or (len(existing_impls) == 1
+                                and not existing_impls[0].method_impls[
+                                    mname].overridable)):
+                            report(EAMBINH(
+                                site, None, mname,
+                                unmerged_impl.name,
+                                existing_impls[0].name))
+                        else:
+                            new.append(unmerged_impl)
+
+                existing_impls.extend(new)
     return merged_impls
 
 class MethodHandle(object):
@@ -653,8 +694,8 @@ class Trait(SubTrait):
         method_impls = {
             name: TraitMethod(
                 msite, inp, outp, throws, independent, startup, memoized,
-                overridable, body, self, name, ancestor_method_impls.get(name),
-                rbrace_site)
+                overridable, body, self, name,
+                ancestor_method_impls.get(name, []), rbrace_site)
             for (name, (msite, inp, outp, throws, independent, startup,
                         memoized, overridable, body, rbrace_site))
             in list(methods.items())
@@ -670,9 +711,9 @@ class Trait(SubTrait):
 
         method_impl_traits = dict(ancestor_method_impls)
         for name in method_impls:
-            method_impl_traits[name] = self
-        # Maps method name to the Trait object that provides an
-        # implementation of the method
+            method_impl_traits[name] = [self]
+        # Maps method name to the list of hierarchically unrelated Trait
+        # objects that provide an implementation of the method
         self.method_impl_traits = method_impl_traits
 
         # methods and parameters that are direct members of this trait's vtable
@@ -757,7 +798,8 @@ class Trait(SubTrait):
         None.'''
 
         if name in self.method_impl_traits:
-            return (self.method_impl_traits[name].method_impls[name].site, self)
+            return (self.method_impl_traits[name][0].method_impls[name].site,
+                    self)
         elif name in self.vtable_methods:
             (site, _, _, _, _, _, _) = self.vtable_methods[name]
             return (site, self)
@@ -781,13 +823,18 @@ class Trait(SubTrait):
         if name == 'templates':
             return mkTraitTemplatesRef(site, self, expr)
         if name in self.method_impl_traits:
-            impl_trait = self.method_impl_traits[name]
-            impl = impl_trait.method_impls[name]
-            if not impl.overridable:
+            impl_traits = self.method_impl_traits[name]
+            if not all(impl_trait.method_impls[name].overridable
+                       for impl_trait in impl_traits):
                 # For a non-overridable method, it is safe to bypass the
                 # vtable lookup indirection, and use a direct reference to
                 # a specific method implementation. This way, the code
                 # gets slightly smaller and faster.
+                if len(impl_traits) != 1:
+                    raise ICE(site, ("Conflict between multiple shared "
+                                     + "method implementations"))
+                [impl_trait] = impl_traits
+                impl = impl_trait.method_impls[name]
                 if self is not impl_trait:
                     expr = TraitUpcast(site, expr, impl_trait)
                 if impl_trait is not impl.vtable_trait:
@@ -842,7 +889,7 @@ class Trait(SubTrait):
     def member_kind(self, name):
         '''For a given member of this trait, return 'method' if it's a
         method, and 'parameter' if it's a parameter'''
-        if name in self.vtable_methods or name in self.method_impls:
+        if name in self.vtable_methods or name in self.method_impl_traits:
             return 'method'
         elif name in self.vtable_params:
             return 'parameter'
@@ -855,7 +902,7 @@ class Trait(SubTrait):
         elif name in self.ancestor_vtables:
             return self.ancestor_vtables[name].member_kind(name)
         else:
-            return self.method_impl_traits[name].member_kind(name)
+            raise ICE(self.site, f'unknown member: {name}')
 
     def vtable_trait(self, name):
         '''Return the trait that has the vtable entry for the named trait

@@ -2201,8 +2201,8 @@ def tinit_args(trait):
         trait.vtable_memoized_outs,
         (name for name in trait.ancestor_vtables
          if (name not in trait.method_impl_traits
-             or trait.method_impl_traits[name].method_impls[
-                 name].overridable))))
+             or any(impl_trait.method_impls[name].overridable
+                    for impl_trait in trait.method_impl_traits[name])))))
 
 def method_tinit_arg(trait, parent, name, scrambled_name):
     '''Return the argument passed by a trait's tinit method to its
@@ -2211,7 +2211,7 @@ def method_tinit_arg(trait, parent, name, scrambled_name):
     vtable_trait = trait.ancestor_vtables[name]
     ancestry_paths = trait.ancestry_paths[vtable_trait]
     canonical_path = ancestry_paths[0]
-    impl_trait = trait.method_impl_traits.get(name, None)
+    impl_traits = trait.method_impl_traits.get(name, [])
     if parent is canonical_path[0]:
         # An overriding function assumes it will be placed in
         # the vtable entry on the canonical path. So any
@@ -2227,12 +2227,18 @@ def method_tinit_arg(trait, parent, name, scrambled_name):
                                                  scrambled_name)
             else:
                 return override.cname()
-        elif not impl_trait:
+        elif not impl_traits:
             # Abstract method, so method is guaranteed to be
             # overridden (meaning that the 'name' parameter of this
             # trait's tinit method will always be non-NULL)
             return scrambled_name
-        elif parent.implements(impl_trait):
+        elif len(impl_traits) > 1:
+            # If multiple ancestors provide an implementation, then
+            # there is no correct default implementation: it must be provided.
+            return scrambled_name
+
+        [impl_trait] = impl_traits
+        if parent.implements(impl_trait):
             # if this function is called, it means that 'name' is
             # overridable in parent. Thus, if the implementation is in
             # a superclass of parent, then the implementation is
@@ -2288,7 +2294,9 @@ def method_tinit_arg(trait, parent, name, scrambled_name):
             vtable_trait.vtable_methods[name]
         # Avoid an indirect call in the adjustor thunk, for
         # methods that are not overridable
-        if impl_trait and not impl_trait.method_impls[name].overridable:
+        if impl_traits and not impl_traits[0].method_impls[name].overridable:
+            assert len(impl_traits) == 1
+            [impl_trait] = impl_traits
             hardcoded_fun = impl_trait.method_impls[name].cname()
             def_path = []
             if trait is not impl_trait:
@@ -2302,7 +2310,7 @@ def method_tinit_arg(trait, parent, name, scrambled_name):
             trait.name, name, inp, outp, throws, independent,
             vtable_path, def_path,
             hardcoded_fun)
-        if parent.implements(impl_trait):
+        if len(impl_traits) == 1 and parent.implements(impl_traits[0]):
             assert name in tinit_args(trait)
             # This parent's default implementation does the
             # right thing, unless overridden
