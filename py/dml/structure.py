@@ -1438,19 +1438,21 @@ def process_method_implementations(obj, name, implementations,
                     raise EMETH(impl.site, overridden.site,
                                 "different nothrow annotations")
 
+        template = (impl.obj_spec.parent_template
+                    if isinstance(impl.obj_spec, InstantiatedTemplateSpec)
+                    else None)
         method = mkmethod(impl.site, rbrace_site,
                           location,
                           obj, name, inp_ast,
                           outp_ast, throws, independent, startup, memoized,
-                          body, default, default_level)
+                          body, default, default_level, template)
         impl_to_method[impl] = method
-        if isinstance(impl.obj_spec, InstantiatedTemplateSpec):
-            tmpl = impl.obj_spec.parent_template
-            if (tmpl, name) in obj.template_method_impls:
+        if template is not None:
+            if (template, name) in obj.template_method_impls:
                 raise ICE(impl.site,
                           f"{tmpl.name} provides multiple"
                           + f"implementations of {name} for {obj.ident}")
-            obj.template_method_impls[(tmpl, name)] = method
+            obj.template_method_impls[(template, name)] = method
 
     if dml.globals.dml_version == (1, 2):
         for (_, method_ast) in implementations:
@@ -1677,8 +1679,7 @@ def mkobj2(obj, obj_specs, params, each_stmts, used_templates):
         try:
             method = process_method_implementations(
                 obj, name, implementations,
-                [trait_method_impls[name]]
-                if name in trait_method_impls else [],
+                trait_method_impls.get(name, []),
                 obj_specs,
                 dml.globals.dml_version == (1, 2) and vtable_nothrow_dml14)
         except DMLError as e:
@@ -2965,7 +2966,7 @@ method io_memory_access(generic_transaction_t *memop, uint64 offset, void *aux) 
 
 def mkmethod(site, rbrace_site, location, parent_obj, name, inp_ast,
              outp_ast, throws, independent, startup, memoized, body, default,
-             default_level):
+             default_level, template):
     # check for duplicate parameter names
     named_args = inp_ast
     if body.site.dml_version() == (1, 2):
@@ -3008,7 +3009,10 @@ def mkmethod(site, rbrace_site, location, parent_obj, name, inp_ast,
                       'Methods with (partially) const output/return '
                       + 'values are not yet supported.')
     if default_level:
-        name += "___default%d" % (default_level,)
+        if template:
+            name = f'templates__{template.name}__{name}'
+        else:
+            name += f'___default{default_level}'
     method = objects.Method(name, site, parent_obj,
                             inp, outp, throws, independent, startup, memoized,
                             body, default, rbrace_site)
