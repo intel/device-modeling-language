@@ -1761,12 +1761,12 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
       <tt>typeof</tt> within a method signature would lead to incorrect
       compile-time errors when the method is overridden.</add-note>
   </build-id>
-  <build-id _6="6297" _7="next"><add-note> Added support for the
+  <build-id _6="6297" _7="7017"><add-note> Added support for the
       <tt>log warning</tt> statement.</add-note></build-id>
-  <build-id _6="6298" _7="next"><add-note> DMLC will now report errors
+  <build-id _6="6298" _7="7017"><add-note> DMLC will now report errors
       for some uses of function types that are illegal in C. These
       would previously yield broken C code.</add-note></build-id>
-  <build-id _6="6298" _7="next"><add-note>Created a compatibility feature
+  <build-id _6="6298" _7="7017"><add-note>Created a compatibility feature
       <tt>function_in_extern_struct</tt>. The syntax <tt>void
       m(conf_object_t)</tt> for function pointers is only permitted
       when this feature is enabled. The feature will be disabled in
