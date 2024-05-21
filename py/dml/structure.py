@@ -938,7 +938,7 @@ def mkobj(ident, objtype, arrayinfo, obj_specs, parent, each_stmts):
         obj.templates = used_templates
         index_sites = [ast.site for ast in arraylen_asts]
         obj_params = create_parameters(obj, obj_specs, index_vars, index_sites)
-        return mkobj2(obj, obj_specs, obj_params, each_stmts, used_templates)
+        return mkobj2(obj, obj_specs, obj_params, each_stmts)
 
 def create_object(site, ident, objtype, parent,
                   arraylen_asts, index_vars):
@@ -1204,6 +1204,7 @@ class DefaultTraitMethod(objects.MethodDefault):
         ancestry_path = self.trait_node.traits.ancestry_paths[
             default_def_trait][0]
         if default_def_trait is not self.trait_method.vtable_trait:
+            # This is safe; ancestry paths are tuples
             ancestry_path += default_def_trait.ancestry_paths[
                 self.trait_method.vtable_trait][0]
         return ExpressionSymbol(
@@ -1387,16 +1388,16 @@ def process_method_implementations(obj, name, implementations,
         startup = 'startup' in qualifiers
         memoized = 'memoized' in qualifiers
         if (startup and not independent) or (memoized and not startup):
-            raise ICE(impl.method_ast.site,
+            raise ICE(impl.site,
                       'Invalid qualifier combination: '
                       + ' '.join(['independent']*independent
                                  + ['startup']*startup
                                  + ['memoized']*memoized))
 
-        if (impl.method_ast.site.dml_version() == (1, 2) and throws
+        if (impl.site.dml_version() == (1, 2) and throws
             and vtable_nothrow_dml14):
             body = wrap_method_body_in_try(
-                impl.method_ast.site, vtable_nothrow_dml14,
+                impl.site, vtable_nothrow_dml14,
                 obj, name, body, rbrace_site)
             throws = False
         for overridden in default_map[impl]:
@@ -1410,9 +1411,9 @@ def process_method_implementations(obj, name, implementations,
                 typecheck_method_override(impl.method_ast,
                                           overridden.method_ast,
                                           location)
-            if (impl.method_ast.site.dml_version() == (1, 2) and throws
+            if (impl.site.dml_version() == (1, 2) and throws
                 and not overridden.throws
-                and overridden.method_ast.site.dml_version() == (1, 4)):
+                and overridden.site.dml_version() == (1, 4)):
                 # If a 1.4 library file defines an overrideable
                 # non-throwing method, and a 1.2 device overrides
                 # this, then assume that the method was never
@@ -1421,7 +1422,7 @@ def process_method_implementations(obj, name, implementations,
                 # We modify the override to nothrow, and patch it
                 # to catch any exceptions.
                 body = wrap_method_body_in_try(
-                    impl.method_ast.site, overridden.method_ast.site,
+                    impl.site, overridden.site,
                     obj, name, body, rbrace_site)
                 throws = False
             elif throws != overridden.throws:
@@ -1478,7 +1479,7 @@ ident_re = re.compile(r'[A-Za-z_][\w_]*')
 # Second stage of object creation, protected by error context
 # TODO: we should probably split up mkobj into several methods with
 # clearer responsibilities
-def mkobj2(obj, obj_specs, params, each_stmts, used_templates):
+def mkobj2(obj, obj_specs, params, each_stmts):
     for param in params:
         obj.add_component(param)
 
@@ -1798,7 +1799,8 @@ def mkobj2(obj, obj_specs, params, each_stmts, used_templates):
                 # handled as a special case in vtable initialization
                 continue
             if not override:
-                if member not in trait.method_impl_traits:
+                impl_traits = trait.method_impl_traits.get(member, [])
+                if not impl_traits:
                     # report error: override required by parameter or
                     # abstract method
                     assert member_kind in ['method', 'parameter']
@@ -1809,6 +1811,20 @@ def mkobj2(obj, obj_specs, params, each_stmts, used_templates):
                                 member_kind, member)
                     raise ICE(decl_trait.site,
                               'no site found for EABSTEMPLATE(%s)' % (member,))
+                elif len(impl_traits) > 1:
+                    # report error: override required to resolve ambiguity
+                    assert member_kind == 'method'
+                    sm0 = impl_traits[0].method_impls[member]
+                    sm1 = impl_traits[1].method_impls[member]
+
+                    raise EAMBINH(sm0.site,
+                                  sm1.site,
+                                  sm0.name,
+                                  RankDesc('template', sm0.trait.name),
+                                  RankDesc('template', sm1.trait.name),
+                                  # Things can only have gotten to this point
+                                  # if all shared impls. are overridable
+                                  True)
                 continue
 
             if override.objtype != decl_trait.member_kind(member):

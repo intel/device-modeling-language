@@ -60,7 +60,7 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                 startup = 'startup' in qualifiers
                 memoized = 'memoized' in qualifiers
                 if (startup and not independent) or (memoized and not startup):
-                    raise ICE(impl.method_ast.site,
+                    raise ICE(impl.site,
                               'Invalid qualifier combination: '
                               + ' '.join(['independent']*independent
                                          + ['startup']*startup
@@ -439,56 +439,51 @@ def merge_method_impl_maps(site, parents):
     # structure.sort_method_implementations
     merged_impls = {}
     for parent in parents:
-        for (mname, unmerged_impls) in list(parent.method_impl_traits.items()):
+        for (mname, unmerged_impls) in parent.method_impl_traits.items():
             if mname not in merged_impls:
-                merged_impls[mname] = list(unmerged_impls)
+                merged_impls[mname] = unmerged_impls
             else:
-                # The method is multiply inherited. If the parent
-                # implementation has an ancestry relation with a previous
-                # implementation, then merge by picking the method
-                # implementation that overrides the other one. Otherwise,
-                # report an error if any implementation is not overridable;
-                # if not, add the new implementation as a novel, unrelated
-                # implementation.
-                # This naive algorithm is on the order of O(n³ * log(n))
-                # (assuming all variable lengths are equal)
+                # The method is multiply inherited. For each unmerged
+                # implementation of the parent, if it gets overridden by any
+                # previous implementation, skip it; otherwise,
+                # implementations it overrides are removed, and mark it as
+                # a new implementation.
+                # If marked as a new implementation, and there are previous
+                # implementations it doesn't override, then report an error if
+                # the new or old implementations are not overridable.
+                # This naive algorithm will result in roughly O(n³ * log(n))
+                # behaviour (when assuming all variable lengths are equal)
                 existing_impls = merged_impls[mname]
-                new = []
+                new_impls = []
                 for unmerged_impl in unmerged_impls:
-                    for (i, existing_impl) in enumerate(existing_impls):
-                        # If there are conflicting implementations,
-                        # then merging could only work out if the new
-                        # implementation is also overridable
-                        if unmerged_impl.implements(existing_impl):
-                            if (len(existing_impls) > 1
-                                and not unmerged_impl.method_impls[
-                                    mname].overridable):
-                                report(EAMBINH(
-                                    site, None, mname,
-                                    unmerged_impl.name,
-                                    existing_impls[0 if i else 1].name))
-                            else:
-                                existing_impls[i] = unmerged_impl
-                            break
+                    filtered_existing_impls = []
+                    for existing_impl in existing_impls:
                         if existing_impl.implements(unmerged_impl):
                             break
+                        elif not unmerged_impl.implements(existing_impl):
+                            filtered_existing_impls.append(existing_impl)
                     else:
-                        # Novel implementation. Error if new or previous
-                        # implementation is unoverridable
+                        # Novel implementation. Error if there are existing
+                        # unrelated implementations, and the new or the
+                        # previous implementations are unoverridable.
                         # Need only check if existing is unoverridable if there
-                        # aren't already multiple conflicting
-                        if (not unmerged_impl.method_impls[mname].overridable
-                            or (len(existing_impls) == 1
-                                and not existing_impls[0].method_impls[
-                                    mname].overridable)):
+                        # were only exactly one of them (otherwise they are all
+                        # already guaranteed to be overridable)
+                        if (filtered_existing_impls
+                            and not (
+                                unmerged_impl.method_impls[mname].overridable
+                                and (len(existing_impls) != 1
+                                     or existing_impls[0].method_impls[
+                                         mname].overridable))):
                             report(EAMBINH(
                                 site, None, mname,
                                 unmerged_impl.name,
                                 existing_impls[0].name))
                         else:
-                            new.append(unmerged_impl)
-
-                existing_impls.extend(new)
+                            new_impls.append(unmerged_impl)
+                            existing_impls = filtered_existing_impls
+                existing_impls.extend(new_impls)
+                merged_impls[mname] = existing_impls
     return merged_impls
 
 class MethodHandle(object):
@@ -499,16 +494,18 @@ class MethodHandle(object):
         self.overridable = overridable
         self.rank = obj_spec.rank
 
-class TraitMethodHandle(MethodHandle):
-    def __init__(self, trait_method, obj_spec):
-        MethodHandle.__init__(self, trait_method.site, trait_method.name,
-                            obj_spec, trait_method.overridable)
-        self.trait_method = trait_method
+def get_highest_ranks(ranks):
+    '''Given a set of ranks, return the subset of highest unrelated ranks'''
+    if len(ranks) <= 1:
+        return ranks.union()
+    # .intersection(ranks) is redundant, but may serve to avoid creating large
+    # intermediate sets
+    return ranks.difference(*(r.inferior.intersection(ranks) for r in ranks))
 
 def calc_minimal_ancestry(ranks):
-    '''Given a set of ranks, return a dictionary Rank -> [Rank]
-    mapping each rank to the list of highest unrelated ranks it subsumes.
-    In addition, minimal_ancestry[None] is the list of highest unrelated ranks
+    '''Given a set of ranks, return a dictionary Rank -> set(Rank)
+    mapping each rank to the set of highest unrelated ranks it subsumes.
+    In addition, minimal_ancestry[None] is the set of highest unrelated ranks
     among all ranks given.
     '''
     # The subset of the ancestry graph where implementations of this

@@ -1,0 +1,47 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+template t1 {
+    shared method m() {}
+}
+
+template t2 is t1 { }
+
+template t3 is t2 { }
+
+template u {
+    shared method n() {}
+}
+
+is (t3, u);
+
+method init() {
+    local t2 x = cast(dev, t2);
+
+    // no error
+    dev.templates.t1.m();
+    dev.templates.t2.m();
+    dev.templates.t3.m();
+    dev.templates.u.n();
+
+    x.templates.t1.m();
+    x.templates.t2.m();
+
+    /// ERROR ENTMPL
+    dev.templates.nonexistent.m();
+    /// ERROR ENTMPL
+    x.templates.nonexistent.m();
+
+    /// ERROR ETQMIC
+    dev.templates.write.write(4);
+
+    /// ERROR ETTQMIC
+    x.templates.t3.m();
+    /// ERROR ETTQMIC
+    x.templates.u.n();
+}

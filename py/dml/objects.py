@@ -222,6 +222,10 @@ class CompositeObject(DMLObject):
         # (Template, string) -> Method
         # ... where the string is a method identifier
         # Populated after object creation
+        # TODO: Preferably, the Method class architecture should be revamped
+        # such that this information can be derived instead. Possibly: a
+        # method component of an object is represented by a MethodNode that has
+        # a dictionary from Rank to implementation.
         self.template_method_impls = {}
 
         self._confidential = False

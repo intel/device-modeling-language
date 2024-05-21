@@ -1,0 +1,68 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+template t {
+    shared method m();
+    shared method n() default {}
+}
+
+template u1 is t {
+    shared method m() default {}
+    shared method n() default {}
+}
+
+template u2 is t {
+    param enable_u2 default true;
+    shared method m() default {}
+    #if (enable_u2) {
+        method n() default {}
+    }
+}
+
+template u3 is (u1, u2) {
+    param enable_u3 default false;
+    #if (enable_u3) {
+        method n() default {}
+    }
+}
+
+template u4 is u3 {
+    shared method m() {}
+    method n() {}
+}
+
+group g1 is u4;
+group g2 is u4 {
+    param enable_u2 = false;
+}
+group g3 is u4 {
+    param enable_u3 = true;
+}
+
+method init() {
+    local u4 x = cast(g1, u4);
+
+    // no error
+    g1.templates.u4.m();
+
+    /// ERROR EAMBTQMIC
+    g1.templates.u3.m();
+
+    /// ERROR EAMBTQMIC
+    g1.templates.u3.n();
+    // no error
+    g2.templates.u3.n();
+    // no error
+    g3.templates.u3.n();
+
+    // no error
+    x.templates.u4.m();
+
+    /// ERROR EAMBTQMIC
+    x.templates.u3.m();
+}

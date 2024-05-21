@@ -6,16 +6,16 @@ dml 1.2;
 
 device test;
 
+/// WARNING WEXPERIMENTAL T_EAMBINH.dml
+
 // trivial example
-/// WARNING WEXPERIMENTAL
 trait a {
     method m() default {}
 }
-/// WARNING WEXPERIMENTAL
+
 trait b {
     method m() default {}
 }
-/// WARNING WEXPERIMENTAL T_EAMBINH.dml
 /// ERROR EAMBINH
 trait c {
     is a;
@@ -33,41 +33,42 @@ trait cp {
 }
 
 // nontrivial example
-/// WARNING WEXPERIMENTAL
 trait d {
     method m();
 }
-/// WARNING WEXPERIMENTAL
 trait e {
     is d;
     method m() default {}
 }
-/// WARNING WEXPERIMENTAL
 trait f {
     is d;
     method m() default {}
 }
-/// WARNING WEXPERIMENTAL
 trait g {
     is e;
 }
-/// ERROR EAMBINH
+// no error
 trait h {
     is g;
     is f;
 }
 
+/// ERROR EAMBINH
+bank b1 is h;
+
+// no error
+bank b2 is h {
+    method m() nothrow {}
+}
+
 // Currently, not even abstract methods may clash. We don't have a good reason
 // to disallow this clash; we just haven't implemented it yet.
-/// WARNING WEXPERIMENTAL
 trait i {
     method m();
 }
-/// WARNING WEXPERIMENTAL
 trait j {
     method m();
 }
-/// WARNING WEXPERIMENTAL T_EAMBINH.dml
 /// ERROR EAMBINH
 trait k {
     is i;

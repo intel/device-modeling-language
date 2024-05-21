@@ -1,0 +1,65 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+template t1 {
+    method nonshared() {}
+    shared method abstract1();
+    shared method abstract2();
+    shared method sm1() default {}
+    shared method sm2() default {}
+    shared method sm3() default {}
+}
+
+template t2 is t1 {
+    shared method abstract1() {}
+    shared method sm2() {}
+    // Any method implementation, within an #if or not, that the template gives
+    // for the object instantiating it is considered possibly used for the
+    // purposes of ENSHAREDTQMIC, even if the #if condition is just 'false'.
+    #if (false) {
+        method sm3() {}
+    }
+}
+
+template t3 is t2 {
+    // ... Unless there is a higher-rank shared method implementation given
+    // (which is only possible if the non-shared implementation is never
+    // provided to the instantiated object)
+    shared method sm3() {}
+}
+
+in each t2 {
+    // Since in-each bodies are not considered part of the template, they are
+    // not considered possible candidates and do not provoke
+    // ENSHAREDTQMIC
+    method sm1() {}
+}
+
+group g is t3 {
+    method abstract2() {}
+}
+
+method init() {
+    local t3 x = cast(g, t3);
+    // no error
+    x.templates.t1.sm1();
+    x.templates.t1.sm2();
+    x.templates.t1.sm3();
+    x.templates.t2.abstract1();
+    x.templates.t2.sm2();
+    x.templates.t3.sm3();
+
+    /// ERROR ENSHAREDTQMIC
+    x.templates.t2.nonshared();
+    /// ERROR ENSHAREDTQMIC
+    x.templates.t1.abstract1();
+    /// ERROR ENSHAREDTQMIC
+    x.templates.t2.abstract2();
+    /// ERROR ENSHAREDTQMIC
+    x.templates.t2.sm3();
+}

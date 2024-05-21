@@ -4,6 +4,7 @@
 # Process templates, from ASTs to Template objects
 
 import os
+import functools
 from . import ast, logging
 from . import compat
 from .logging import *
@@ -63,8 +64,7 @@ class Rank(object):
 class ObjectSpec(object):
     '''Partial specification of a DML object. Basically the AST of an object
     declaration block, but slightly post-processed.'''
-    __slots__ = ('site', 'rank', 'templates', 'in_eachs', 'params', 'blocks',
-                 '_defined_symbols')
+    __slots__ = ('site', 'rank', 'templates', 'in_eachs', 'params', 'blocks')
     def __init__(self, site, rank, templates, in_eachs, params, blocks):
         self.site = site
         # Rank object
@@ -85,7 +85,6 @@ class ObjectSpec(object):
         # object if all exprs, evaluated in the object's scope, yield
         # true.
         self.blocks = blocks
-        self._defined_symbols = None
 
     def __repr__(self):
         # A full repr is way too verbose; instead print a shorter form that
@@ -106,8 +105,6 @@ class ObjectSpec(object):
         '''Return a dictionary of all symbols defined, conditionally or
         unconditionally, in this block. The dictionary maps symbol to a pair
         (kind, site)'''
-        if self._defined_symbols is not None:
-            return self._defined_symbols
         symbols = {}
         for (_, t) in self.templates:
             for (sym, val) in list(t.spec.defined_symbols().items()):
@@ -128,7 +125,6 @@ class ObjectSpec(object):
                     assert sub.kind == 'error'
             for (_, name, _, specs) in composite:
                 symbols[name] = ('subobj', specs.site)
-        self._defined_symbols = symbols
         return symbols
 
 class InstantiatedTemplateSpec(ObjectSpec):
@@ -148,8 +144,6 @@ class Template(object):
         # ObjectSpec instance
         self.spec = spec
 
-        self._top_method_impls = {}
-
     def __repr__(self):
         return 'Template(%r)' % (self.name,)
     @property
@@ -162,49 +156,65 @@ class Template(object):
             return Set().union(
                 *[sup.traits() for (_, sup) in self.spec.templates])
 
-    def get_potential_method_impl_details(self, method_name):
-        if method_name in self._top_method_impls:
-            return self._top_method_impls[method_name]
+    @functools.cache
+    def get_potential_method_impl_details(self, method_name: str) -> tuple[
+            bool, tuple['Template', ...]]:
+        '''Provides details about which among this template and its ancestors
+        may provide the highest-rank implementation of the specified method
+        (when not considering any rank higher than that of the template.)
 
+        Returns a tuple `(provides_impl, next_candidates)`:
+        * `provides_impl`: Signifies that the current template itself specifies
+          an implementation of the method (which may be conditionally provided)
+        * `next_candidates`: A tuple of all hierarchically unrelated ancestor
+          templates that specify (and thus may provide) a highest-rank
+          implementation of the named method when excluding the current
+          template. If the current template unconditionally provides an
+          implementation, this tuple will be empty.
+
+        Example return values of `t.get_potential_method_impl_details(m)` and
+        their meaning:
+        * `(True, ())`
+          `t` specifies an implementation of `m`, and no ancestor template
+          specifies an implementation of `m` that may possibly be used
+          instead.
+        * `(False, ())``
+          Neither `t` nor its ancestor templates have a specification of a
+          method `m`.
+        * `(True, (next_t1, next_t2))`
+          `t` specifies an implementation of a method `m`, which, if provided
+          to the object instantiating the template, would override the
+          next-highest rank implementations, which are specified by `next_t1`
+          and `next_t2`.
+        * `(False, (next_t1, next_t2))`
+          The highest-rank implementation specifications of the method `m` are
+          given by the (unrelated) ancestor templates `next_t1` and `next_t2`.
+        '''
         self_is_candidate = False
-        final = False
         for (preconds, shallow, composite) in self.spec.blocks:
             for sub in shallow:
                 if sub.args[0] == method_name:
                     if not preconds:
-                        impls = (not (sub.kind == 'method' and sub.args[2]),
-                                 sub.kind == 'method', [])
-                        self._top_method_impls[method_name] = impls
-                        return impls
+                        return (sub.kind == 'method', ())
                     elif sub.kind == 'method':
                         self_is_candidate = True
         rank_to_candidate = {}
 
         for (_, tmpl) in self.spec.templates:
-            (final, provides_impl, sub_next_candidates
-             ) = tmpl.get_potential_method_impl_details(method_name)
-            if final:
-                assert provides_impl or len(sub_next_candidates) <= 1
-                impls = (final, False,
-                         tmpl if provides_impl else sub_next_candidates)
-                self._top_method_impls[method_name] = impls
-                return impls
-
+            (provides_impl,
+             sub_next_candidates) = tmpl.get_potential_method_impl_details(
+                 method_name)
             if provides_impl:
                 rank_to_candidate[tmpl.spec.rank] = tmpl
             else:
-                rank_to_candidate.update((tmpl.spec.rank, tmpl)
-                                         for tmpl in sub_next_candidates)
+                rank_to_candidate.update((ancestor.spec.rank, ancestor)
+                                         for ancestor in sub_next_candidates)
 
-        minimal_ancestry = dml.traits.calc_minimal_ancestry(
-            Set(rank_to_candidate))
+        highest_ranks = dml.traits.get_highest_ranks(Set(rank_to_candidate))
 
-        next_candidates = [rank_to_candidate[r]
-                           for r in minimal_ancestry[None]]
+        next_candidates = tuple(rank_to_candidate[r] for r in highest_ranks)
 
-        impls = (final, self_is_candidate, next_candidates)
-        self._top_method_impls[method_name] = impls
-        return impls
+        return (self_is_candidate, next_candidates)
 
 def flatten_ifs(stmts, preconds):
     '''Given a sequence of {if, method, session, object, error, export} nodes,

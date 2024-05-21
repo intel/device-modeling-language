@@ -1,0 +1,90 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+// Test for Template-Qualified Method Implementation Calls (TQMIC)
+
+dml 1.4;
+device test;
+
+template t {
+    shared method sm() -> (double) default {
+        return 1.0;
+    }
+
+    shared method m() -> (double) default {
+        return 1.0;
+    }
+}
+
+template u1 is t {}
+
+template u2 is t {
+    shared method sm() -> (double) default {
+        return 2.2;
+    }
+
+    shared method m() -> (double) default {
+        return 2.2;
+    }
+}
+
+template u3 is t {
+    shared method sm() -> (double) default {
+        return 2.3;
+    }
+
+    param enable_u3 default true;
+    #if (enable_u3) {
+        method m() -> (double) default {
+            return 2.3;
+        }
+    }
+}
+
+// Redundancy as a smoke test that ancestor vtable merging works properly
+template v is (t, u1, u2, u3) {}
+
+template w is (t, u1, u2, u3, v) {
+    shared method sm() -> (double) default {
+        return 4.0;
+    }
+    method m() -> (double) {
+        return 4.0;
+    }
+}
+
+group g1 is w;
+group g2 is w {
+    param enable_u3 = false;
+}
+
+method init() {
+    local w tref = cast(g1, w);
+    local w *trefp = &tref;
+
+    #foreach g in ([g1, g2]) {
+        assert g.templates.t.sm() == 1.0 && g.templates.t.m() == 1.0;
+        assert g.templates.u1.sm() == 1.0 && g.templates.u1.m() == 1.0;
+        assert g.templates.u2.sm() == 2.2 && g.templates.u2.m() == 2.2;
+        assert g.templates.u3.sm() == 2.3;
+        assert g.templates.w.sm() == 4.0 && g.templates.w.m() == 4.0;
+    }
+    assert tref.templates.t.sm() == 1.0;
+    assert trefp->templates.t.sm() == 1.0;
+
+    assert tref.templates.u1.sm() == 1.0;
+    assert tref.templates.u2.sm() == 2.2;
+    assert tref.templates.u3.sm() == 2.3;
+    assert tref.templates.w.sm() == 4.0;
+
+    // Since g2 lacks u3's def of m(), the TQMIC with v unambiguously resolves
+    // to u2's implementation
+    assert g2.templates.v.m() == 2.2;
+
+    // a TQMIC qualified by the 'object' template is always allowed.
+    // This really only serves as an easy way to call `cancel_after()` or the
+    // internal '_qname()'
+    assert strcmp(tref.templates.object._qname(), "g1") == 0;
+}

@@ -544,4 +544,18 @@
       an implementation that overrides all the unrelated implementations
       <bug number="SIMICS-20431"/>. This mirrors the pre-existing semantics for
       non-<tt>shared</tt> methods.</add-note></build-id>
+  <build-id _6="next" _7="next"><add-note> Added the `templates` member for
+      all objects and values of template types, which allows for making calls
+      to any particular implementation of a method as provided by a specified
+      template <bug number="SIMICS-22264"/>. Example syntax:
+      <pre>
+      // Call the `write_register()` implementation as provided by the
+      // `register` template on the `r` register of the bank `b`.
+      b.r.templates.register.write_register(...);
+      </pre>
+      Calls of this form are called <em>Template-Qualified Method Implementation
+      Calls</em>, and are primarily meant to make it easier to resolve conflicts
+      in multiple inheritance: it allows any method that overrides multiple
+      implementations from unrelated templates to individually reference and
+      call the implementations it overrides.</add-note></build-id>
 </rn>
