@@ -482,6 +482,9 @@ template object is (name, _qname, desc, documentation, limitations) {
 
     param dev                       = defined parent #? parent.dev #: this;
 
+    // For template-qualified method implementation calls
+    param templates                 auto;
+
     shared method cancel_after() {
         local object ref = this;
         _cancel_simple_events(dev.obj, cast(&ref, _traitref_t *)->id);

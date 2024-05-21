@@ -16,6 +16,7 @@ __all__ = (
     'Rank',
     'RankDesc',
     'ObjectSpec',
+    'InstantiatedTemplateSpec',
     'process_templates',
 )
 
@@ -62,7 +63,8 @@ class Rank(object):
 class ObjectSpec(object):
     '''Partial specification of a DML object. Basically the AST of an object
     declaration block, but slightly post-processed.'''
-    __slots__ = ('site', 'rank', 'templates', 'in_eachs', 'params', 'blocks')
+    __slots__ = ('site', 'rank', 'templates', 'in_eachs', 'params', 'blocks',
+                 '_defined_symbols')
     def __init__(self, site, rank, templates, in_eachs, params, blocks):
         self.site = site
         # Rank object
@@ -83,6 +85,7 @@ class ObjectSpec(object):
         # object if all exprs, evaluated in the object's scope, yield
         # true.
         self.blocks = blocks
+        self._defined_symbols = None
 
     def __repr__(self):
         # A full repr is way too verbose; instead print a shorter form that
@@ -103,6 +106,8 @@ class ObjectSpec(object):
         '''Return a dictionary of all symbols defined, conditionally or
         unconditionally, in this block. The dictionary maps symbol to a pair
         (kind, site)'''
+        if self._defined_symbols is not None:
+            return self._defined_symbols
         symbols = {}
         for (_, t) in self.templates:
             for (sym, val) in list(t.spec.defined_symbols().items()):
@@ -123,7 +128,17 @@ class ObjectSpec(object):
                     assert sub.kind == 'error'
             for (_, name, _, specs) in composite:
                 symbols[name] = ('subobj', specs.site)
+        self._defined_symbols = symbols
         return symbols
+
+class InstantiatedTemplateSpec(ObjectSpec):
+    '''The return value of `wrap_sites`, represents the object spec of
+    a particular instantiation of a template'''
+    __slots__ = ('parent_template',)
+    def __init__(self, parent_template, site, rank, templates, in_eachs,
+                 params, blocks):
+        self.parent_template = parent_template
+        super().__init__(site, rank, templates, in_eachs, params, blocks)
 
 class Template(object):
     def __init__(self, name, trait, spec):
@@ -132,6 +147,9 @@ class Template(object):
         self.trait = trait
         # ObjectSpec instance
         self.spec = spec
+
+        self._top_method_impls = {}
+
     def __repr__(self):
         return 'Template(%r)' % (self.name,)
     @property
@@ -143,6 +161,50 @@ class Template(object):
         else:
             return Set().union(
                 *[sup.traits() for (_, sup) in self.spec.templates])
+
+    def get_potential_method_impl_details(self, method_name):
+        if method_name in self._top_method_impls:
+            return self._top_method_impls[method_name]
+
+        self_is_candidate = False
+        final = False
+        for (preconds, shallow, composite) in self.spec.blocks:
+            for sub in shallow:
+                if sub.args[0] == method_name:
+                    if not preconds:
+                        impls = (not (sub.kind == 'method' and sub.args[2]),
+                                 sub.kind == 'method', [])
+                        self._top_method_impls[method_name] = impls
+                        return impls
+                    elif sub.kind == 'method':
+                        self_is_candidate = True
+        rank_to_candidate = {}
+
+        for (_, tmpl) in self.spec.templates:
+            (final, provides_impl, sub_next_candidates
+             ) = tmpl.get_potential_method_impl_details(method_name)
+            if final:
+                assert provides_impl or len(sub_next_candidates) <= 1
+                impls = (final, False,
+                         tmpl if provides_impl else sub_next_candidates)
+                self._top_method_impls[method_name] = impls
+                return impls
+
+            if provides_impl:
+                rank_to_candidate[tmpl.spec.rank] = tmpl
+            else:
+                rank_to_candidate.update((tmpl.spec.rank, tmpl)
+                                         for tmpl in sub_next_candidates)
+
+        minimal_ancestry = dml.traits.calc_minimal_ancestry(
+            Set(rank_to_candidate))
+
+        next_candidates = [rank_to_candidate[r]
+                           for r in minimal_ancestry[None]]
+
+        impls = (final, self_is_candidate, next_candidates)
+        self._top_method_impls[method_name] = impls
+        return impls
 
 def flatten_ifs(stmts, preconds):
     '''Given a sequence of {if, method, session, object, error, export} nodes,

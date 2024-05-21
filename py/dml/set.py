@@ -40,6 +40,9 @@ class Set:
     def add(self, x):
         self._d[x] = None
 
+    def pop(self):
+        return self._d.popitem()[0]
+
     def update(self, xs):
         self._d.update((x, None) for x in xs)
 

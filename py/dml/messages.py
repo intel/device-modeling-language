@@ -1639,6 +1639,56 @@ class ELOGGROUPS(DMLError):
     fmt = ("Too many loggroup declarations. A maximum of 63 log groups (61 "
            + "excluding builtins) may be declared per device.")
 
+class ETQMIC(DMLError):
+    """A template-qualified method implementation call can only be done if
+    the specified template is actually instantiated by the object. """
+    fmt = ("invalid template-qualified method implementation call, '%s' does "
+           + "not instantiate '%s'")
+
+class EAMBTQMIC(DMLError):
+    """A template-qualified method implementation call was made, when the
+    template inheritance graph for specified template is insufficient to infer
+    that one implementation overrides the others.
+    To resolve this, the template-qualified method implementation call should
+    instead be qualified with the specific ancestor template that has the
+    desired implementation.
+    """
+    fmt = ("Ambiguous invocation of template-qualified method implementation "
+           + "call. '%s' does not provide an implementation of '%s', and "
+           + "inherits multiple unrelated implementations from its ancestor "
+           + "templates.")
+    def __init__(self, site, template, method, candidates):
+        DMLError.__init__(self, site, template, method)
+        self.candidates = candidates
+    def log(self):
+        DMLError.log(self)
+        for (ancestor, candidate) in self.candidates:
+            self.print_site_message(
+                candidate.site,
+                "implementation candidate provided by ancestor template "
+                + f"'{ancestor.name}'")
+
+class ENSHAREDTQMIC(DMLError):
+    """A template-qualified method implementation call via a value of template
+    type, including when `(this.)templates` is used within the body of a
+    shared method, can only be done if the specified template provides or
+    inherits a shared implementation of the specified method. If an
+    implementation is never provided or inherited by the template, or the
+    template provides or inherits a non-shared implementation, then the call
+    can't be made."""
+    fmt = ("invalid template-qualified method implementation call made via a "
+           + "value of template type: '%s' does not provide nor inherit a "
+           + "shared implementation of '%s'")
+
+class ETTQMIC(DMLError):
+    """A template-qualified method implementation via a value of template type,
+    including when `(this.)templates` is used within the body call casting to
+    a template type, can only be done if the specified template is a parent
+    template of the template type, or the template type itself."""
+    version = "1.4"
+    fmt = ("invalid template-qualified method implementation call, "
+           + "'%s' not a subtemplate of '%s'")
+
 #
 # WARNINGS (keep these as few as possible)
 #

@@ -451,17 +451,41 @@ def merge_method_impl_maps(site, parents):
     return merged_impls
 
 class MethodHandle(object):
-    def __init__(self, site, name, rank, overridable):
+    def __init__(self, site, name, obj_spec, overridable):
         self.site = site
         self.name = name
-        self.rank = rank
+        self.obj_spec = obj_spec
         self.overridable = overridable
+        self.rank = obj_spec.rank
 
 class TraitMethodHandle(MethodHandle):
-    def __init__(self, trait_method, rank):
+    def __init__(self, trait_method, obj_spec):
         MethodHandle.__init__(self, trait_method.site, trait_method.name,
-                            rank, trait_method.overridable)
+                            obj_spec, trait_method.overridable)
         self.trait_method = trait_method
+
+def calc_minimal_ancestry(ranks):
+    '''Given a set of ranks, return a dictionary Rank -> [Rank]
+    mapping each rank to the list of highest unrelated ranks it subsumes.
+    In addition, minimal_ancestry[None] is the list of highest unrelated ranks
+    among all ranks given.
+    '''
+    # The subset of the ancestry graph where implementations of this
+    # method can be found
+    ancestry = {rank: rank.inferior.intersection(ranks)
+                for rank in ranks}
+
+    # None represents a fictional declaration that overrides all real
+    # implementations
+    ancestry[None] = ranks
+
+    # Transitive reduction, naive O(n^3) algorithm.
+    minimal_ancestry = {
+        rank: parents.difference(*(
+            ancestry[p] for p in parents))
+        for (rank, parents) in ancestry.items()}
+
+    return minimal_ancestry
 
 def sort_method_implementations(implementations):
     '''Given a list of (Rank, ast.method) pairs, return a pair
@@ -477,22 +501,7 @@ def sort_method_implementations(implementations):
                             impl.name)
         rank_to_method[impl.rank] = impl
 
-    ranks = Set(rank_to_method)
-
-    # The subset of the ancestry graph where implementations of this
-    # method can be found
-    ancestry = {rank: rank.inferior.intersection(ranks)
-                for rank in ranks}
-
-    # None represents a fictional declaration that overrides all real
-    # implementations
-    ancestry[None] = ranks
-
-    # Transitive reduction, naive O(n^3) algorithm.
-    minimal_ancestry = {
-        rank: parents.difference(*(
-            ancestry[p] for p in parents))
-        for (rank, parents) in ancestry.items()}
+    minimal_ancestry = calc_minimal_ancestry(Set(rank_to_method))
 
     if len(minimal_ancestry[None]) > 1:
         # There is no single method implementation that overrides all
@@ -510,8 +519,8 @@ def sort_method_implementations(implementations):
     # Ancestry graph translated back to method ASTs. Maps method to
     # list of default methods.
     method_map = {
-        rank_to_method[r]: [rank_to_method[x] for x in minimal_ancestry[r]]
-        for r in ranks}
+        m: [rank_to_method[x] for x in minimal_ancestry[r]]
+        for (r, m) in rank_to_method.items()}
     method_order = list(reversed(topsort.topsort(method_map)))
 
     m = method_order[0]
@@ -769,6 +778,8 @@ class Trait(SubTrait):
     def lookup(self, name, expr, site):
         '''Look up a member of this trait; return a referencing expression or
         None. expr is an expression referencing this trait.'''
+        if name == 'templates':
+            return mkTraitTemplatesRef(site, self, expr)
         if name in self.method_impl_traits:
             impl_trait = self.method_impl_traits[name]
             impl = impl_trait.method_impls[name]
