@@ -27,7 +27,15 @@ header %{
 #ifndef _WIN32
         // waste most of the stack. Pass O0 to avoid optimizing out alloca.
         struct rlimit limit;
-        getrlimit(RLIMIT_STACK, &limit);
+        int ret = getrlimit(RLIMIT_STACK, &limit);
+        ASSERT(ret == 0);
+        if (limit.rlim_cur == -1) {
+            // lower limit to make a stack overflow possible
+            limit.rlim_cur = 16 * 1024 * 1024;
+            ret = setrlimit(RLIMIT_STACK, &limit);
+            ASSERT(ret == 0);
+        }
+        ASSERT(limit.rlim_cur > stack_limit);
 /// CC-FLAG -O0
         char *x = alloca(limit.rlim_cur - stack_limit);
         x[0] = 1;
