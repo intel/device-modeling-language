@@ -429,6 +429,9 @@ which cannot be overridden:
 
 * dev: The top-level `device` object
 
+* templates: see [Template-Qualified Method Implementation
+  Calls](language.html#template-qualified-method-implementation-calls).
+
 * indices: List of local indices for this object. For a non-array
   object, this is the empty list. In a register array of size N, it is
   a list with one element, a non-negative integer smaller than N. The

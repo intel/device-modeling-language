@@ -1641,7 +1641,7 @@ class ELOGGROUPS(DMLError):
 
 class ETQMIC(DMLError):
     """A template-qualified method implementation call can only be done if
-    the specified template is actually instantiated by the object. """
+    the specified template is actually instantiated by the object."""
     fmt = ("invalid template-qualified method implementation call, '%s' does "
            + "not instantiate '%s'")
 
@@ -1669,22 +1669,124 @@ class EAMBTQMIC(DMLError):
                 + f"'{ancestor.name}'")
 
 class ENSHAREDTQMIC(DMLError):
-    """A template-qualified method implementation call via a value of template
-    type, including when `(this.)templates` is used within the body of a
-    shared method, can only be done if the specified template provides or
-    inherits a shared implementation of the specified method. If an
+    """<a id="ENSHAREDTQMIC"/>
+    A template-qualified method implementation call via a value of template
+    type, including when `this.templates` is used within the body of a
+    `shared` method, can only be done if the specified template provides or
+    inherits a `shared` implementation of the specified method. If an
     implementation is never provided or inherited by the template, or the
-    template provides or inherits a non-shared implementation, then the call
-    can't be made."""
+    template provides or inherits a non-`shared` implementation, then the call
+    can't be made.
+
+    For example, the following is permitted:
+    ```
+    template t {
+        shared method m();
+    }
+
+    template u is t {
+        shared method m() default {
+            log info: "implementation from 'u'";
+        }
+    }
+
+    template v is t {
+        shared method m() default {
+            log info: "implementation from 'v'";
+        }
+    }
+
+    template uv is (u, v) {
+        shared method m() {
+            // 'this' is a value of the template type 'uv'
+            this.templates.u.m();
+            // Equivalent to 'this.templates.v.m()'
+            templates.v.m();
+        }
+    }
+    ```
+
+    But the following is not:
+    ```
+    template t {
+        shared method m();
+    }
+
+    template u is t {
+        shared method m() default {
+            log info: "implementation from 'u'";
+        }
+    }
+
+    template v is t {
+        method m() default {
+            log info: "implementation from 'v'";
+        }
+    }
+
+    template uv is (u, v) {
+        // Indirection as a shared implementation is not allowed to override a
+        // non-shared implementation, but even if it were...
+        method m() {
+            m_impl();
+        }
+
+        shared method m_impl() {
+            this.templates.u.m();
+            // This is rejected because the implementation of 'm' provided by
+            // 'v' is not shared.
+            this.templates.v.m();
+        }
+    }
+    ```
+
+    As a result, resolving a conflict between a non-`shared` method
+    implementation and a `shared` method implementation can typically only be
+    done by having most parts of the overriding implementation be non-`shared`:
+    ```
+    template uv is (u, v) {
+        method m() {
+            // OK; 'this' is a compile-time reference to the object
+            // instantiating the template rather than a value of template type.
+            this.templates.u.m();
+            this.templates.v.m();
+        }
+    }
+    ```
+
+    Alternatively, a new `shared` method with non-`shared` implementation can
+    be declared to allow access to the specific non-`shared` implementation
+    needed (at the cost of increasing the memory overhead needed for the
+    template type):
+    ```
+    template uv is (u, v) {
+        method m() {
+            m_impl();
+        }
+
+        shared method m_impl_by_v();
+        method m_impl_by_v() {
+            this.templates.v.m();
+        }
+
+        shared method m_impl() {
+            this.templates.u.m();
+            // OK
+            m_impl_by_v();
+        }
+    }
+    ```
+    """
     fmt = ("invalid template-qualified method implementation call made via a "
            + "value of template type: '%s' does not provide nor inherit a "
            + "shared implementation of '%s'")
 
 class ETTQMIC(DMLError):
-    """A template-qualified method implementation via a value of template type,
-    including when `(this.)templates` is used within the body call casting to
-    a template type, can only be done if the specified template is a parent
-    template of the template type, or the template type itself."""
+    """A template-qualified method implementation call via a value of template
+    type, including when `this.templates` is used within the body of a `shared`
+    method, can only be done if the specified template is an ancestor template
+    of the template type, the `object` template type, or the template type
+    itself."""
     version = "1.4"
     fmt = ("invalid template-qualified method implementation call, "
            + "'%s' not a subtemplate of '%s'")

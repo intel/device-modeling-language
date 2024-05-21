@@ -1245,37 +1245,10 @@ def expr_objectref(tree, location, scope):
                     dmlparse.start_site(tree.site), '', prefix))
     return e
 
-def try_resolve_len(site, lh):
-    if isinstance(lh, NonValue):
-        if isinstance(lh, AbstractList):
-            return mkIntegerConstant(site,
-                                     len(tuple(lh.iter_flat())), False)
-        elif isinstance(lh, NonValueArrayRef):
-            return mkIntegerConstant(site,
-                                     lh.local_dimsizes[len(lh.local_indices)],
-                                     False)
-    return None
-
 @expression_dispatcher
 def expr_member(tree, location, scope):
     [lh, op, rh] = tree.args
     lh = codegen_expression_maybe_nonvalue(lh, location, scope)
-    if op == '.':
-        if not tree.site.dml_version() == (1, 2) and rh == 'len':
-            member = try_resolve_len(tree.site, lh)
-            if member:
-                return member
-        elif isinstance(lh, TemplatesRef):
-            return mkTemplatesSubRef(tree.site, lh, rh)
-        elif isinstance(lh, TemplatesSubRef):
-            return mkTemplateQualifiedMethodRef(tree.site, lh, rh)
-        elif isinstance(lh, TraitTemplatesRef):
-            return mkTraitTemplatesSubRef(tree.site, lh, rh)
-        elif isinstance(lh, TraitTemplatesSubRef):
-            return mkTraitTemplateQualifiedMethodRef(tree.site, lh, rh)
-
-    if isinstance(lh, NonValue) and not isinstance(lh, NodeRef):
-        raise lh.exc()
 
     return mkSubRef(tree.site, lh, rh, op)
 

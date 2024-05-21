@@ -1079,6 +1079,10 @@ A template type has the following members:
   `post` and `next` are members of
   the `simple_time_event` template type.
 
+* The `templates` member, which permits [template-qualified method
+  implementation calls](#template-qualified-method-implementation-calls) to
+  the `shared` method implementations of the template type's ancestor templates.
+
 Template members are dereferenced using the `.` operator,
 much like struct members.
 
@@ -1680,6 +1684,15 @@ method from within the body of the overriding method using the identifier
 ```
 x = default(...);
 ```
+
+In addition to `default`, there exists the [`templates` member of
+objects](#template-qualified-method-implementation-calls) which allows for
+calling the particular implementation of a method as provided by a specified
+template. This is particularly useful when `default` _can't_ be used due to the
+method overriding implementations provided by multiple hierarchically unrelated
+templates, such that `default` can't be unambiguously resolved (see [Resolution
+of overrides](#resolution-of-overrides).) Unlike `default`, `templates` can also
+be used even outside the body of the overriding method.
 
 DML supports _compound initializer syntax_ for the arguments of called methods,
 meaning arguments of struct-like types can be constructed using
@@ -3235,6 +3248,176 @@ local (int i, uint8 j) = m(e1);
 // caller.
 return m(e1)
 ```
+
+### Template-Qualified Method Implementation Calls
+Every object, as well as [every template type](#templates-as-types), has a
+`templates` member to allow for calling _particular_ implementations of that
+object's methods, as opposed to only the final overriding implementations
+that are reachable directly. Specifically, `templates` allows for invoking any
+particular implementation as provided by a specified template instantiated by
+the object. Such invocations are called _template-qualified method
+implementation calls_, and are made as follows:
+```
+template t {
+    method m() default {
+        log info: "implementation from 't'"
+    }
+}
+
+template u is t {
+    method m() default {
+        log info: "implementation from 'u'"
+    }
+}
+
+group g is u {
+    method m() {
+        log info: "final implementation"
+    }
+}
+
+method call_ms() {
+    // Logs "final implementation"
+    g.m();
+    // Logs "implementation from 'u'"
+    g.templates.u.m();
+    // Logs "implementation from 't'"
+    g.templates.t.m();
+}
+```
+
+Template-qualified method implementation calls are primarily meant as a way
+for an overriding method to reference overridden implementations, *even when*
+the implementations are provided by hierarchically unrelated templates such that
+`default` can't be used (see [Resolution of
+overrides](#resolution-of-overrides).) In particular, this typically allows for
+ergonomically resolving conflicts introduced when multiple orthogonal templates
+are instantiated, as long as all conflicting implementations are overridable,
+and one of the following is true:
+* The implementations can be combined together by calling each one of them, as
+  long as that can be done without risking e.g. side-effects being duplicated.
+* The implementations can be combined by choosing one particular template's
+  implementation to invoke (typically the one most complex), and then adding
+  code around that implementation call in order to replicate the behaviour of
+  the implementations of the other templates. Ideally, the other templates would
+  provide methods that may be leveraged so that their behaviour may be
+  replicated without the need for excessive boilerplate.
+
+The following is an example of the first case:
+```
+template alter_write is write {
+    method write(uint64 written) {
+        default(alter_write(written));
+    }
+
+    method alter_write(uint64 curr, uint64 written) -> (uint64);
+}
+
+template gated_write is alter_write {
+    method write_allowed() -> (bool) default {
+        return true;
+    }
+
+    method alter_write(uint64 curr, uint64 written) -> (uint64) default {
+        return write_allowed() ? written : curr;
+    }
+}
+
+template write_1_clears is alter_write {
+    method alter_write(uint64 curr, uint64 written) -> (uint64) default {
+        return curr & ~written;
+    }
+}
+
+template gated_write_1_clears is (gated_write, write_1_clears) {
+    method alter_write(uint64 curr, uint64 written) default {
+        local uint64 new = this.templates.write_1_clears.alter_write(
+            curr, written);
+        return this.templates.gated_write.alter_write(curr, new);
+    }
+}
+
+// Resolve the conflict introduced whenever the two orthogonal templates are
+// instantiated by also instantiating gated_write_1_clears when that happens
+in each (gated_write, write_1_clears) { is gated_write_1_clears; }
+```
+
+The following is an example of the second case:
+```
+template very_complex_register is register {
+    method write_register(uint64 written, uint64 enabled_bytes,
+                          void *aux) default {
+        ... // An extremely complicated implementation
+    }
+}
+
+template gated_register is register {
+    method write_allowed() -> (bool) default {
+        return true;
+    }
+
+    method on_write_attempted_when_not_allowed() default {
+        log spec_viol: "%s was written to when not allowed", qname;
+    }
+
+    method write_register(uint64 written, uint64 enabled_bytes,
+                          void *aux) default {
+        if (write_allowed()) {
+            default(written, enabled_bytes, aux);
+        } else {
+            on_write_attempted_when_not_allowed();
+        }
+    }
+}
+
+template very_complex_gated_register is (very_complex_register,
+                                         gated_register) {
+    // No sensible way to combine the two implementations by calling both.
+    // Even if there were, calling both implementations would cause each field
+    // of the register to be written to multiple times, potentially duplicating
+    // side-effects, which is undesirable.
+    // Instead, very_complex_register is chosen as the base implementation
+    // called, and the behaviour of gated_register is replicated around that
+    // call.
+    method write_register(uint64 written, uint64 enabled_bytes,
+                          void *aux) default {
+        if (write_allowed()) {
+            this.templates.very_complex_register.write_register(
+                written, enabled_bytes, aux);
+        } else {
+            on_write_attempted_when_not_allowed();
+        }
+    }
+}
+
+in each (gated_register, very_complex_register) {
+    is very_complex_gated_register;
+}
+```
+
+A template-qualified method implementation call is resolved by using
+the method implementation provided to the object by the named template.
+If no such implementation is provided (whether it be because the template does
+not specify one, or specifies one which is not provided to the object due to its
+definition being eliminated by an [`#if`](#conditional-objects)), then the
+ancestor templates of the named template are recursively searched for the
+highest-rank (most specific) implementation provided by them. If the ancestor
+templates provide multiple hierarchically unrelated implementations, then the
+choice is ambiguous and the call will be rejected by the compiler. In this case,
+the modeller must refine the template-qualified method implementation call to
+name the ancestor template whose implementation they would like to use.
+
+A template-qualified method implementation call done via [a value of template
+type](#templates-as-types) functions differently compared to compile-time
+object references. In particular, `this.templates` within the bodies of `shared`
+methods functions differently. The specified template must be an ancestor
+template of the value's template type, the <tt>object</tt> template, or the
+template type itself; furthermore, the specified template **must provide or
+inherit a `shared` implementation of the named method**. It is not sufficient
+that the method is simply _declared_ `shared` such that it is part of the
+template type: the implementation itself must also be `shared`. For more
+information, see the documentation of the [`ENSHAREDTQMIC` error
+message.](messages.html#ENSHAREDTQMIC)
 
 ### After Statements
 

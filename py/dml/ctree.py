@@ -3800,9 +3800,11 @@ class TraitMethodRef(NonValue):
         return self.call_expr(args, rettype)
 
 class TraitMethodDirect(TraitMethodRef):
-    '''The DML expression 'default', evaluated inside a trait method. In
-    other words, a direct reference to a specific trait method
-    instance, as opposed to an indirect vtable lookup.'''
+    '''A direct reference to a specific trait method instance,
+    as opposed to an indirect vtable lookup. This is used for references
+    to unoverridable shared implementations, the DML expression 'default'
+    when evaluated inside a shared method, and template-qualified method
+    implementation calls to shared implementations'''
     @auto_init
     def __init__(self, site, traitref, methodref): pass
 
@@ -4330,7 +4332,7 @@ def mkTemplatesSubRef(site, templates_ref, template_name):
     if tmpl is None:
         raise ENTMPL(site, template_name)
     if tmpl not in templates_ref.node.templates:
-        raise TQMIC(site, templates_ref.node.ident, template_name)
+        raise ETQMIC(site, templates_ref.node.ident, template_name)
     return TemplatesSubRef(site, templates_ref, template_name)
 
 def mkTemplateQualifiedMethodRef(site, templates_subref, method_name):
@@ -4348,47 +4350,32 @@ def mkTemplateQualifiedMethodRef(site, templates_subref, method_name):
         for impl_trait in trait.method_impl_traits.get(method_name, []):
             impl_template = dml.globals.templates[impl_trait.name]
             shared_method = impl_trait.method_impls[method_name]
-            rank_to_candidate[impl_template.spec.rank] = (
-                impl_template, shared_method)
+            rank_to_candidate[impl_template.spec.rank] = (impl_template,
+                                                          shared_method)
 
-
-    studied_templates = set()
-    pending_templates = Set((dml.globals.templates[template_name],)
-                            # don't bother going through regular methods
-                            # if if some shared method impl. is
-                            # unoverridable (can only be one if so)
-                            * (shared_method is None
-                               or shared_method.overridable))
-
-    # Find the highest ranking candidate of each distinct template hierarchy
-    # that is actually implemented for the object
-    while pending_templates:
-        tmpl = pending_templates.pop()
-        studied_templates.add(tmpl)
-        (final, implements_method,
-         next_templates) = tmpl.get_potential_method_impl_details(method_name)
-
-        if final:
-            rank_to_candidate.clear()
-            if next_templates:
-                [tmpl] = next_templates
-            elif not implements_method:
-                break
-
-            candidate = node.template_method_impls.get((tmpl, method_name))
-            assert candidate is not None
-            rank_to_candidate[tmpl.spec.rank] = (tmpl, candidate)
-            break
-
-        if implements_method:
-            candidate = node.template_method_impls.get((tmpl, method_name))
-            if candidate is not None:
-                rank_to_candidate[tmpl.spec.rank] = (tmpl, candidate)
+    # Don't bother going through regular methods if if some shared method
+    # implementation is unoverridable (can only be one if so)
+    if shared_method is None or shared_method.overridable:
+        studied_templates = set()
+        pending_templates = [dml.globals.templates[template_name]]
+        # Find the highest ranking candidate of each distinct template
+        # hierarchy that is actually implemented for the object
+        while pending_templates:
+            tmpl = pending_templates.pop()
+            if tmpl in studied_templates:
                 continue
+            studied_templates.add(tmpl)
+            (implements_method,
+             next_templates) = tmpl.get_potential_method_impl_details(
+                 method_name)
 
-        pending_templates.update(filter(lambda c: c not in studied_templates,
-                                        next_templates))
+            if implements_method:
+                candidate = node.template_method_impls.get((tmpl, method_name))
+                if candidate is not None:
+                    rank_to_candidate[tmpl.spec.rank] = (tmpl, candidate)
+                    continue
 
+            pending_templates.extend(next_templates)
 
     # Eliminate any candidates with lower rank of those found
     # Needed because distinct template hierarchies may still share tails.
@@ -4396,9 +4383,9 @@ def mkTemplateQualifiedMethodRef(site, templates_subref, method_name):
     # T -> X (doesn't provide impl. due to #if) -> Z (provides impl.)
     # T -> Y (provides impl.) -> Z
     # ... in which case the candidate implementation of Z should be excluded
-    from .traits import calc_minimal_ancestry
+    from .traits import get_highest_ranks
     candidates = [rank_to_candidate[r]
-                  for r in calc_minimal_ancestry(Set(rank_to_candidate))[None]]
+                  for r in get_highest_ranks(Set(rank_to_candidate))]
 
     if not candidates:
         raise EMEMBER(site, templates_subref, method_name)
@@ -4414,7 +4401,8 @@ def mkTemplateQualifiedMethodRef(site, templates_subref, method_name):
         impl_trait = method.trait
         ancestry_path = node.traits.ancestry_paths[impl_trait][0]
         if impl_trait is not method.vtable_trait:
-            ancestry_path += trait.ancestry_paths[method.vtable_trait][0]
+            # This is safe; ancestry paths are tuples
+            ancestry_path += impl_trait.ancestry_paths[method.vtable_trait][0]
         traitref = ObjTraitRef(site, node, method.vtable_trait, indices,
                                ancestry_path=ancestry_path)
         return TraitMethodDirect(site, traitref, method)
@@ -4443,23 +4431,37 @@ def mkTraitTemplatesSubRef(site, templates_ref, template_name):
     trait = dml.globals.traits.get(template_name)
     if trait is None:
         raise ENTMPL(site, template_name)
-    if not templates_ref.trait.implements(trait):
+    if not (templates_ref.trait.implements(trait)
+            or trait is dml.globals.object_trait):
         raise ETTQMIC(site, trait.name, templates_ref.trait.name)
 
     return TraitTemplatesSubRef(site, templates_ref, trait)
 
 def mkTraitTemplateQualifiedMethodRef(site, templates_subref, method_name):
     trait = templates_subref.trait
+
+    tmpl = dml.globals.templates[trait.name]
+    (provides_impl, next_tmpls) = tmpl.get_potential_method_impl_details(
+        method_name)
+    impl_tmpls = (tmpl,) if provides_impl else next_tmpls
+
     impl_traits = trait.method_impl_traits.get(method_name)
     if not impl_traits:
-        if (trait.member_declaration(method_name) is not None
-            and trait.member_kind(method_name) == 'method'):
+        if ((trait.member_declaration(method_name) is not None
+             and trait.member_kind(method_name) == 'method')
+            or impl_tmpls):
             raise ENSHAREDTQMIC(site, trait, method_name)
         else:
             raise EMEMBER(site, templates_subref, method_name)
 
-    if method_name in dml.globals.templates[trait.name].spec.defined_symbols():
-        raise ENSHAREDTQMIC(site, trait, method_name)
+    # If there is any non-shared method specification not lower in rank than
+    # some shared method implementation, then it could be a potential
+    # implementation candidate, which renders the TQMIC invalid
+    for impl_tmpl in impl_tmpls:
+        if all(impl_tmpl.spec.rank
+               not in dml.globals.templates[impl_trait.name].spec.rank.inferior
+               for impl_trait in impl_traits):
+            raise ENSHAREDTQMIC(site, trait, method_name)
 
     if len(impl_traits) > 1:
         raise EAMBTQMIC(site, trait.name, method_name,
@@ -4469,7 +4471,12 @@ def mkTraitTemplateQualifiedMethodRef(site, templates_subref, method_name):
     impl_trait = impl_traits[0]
     method = impl_trait.method_impls[method_name]
     traitref = templates_subref.templates_ref.traitref
-    if templates_subref.templates_ref.trait is not impl_trait:
+    traitref_trait = templates_subref.templates_ref.trait
+    if not traitref_trait.implements(impl_trait):
+        assert trait is dml.globals.object_trait
+        traitref = TraitObjectCast(site, traitref)
+        traitref_trait = dml.globals.object_trait
+    if traitref_trait is not impl_trait:
         traitref = mkTraitUpcast(site, traitref, impl_trait)
     if impl_trait is not method.vtable_trait:
         traitref = mkTraitUpcast(site, traitref, method.vtable_trait)
@@ -4548,6 +4555,17 @@ class StructMember(LValue):
     def is_pointer_to_stack_allocation(self):
         return isinstance(self.type, TArray) and self.is_stack_allocated
 
+def try_resolve_len(site, lh):
+    if isinstance(lh, NonValue):
+        if isinstance(lh, AbstractList):
+            return mkIntegerConstant(site,
+                                     len(tuple(lh.iter_flat())), False)
+        elif isinstance(lh, NonValueArrayRef):
+            return mkIntegerConstant(site,
+                                     lh.local_dimsizes[len(lh.local_indices)],
+                                     False)
+    return None
+
 def mkSubRef(site, expr, sub, op):
     if isinstance(expr, NodeRef):
         node, indices = expr.get_ref()
@@ -4565,7 +4583,25 @@ def mkSubRef(site, expr, sub, op):
         else:
             raise EREF(site, sub, expr)
 
-    elif isinstance(expr, AddressOf) and op == '->':
+    if isinstance(expr, NonValue):
+        if op == '.':
+            if site.dml_version() != (1, 2) and sub == 'len':
+                member = try_resolve_len(site, expr)
+                if member:
+                    return member
+
+            if isinstance(expr, TemplatesRef):
+                return mkTemplatesSubRef(site, expr, sub)
+            elif isinstance(expr, TemplatesSubRef):
+                return mkTemplateQualifiedMethodRef(site, expr, sub)
+            elif isinstance(expr, TraitTemplatesRef):
+                return mkTraitTemplatesSubRef(site, expr, sub)
+            elif isinstance(expr, TraitTemplatesSubRef):
+                return mkTraitTemplateQualifiedMethodRef(site, expr, sub)
+
+        raise expr.exc()
+
+    if isinstance(expr, AddressOf) and op == '->':
         expr = expr.rh
         op = '.'
     elif isinstance(expr, Dereference) and op == '.':

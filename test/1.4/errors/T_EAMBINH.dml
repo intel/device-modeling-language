@@ -56,3 +56,32 @@ template asm4 is (asm1, asm2) {
 template asm5 is (asm1, asm3) {
     shared method m() {}
 }
+
+template asm6 is asm1 {
+    shared method m() default {}
+}
+template asm7 is asm1 {
+    shared method m() default {}
+}
+template asm8 is (asm6, asm7) {
+    shared method m() {}
+}
+
+template asm9 is asm1 {
+    shared method m() {}
+}
+
+/// ERROR EAMBINH
+template asm10 is (asm6, asm9) {}
+
+/// ERROR EAMBINH
+group g1 is (asm6, asm7);
+
+// no error
+group g2 is (asm6, asm7) {
+    method m() {}
+}
+
+// Redundancy as a smoke test that ancestor vtable merging works properly
+// no error
+group g3 is (asm6, asm7, asm1, asm8);
