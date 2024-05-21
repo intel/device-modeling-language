@@ -1260,10 +1260,19 @@ def try_resolve_len(site, lh):
 def expr_member(tree, location, scope):
     [lh, op, rh] = tree.args
     lh = codegen_expression_maybe_nonvalue(lh, location, scope)
-    if not tree.site.dml_version() == (1, 2) and op == '.' and rh == 'len':
-        member = try_resolve_len(tree.site, lh)
-        if member:
-            return member
+    if op == '.':
+        if not tree.site.dml_version() == (1, 2) and rh == 'len':
+            member = try_resolve_len(tree.site, lh)
+            if member:
+                return member
+        elif isinstance(lh, TemplatesRef):
+            return mkTemplatesSubRef(tree.site, lh, rh)
+        elif isinstance(lh, TemplatesSubRef):
+            return mkTemplateQualifiedMethodRef(tree.site, lh, rh)
+        elif isinstance(lh, TraitTemplatesRef):
+            return mkTraitTemplatesSubRef(tree.site, lh, rh)
+        elif isinstance(lh, TraitTemplatesSubRef):
+            return mkTraitTemplateQualifiedMethodRef(tree.site, lh, rh)
 
     if isinstance(lh, NonValue) and not isinstance(lh, NodeRef):
         raise lh.exc()

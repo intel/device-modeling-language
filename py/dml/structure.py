@@ -28,7 +28,7 @@ from .messages import *
 from .types import *
 import dml.globals
 from . import template
-from .template import Rank, RankDesc, ObjectSpec
+from .template import Rank, RankDesc, ObjectSpec, InstantiatedTemplateSpec
 from .reginfo import explode_registers
 from . import dmlparse
 from .set import Set
@@ -436,15 +436,16 @@ def check_unused_and_warn(node):
     for n in node.get_components():
         check_unused_and_warn(n)
 
-def wrap_sites(obj_spec, issite, tname):
-    '''Instantiate a template, by traversing it and replacing sites'''
+def wrap_sites(spec, issite, tname):
+    '''Instantiate a template, by traversing it and replacing sites, and
+       return corresponding arguments for the construction of an ObjectSpec'''
     templates = [(TemplateSite(site, issite, tname), t)
-                 for (site, t) in obj_spec.templates]
+                 for (site, t) in spec.templates]
     params = [ast.parameter(TemplateSite(site, issite, tname), name, value)
-              for (_, site, name, value) in obj_spec.params]
+              for (_, site, name, value) in spec.params]
 
     blocks = []
-    for (preconds, shallow, composite) in obj_spec.blocks:
+    for (preconds, shallow, composite) in spec.blocks:
         shallow_wrapped = []
         for stmt in shallow:
             asttype = stmt.kind
@@ -475,13 +476,13 @@ def wrap_sites(obj_spec, issite, tname):
             else:
                 raise ICE(issite, 'unknown node type %r %r' % (asttype, stmt))
         composite_wrapped = [
-            (objtype, name, arrayinfo, wrap_sites(spec, issite, tname))
+            (objtype, name, arrayinfo,
+             ObjectSpec(*wrap_sites(spec, issite, tname)))
             for (objtype, name, arrayinfo, spec) in composite]
         blocks.append((preconds, shallow_wrapped, composite_wrapped))
 
-    return ObjectSpec(TemplateSite(obj_spec.site, issite, tname),
-                      obj_spec.rank, templates, obj_spec.in_eachs,
-                      params, blocks)
+    return (TemplateSite(spec.site, issite, tname), spec.rank,
+            templates, spec.in_eachs, params, blocks)
 
 def setparam(node, name, mkexpr):
     """
@@ -495,7 +496,7 @@ def setparam(node, name, mkexpr):
     pnode.set_expr(mkexpr)
 
 def add_templates(obj_specs, each_stmts):
-    used_templates = set()
+    used_templates = {}
     queue = sum((obj_spec.templates for obj_spec in obj_specs), [])
 
     i = 0
@@ -508,7 +509,14 @@ def add_templates(obj_specs, each_stmts):
             continue
         if tpl in used_templates:
             continue
-        used_templates.add(tpl)
+
+        if tpl.name.startswith('@'):
+            obj_spec = tpl.spec
+        else:
+            obj_spec = InstantiatedTemplateSpec(
+                tpl, *wrap_sites(tpl.spec, site, tpl.name))
+        used_templates[tpl] = obj_spec
+
         for (tpls, spec) in each_stmts.get(tpl, []):
             for t in tpls:
                 if t not in used_templates:
@@ -522,20 +530,17 @@ def add_templates(obj_specs, each_stmts):
                     break
             else:
                 # All templates match; expand the each statement.
-                obj_specs.append(wrap_sites(spec, spec.site, tpl.name))
+                obj_specs.append(
+                    ObjectSpec(*wrap_sites(spec, spec.site, tpl.name)))
                 queue.extend(spec.templates)
 
-        if tpl.name.startswith('@'):
-            obj_spec = tpl.spec
-        else:
-            obj_spec = wrap_sites(tpl.spec, site, tpl.name)
         obj_specs.append(obj_spec)
         queue.extend(obj_spec.templates)
 
     if logging.show_porting:
         PWUNUSED.used_templates.update(used_templates)
 
-    return obj_specs
+    return (obj_specs, used_templates)
 
 def merge_parameters(defs, obj_specs):
     '''Given a list of parameters along with the templates they are
@@ -727,7 +732,7 @@ def sort_method_implementations(implementations, obj_specs):
         # create fake ranks to make sure methods end up in the right order
         if m1.overridable and not m2.overridable:
             if logging.show_porting:
-                report_poverride(m2.rank, m1.rank, obj_specs)
+                report_poverride(m2.obj_spec.rank, m1.obj_spec.rank, obj_specs)
             m2.rank = Rank({m1.rank}, m2.rank.desc)
         elif not m1.overridable and m2.overridable:
             if logging.show_porting:
@@ -929,10 +934,11 @@ def mkobj(ident, objtype, arrayinfo, obj_specs, parent, each_stmts):
         raise EASZLARGE(site, num_elems)
 
     with ErrorContext(obj):
-        obj_specs = add_templates(obj_specs, each_stmts)
+        (obj_specs, used_templates) = add_templates(obj_specs, each_stmts)
+        obj.templates = used_templates
         index_sites = [ast.site for ast in arraylen_asts]
         obj_params = create_parameters(obj, obj_specs, index_vars, index_sites)
-        return mkobj2(obj, obj_specs, obj_params, each_stmts)
+        return mkobj2(obj, obj_specs, obj_params, each_stmts, used_templates)
 
 def create_object(site, ident, objtype, parent,
                   arraylen_asts, index_vars):
@@ -1097,6 +1103,8 @@ def make_autoparams(obj, index_vars, index_var_sites):
             autoparams['_nongroup_parent'] = SimpleParamExpr(
                 mkUndefined(obj.site))
 
+        autoparams['templates'] = TemplatesParamExpr(obj.site, obj)
+
     return autoparams
 
 def implicit_params(obj, index_vars):
@@ -1241,8 +1249,12 @@ def report_pbefaft(obj, method_asts):
         for (before_name, after_name, method_decl, default_call) in (
                 before_after_pairs[obj.objtype]):
             # map rank -> AST
-            before_asts = dict(method_asts.get(before_name, []))
-            after_asts = dict(method_asts.get(after_name, []))
+            before_asts = {spec.rank: stmt
+                           for (spec, stmt) in method_asts.get(before_name, [])
+                           }
+            after_asts = {spec.rank: stmt
+                          for (spec, stmt) in method_asts.get(after_name, [])
+                          }
             # map rank -> (before, after)
             combined = {r: (before_asts.get(r), after_asts[r])
                         for r in after_asts}
@@ -1309,19 +1321,19 @@ def wrap_method_body_in_try(site, overridden_site, obj, name, body,
 
 class ObjMethodHandle(traits.MethodHandle):
     shared = False
-    def __init__(self, method_ast, rank):
+    def __init__(self, method_ast, obj_spec):
         (name, (_, _, throws, _, _), overridable, _, _) = method_ast.args
         super(ObjMethodHandle, self).__init__(
-            method_ast.site, name, rank, overridable)
+            method_ast.site, name, obj_spec, overridable)
         self.method_ast = method_ast
         self.throws = throws
 
 class TraitMethodHandle(traits.MethodHandle):
     shared = True
-    def __init__(self, trait_method, rank):
+    def __init__(self, trait_method, obj_spec):
         super(TraitMethodHandle, self).__init__(
             trait_method.site, trait_method.name,
-            rank, trait_method.overridable)
+            obj_spec, trait_method.overridable)
         self.trait_method = trait_method
         self.throws = trait_method.throws
 
@@ -1332,12 +1344,12 @@ def process_method_implementations(obj, name, implementations,
     # We will create a MethodHandle object for either, which
     # sort_method_implementations() uses to resolve override order.
     unshared_methods = [
-        ObjMethodHandle(method_ast, rank)
-        for (rank, method_ast) in implementations]
+        ObjMethodHandle(method_ast, obj_spec)
+        for (obj_spec, method_ast) in implementations]
     shared_methods = [
         TraitMethodHandle(
             impl_trait.method_impls[name],
-            dml.globals.templates[impl_trait.name].spec.rank)
+            dml.globals.templates[impl_trait.name].spec)
         for impl_trait in shared_impl_traits]
 
     (default_map, method_order) = sort_method_implementations(
@@ -1432,6 +1444,13 @@ def process_method_implementations(obj, name, implementations,
                           outp_ast, throws, independent, startup, memoized,
                           body, default, default_level)
         impl_to_method[impl] = method
+        if isinstance(impl.obj_spec, InstantiatedTemplateSpec):
+            tmpl = impl.obj_spec.parent_template
+            if (tmpl, name) in obj.template_method_impls:
+                raise ICE(impl.site,
+                          f"{tmpl.name} provides multiple"
+                          + f"implementations of {name} for {obj.ident}")
+            obj.template_method_impls[(tmpl, name)] = method
 
     if dml.globals.dml_version == (1, 2):
         for (_, method_ast) in implementations:
@@ -1457,7 +1476,7 @@ ident_re = re.compile(r'[A-Za-z_][\w_]*')
 # Second stage of object creation, protected by error context
 # TODO: we should probably split up mkobj into several methods with
 # clearer responsibilities
-def mkobj2(obj, obj_specs, params, each_stmts):
+def mkobj2(obj, obj_specs, params, each_stmts, used_templates):
     for param in params:
         obj.add_component(param)
 
@@ -1505,17 +1524,17 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                    for cond in preconds):
                 if logging.show_porting:
                     PWUNUSED.satisfied_conds.update(preconds)
-                shallow_subobjs.append((shallow, obj_spec.rank))
-                composite_subobjs.append((composite, obj_spec.rank))
+                shallow_subobjs.append((shallow, obj_spec))
+                composite_subobjs.append((composite, obj_spec))
 
-    # name -> list of (Rank, ast.method)
+    # name -> list of (ObjectSpec, ast.method)
     method_asts = {}
     sessions = {}
     saved = {}
     hooks = {}
     # list of export stmnts
     exports = []
-    for (stmts, rank) in shallow_subobjs:
+    for (stmts, obj_spec) in shallow_subobjs:
         for s in stmts:
             if s.kind == 'error':
                 _, esite, msg = s
@@ -1527,9 +1546,9 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                         report(ENAMECOLL(s.site, symbols[name], name))
                     else:
                         symbols[name] = s.site
-                        method_asts[name] = [(rank, s)]
+                        method_asts[name] = [(obj_spec, s)]
                 else:
-                    method_asts[name].append((rank, s))
+                    method_asts[name].append((obj_spec, s))
             elif s.kind == 'session':
                 (decls, inits) = s.args
                 if inits is not None and len(decls) != len(inits):
@@ -1575,7 +1594,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
 
     subobj_defs = {}
 
-    for (stmts, rank) in composite_subobjs:
+    for (stmts, obj_spec) in composite_subobjs:
         for s in stmts:
             (objtype, ident, arrayinfo, subobj_spec) = s
 
@@ -2518,6 +2537,18 @@ class NongroupParentParamExpr(objects.ParamExpr):
     def mkexpr(self, indices):
         return mkNodeRef(self.site, self.node.nongroup_parent,
                          indices[:self.node.nongroup_parent.dimensions])
+
+
+class TemplatesParamExpr(objects.ParamExpr):
+    '''The 'templates' parameter'''
+    __slots__ = ('site', 'node')
+
+    def __init__(self, site, node):
+        self.site = site
+        self.node = node
+
+    def mkexpr(self, indices):
+        return mkTemplatesRef(self.site, self.node, indices)
 
 def port_class_ident(port):
     '''The C identifier used for a port class within the device class

@@ -18,6 +18,7 @@ from .output import *
 from .types import *
 from .expr import *
 from .expr_util import *
+from .set import Set
 from .slotsmeta import auto_init
 from . import dmlparse, output
 from . import compat
@@ -115,6 +116,12 @@ __all__ = (
     'mkHookSendNowApply', 'HookSendNowApply',
     'mkHookSendRef', 'HookSendRef',
     'mkHookSendApply', 'HookSendApply',
+    'mkTemplatesRef', 'TemplatesRef',
+    'mkTemplatesSubRef', 'TemplatesSubRef',
+    'mkTemplateQualifiedMethodRef',
+    'mkTraitTemplatesRef', 'TraitTemplatesRef',
+    'mkTraitTemplatesSubRef', 'TraitTemplatesSubRef',
+    'mkTraitTemplateQualifiedMethodRef',
     'mkNew',
     #'Constant',
     'mkIntegerConstant', 'IntegerConstant',
@@ -3800,8 +3807,9 @@ class TraitMethodDirect(TraitMethodRef):
     def __init__(self, site, traitref, methodref): pass
 
     def __str__(self):
-        return "%s.%s" % (str(realtype(self.traitref.ctype()).trait.name),
-                          self.methodref.name)
+        return "%s.templates.%s.%s" % (
+            self.traitref, str(realtype(self.traitref.ctype()).trait.name),
+            self.methodref.name)
 
     @property
     def inp(self):
@@ -4296,6 +4304,171 @@ class HookSendApply(Expression):
                 + f'{args_size}, NULL, 0)')
 
 mkHookSendApply = HookSendApply
+
+class TemplatesRef(NonValue):
+    '''Reference to the 'templates' param of an object, used for
+       template-qualified method implementation calls'''
+    @auto_init
+    def __init__(self, site, node, indices): pass
+
+    def __str__(self):
+        return f'{self.node.logname(self.indices)}.templates'
+
+mkTemplatesRef = TemplatesRef
+
+class TemplatesSubRef(NonValue):
+    '''A subreference of the 'templates' param of an object, specifying the
+       template of the template-qualified method implementation call'''
+    @auto_init
+    def __init__(self, site, templates_ref, template_name): pass
+
+    def __str__(self):
+        return f'{self.templates_ref}.{self.template_name}'
+
+def mkTemplatesSubRef(site, templates_ref, template_name):
+    tmpl = dml.globals.templates.get(template_name)
+    if tmpl is None:
+        raise ENTMPL(site, template_name)
+    if tmpl not in templates_ref.node.templates:
+        raise TQMIC(site, templates_ref.node.ident, template_name)
+    return TemplatesSubRef(site, templates_ref, template_name)
+
+def mkTemplateQualifiedMethodRef(site, templates_subref, method_name):
+    node = templates_subref.templates_ref.node
+    indices = templates_subref.templates_ref.indices
+
+    template_name = templates_subref.template_name
+
+    rank_to_candidate = {}
+
+    # Add any shared method implementation as a possible candidate
+    trait = dml.globals.traits.get(template_name)
+    shared_method = None
+    if trait is not None:
+        impl_trait = trait.method_impl_traits.get(method_name)
+        if impl_trait is not None:
+            impl_template = dml.globals.templates[impl_trait.name]
+            shared_method = impl_trait.method_impls[method_name]
+            rank_to_candidate[impl_template.spec.rank] = (
+                impl_template, shared_method)
+
+
+    studied_templates = set()
+    pending_templates = Set((dml.globals.templates[template_name],)
+                            # don't bother going through regular methods
+                            # if the found shared method impl. is unoverridable
+                            * (shared_method is None
+                               or shared_method.overridable))
+
+    # Find the highest ranking candidate of each distinct template hierarchy
+    # that is actually implemented for the object
+    while pending_templates:
+        tmpl = pending_templates.pop()
+        studied_templates.add(tmpl)
+        (final, implements_method,
+         next_templates) = tmpl.get_potential_method_impl_details(method_name)
+
+        if final:
+            rank_to_candidate.clear()
+            if next_templates:
+                [tmpl] = next_templates
+            elif not implements_method:
+                break
+
+            candidate = node.template_method_impls.get((tmpl, method_name))
+            assert candidate is not None
+            rank_to_candidate[tmpl.spec.rank] = (tmpl, candidate)
+            break
+
+        if implements_method:
+            candidate = node.template_method_impls.get((tmpl, method_name))
+            if candidate is not None:
+                rank_to_candidate[tmpl.spec.rank] = (tmpl, candidate)
+                continue
+
+        pending_templates.update(filter(lambda c: c not in studied_templates,
+                                        next_templates))
+
+
+    # Eliminate any candidates with lower rank of those found
+    # Needed because distinct template hierarchies may still share tails.
+    # E.g. you can have
+    # T -> X (doesn't provide impl. due to #if) -> Z (provides impl.)
+    # T -> Y (provides impl.) -> Z
+    # ... in which case the candidate implementation of Z should be excluded
+    from .traits import calc_minimal_ancestry
+    candidates = [rank_to_candidate[r]
+                  for r in calc_minimal_ancestry(Set(rank_to_candidate))[None]]
+
+    if not candidates:
+        raise EMEMBER(site, templates_subref, method_name)
+
+    if len(candidates) > 1:
+        report(EAMBTQMIC(site, template_name, method_name, candidates))
+
+    (tmpl, method) = candidates[0]
+
+    if isinstance(method, objects.Method):
+        return mkNodeRef(site, method, indices)
+    else:
+        impl_trait = method.trait
+        ancestry_path = node.traits.ancestry_paths[impl_trait][0]
+        if impl_trait is not method.vtable_trait:
+            ancestry_path += trait.ancestry_paths[method.vtable_trait][0]
+        traitref = ObjTraitRef(site, node, method.vtable_trait, indices,
+                               ancestry_path=ancestry_path)
+        return TraitMethodDirect(site, traitref, method)
+
+class TraitTemplatesRef(NonValue):
+    '''Reference to the 'templates' member of a traitref, used for
+       template-qualified method implementation calls'''
+    @auto_init
+    def __init__(self, site, trait, traitref): pass
+
+    def __str__(self):
+        return f'{self.traitref}.templates'
+
+mkTraitTemplatesRef = TraitTemplatesRef
+
+class TraitTemplatesSubRef(NonValue):
+    '''A subreference of the 'templates' param of an object, specifying the
+       template of the template-qualified method implementation call'''
+    @auto_init
+    def __init__(self, site, templates_ref, trait): pass
+
+    def __str__(self):
+        return f'{self.templates_ref}.{self.trait.name}'
+
+def mkTraitTemplatesSubRef(site, templates_ref, template_name):
+    trait = dml.globals.traits.get(template_name)
+    if trait is None:
+        raise ENTMPL(site, template_name)
+    if not templates_ref.trait.implements(trait):
+        raise ETTQMIC(site, trait.name, templates_ref.trait.name)
+
+    return TraitTemplatesSubRef(site, templates_ref, trait)
+
+def mkTraitTemplateQualifiedMethodRef(site, templates_subref, method_name):
+    trait = templates_subref.trait
+    impl_trait = trait.method_impl_traits.get(method_name)
+    if impl_trait is None:
+        if (trait.member_declaration(method_name) is not None
+            and trait.member_kind(method_name) == 'method'):
+            raise ENSHAREDTQMIC(site, trait, method_name)
+        else:
+            raise EMEMBER(site, templates_subref, method_name)
+
+    if method_name in dml.globals.templates[trait.name].spec.defined_symbols():
+        raise ENSHAREDTQMIC(site, trait, method_name)
+
+    method = impl_trait.method_impls[method_name]
+    traitref = templates_subref.templates_ref.traitref
+    if templates_subref.templates_ref.trait is not impl_trait:
+        traitref = mkTraitUpcast(site, traitref, impl_trait)
+    if impl_trait is not method.vtable_trait:
+        traitref = mkTraitUpcast(site, traitref, method.vtable_trait)
+
+    return TraitMethodDirect(site, traitref, method)
 
 class Variable(LValue):
     "Variable storage"

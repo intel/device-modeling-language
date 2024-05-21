@@ -194,7 +194,8 @@ class DMLObject(object):
 class CompositeObject(DMLObject):
     '''A DML object that may contain other DML objects'''
     __slots__ = ('name', '_components', '_component_dict', '_arraylens',
-                 '_idxvars', 'traits', '_confidential', 'uniq')
+                 '_idxvars', 'traits', 'templates', 'template_method_impls',
+                 '_confidential', 'uniq')
 
     def __init__(self, ident, site, parent, arraylens = (), idxvars = ()):
         super(CompositeObject, self).__init__(ident, site, parent)
@@ -213,6 +214,15 @@ class CompositeObject(DMLObject):
 
         # set to an ObjTraits object after object creation
         self.traits = None
+
+        # Template -> ObjectSpec (site-wrapped)
+        # Set after object creation
+        self.templates = None
+
+        # (Template, string) -> Method
+        # ... where the string is a method identifier
+        # Populated after object creation
+        self.template_method_impls = {}
 
         self._confidential = False
 
