@@ -27,6 +27,8 @@ saved int sa;
 session int se;
 hook () h;
 #if (false) { error; }
+header %{ %}
+footer %{ %}
 
 // DEAD
 method dead() { }
@@ -36,9 +38,6 @@ method dead_long() -> (int)
 {
     return 0;
 }
-
-header %{ %}
-footer %{ %}
 
 // not dead
 method live() -> (int) {
