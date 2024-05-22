@@ -561,4 +561,22 @@
   <build-id _6="6309" _7="7021"><add-note> Template <tt>function_io_memory</tt>
       now searches for the bank in the same `subdevice`/`device` scope as the
       `implement`. </add-note></build-id>
+  <build-id _6="next" _7="next"><add-note>Added a system
+      for <em>provisional language features</em>: language features
+      that are disabled by default but can be explicitly enabled per
+      DML file. Each provisional feature is named and documented in an
+      appendix of the reference manual; to enable a feature
+      named <tt>foo_bar</tt> in a DML file, write <tt>provisional
+      foo_bar;</tt> in the top of the file, right after <tt>dml
+      1.4;</tt>.</add-note></build-id>
+  <build-id _6="next" _7="next"><add-note>Added a provisional feature
+      <tt>explicit_param_decls</tt>, which can be enabled per file
+      by a statement <tt>provisional explicit_param_decls;</tt>. This
+      feature adds a syntax <tt>param NAME := VALUE;</tt>, which
+      signifies that the parameter is <em>not</em> intended as an
+      override. The existing syntax <tt>param NAME = VALUE;</tt> is
+      re-purposed to signify that the parameter <em>is</em> intended
+      as an override. Inconsistent usage will trigger compile errors.
+      This is useful to catch misspelled
+      overrides <bug number="SIMICS-21451"/>.</add-note></build-id>
 </rn>

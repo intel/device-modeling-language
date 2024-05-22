@@ -15,6 +15,9 @@ class ProvisionalFeature(abc.ABC):
     @abc.abstractproperty
     def short(self) -> str: pass
 
+    @abc.abstractproperty
+    def stable(self) -> str: pass
+
 
 # tag -> feature
 features: dict[str, ProvisionalFeature] = {}
@@ -65,7 +68,7 @@ class explicit_param_decls(ProvisionalFeature):
     parameter declarations in that file.
     '''
     short = "Require := syntax for assigning new params"
-
+    stable = False
 
 def parse_provisional(
         provs: list[("Site", str)]) -> dict[ProvisionalFeature, "Site"]:
