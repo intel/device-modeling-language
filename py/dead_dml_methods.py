@@ -161,14 +161,16 @@ def find_dead_methods(c_files: set[Path], dml_files: set[Path]) -> (
     dead : dict[Path, list[int]] = {}
     for (dml_file, linemarks) in linemarks_by_path.items():
         if dml_file in dml_files:
+            # Each live method should yield at least one linemark
+            # within the syntactic bounds of the method definition
             linemarks = sorted(linemarks) + [math.inf]
             i = 0
             for (first_line, last_line, name, ignored) in sorted(
                     method_locations(dml_file)):
+                while linemarks[i] < first_line:
+                    i += 1
                 if linemarks[i] > last_line and not ignored:
                     dead.setdefault(dml_file, []).append((first_line, name))
-                while linemarks[i] <= last_line:
-                    i += 1
         else:
             skipped.append(dml_file)
     # so far we only found dead methods in files referenced by #line
