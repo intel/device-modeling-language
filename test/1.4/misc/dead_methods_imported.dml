@@ -10,6 +10,11 @@ method dead_imported() -> (int) {
 }
 
 template t {
+    // AST traversal
+    param p: int;
+    param p default 4;
+    shared hook () h;
+
     // no problem
     shared method dead_abstract();
     // TODO: this one is apparently dead, but C code is still generated

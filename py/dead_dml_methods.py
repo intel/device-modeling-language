@@ -67,7 +67,7 @@ def traverse_ast(ast):
     if ast.kind in {
             'constant', 'dml_typedef', 'extern', 'extern_typedef',
             'loggroup', 'struct', 'import', 'header', 'footer', 'is',
-            'typedparam', 'parameter', 'saved', 'session',
+            'param', 'saved', 'session',
             'sharedhook', 'hook', 'error', 'export'}:
         return
     elif ast.kind == 'dml':

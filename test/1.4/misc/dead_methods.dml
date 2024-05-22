@@ -14,6 +14,20 @@ device test;
 // Relative path to test that DMLC resolves the path in the sources list
 import "../misc/dead_methods_imported.dml";
 
+// test that dead_dml_methods.traverse_ast tolerates all kinds of AST nodes
+param p = 3;
+typedef int dml_type;
+extern typedef int c_type;
+constant c = 4;
+extern void f(void);
+loggroup lg;
+template nothing {}
+is nothing;
+saved int sa;
+session int se;
+hook () h;
+#if (false) { error; }
+
 // DEAD
 method dead() { }
 
@@ -23,10 +37,19 @@ method dead_long() -> (int)
     return 0;
 }
 
+header %{ %}
+footer %{ %}
+
 // not dead
 method live() -> (int) {
     return 0;
 }
+
+// not dead only thanks to export
+method exported() {
+}
+
+export exported as "exported";
 
 // not dead: inline methods are excluded from analysis
 inline method inline_dead(inline x) -> (int) {
