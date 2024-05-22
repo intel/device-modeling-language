@@ -1076,8 +1076,10 @@ def make_autoparams(obj, index_vars, index_var_sites):
                 mkStringConstant(site, index_var))
             autoparams['index'] = autoparams[index_var]
         elif index_vars:
+            autoparams['indexvar'] = SimpleParamExpr(mkUndefined(site))
             autoparams['index'] = IndexListParamExpr(site, index_params)
         else:
+            autoparams['indexvar'] = SimpleParamExpr(mkUndefined(site))
             autoparams['index'] = SimpleParamExpr(mkUndefined(site))
     else:
         autoparams['indices'] = IndexListParamExpr(site, index_params)
@@ -2776,7 +2778,7 @@ def mkparam(obj, autoparams, param):
 
     # auto-parameters are like normal "hard" assignments
     if name in autoparams:
-        if not auto and not (dml.globals.dml_version == (1, 2) and is_default):
+        if not auto:
             # seems that dml-builtins lacks a declaration
             # 'parameter ... auto;'
             raise ICE(site, 'missing auto declaration: %s' % (name,))

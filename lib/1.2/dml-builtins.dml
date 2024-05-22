@@ -172,8 +172,8 @@ template object {
     // Documentation of limitations
     parameter limitations               default undefined;
 
-    parameter index                     default undefined;
-    parameter indexvar                  default undefined;
+    parameter index                     auto;
+    parameter indexvar                  auto;
 
     parameter qname                     auto;
 
