@@ -537,14 +537,14 @@
       template now allows for its implementations of <tt>unmapped_read</tt>,
       <tt>unmapped_write</tt>, and <tt>unmapped_get</tt> to be
       overridden. </add-note></build-id>
-  <build-id _6="next" _7="next"><add-note> It's now allowed to instantiate
+  <build-id _6="next" _7="7020"><add-note> It's now allowed to instantiate
       multiple unrelated templates that offer different <tt>shared</tt>
       implementations of the same method, as long as that method is declared
       in a common ancestor template, and the conflict is resolved through
       an implementation that overrides all the unrelated implementations
       <bug number="SIMICS-20431"/>. This mirrors the pre-existing semantics for
       non-<tt>shared</tt> methods.</add-note></build-id>
-  <build-id _6="next" _7="next"><add-note> Added the `templates` member for
+  <build-id _6="next" _7="7020"><add-note> Added the `templates` member for
       all objects and values of template types, which allows for making calls
       to any particular implementation of a method as provided by a specified
       template <bug number="SIMICS-22264"/>. Example syntax:
