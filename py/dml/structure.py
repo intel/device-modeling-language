@@ -607,27 +607,27 @@ def merge_parameters(params, obj_specs):
         if p is not None:
             return p
 
-    decls = []
-    defs = []
+    decls = {}
+    defs = {}
     for (rank, param) in params:
-        (_, type_info, _, value) = param.args
+        (name, type_info, _, value) = param.args
         if value is None:
-            if type_info is None or type_info.kind == 'paramtype':
-                # "parameter x;", "parameter x: type;", handled separately
-                decls.append((rank, param))
-            else:
-                assert type_info.kind == 'walrus'
-                defs.append((rank, param))
+            assert type_info is None or type_info.kind == 'paramtype'
+            # "parameter x;", "parameter x: type;", handled separately
+            decls[rank] = param
         else:
-            defs.append((rank, param))
+            if rank in defs:
+                raise ENAMECOLL(param.site, defs[rank].site, name)
+            defs[rank] = param
 
-    if not defs and not autos:
-        (_, decl) = decls[0]
+    if not defs:
+        [decl, *_] = decls.values()
         (name, _, _, _) = decl.args
         raise ENPARAM(decl.site, name)
 
-    all_inferior = set().union(*(rank.inferior for (rank, _) in defs))
-    superior = [(rank, p) for (rank, p) in defs if rank not in all_inferior]
+    all_inferior = set().union(*(rank.inferior for rank in defs))
+    superior = [(rank, p) for (rank, p) in defs.items()
+                if rank not in all_inferior]
 
     if len(superior) > 1:
         def decl_is_default(decl):
@@ -639,20 +639,12 @@ def merge_parameters(params, obj_specs):
         [(rank1, p1), (rank2, p2)] = sorted(
             superior, key=decl_is_default)[:2]
         (name, _, _, _) = p1.args
-        if rank1 is rank2:
-            # If the two conflicting default definitions are in the
-            # same template/file, then the message in EAMBINH is
-            # inaccurate and it's easier to understand it as a name
-            # collision.
-            raise ENAMECOLL(p1.site, p2.site, name)
-        else:
-            raise EAMBINH(
-                p1.site, p2.site, name, rank1.desc, rank2.desc,
-                decl_is_default((rank1, p1)))
+        raise EAMBINH(
+            p1.site, p2.site, name, rank1.desc, rank2.desc,
+            decl_is_default((rank1, p1)))
 
-    decl_ranks = {rank for (rank, _) in decls}
-    decl_or_def_ranks = decl_ranks.union(rank for (rank, _) in defs)
-    for (rank, p) in defs:
+    all_ranks = {rank for (rank, _) in params}
+    for (rank, p) in defs.items():
         if p.site.provisional_enabled(provisional.explicit_param_decls):
             (_, type_info, is_default, _) = p.args
             if type_info is None:
@@ -660,24 +652,24 @@ def merge_parameters(params, obj_specs):
             else:
                 assert type_info.kind in {'walrus', 'paramtype'}
                 declared_as_override = False
-            is_override = (not decl_or_def_ranks.isdisjoint(rank.inferior)
-                           or rank in decl_ranks)
+            is_override = not all_ranks.isdisjoint(rank.inferior)
             if not declared_as_override and is_override:
-                [parent, *_] = [
-                    other for (other_rank, other) in decls + defs
-                    if other_rank in rank.inferior] + [
-                    other for (other_rank, other) in decls
-                    if other_rank is rank]
+                minimal_ancestry = traits.calc_minimal_ancestry(all_ranks)
+                [parent, *_] = (parent for (parent_rank, parent) in params
+                                if parent_rank in minimal_ancestry[rank])
                 report(EOVERRIDE(type_info.site, parent.site,
                                  'default' if is_default else '='))
+            if not declared_as_override and rank in decls:
+                report(EOVERRIDE(type_info.site, decls[rank].site,
+                                 'default' if is_default else '='))
             elif (not is_override and declared_as_override
-                  and not any(r is rank for (r, _) in decls)):
+                  and rank not in decls):
                 report(ENOVERRIDE(
                     p.site, 'default' if is_default else '='))
 
     [(rank0, param0)] = superior
 
-    for (rank, param) in defs:
+    for (rank, param) in defs.items():
         (name, _, is_default, _) = param.args
         if not is_default and rank is not rank0:
             # Attempt to override non-default parameter
