@@ -242,6 +242,15 @@ template sm {
     shared method m() default {}
 }
 
+template p_clash {
+    /// ERROR ENAMECOLL
+    param p default 1;
+    /// ERROR ENAMECOLL
+    param p default 2;
+}
+// does not hide the error
+group p_clash is p_clash { param p = 3; }
+
 bank tb is sm {
     /// ERROR ENAMECOLL
     register m size 1 @ 0;

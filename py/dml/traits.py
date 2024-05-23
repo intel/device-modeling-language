@@ -504,7 +504,7 @@ def get_highest_ranks(ranks):
     # intermediate sets
     return ranks.difference(*(r.inferior.intersection(ranks) for r in ranks))
 
-def calc_minimal_ancestry(ranks):
+def calc_minimal_ancestry(ranks: set["Rank"]):
     '''Given a set of ranks, return a dictionary Rank -> set(Rank)
     mapping each rank to the set of highest unrelated ranks it subsumes.
     In addition, minimal_ancestry[None] is the set of highest unrelated ranks
