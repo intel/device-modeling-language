@@ -1646,6 +1646,11 @@ def mkobj2(obj, obj_specs, params, each_stmts):
         ancestors.add(implicit_traits[traitset])
     direct_parents = ancestors.difference(*(t.ancestors for t in ancestors))
 
+    # TODO: this call is not memoized in any way, while it could be per
+    # set of highest-rank unrelated traits. We should investigate if the
+    # current state presents a bottleneck for devices that feature a large
+    # amount of objects that instantiate the same set of templates; if so,
+    # memoization should be applied.
     trait_method_impls = traits.merge_method_impl_maps(
         obj.site, explicit_traits)
 
