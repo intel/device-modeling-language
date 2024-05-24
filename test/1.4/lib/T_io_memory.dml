@@ -46,10 +46,6 @@ subdevice ab {
     implement io_memory {
         is function_io_memory;
     }
-    // this bank's qname should be earlier alphabetically than
-    // qname of the bank we compare it against on device level
-    // because we test `foreach` cycle
-    // and otherwise it works nevertherless
     bank b {
         is function_mapped_bank;
         param function = 0xb;
