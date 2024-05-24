@@ -26,6 +26,9 @@ stest.expect_equal(dev_util.Register_LE((obj.ab.port.function_io_memory_port,
                                          0xb, 0), size=1).read(), 0xab)
 stest.expect_equal(dev_util.Register_LE((obj.ab.bank.function_io_memory_bank,
                                          0xb, 0), size=1).read(), 0xab)
+# subdevice of subdevice is also isolated
+stest.expect_equal(dev_util.Register_LE((obj.ab.cc, 0xb, 0), size=1).read(),
+                                         0xcc)
 # accessing 0x10 hits address 0x100 in the bank
 ms = SIM_create_object('memory-space', 'ms', map=[[0x10, obj, 0xf, 0x100, 1]])
 ms.iface.memory_space.read(None, 0x10, 1, False)

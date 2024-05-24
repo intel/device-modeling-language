@@ -1093,7 +1093,8 @@ template function_mapped_bank is bank {
 Only valid in `implement` objects named `io_memory`. Implements the `io_memory`
 interface by function mapping: An incoming memory transaction is handled by
 finding a bank that instantiates the
-[`function_mapped_bank`](#function_mapped_bank) template, and has a function
+[`function_mapped_bank`](#function_mapped_bank) template inside
+the same (sub)device as `implement`, and has a function
 number that matches the memory transaction's. If such a bank exists, the
 transaction is handled by that bank. If no such bank exists, an error message
 is logged and a miss is reported for the access.
