@@ -26,6 +26,9 @@ stest.expect_equal(dev_util.Register_LE((obj.ab.port.function_io_memory_port,
                                          0xb, 0), size=1).read(), 0xab)
 stest.expect_equal(dev_util.Register_LE((obj.ab.bank.function_io_memory_bank,
                                          0xb, 0), size=1).read(), 0xab)
+# bank inside group inside subdevice is a part of subdevice scope
+stest.expect_equal(dev_util.Register_LE(
+    (obj.ab._group.bank.function_io_memory_bank, 0xb, 0), size=1).read(), 0xab)
 # subdevice of subdevice is also isolated
 stest.expect_equal(dev_util.Register_LE((obj.ab.cc, 0xb, 0), size=1).read(),
                                          0xcc)
