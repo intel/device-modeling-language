@@ -557,22 +557,64 @@ def add_templates(obj_specs, each_stmts):
 
     return (obj_specs, used_templates)
 
+def merge_parameters_dml12(params, obj_specs):
+    defs = [(rank, param) for (rank, param) in params
+            if param.args[1] is None and param.args[3] is not None]
+    # Backward compatibility: If there is exactly one
+    # non-default definition, then disregard template
+    # instantiation relations and give the non-default definition
+    # precedence
+    nondefault = [(r, p) for (r, p) in defs if not p.args[2]]
+
+    if len(nondefault) == 1:
+        def_map = dict(defs)
+        minimal_ancestry = traits.calc_minimal_ancestry(set(def_map))
+        superior = [(rank, def_map[rank]) for rank in minimal_ancestry[None]]
+        [(nd_rank, nd_param)] = nondefault
+        # Add 'is' declaration in 1.4. In the odd case where
+        # t1 overrides t2 but the non-default declaration is
+        # in t2, do nothing (the right thing is likely to
+        # remove the definition in t2)
+        if (logging.show_porting and len(superior) > 1
+            and nd_rank in minimal_ancestry[None]):
+            for (r, p) in superior:
+                if r != nd_rank:
+                    report_poverride(nd_rank, r, obj_specs)
+        return nd_param
+    return None
+
 def merge_parameters(params, obj_specs):
     '''Given a list of parameters along with the templates they are
     defined in, as (rank, ast.param) pairs, return the
     declaration to use for the parameter, or raise a DMLError.'''
 
+    # Handle 'auto' declarations separately. It's easy; an 'auto'
+    # declaration must be alone.
+    autos = [
+        p for (_, p) in params
+        if p.args[1] is not None and p.args[1].kind == 'auto']
+    if autos:
+        for (_, p) in params:
+            (name, _, _, value) = p.args
+            if value is not None:
+                raise EAUTOPARAM(p.site, name)
+        if len(autos) != 1:
+            raise EAUTOPARAM(autos[0].site, autos[0].args[0])
+        return autos[0]
+
+    if dml.globals.dml_version == (1, 2):
+        p = merge_parameters_dml12(params, obj_specs)
+        if p is not None:
+            return p
+
     decls = []
     defs = []
-    autos = []
     for (rank, param) in params:
         (_, type_info, _, value) = param.args
         if value is None:
             if type_info is None or type_info.kind == 'paramtype':
                 # "parameter x;", "parameter x: type;", handled separately
                 decls.append((rank, param))
-            elif type_info.kind == 'auto':
-                autos.append((rank, param))
             else:
                 assert type_info.kind == 'walrus'
                 defs.append((rank, param))
@@ -584,38 +626,8 @@ def merge_parameters(params, obj_specs):
         (name, _, _, _) = decl.args
         raise ENPARAM(decl.site, name)
 
-    # Handle 'auto' declarations separately. It's easy; an 'auto'
-    # declaration must be alone.
-    if autos:
-        if defs:
-            raise EAUTOPARAM(defs[0][1].site, defs[0][1].args[0])
-        elif len(autos) == 1:
-            [(_, p)] = autos
-            return p
-        else:
-            raise EAUTOPARAM(autos[0][1].site, autos[0][1].args[0])
-
     all_inferior = set().union(*(rank.inferior for (rank, _) in defs))
     superior = [(rank, p) for (rank, p) in defs if rank not in all_inferior]
-
-    if dml.globals.dml_version == (1, 2):
-        # Backward compatibility: If there is exactly one
-        # non-default definition, then disregard template
-        # instantiation relations and give the non-default definition
-        # precedence
-        nondefault = [(r, p) for (r, p) in defs if not p.args[2]]
-        if len(nondefault) == 1:
-            [(nd_rank, nd_param)] = nondefault
-            # Add 'is' declaration in 1.4. In the odd case where
-            # t1 overrides t2 but the non-default declaration is
-            # in t2, do nothing (the right thing is likely to
-            # remove the definition in t2)
-            if (logging.show_porting and len(superior) > 1
-                and nd_rank not in all_inferior):
-                for (r, p) in superior:
-                    if r != nd_rank:
-                        report_poverride(nd_rank, r, obj_specs)
-            return nd_param
 
     if len(superior) > 1:
         def decl_is_default(decl):
