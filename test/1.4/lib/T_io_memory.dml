@@ -65,6 +65,19 @@ subdevice ab {
             is function_io_memory;
         }
     }
+    subdevice cc {
+        implement io_memory {
+            is function_io_memory;
+        }
+        bank b {
+            is function_mapped_bank;
+            param function = 0xb;
+            method read(uint64 address, uint64 enabled_bytes, void *user)
+                -> (uint64) throws {
+                return 0xcc;
+            }
+        }
+    }
 }
 bank b {
     is function_mapped_bank;
