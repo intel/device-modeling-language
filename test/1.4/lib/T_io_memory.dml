@@ -14,10 +14,23 @@ implement io_memory {
     is function_io_memory;
 }
 
+port function_io_memory_port {
+    implement io_memory {
+        is function_io_memory;
+    }
+}
+
 port bare {
     implement io_memory {
         is bank_io_memory;
         param bank = a;
+    }
+}
+
+bank function_io_memory_bank {
+    param use_io_memory = false;  // not using bank_io_memory
+    implement io_memory {
+        is function_io_memory;
     }
 }
 
@@ -27,6 +40,34 @@ bank a {
     method read(uint64 address, uint64 enabled_bytes, void *user)
         -> (uint64) throws {
         return 0xaa;
+    }
+}
+subdevice ab {
+    implement io_memory {
+        is function_io_memory;
+    }
+    // this bank's qname should be earlier alphabetically than
+    // qname of the bank we compare it against on device level
+    // because we test `foreach` cycle
+    // and otherwise it works nevertherless
+    bank b {
+        is function_mapped_bank;
+        param function = 0xb;
+        method read(uint64 address, uint64 enabled_bytes, void *user)
+            -> (uint64) throws {
+            return 0xab;
+        }
+    }
+    port function_io_memory_port {
+        implement io_memory {
+            is function_io_memory;
+        }
+    }
+    bank function_io_memory_bank {
+        param use_io_memory = false;  // not using bank_io_memory
+        implement io_memory {
+            is function_io_memory;
+        }
     }
 }
 bank b {
