@@ -1122,15 +1122,17 @@ template function_io_memory {
         error "The function_io_memory template can only be instantiated"
             + " inside 'implement io_memory'";
     }
-    param port_parent = (this.parent.objtype == "device" 
-                        || this.parent.objtype == "subdevice")
-                        #? this.parent.obj
-                        #: SIM_port_object_parent(this.parent.obj);
+    param subdev_parent = (this.parent.objtype == "device"
+                           || this.parent.objtype == "subdevice")
+                        #? this.parent
+                        // Implement is for a port or bank
+                        #: this.parent._nongroup_parent;
+
     method operation(generic_transaction_t *mem_op,
                      map_info_t map_info) -> (exception_type_t) {
         local uint64 offset = map_info.start - map_info.base;
-        foreach b in (each function_mapped_bank in (dev)) {
-            if (SIM_port_object_parent(b._bank_obj()) == port_parent) {
+        foreach b in (each function_mapped_bank in (subdev_parent)) {
+            if (SIM_port_object_parent(b._bank_obj()) == subdev_parent.obj) {
                 if (b.function == map_info.function) {
                     if (!b.use_io_memory) {
                         local map_target_t *mt = SIM_new_map_target(
