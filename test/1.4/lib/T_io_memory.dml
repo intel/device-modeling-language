@@ -78,6 +78,14 @@ subdevice ab {
             }
         }
     }
+    group _group {
+        bank function_io_memory_bank {
+            param use_io_memory = false;  // not using bank_io_memory
+            implement io_memory {
+                is function_io_memory;
+            }
+        }
+    }
 }
 bank b {
     is function_mapped_bank;
