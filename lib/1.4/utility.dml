@@ -1136,14 +1136,12 @@ template function_io_memory {
                 && b.function == map_info.function)
             {
                 if (!b.use_io_memory) {
-                    local map_target_t *mt = SIM_new_map_target(
-                        b._bank_obj(), NULL, NULL);
+                    local map_target_t *mt = SIM_new_map_target(b._bank_obj(),
+                                                                 NULL, NULL);
                     if (!mt) {
-                        local exception_type_t _ex = SIM_clear_exception();
-                        log error: "failed to create map target "
-                            + "for %s: %s",
-                            SIM_object_name(b._bank_obj()),
-                            SIM_last_error();
+                        local exception_type_t _exc = SIM_clear_exception();
+                        log error: "failed to create map target for %s: %s",
+                            SIM_object_name(b._bank_obj()), SIM_last_error();
                         return Sim_PE_IO_Not_Taken;
                     }
                     // hack: VT_map_target_access doesn't accept a map_info
@@ -1151,8 +1149,7 @@ template function_io_memory {
                     // Work around by temporarily patching the memop.
                     local uint64 before = SIM_get_mem_op_physical_address(
                         mem_op);
-                    SIM_set_mem_op_physical_address(mem_op,
-                                                    before + offset);
+                    SIM_set_mem_op_physical_address(mem_op, before + offset);
                     local exception_type_t ret
                         = VT_map_target_access(mt, mem_op);
                     SIM_set_mem_op_physical_address(mem_op, before);
