@@ -1416,6 +1416,8 @@ class ExprTests(GccTests):
             # abstract type
             types.IntegerType,
             # abstract type
+            types.ArchDependentIntegerType,
+            # abstract type
             types.StructType,
             # 1.2, weird
             types.TUnknown,

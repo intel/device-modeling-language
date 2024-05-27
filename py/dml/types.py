@@ -12,10 +12,13 @@ __all__ = (
     'realtype',
     'safe_realtype_shallow',
     'safe_realtype',
+    'safe_realtype_unconst',
     'conv_const',
+    'shallow_const',
     'deep_const',
     'type_union',
     'compatible_types',
+    'compatible_types_fuzzy',
     'typedefs',
     'global_type_declaration_order',
     'global_anonymous_structs',
@@ -133,7 +136,7 @@ def realtype(t):
     elif isinstance(t, TVector):
         t2 = realtype(t.base)
         if t2 != t:
-            return TVector(t2, t.const)
+            return TVector(t2, t.const, t.uniq)
     elif isinstance(t, TFunction):
         input_types = tuple(realtype(sub) for sub in t.input_types)
         output_type = realtype(t.output_type)
@@ -168,6 +171,27 @@ def conv_const(const, t):
         t.const = True
     return t
 
+def safe_realtype_unconst(t0):
+    def sub(t):
+        if isinstance(t, (TArray, TVector)):
+            base = sub(t.base)
+            if t.const or base is not t.base:
+                t = t.clone()
+                t.const = False
+                t.base = base
+        elif t.const:
+            t = t.clone()
+            t.const = False
+        return t
+    return sub(safe_realtype(t0))
+
+def shallow_const(t):
+    t = safe_realtype_shallow(t)
+    while not t.const and isinstance(t, (TArray, TVector)):
+        t = safe_realtype_shallow(t.base)
+
+    return t.const
+
 def deep_const(origt):
     subtypes = [origt]
     while subtypes:
@@ -200,7 +224,7 @@ class TypeSequence:
                         in zip(self.types, other.types)))
 
     def __hash__(self):
-        return hash(tuple(type(elem) for elem in self.types))
+        return hash(tuple(elem.hashed() for elem in self.types))
 
 class DMLType(metaclass=abc.ABCMeta):
     '''The type of a value (expression or declaration) in DML. One DML
@@ -231,25 +255,47 @@ class DMLType(metaclass=abc.ABCMeta):
         return None
 
     def cmp(self, other):
-        """Compare this type to another.
+        """Strict type compatibility/equality.
 
-        Return 0 if the types are equivalent,
-        Return NotImplemented otherwise.
+        Return 0 if the types are run-time compatible,
+        Return NotImplemented otherwise
 
-        The exact meaning of this is somewhat fuzzy. The
-        method is used for three purposes:
+        "Run-time compatibility" has two minimal criteria:
+        1. The C representations of the types MUST be compatible, in a C sense
+        2. A value of one type can be treated by DMLC as though it were of the
+        other type without any additional risk of undefined behavior or invalid
+        generated C.
+        For example, all trait reference types share the same C representation,
+        and so satisfy (1), but trait reference types for different traits do
+        not share vtables; trying to use a vtable for one trait with an
+        incompatible reference would result in undefined behavior, and so do
+        not satisfy (2).
 
+        The method is used for three purposes:
         1. in TPtr.canstore(), to judge whether pointer target types
         are compatible.
         2. in ctree, to compare how large values different numerical
         types can hold
-        3. when judging whether a method override is allowed, as an inaccurate
-        replacement of TPtr(self).canstore(TPtr(other))[0]
+        3. when judging whether a method override is allowed
 
         See SIMICS-9504 for further discussions.
-
         """
-        return NotImplemented
+        return (0 if type(self) is type(other) and self.const == other.const
+                else NotImplemented)
+
+    def cmp_fuzzy(self, other):
+        """Compare this type to another.
+        Return 0 if the types are pretty much equivalent,
+        Return NotImplemented otherwise.
+        As implied, the exact meaning of this is fuzzy. It mostly relaxes
+        criteria (1) of 'cmp'); for example, TPtr(void).cmp(TPtr(TBool())) is
+        allowed to return 0, as is TPtr(TBool()).cmp(TArray(TBool())).
+
+        Most notably, cmp_fuzzy does not take const-qualification into account.
+
+        Any usage of cmp_fuzzy should be considered a HACK
+        """
+        return safe_realtype_unconst(self).cmp(safe_realtype_unconst(other))
 
     def canstore(self, other):
         """Can a variable of this type store a value of another type.
@@ -262,7 +308,8 @@ class DMLType(metaclass=abc.ABCMeta):
         The correctness of the return value can not be trusted; see
         SIMICS-9504 for further discussions.
         """
-        return (self.cmp(other) == 0, False, False)
+        return (safe_realtype_unconst(self).cmp(safe_realtype_unconst(other))
+                == 0, False, False)
 
     @abc.abstractmethod
     def clone(self):
@@ -278,6 +325,13 @@ class DMLType(metaclass=abc.ABCMeta):
 
     def describe(self):
         raise Exception("%s.describe not implemented" % self.__class__.__name__)
+
+    def hashed(self):
+        '''Hash the DML type in a way compatible with cmp. I.e.
+           a.cmp(b) == 0 implies a.hashed() == b.hashed()'''
+        assert type(self).cmp is DMLType.cmp, \
+               '.cmp() overridden without overriding .hashed()'
+        return hash((type(self), self.const))
 
     def key(self):
         return self.const_str + self.describe()
@@ -309,8 +363,6 @@ class TVoid(DMLType):
         return 'void ' + self.const_str + ' ' + var
     def clone(self):
         return TVoid()
-    def cmp(self, other):
-        return 0 if isinstance(realtype(other), TVoid) else NotImplemented
 
 class TUnknown(DMLType):
     '''A type unknown to DML. Typically used for a generic C macro
@@ -344,8 +396,6 @@ class TDevice(DMLType):
         return 'pointer to %s' % self.name
     def key(self):
         return 'device'
-    def cmp(self, other):
-        return 0 if isinstance(realtype(other), TDevice) else NotImplemented
     def canstore(self, other):
         constviol = False
         if not self.const and other.const:
@@ -400,6 +450,10 @@ class TNamed(DMLType):
         raise ICE(self.declaration_site, 'need realtype before key')
     def cmp(self, other):
         assert False, 'need realtype before cmp'
+    def cmp_fuzzy(self, other):
+        assert False, 'need realtype before cmp_fuzzy'
+    def hashed(self):
+        assert False, 'need realtype before hashed'
 
     def clone(self):
         return TNamed(self.c, self.const)
@@ -418,14 +472,10 @@ class TBool(DMLType):
         return 'bool'
     def declaration(self, var):
         return 'bool ' + self.const_str + var
-    def cmp(self, other):
-        if isinstance(other, TBool):
-            return 0
-        return NotImplemented
 
     def canstore(self, other):
         constviol = False
-        if isinstance(other, TBool):
+        if type(other) is TBool:
             return (True, False, constviol)
         if (other.is_int
             and other.bits == 1 and not other.signed):
@@ -454,6 +504,8 @@ class IntegerType(DMLType):
     is_int = True
     is_arith = True
     is_endian = False
+    is_arch_dependent = False
+
     @property
     def is_bitfields(self):
         return self.members is not None
@@ -477,7 +529,12 @@ class IntegerType(DMLType):
         return t
 
     def cmp(self, other):
+        if self.const != other.const:
+            return NotImplemented
         if not other.is_int:
+            return NotImplemented
+        if ((self.is_arch_dependent or other.is_arch_dependent)
+            and type(self) is not type(other)):
             return NotImplemented
         if self.is_endian:
             if not other.is_endian:
@@ -486,11 +543,21 @@ class IntegerType(DMLType):
                 return NotImplemented
         elif other.is_endian:
             return NotImplemented
-        if isinstance(self, TLong) != isinstance(other, TLong):
+        return (0 if (self.bits, self.signed) == (other.bits, other.signed)
+                else NotImplemented)
+
+    def cmp_fuzzy(self, other):
+        if not other.is_int:
             return NotImplemented
-        if isinstance(self, TSize) != isinstance(other, TSize):
+        if ((self.is_arch_dependent or other.is_arch_dependent)
+            and type(self) is not type(other)):
             return NotImplemented
-        if isinstance(self, TInt64_t) != isinstance(other, TInt64_t):
+        if self.is_endian:
+            if not other.is_endian:
+                return NotImplemented
+            if self.byte_order != other.byte_order:
+                return NotImplemented
+        elif other.is_endian:
             return NotImplemented
         if (dml.globals.dml_version == (1, 2)
             and compat.dml12_int in dml.globals.enabled_compat):
@@ -499,6 +566,12 @@ class IntegerType(DMLType):
         else:
             return (0 if (self.bits, self.signed) == (other.bits, other.signed)
                     else NotImplemented)
+
+    def hashed(self):
+        cls = type(self) if self.is_arch_dependent else IntegerType
+        byte_order = self.byte_order if self.is_endian else None
+        return hash((cls, self.const, self.bits, self.signed, byte_order))
+
     # This is the most restrictive canstore definition for
     # IntegerTypes, if this is overridden then it should be
     # because we want to be less restrictive
@@ -582,7 +655,13 @@ class TInt(IntegerType):
         else:
             return 'uint8 ' + self.const_str + var + '[' + str(self.bytes) + ']'
 
-class TLong(IntegerType):
+class ArchDependentIntegerType(IntegerType):
+    '''Integer types whose definition and/or properties are architecture
+       dependent.'''
+    __slots__ = ()
+    is_arch_dependent = True
+
+class TLong(ArchDependentIntegerType):
     '''The 'long' type from C'''
     __slots__ = ()
     def __init__(self, signed, const=False):
@@ -604,7 +683,7 @@ class TLong(IntegerType):
     def declaration(self, var):
         return f'{self.c_name()} {var}'
 
-class TSize(IntegerType):
+class TSize(ArchDependentIntegerType):
     '''The 'size_t' type from C'''
     __slots__ = ()
     def __init__(self, signed, const=False):
@@ -625,7 +704,7 @@ class TSize(IntegerType):
     def declaration(self, var):
         return f'{self.c_name()} {var}'
 
-class TInt64_t(IntegerType):
+class TInt64_t(ArchDependentIntegerType):
     '''The '[u]int64_t' type from ISO C. For compatibility with C
     APIs, e.g., calling an externally defined C function that takes a
     `uint64_t *` arg. We find `uint64` a generally more useful type
@@ -731,9 +810,13 @@ class TFloat(DMLType):
     def describe(self):
         return self.name
     def cmp(self, other):
-        if other.is_float and self.name == other.name:
+        if (self.const == other.const
+            and other.is_float and self.name == other.name):
             return 0
         return NotImplemented
+
+    def hashed(self):
+        return hash((TFloat, self.const, self.name))
 
     def canstore(self, other):
         constviol = False
@@ -765,7 +848,7 @@ class TArray(DMLType):
                 % (conv_const(self.const, self.base).key(),
                    self.size.value))
     def describe(self):
-        return 'array of size %s of %s' % (self.size.read(),
+        return 'array of size %s of %s' % (str(self.size),
                                            self.base.describe())
     def declaration(self, var):
         return self.base.declaration(self.const_str + var
@@ -784,16 +867,30 @@ class TArray(DMLType):
         if elt_size == None:
             return None
         return self.size.value * elt_size
+
     def cmp(self, other):
-        if compat.dml12_misc in dml.globals.enabled_compat:
-            if isinstance(other, (TArray, TPtr)):
-                return self.base.cmp(other.base)
-        elif isinstance(other, (TPtr, TArray)):
-            if self.base.void or other.base.void:
+        if not isinstance(other, TArray):
+            return NotImplemented
+        if not (self.size is other.size
+                or (self.size.constant and other.size.constant
+                    and self.size.value == other.size.value)):
+            return NotImplemented
+        return conv_const(self.const, self.base).cmp(
+            conv_const(other.const, other.base))
+
+    def cmp_fuzzy(self, other):
+        if isinstance(other, (TArray, TPtr)):
+            if other.base.void:
                 return 0
-            if self.base.cmp(other.base) == 0:
-                return 0
+            return self.base.cmp_fuzzy(other.base)
         return NotImplemented
+
+    def hashed(self):
+        size = self.size.value if self.size.constant else self.size
+        return hash((TArray,
+                     size,
+                     conv_const(self.const, self.base).hashed()))
+
     def canstore(self, other):
         return (False, False, False)
     def clone(self):
@@ -816,33 +913,41 @@ class TPtr(DMLType):
     def describe(self):
         return 'pointer to %s' % (self.base.describe())
     def cmp(self, other):
-        if compat.dml12_misc in dml.globals.enabled_compat:
-            if isinstance(other, TPtr):
-                # Can only compare for voidness or equality
-                if self.base.void or other.base.void:
-                    return 0
-                if self.base.cmp(other.base) == 0:
-                    return 0
-        elif isinstance(other, (TPtr, TArray)):
+        if DMLType.cmp(self, other) != 0:
+            return NotImplemented
+        return self.base.cmp(other.base)
+
+    def cmp_fuzzy(self, other):
+        if isinstance(other, (TPtr, TArray)):
             if self.base.void or other.base.void:
                 return 0
-            if self.base.cmp(other.base) == 0:
-                return 0
+            return self.base.cmp_fuzzy(other.base)
         return NotImplemented
+
+    def hashed(self):
+        return hash((TPtr, self.const, self.base.hashed()))
 
     def canstore(self, other):
         ok = False
         trunc = False
         constviol = False
         if isinstance(other, (TPtr, TArray)):
+            constviol = (not shallow_const(self.base)
+                         and shallow_const(other.base))
             if self.base.void or other.base.void:
                 ok = True
             else:
-                if not self.base.const and other.base.const:
-                    constviol = True
-                ok = (self.base.cmp(other.base) == 0)
+                unconst_self_base = safe_realtype_unconst(self.base)
+                unconst_other_base = safe_realtype_unconst(other.base)
+
+                ok = ((unconst_self_base.cmp_fuzzy
+                       if compat.dml12_int in dml.globals.enabled_compat
+                       else unconst_self_base.cmp)(unconst_other_base)
+                      == 0)
         elif isinstance(other, TFunction):
-            ok = True
+            ok = safe_realtype_unconst(self.base).cmp(other) == 0
+        # TODO gate this behind dml.globals.dml_version == (1, 2) or
+        # dml12_misc?
         if self.base.void and isinstance(other, TDevice):
             ok = True
         #dbg('TPtr.canstore %r %r => %r' % (self, other, ok))
@@ -862,9 +967,14 @@ class TPtr(DMLType):
         return self
 
 class TVector(DMLType):
-    __slots__ = ('base',)
-    def __init__(self, base, const = False):
+    count = 0
+    __slots__ = ('base', 'uniq',)
+    def __init__(self, base, const=False, uniq=None):
         DMLType.__init__(self, const)
+        if uniq is None:
+            uniq = TVector.count
+            TVector.count += 1
+        self.uniq = uniq
         if not base:
             raise DMLTypeError("Null base")
         self.base = base
@@ -875,15 +985,20 @@ class TVector(DMLType):
     def describe(self):
         return 'vector of %s' % self.base.describe()
     def cmp(self, other):
+        return (0 if (DMLType.cmp(self, other) == 0
+                      and self.uniq == other.uniq)
+                else NotImplemented)
+    def cmp_fuzzy(self, other):
         if isinstance(other, TVector):
             # Can only compare for voidness or equality
             if self.base.void or other.base.void:
                 return 0
-            if self.base.cmp(other.base) == 0:
-                return 0
+            return self.base.cmp_fuzzy(other.base)
         return NotImplemented
+    def hashed(self):
+        return hash((TVector, self.const, self.uniq))
     def clone(self):
-        return TVector(self.base, self.const)
+        return TVector(self.base, self.const, self.uniq)
     def declaration(self, var):
         s = self.base.declaration('')
         return 'VECT(%s) %s%s' % (s, self.const_str, var)
@@ -904,13 +1019,15 @@ class TTrait(DMLType):
         return TTrait(self.trait)
 
     def cmp(self, other):
-        if isinstance(other, TTrait) and self.trait is other.trait:
-            return 0
-        else:
-            return NotImplemented
+        return (0 if (DMLType.cmp(self, other) == 0
+                      and self.trait is other.trait)
+                else NotImplemented)
 
     def key(self):
         return f'{self.const_str}trait({self.trait.name})'
+
+    def hashed(self):
+        return hash((TTrait, self.const, self.trait))
 
     def c_name(self):
         return f'{self.const_str}{cident(self.trait.name)}'
@@ -935,13 +1052,15 @@ class TTraitList(DMLType):
         return TTraitList(self.traitname, self.const)
 
     def cmp(self, other):
-        if isinstance(other, TTraitList) and self.traitname == other.traitname:
-            return 0
-        else:
-            return NotImplemented
+        return (0 if (DMLType.cmp(self, other) == 0
+                      and self.traitname == other.traitname)
+                else NotImplemented)
 
     def key(self):
         return f'{self.const_str}sequence({self.traitname})'
+
+    def hashed(self):
+        return hash((TTraitList, self.const, self.traitname))
 
     def c_type(self):
         return f'{self.const_str}_each_in_t'
@@ -1011,9 +1130,12 @@ class TExternStruct(StructType):
         return "%s %s%s" % (self.typename, self.const_str, var)
 
     def cmp(self, other):
-        if isinstance(other, TExternStruct) and self.id == other.id:
-            return 0
-        return NotImplemented
+        return (0 if (DMLType.cmp(self, other) == 0
+                      and self.id == other.id)
+                else NotImplemented)
+
+    def hashed(self):
+        return hash((TExternStruct, self.const, self.id))
 
     def clone(self):
         return TExternStruct(self.members, self.id, self.typename, self.const)
@@ -1066,9 +1188,12 @@ class TStruct(StructType):
         out("};\n", preindent = -1)
 
     def cmp(self, other):
-        if isinstance(other, TStruct) and self.label == other.label:
-            return 0
-        return NotImplemented
+        return (0 if (DMLType.cmp(self, other) == 0
+                      and self.label == other.label)
+                else NotImplemented)
+
+    def hashed(self):
+        return hash((TStruct, self.const, self.label))
 
     def clone(self):
         return TStruct(self.members, self.label, self.const)
@@ -1205,13 +1330,33 @@ class TFunction(DMLType):
     def cmp(self, other):
         if (isinstance(other, TFunction)
             and len(self.input_types) == len(other.input_types)
-            and all(arg1.cmp(arg2) == 0
-                    for (arg1, arg2) in zip(self.input_types,
-                                            other.input_types))
-            and self.output_type.cmp(other.output_type) == 0
+            and all(safe_realtype_unconst(arg1).cmp(
+                        safe_realtype_unconst(arg2)) == 0
+                    for (arg1, arg2)
+                    in zip(self.input_types, other.input_types))
+            and safe_realtype_unconst(self.output_type).cmp(
+                safe_realtype_unconst(other.output_type)) == 0
             and self.varargs == other.varargs):
             return 0
         return NotImplemented
+
+    def cmp_fuzzy(self, other):
+        if (isinstance(other, TFunction)
+            and len(self.input_types) == len(other.input_types)
+            and all(arg1.cmp_fuzzy(arg2) == 0
+                    for (arg1, arg2)
+                    in zip(self.input_types, other.input_types))
+            and self.output_type.cmp_fuzzy(other.output_type) == 0
+            and self.varargs == other.varargs):
+            return 0
+        return NotImplemented
+
+    def hashed(self):
+        return hash((TFunction,
+                     tuple(safe_realtype_unconst(typ).hashed()
+                           for typ in self.input_types),
+                     safe_realtype_unconst(self.output_type).hashed(),
+                     self.varargs))
 
     def canstore(self, other):
         return (False, False, False)
@@ -1242,7 +1387,7 @@ class THook(DMLType):
         return THook(self.msg_types, self.validated, self.const)
 
     def cmp(self, other):
-        if (isinstance(other, THook)
+        if (DMLType.cmp(self, other) == 0
             and len(self.msg_types) == len(other.msg_types)
             and all(own_comp.cmp(other_comp) == 0
                     for (own_comp, other_comp) in zip(self.msg_types,
@@ -1250,6 +1395,11 @@ class THook(DMLType):
             return 0
         else:
             return NotImplemented
+
+    def hashed(self):
+        return hash((THook,
+                     self.const,
+                     tuple(comp.hashed() for comp in self.msg_types)))
 
     def key(self):
         return ('%shook(%s)'
@@ -1311,10 +1461,21 @@ def type_union(type1, type2):
 def compatible_types(type1, type2):
     # This function intends to verify that two DML types are
     # compatible in the sense defined by the C spec, possibly with
-    # some DML-specific restrictions added. TODO: DMLType.cmp is only
-    # a rough approximation of this; we should write tests and
-    # either repair cmp or rewrite the logic from scratch.
+    # some DML-specific restrictions added.
     return type1.cmp(type2) == 0
+
+# TODO We should look into getting rid of this and cmp_fuzzy, and replace
+# their usages with usage-specific checks.
+def compatible_types_fuzzy(type1, type2):
+    # This function intends to verify that two DML types are
+    # compatible in the sense defined by the C spec, possibly with
+    # some DML-specific restrictions added.
+    # DMLType.cmp_fuzzy is only a very rough approximation of this,
+    # meant to suite usages such as type-checking the ternary
+    # operator.
+    # Any use of .cmp_fuzzy or compatible_type_fuzzy should be considered
+    # a HACK.
+    return type1.cmp_fuzzy(type2) == 0
 
 void = TVoid()
 # These are the named types used.  This includes both "imported"

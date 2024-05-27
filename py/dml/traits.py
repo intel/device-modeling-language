@@ -401,11 +401,11 @@ def typecheck_method_override(left, right):
     if throws0 != throws1:
         raise EMETH(site0, site1, "different nothrow annotations")
     for ((n, t0), (_, t1)) in zip(inp0, inp1):
-        if realtype(t0).cmp(realtype(t1)) != 0:
+        if safe_realtype_unconst(t0).cmp(safe_realtype_unconst(t1)) != 0:
             raise EMETH(site0, site1,
                         "mismatching types in input argument %s" % (n,))
     for (i, ((_, t0), (_, t1))) in enumerate(zip(outp0, outp1)):
-        if realtype(t0).cmp(realtype(t1)) != 0:
+        if safe_realtype_unconst(t0).cmp(safe_realtype_unconst(t1)) != 0:
             raise EMETH(site0, site1,
                         "mismatching types in output argument %d" % (i + 1,))
 

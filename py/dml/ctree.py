@@ -1222,7 +1222,7 @@ def mkIfExpr(site, cond, texpr, fexpr):
                 (texpr, fexpr, utype) = usual_int_conv(
                     texpr, ttype, fexpr, ftype)
         else:
-            if not compatible_types(ttype, ftype):
+            if not compatible_types_fuzzy(ttype, ftype):
                 raise EBINOP(site, ':', texpr, fexpr)
             # TODO: in C, the rules are more complex,
             # but our type system is too primitive to cover that
@@ -1396,7 +1396,7 @@ class Compare(BinOp):
         if ((lhtype.is_arith and rhtype.is_arith)
             or (isinstance(lhtype, (TPtr, TArray))
                 and isinstance(rhtype, (TPtr, TArray))
-                and compatible_types(lhtype.base, rhtype.base))):
+                and compatible_types_fuzzy(lhtype.base, rhtype.base))):
             return cls.make_simple(site, lh, rh)
         raise EILLCOMP(site, lh, lhtype, rh, rhtype)
 
@@ -1601,7 +1601,7 @@ class Equals(BinOp):
         if ((lhtype.is_arith and rhtype.is_arith)
             or (isinstance(lhtype, (TPtr, TArray))
                 and isinstance(rhtype, (TPtr, TArray))
-                and compatible_types(lhtype, rhtype))
+                and compatible_types_fuzzy(lhtype, rhtype))
             or (isinstance(lhtype, TBool) and isinstance(rhtype, TBool))):
             return Equals(site, lh, rh)
 
@@ -2932,8 +2932,8 @@ def mkInterfaceMethodRef(site, iface_node, indices, method_name):
     if (not isinstance(ftype, TPtr)
         or not isinstance(ftype.base, TFunction)
         or not ftype.base.input_types
-        or TPtr(safe_realtype(TNamed('conf_object_t'))).cmp(
-            safe_realtype(ftype.base.input_types[0])) != 0):
+        or TPtr(safe_realtype_unconst(TNamed('conf_object_t'))).cmp(
+            safe_realtype_unconst(ftype.base.input_types[0])) != 0):
         # non-method members are not accessible
         raise EMEMBER(site, struct_name, method_name)
 
@@ -4684,7 +4684,10 @@ class ArrayRef(LValue):
     explicit_type = True
     @auto_init
     def __init__(self, site, expr, idx):
-        self.type = realtype_shallow(expr.ctype()).base
+        expr_type = realtype_shallow(expr.ctype())
+        self.type = conv_const(expr_type.const
+                               and isinstance(expr_type, TArray),
+                               expr_type.base)
     def __str__(self):
         return '%s[%s]' % (self.expr, self.idx)
     def read(self):
@@ -4797,6 +4800,15 @@ def mkCast(site, expr, new_type):
             raise ETEMPLATEUPCAST(site, "object", new_type)
         else:
             return mkTraitUpcast(site, expr, real.trait)
+
+    if (compat.dml12_misc in dml.globals.enabled_compat
+        and isinstance(expr, InterfaceMethodRef)):
+        # Workaround for SIMICS-9868
+        return mkLit(site, "%s->%s" % (
+            expr.node_expr.read(), expr.method_name), new_type)
+
+    if isinstance(expr, NonValue):
+        raise expr.exc()
     old_type = safe_realtype(expr.ctype())
     if (dml.globals.compat_dml12_int(site)
         and (isinstance(old_type, (TStruct, TVector))
@@ -4804,15 +4816,17 @@ def mkCast(site, expr, new_type):
         # these casts are permitted by C only if old and new are
         # the same type, which is useless
         return Cast(site, expr, new_type)
-    if isinstance(real, TStruct):
-        if isinstance(old_type, TStruct) and old_type.label == real.label:
-            return expr
+    if isinstance(real, (TVoid, TArray, TFunction)):
         raise ECAST(site, expr, new_type)
-    if isinstance(real, TExternStruct):
-        if isinstance(old_type, TExternStruct) and old_type.id == real.id:
-            return expr
-        raise ECAST(site, expr, new_type)
-    if isinstance(real, (TVoid, TArray, TVector, TTraitList, TFunction)):
+    if old_type.cmp(real) == 0:
+        if (old_type.is_int
+            and not old_type.is_endian
+            and dml.globals.compat_dml12_int(expr.site)):
+            # 1.2 integer expressions often lie about their actual type,
+            # and require a "redundant" cast! Why yes, this IS horrid!
+            return Cast(site, expr, new_type)
+        return mkRValue(expr)
+    if isinstance(real, (TStruct, TExternStruct, TVector, TTraitList)):
         raise ECAST(site, expr, new_type)
     if isinstance(old_type, (TVoid, TStruct, TVector, TTraitList, TTrait)):
         raise ECAST(site, expr, new_type)
@@ -4820,7 +4834,7 @@ def mkCast(site, expr, new_type):
         expr = as_int(expr)
         old_type = safe_realtype(expr.ctype())
     if real.is_int and not real.is_endian:
-        if isinstance(expr, IntegerConstant):
+        if old_type.is_int and expr.constant:
             value = truncate_int_bits(expr.value, real.signed, real.bits)
             if dml.globals.compat_dml12_int(site):
                 return IntegerConstant_dml12(site, value, real)
@@ -4831,8 +4845,8 @@ def mkCast(site, expr, new_type):
         # Shorten redundant chains of integer casts. Avoids insane C
         # output for expressions like a+b+c+d.
         if (isinstance(expr, Cast)
-            and isinstance(expr.type, TInt)
-            and expr.type.bits >= real.bits):
+            and isinstance(old_type, TInt)
+            and old_type.bits >= real.bits):
             # (uint64)(int64)x -> (uint64)x
             expr = expr.expr
             old_type = safe_realtype(expr.ctype())
@@ -4868,9 +4882,7 @@ def mkCast(site, expr, new_type):
             return expr
     elif real.is_int and real.is_endian:
         old_type = safe_realtype(expr.ctype())
-        if real.cmp(old_type) == 0:
-            return expr
-        elif old_type.is_arith or isinstance(old_type, TPtr):
+        if old_type.is_arith or isinstance(old_type, TPtr):
             return mkApply(
                 expr.site,
                 mkLit(expr.site, *real.get_store_fun()),
@@ -4927,7 +4939,6 @@ def mkCast(site, expr, new_type):
 class RValue(Expression):
     '''Wraps an lvalue to prohibit write. Useful when a composite
     expression is reduced down to a single variable.'''
-    writable = False
     @auto_init
     def __init__(self, site, expr): pass
     def __str__(self):
@@ -4936,11 +4947,22 @@ class RValue(Expression):
         return self.expr.ctype()
     def read(self):
         return self.expr.read()
-    def discard(self): pass
+    def discard(self):
+        return self.expr.discard()
     def incref(self):
         self.expr.incref()
     def decref(self):
         self.expr.decref()
+    @property
+    def explicit_type(self):
+        return self.expr.explicit_type
+    @property
+    def type(self):
+        assert self.explicit_type
+        return self.expr.type
+    @property
+    def is_pointer_to_stack_allocation(self):
+        return self.expr.is_pointer_to_stack_allocation
 
 def mkRValue(expr):
     if isinstance(expr, LValue) or expr.writable:
