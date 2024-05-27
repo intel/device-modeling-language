@@ -4825,6 +4825,11 @@ def mkCast(site, expr, new_type):
             # 1.2 integer expressions often lie about their actual type,
             # and require a "redundant" cast! Why yes, this IS horrid!
             return Cast(site, expr, new_type)
+        if real.is_int and real.members is not None:
+            # An integer type can be compatible with a bitfields without being
+            # equal to it, as DMLC will treat bitfields differently. Leverage
+            # Cast in this case
+            return Cast(site, expr, new_type)
         return mkRValue(expr)
     if isinstance(real, (TStruct, TExternStruct, TVector, TTraitList)):
         raise ECAST(site, expr, new_type)
