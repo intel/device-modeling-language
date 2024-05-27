@@ -10,6 +10,8 @@ typedef struct { uint32 x; } s_t;
 typedef layout "little-endian" { uint32 x; } l_t;
 /// WARNING WEXPERIMENTAL
 typedef int vect v_t;
+/// WARNING WEXPERIMENTAL
+typedef int vect alt_v_t;
 typedef int a_t[1];
 typedef void f_t(void);
 extern f_t f;
@@ -43,8 +45,10 @@ method init() {
     cast(v, uint32);
     /// ERROR ECAST
     cast(i, v_t);
-    /// ERROR ECAST
+    // no error
     cast(v, v_t);
+    /// ERROR ECAST
+    cast(v, alt_v_t);
     /// ERROR ECAST
     cast(l, uint32);
     // no error!

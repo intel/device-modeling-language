@@ -1306,18 +1306,7 @@ def expr_cast(tree, location, scope):
     for (site, _) in struct_defs:
         report(EANONSTRUCT(site, "'cast' expression"))
 
-    if (compat.dml12_misc in dml.globals.enabled_compat
-        and isinstance(expr, InterfaceMethodRef)):
-        # Workaround for SIMICS-9868
-        return mkLit(tree.site, "%s->%s" % (
-            expr.node_expr.read(), expr.method_name), type)
-
-    if isinstance(expr, NonValue) and (
-            not isinstance(expr, NodeRef)
-            or not isinstance(safe_realtype(type), TTrait)):
-        raise expr.exc()
-    else:
-        return mkCast(tree.site, expr, type)
+    return mkCast(tree.site, expr, type)
 
 @expression_dispatcher
 def expr_undefined(tree, location, scope):
@@ -2008,9 +1997,8 @@ def stmt_local(stmt, location, scope):
         for (name, typ) in decls:
             sym = mk_sym(name, typ)
             tgt_typ = safe_realtype_shallow(typ)
-            if tgt_typ.const:
-                nonconst_typ = tgt_typ.clone()
-                nonconst_typ.const = False
+            if shallow_const(tgt_typ):
+                nonconst_typ = safe_realtype_unconst(tgt_typ)
                 tgt_sym = mk_sym('_tmp_' + name, nonconst_typ, True)
                 sym.init = ExpressionInitializer(mkLocalVariable(stmt.site,
                                                                  tgt_sym))

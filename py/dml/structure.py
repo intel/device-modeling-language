@@ -737,7 +737,8 @@ def typecheck_method_override(m1, m2, location):
             # TODO move to caller
             (_, type1) = eval_type(t1, a1.site, location, global_scope)
             (_, type2) = eval_type(t2, a2.site, location, global_scope)
-            if safe_realtype(type1).cmp(safe_realtype(type2)) != 0:
+            if safe_realtype_unconst(type1).cmp(
+                    safe_realtype_unconst(type2)) != 0:
                 raise EMETH(a1.site, a2.site,
                             f"mismatching types in input argument {n1}")
 
@@ -746,7 +747,8 @@ def typecheck_method_override(m1, m2, location):
             ((n1, t1), (n2, t2)) = (a1.args, a2.args)
             (_, type1) = eval_type(t1, a1.site, location, global_scope)
             (_, type2) = eval_type(t2, a2.site, location, global_scope)
-            if safe_realtype(type1).cmp(safe_realtype(type2)) != 0:
+            if safe_realtype_unconst(type1).cmp(
+                    safe_realtype_unconst(type2)) != 0:
                 msg = "mismatching types in return value"
                 if len(outp1) > 1:
                     msg += f" {i + 1}"
