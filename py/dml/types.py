@@ -173,7 +173,7 @@ def conv_const(const, t):
 
 def safe_realtype_unconst(t0):
     def sub(t):
-        if isinstance(t, (TArray, TVector)):
+        if isinstance(t, TArray):
             base = sub(t.base)
             if t.const or base is not t.base:
                 t = t.clone()
@@ -187,7 +187,7 @@ def safe_realtype_unconst(t0):
 
 def shallow_const(t):
     t = safe_realtype_shallow(t)
-    while not t.const and isinstance(t, (TArray, TVector)):
+    while not t.const and isinstance(t, TArray):
         t = safe_realtype_shallow(t.base)
 
     return t.const
@@ -198,7 +198,7 @@ def deep_const(origt):
         st = safe_realtype_shallow(subtypes.pop())
         if st.const:
             return True
-        if isinstance(st, (TArray, TVector)):
+        if isinstance(st, TArray):
             subtypes.append(st.base)
         elif isinstance(st, StructType):
             subtypes.extend(st.members.values())
