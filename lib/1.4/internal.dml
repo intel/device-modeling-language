@@ -39,15 +39,15 @@ extern uint16 CONVERT_BE16(uint16 val);
 extern uint32 CONVERT_BE32(uint32 val);
 extern uint64 CONVERT_BE64(uint64 val);
 
-extern uint8  LOAD_LE8 (void *src);
-extern uint16 LOAD_LE16(void *src);
-extern uint32 LOAD_LE32(void *src);
-extern uint64 LOAD_LE64(void *src);
+extern uint8  LOAD_LE8 (const void *src);
+extern uint16 LOAD_LE16(const void *src);
+extern uint32 LOAD_LE32(const void *src);
+extern uint64 LOAD_LE64(const void *src);
 
-extern uint8  LOAD_BE8 (void *src);
-extern uint16 LOAD_BE16(void *src);
-extern uint32 LOAD_BE32(void *src);
-extern uint64 LOAD_BE64(void *src);
+extern uint8  LOAD_BE8 (const void *src);
+extern uint16 LOAD_BE16(const void *src);
+extern uint32 LOAD_BE32(const void *src);
+extern uint64 LOAD_BE64(const void *src);
 
 extern void STORE_LE8 (void *dst, uint8  val);
 extern void STORE_LE16(void *dst, uint16 val);
@@ -59,15 +59,15 @@ extern void STORE_BE16(void *dst, uint16 val);
 extern void STORE_BE32(void *dst, uint32 val);
 extern void STORE_BE64(void *dst, uint64 val);
 
-extern uint8  UNALIGNED_LOAD_LE8 (void *src);
-extern uint16 UNALIGNED_LOAD_LE16(void *src);
-extern uint32 UNALIGNED_LOAD_LE32(void *src);
-extern uint64 UNALIGNED_LOAD_LE64(void *src);
+extern uint8  UNALIGNED_LOAD_LE8 (const void *src);
+extern uint16 UNALIGNED_LOAD_LE16(const void *src);
+extern uint32 UNALIGNED_LOAD_LE32(const void *src);
+extern uint64 UNALIGNED_LOAD_LE64(const void *src);
 
-extern uint8  UNALIGNED_LOAD_BE8 (void *src);
-extern uint16 UNALIGNED_LOAD_BE16(void *src);
-extern uint32 UNALIGNED_LOAD_BE32(void *src);
-extern uint64 UNALIGNED_LOAD_BE64(void *src);
+extern uint8  UNALIGNED_LOAD_BE8 (const void *src);
+extern uint16 UNALIGNED_LOAD_BE16(const void *src);
+extern uint32 UNALIGNED_LOAD_BE32(const void *src);
+extern uint64 UNALIGNED_LOAD_BE64(const void *src);
 
 extern void UNALIGNED_STORE_LE8 (void *dst, uint8  val);
 extern void UNALIGNED_STORE_LE16(void *dst, uint16 val);
