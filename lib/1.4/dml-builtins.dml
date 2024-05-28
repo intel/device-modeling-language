@@ -879,16 +879,14 @@ extern typedef struct {
         const uint32 *indices;
 } _port_object_t;
 
-independent method _get_attribute_attr_trampoline(
-    void *info, conf_object_t *obj, attr_value_t *_idx)
-    -> (attr_value_t) {
-    return (&_get_attribute_attr)(obj, info, 0, 0);
+method _get_attribute_attr_trampoline(void *info) -> (attr_value_t) {
+    return _get_attribute_attr(info, 0, 0);
 }
 
 independent method _get_attribute_attr_portobj_trampoline(
-    void *_info, conf_object_t *_portobj, attr_value_t *_idx)
+    conf_object_t *_portobj, void *_info)
     -> (attr_value_t) {
-    local _port_object_t *portobj = cast(_portobj, _port_object_t*);
+    local _port_object_t *portobj = cast(_portobj, _port_object_t *);
     local _dml_attr_getset_info_t *info =
         cast(_info, _dml_attr_getset_info_t *);
     local uint32 flat_index_offset = 0;
@@ -946,16 +944,14 @@ method _get_attribute_attr(const _dml_attr_getset_info_t *_conf_info,
     return to_ret;
 }
 
-independent method _set_attribute_attr_trampoline(
-    void *info, conf_object_t *obj, attr_value_t *val, attr_value_t *_idx)
-    -> (set_error_t) {
-    return (&_set_attribute_attr)(obj, info, 0, 0, val);
+method _set_attribute_attr_trampoline(attr_value_t *val, void *info)
+                                  -> (set_error_t) {
+    return _set_attribute_attr(info, 0, 0, val);
 }
 
 independent method _set_attribute_attr_portobj_trampoline(
-    void *_info, conf_object_t *_portobj, attr_value_t *val,
-    attr_value_t *_idx) -> (set_error_t) {
-    local _port_object_t *portobj = cast(_portobj, _port_object_t*);
+    conf_object_t *_portobj, attr_value_t *val, void *_info) -> (set_error_t) {
+    local _port_object_t *portobj = cast(_portobj, _port_object_t *);
     local _dml_attr_getset_info_t *info = cast(_info,
                                                _dml_attr_getset_info_t *);
     local uint32 flat_index_offset = 0;
@@ -1039,12 +1035,10 @@ extern void *_DML_register_attributes(
     conf_class_t *, const _id_info_t *, const _dml_port_object_assoc_t *,
     const _vtable_list_t *, sequence(_conf_attribute),
     _dml_attr_conf_info_t (*)(_conf_attribute),
-    attr_value_t (*get)(void *, conf_object_t *, attr_value_t *),
-    set_error_t (*set)(void *, conf_object_t *, attr_value_t *,
-                       attr_value_t *),
-    attr_value_t (*port_get)(void *, conf_object_t *, attr_value_t *),
-    set_error_t (*port_set)(void *, conf_object_t *, attr_value_t *,
-                            attr_value_t *));
+    attr_value_t (*get)(conf_object_t *, void *),
+    set_error_t (*set)(conf_object_t *, attr_value_t *, void *),
+    attr_value_t (*port_get)(conf_object_t *, void *),
+    set_error_t (*port_set)(conf_object_t *, attr_value_t *, void *));
 
 extern const _vtable_list_t *_each___conf_attribute;
 extern const _dml_port_object_assoc_t *_port_object_assocs;
