@@ -503,8 +503,7 @@ def add_templates(obj_specs, each_stmts):
     while i < len(queue):
         (site, tpl) = queue[i]
         i += 1
-        if (compat.dml12_misc in dml.globals.enabled_compat
-            and tpl.name in dml.globals.missing_templates):
+        if tpl.name in dml.globals.missing_templates:
             report(ENTMPL(site, tpl.name))
             continue
         if tpl in used_templates:
