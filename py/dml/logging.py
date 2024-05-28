@@ -394,7 +394,7 @@ class DumpableSite(Site):
     def __setstate__(self, data):
         (self.file_info, self._offs) = data
     def provisional_enabled(self, feature):
-        return feature in self.file_info.provisional
+        return self.file_info.provisional.get(feature, False)
 
 class TemplateSite(Site):
     '''A source code location after template expansion'''

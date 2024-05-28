@@ -1143,16 +1143,25 @@ class ENOVERRIDE(DMLError):
     declarations that do not override existing declarations must be
     declared using the `:=` or `:default` syntax.
     """
-    fmt = ("non-overriding param should use :%s syntax"
-           " (from explicit_param_decls feature)")
+    fmt = ("parameter '%s' not previously declared."
+           " To declare and define a new parameter, use the ':%s' syntax.")
+
+    def log(self):
+        from . import provisional
+        DMLError.log(self)
+        prov_site = self.site.provisional_enabled(
+            provisional.explicit_param_decls)
+        self.print_site_message(
+            prov_site,
+            "enabled by the explicit_param_decls provisional feature")
+
 
 class EOVERRIDE(DMLError):
     """When the `explict_param_decls` provisional feature is enabled,
     parameters declared using `:=` or `:default` syntax may not override
     other parameters.
     """
-    fmt = ("use of :%s to override existing param"
-           " (from explicit_param_decls feature)")
+    fmt = "The :%s syntax may not be used to override an existing parameter"
     def __init__(self, site, other_site, token):
         super().__init__(site, token)
         self.other_site = other_site
