@@ -50,6 +50,26 @@ def feature(cls: type[CompatFeature]):
 
 
 @feature
+class broken_conditional_is(CompatFeature):
+    '''This compatibility feature prevents DML from
+    reporting errors when instantiating a template within an `#if` block:
+    ```
+    #if (true) {
+        group g {
+            // should be an error, but silently ignored when this
+            // feature is enabled
+            is nonexisting_template;
+        }
+    }
+    ```
+    Up to Simics 7, a bug prevented DMLC from reporting an error; this
+    feature exists to preserve that behaviour.
+    '''
+    short = "Generate proxy port interfaces for banks and ports"
+    last_api_version = api_7
+
+
+@feature
 class port_proxy_ifaces(CompatFeature):
     '''Version 5 and earlier of Simics relied on interface ports (as
     registered by the `SIM_register_port_interface` API function) for

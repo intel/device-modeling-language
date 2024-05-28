@@ -206,6 +206,7 @@ template device {
 
     parameter simics_api_version auto;
 
+    parameter _compat_broken_conditional_is auto;
     parameter _compat_port_proxy_ifaces auto;
     parameter _compat_port_proxy_attrs auto;
     parameter _compat_optional_version_statement auto;
