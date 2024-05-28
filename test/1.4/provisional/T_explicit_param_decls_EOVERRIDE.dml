@@ -5,6 +5,7 @@
 
 dml 1.4;
 
+/// ERROR ENOVERRIDE
 provisional explicit_param_decls;
 
 device test;

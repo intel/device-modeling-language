@@ -665,7 +665,7 @@ def merge_parameters(params, obj_specs):
             elif (not parent_ranks and declared_as_override
                   and rank not in decls):
                 report(ENOVERRIDE(
-                    p.site, 'default' if is_default else '='))
+                    p.site, name, 'default' if is_default else '='))
 
     [(rank0, param0)] = superior
 
