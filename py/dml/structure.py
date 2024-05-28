@@ -518,8 +518,14 @@ def add_templates(obj_specs, each_stmts):
     while i < len(queue):
         (site, tpl) = queue[i]
         i += 1
-        if (compat.dml12_misc in dml.globals.enabled_compat
-            and tpl.name in dml.globals.missing_templates):
+        if (tpl.name in dml.globals.missing_templates
+            and (
+                # SIMICS-22403: dml12_misc makes DML *less* strict,
+                # which is a bug, and we use a compat feature to
+                # gradually fix that bug. We also preserve the
+                # stricter checking in 1.2, because that doesn't hurt.
+                compat.broken_conditional_is not in dml.globals.enabled_compat
+                or compat.dml12_misc in dml.globals.enabled_compat)):
             report(ENTMPL(site, tpl.name))
             continue
         if tpl in used_templates:

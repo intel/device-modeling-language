@@ -579,4 +579,15 @@
       as an override. Inconsistent usage will trigger compile errors.
       This is useful to catch misspelled
       overrides <bug number="SIMICS-21451"/>.</add-note></build-id>
+  <build-id _6="next" _7="next"><add-note>Addressed a bug where DMLC did
+      not report errors when a non-existing template is instantiated within
+      an <tt>#if</tt> block. E.g., the following does not give an error:
+      <pre>
+      #if (true) { group g { is nonexisting_template; }}
+      </pre>
+      The bugfix is opt-in, because an immediate bugfix would risk
+      breaking existing builds; the error will only be reported when the flag
+      <tt>--no-compat=broken_conditional_is</tt> is passed to DMLC.
+      This flag will be automatically enabled in Simics 8
+      <bug number="SIMICS-22403"/>.</add-note></build-id>
 </rn>
