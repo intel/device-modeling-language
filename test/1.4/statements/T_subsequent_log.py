@@ -64,3 +64,19 @@ with LogCapture() as capture:
         stest.expect_true("shared in array" in mess)
     for mess in messages[4:]:
         stest.expect_true("array method" in mess)
+
+with LogCapture() as capture:
+    with stest.expect_log_mgr(obj, 'warning'):
+        obj.test_warning_once = True
+    with stest.expect_log_mgr(obj, 'error'):
+        obj.test_error_once = True
+    with stest.expect_log_mgr(obj, 'critical'):
+        obj.test_critical_once = True
+    stest.expect_equal(capture.messages,
+                       ['warning once', 'error once', 'critical once'])
+
+with LogCapture() as capture:
+    obj.test_warning_once = True
+    obj.test_error_once = True
+    obj.test_critical_once = True
+    stest.expect_equal(capture.messages, [])
