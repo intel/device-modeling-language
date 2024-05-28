@@ -558,7 +558,7 @@
       in multiple inheritance: it allows any method that overrides multiple
       implementations from unrelated templates to individually reference and
       call the implementations it overrides.</add-note></build-id>
-  <build-id _6="6309" _7="next"><add-note> Template <tt>function_io_memory</tt>
+  <build-id _6="6309" _7="7021"><add-note> Template <tt>function_io_memory</tt>
       now searches for the bank in the same `subdevice`/`device` scope as the
       `implement`. </add-note></build-id>
 </rn>
