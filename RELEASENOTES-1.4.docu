@@ -228,7 +228,7 @@
   <build-id value="6129"><add-note> Various improvements to the reference
       manual has been made. </add-note></build-id>
   <build-id value="6131"><add-note> It is no longer an error to instantiate
-      a non-existing template from within a dead branch of an `#if` block.
+      a non-existing template from within a dead branch of an <tt>#if</tt> block.
   </add-note></build-id>
   <build-id value="6133"><add-note> Two values of the same template type
       can now be compared for equality, and are equal when they
@@ -303,17 +303,17 @@
       </pre></add-note></build-id>
   <build-id value="6148"><add-note>The <tt>issue</tt> method in the
       <tt>map_target</tt> template can now be overridden.</add-note></build-id>
-  <build-id value="6149"><add-note> Objects of type `port` and `bank`
-      can now be placed inside `group` objects.</add-note></build-id>
+  <build-id value="6149"><add-note> Objects of type <tt>port</tt> and <tt>bank</tt>
+      can now be placed inside <tt>group</tt> objects.</add-note></build-id>
   <build-id value="6149"><add-note> Added a new object type
-      `subdevice`. This object behaves similar to a `port`, with two
-      differences: It may contain `port` and `bank` objects, and the
-      corresponding Simics object does not add a `port.` prefix. For
-      instance, the object for `subdevice x;` is named `dev.x` instead
-      of `dev.port.x`.</add-note></build-id>
+      <tt>subdevice</tt>. This object behaves similar to a <tt>port</tt>, with two
+      differences: It may contain <tt>port</tt> and <tt>bank</tt> objects, and the
+      corresponding Simics object does not add a <tt>port.</tt> prefix. For
+      instance, the object for <tt>subdevice x;</tt> is named <tt>dev.x</tt> instead
+      of <tt>dev.port.x</tt>.</add-note></build-id>
   <build-id value="6149"><add-note> Fixed a bug that caused incorrect
-      Simics object names when the `init_as_subobj` template is
-      instantiated on a `connect` object inside a `bank` or `port`
+      Simics object names when the <tt>init_as_subobj</tt> template is
+      instantiated on a <tt>connect</tt> object inside a <tt>bank</tt> or <tt>port</tt>
       object.</add-note></build-id>
   <build-id value="6150"><add-note> Multiple variables may now be declared
       simultaneously using tuple syntax (parentheses), and tuple syntax can now
@@ -467,7 +467,7 @@
       }
       </pre>
       This syntax can't be used for variadic arguments or any argument
-      corresponding to a method parameter declared `inline`
+      corresponding to a method parameter declared <tt>inline</tt>
       <bug number="SIMICS-20473"/>.</add-note></build-id>
   <build-id value="6218"><add-note>Fixed a bug where a top-level
       object named the same as the device object could result in
@@ -544,7 +544,7 @@
       an implementation that overrides all the unrelated implementations
       <bug number="SIMICS-20431"/>. This mirrors the pre-existing semantics for
       non-<tt>shared</tt> methods.</add-note></build-id>
-  <build-id _6="6309" _7="7020"><add-note> Added the `templates` member for
+  <build-id _6="6309" _7="7020"><add-note> Added the <tt>templates</tt> member for
       all objects and values of template types, which allows for making calls
       to any particular implementation of a method as provided by a specified
       template <bug number="SIMICS-22264"/>. Example syntax:
@@ -559,8 +559,8 @@
       implementations from unrelated templates to individually reference and
       call the implementations it overrides.</add-note></build-id>
   <build-id _6="6309" _7="7021"><add-note> Template <tt>function_io_memory</tt>
-      now searches for the bank in the same `subdevice`/`device` scope as the
-      `implement`. </add-note></build-id>
+      now searches for the bank in the same <tt>subdevice</tt>/<tt>device</tt> scope as the
+      <tt>implement</tt>. </add-note></build-id>
   <build-id _6="next" _7="next"><add-note>Added a system
       for <em>provisional language features</em>: language features
       that are disabled by default but can be explicitly enabled per

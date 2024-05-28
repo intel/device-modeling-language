@@ -1675,7 +1675,7 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
       to <tt><em>host</em>/bin/dml/include/simics</tt>. Makefiles have
       been updated to add this directory to the include
       path. </add-note></build-id>
-  <build-id value="6132"><add-note> Fixed a problem with `log error`
+  <build-id value="6132"><add-note> Fixed a problem with <tt>log error</tt>
       statements when there are more than 32 log groups
       <bug number="HSD-1305472692"/>. </add-note></build-id>
   <build-id value="6132"><add-note> Unicode BiDi control characters
