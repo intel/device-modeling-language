@@ -568,7 +568,7 @@ def merge_parameters_dml12(params, obj_specs):
 
     if len(nondefault) == 1:
         def_map = dict(defs)
-        minimal_ancestry = traits.calc_minimal_ancestry(set(def_map))
+        minimal_ancestry = traits.calc_minimal_ancestry(frozenset(def_map))
         superior = [(rank, def_map[rank]) for rank in minimal_ancestry[None]]
         [(nd_rank, nd_param)] = nondefault
         # Add 'is' declaration in 1.4. In the odd case where
@@ -644,6 +644,7 @@ def merge_parameters(params, obj_specs):
             decl_is_default((rank1, p1)))
 
     all_ranks = {rank for (rank, _) in params}
+    minimal_ancestry = traits.calc_minimal_ancestry(frozenset(all_ranks))
     for (rank, p) in defs.items():
         if p.site.provisional_enabled(provisional.explicit_param_decls):
             (_, type_info, is_default, _) = p.args
@@ -652,17 +653,16 @@ def merge_parameters(params, obj_specs):
             else:
                 assert type_info.kind in {'walrus', 'paramtype'}
                 declared_as_override = False
-            is_override = not all_ranks.isdisjoint(rank.inferior)
-            if not declared_as_override and is_override:
-                minimal_ancestry = traits.calc_minimal_ancestry(all_ranks)
+            parent_ranks = minimal_ancestry[rank]
+            if not declared_as_override and parent_ranks:
                 [parent, *_] = (parent for (parent_rank, parent) in params
-                                if parent_rank in minimal_ancestry[rank])
+                                if parent_rank in parent_ranks)
                 report(EOVERRIDE(type_info.site, parent.site,
                                  'default' if is_default else '='))
             if not declared_as_override and rank in decls:
                 report(EOVERRIDE(type_info.site, decls[rank].site,
                                  'default' if is_default else '='))
-            elif (not is_override and declared_as_override
+            elif (not parent_ranks and declared_as_override
                   and rank not in decls):
                 report(ENOVERRIDE(
                     p.site, 'default' if is_default else '='))

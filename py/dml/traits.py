@@ -4,6 +4,7 @@
 # Infrastructure for traits
 
 import itertools
+import functools
 import contextlib
 import abc
 import os
@@ -504,7 +505,8 @@ def get_highest_ranks(ranks):
     # intermediate sets
     return ranks.difference(*(r.inferior.intersection(ranks) for r in ranks))
 
-def calc_minimal_ancestry(ranks: set["Rank"]):
+@functools.cache
+def calc_minimal_ancestry(ranks: frozenset["Rank"]):
     '''Given a set of ranks, return a dictionary Rank -> set(Rank)
     mapping each rank to the set of highest unrelated ranks it subsumes.
     In addition, minimal_ancestry[None] is the set of highest unrelated ranks
@@ -541,7 +543,7 @@ def sort_method_implementations(implementations):
                             impl.name)
         rank_to_method[impl.rank] = impl
 
-    minimal_ancestry = calc_minimal_ancestry(Set(rank_to_method))
+    minimal_ancestry = calc_minimal_ancestry(frozenset(rank_to_method))
 
     if len(minimal_ancestry[None]) > 1:
         # There is no single method implementation that overrides all
