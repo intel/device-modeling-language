@@ -30,14 +30,14 @@ method init() {
     assert SIM_object_descendant(dev.obj, "port.p[1]") == p[1].obj;
 
     assert SIM_get_attribute_attributes(SIM_object_class(p[1].obj), "a")
-        == (Sim_Attr_Optional | Sim_Attr_Legacy);
+        == (Sim_Attr_Optional | Sim_Attr_CB_Data);
     local attr_value_t v = SIM_get_attribute(p[1].obj, "a");
     assert SIM_attr_integer(v) == 4712;
     // compatibility proxy attribute
     assert SIM_get_attribute_attributes(SIM_object_class(dev.obj), "p_a")
-        == (Sim_Attr_Pseudo | Sim_Attr_Legacy | Sim_Attr_Internal);
+        == (Sim_Attr_Pseudo | Sim_Attr_Internal | Sim_Attr_CB_Data);
     assert SIM_get_attribute_attributes(SIM_object_class(dev.obj), "x_a")
-        == (Sim_Attr_Pseudo | Sim_Attr_Legacy | Sim_Attr_Internal);
+        == (Sim_Attr_Pseudo | Sim_Attr_Internal | Sim_Attr_CB_Data);
     v = SIM_get_attribute(dev.obj, "p_a");
     assert SIM_attr_integer(SIM_attr_list_item(v, 1)) == 4712;
     SIM_free_attribute(v);

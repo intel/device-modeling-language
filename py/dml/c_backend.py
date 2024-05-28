@@ -386,7 +386,7 @@ def generate_attr_setter(fname, node, port, dimsizes, cprefix, loopvars,
                          allow_cutoff=False):
     device = dml.globals.device
     proto = ('set_error_t ' + fname +
-             '(void *_, conf_object_t *_obj, attr_value_t *_val, attr_value_t *_idx)')
+             '(conf_object_t *_obj, attr_value_t *_val, lang_void *_aux)')
     start_function_definition(proto)
     out('{\n', postindent = 1)
     if port:
@@ -448,7 +448,7 @@ def generate_attr_setter(fname, node, port, dimsizes, cprefix, loopvars,
 
 def generate_attr_getter(fname, node, port, dimsizes, cprefix, loopvars):
     device = dml.globals.device
-    proto = ('attr_value_t ' + fname+'(void *_, conf_object_t *_obj, attr_value_t *_idx)')
+    proto = ('attr_value_t ' + fname+'(conf_object_t *_obj, lang_void *_aux)')
     start_function_definition(proto)
     out('{\n', postindent = 1)
     if port:
@@ -623,14 +623,10 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
                    attrname, getter, setter,
                    attr_flag, attr_type, doc.read()))
     else:
-        initcode.out('SIM_register_typed_attribute(class, "'+attrname+'",'+
-                     '\n                             '+
-                 getter+', 0, '+
-                 setter+', 0,'+
-                 '\n                             '+
-                 attr_flag + ', ' + '"'+attr_type+'", NULL,'+
-                 '\n                             '+
-                 doc.read() + ');\n')
+        initcode.out(
+            f'SIM_register_attribute_with_user_data(class, "{attrname}", '
+            + f'{getter}, NULL, {setter}, NULL, {attr_flag}, "{attr_type}", '
+            + f'{doc.read()});\n')
 
 # Output register attribute functions and return a string with
 # initialization code
@@ -2924,12 +2920,12 @@ def register_saved_attributes(initcode, dev):
                      + " ++idx) {\n", postindent = 1)
         # Reasonably, all saved variables are optional, inside the model
         # they will be initialized to 0-bit values by DML
-        initcode.out('SIM_register_typed_attribute(%s, ' % (cls,)
+        initcode.out(f'SIM_register_attribute_with_user_data({cls}, '
                      + 'saved_attrinfo[idx].name,\n', postindent = 1)
-        initcode.out('%s, (lang_void *)&saved_userdata[idx],\n' % (getter,))
-        initcode.out('%s, (lang_void *)&saved_userdata[idx],\n' % (setter,))
+        initcode.out(f'{getter}, (lang_void *)&saved_userdata[idx],\n')
+        initcode.out(f'{setter}, (lang_void *)&saved_userdata[idx],\n')
         initcode.out('Sim_Attr_Optional | Sim_Attr_Internal,\n')
-        initcode.out('saved_attrinfo[idx].type, NULL, "saved variable");\n',
+        initcode.out('saved_attrinfo[idx].type, "saved variable");\n',
                      postindent = -1)
         initcode.out('}\n', preindent=-1)
         initcode.out('}\n', preindent=-1)
@@ -3006,8 +3002,7 @@ def generate_hook_attribute_funs():
 
     start_function_definition(
         'attr_value_t _DML_get_hook_attr('
-        + 'lang_void *hook_access, conf_object_t *obj, '
-        + 'attr_value_t *_)')
+        + 'conf_object_t *obj, lang_void *hook_access)')
     body = '''{
     _dml_hook_aux_info_t *acc = (_dml_hook_aux_info_t *) hook_access;
     _dml_hook_get_set_aux_data_t data = {
@@ -3031,8 +3026,7 @@ def generate_hook_attribute_funs():
 
     start_function_definition(
         'set_error_t _DML_set_hook_attr('
-        + 'lang_void *hook_access, conf_object_t *obj, '
-        + 'attr_value_t *val, attr_value_t *_)')
+        + 'conf_object_t *obj, attr_value_t *val, lang_void *hook_access)')
     body = '''{
     _dml_hook_aux_info_t *acc = (_dml_hook_aux_info_t *) hook_access;
     _dml_hook_get_set_aux_data_t data = {
@@ -3056,8 +3050,7 @@ def generate_hook_attribute_funs():
 
     start_function_definition(
         'attr_value_t _DML_get_port_hook_attr('
-        + 'lang_void *hook_access, conf_object_t *_portobj, '
-        + 'attr_value_t *_)')
+        + 'conf_object_t *_portobj, lang_void *hook_access)')
     body = '''{
     _port_object_t *portobj = (_port_object_t *)_portobj;
     conf_object_t *obj = portobj->dev;
@@ -3088,8 +3081,8 @@ def generate_hook_attribute_funs():
 
     start_function_definition(
         'set_error_t _DML_set_port_hook_attr('
-        + 'lang_void *hook_access, conf_object_t *_portobj, '
-        + 'attr_value_t *val, attr_value_t *_)')
+        + 'conf_object_t *_portobj, attr_value_t *val, '
+        + 'lang_void *hook_access)')
     body = '''{
     _port_object_t *portobj = (_port_object_t *)_portobj;
     conf_object_t *obj = portobj->dev;
