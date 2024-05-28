@@ -146,11 +146,11 @@
       of a confidential object is used outside of <tt>log</tt> statements
       <bug number="SIMICS-18428"/>.</add-note></build-id>
   <build-id value="6149"><add-note> Like in DML 1.4, objects of type
-      `port` can now be placed inside `group` objects. However, `bank`
+      <tt>port</tt> can now be placed inside <tt>group</tt> objects. However, <tt>bank</tt>
       objects are still restricted to top level
-      <bug number="SIMICS-19009"/>. The new object type `subobject` is not
+      <bug number="SIMICS-19009"/>. The new object type <tt>subobject</tt> is not
       directly accessible in DML 1.2, but it is permitted to import DML 1.4
-      code that declares `subobject` objects.</add-note></build-id>
+      code that declares <tt>subobject</tt> objects.</add-note></build-id>
   <build-id value="6158"><add-note> Add porting rule for uses of
       <tt>undefined</tt> as register offsets; replaces such uses with
       <tt>unmapped_offset</tt> <bug number="SIMINT-1486"/>.</add-note>
@@ -166,7 +166,7 @@
       return value in an intermediate local variable.</add-note></build-id>
   <build-id value="6218"><add-note> If a bank declared with
       <tt>use_io_memory=false</tt> in a DML 1.4 file is imported from
-      a DML 1.2 device, using the `dml12-compatibility.dml` library,
+      a DML 1.2 device, using the <tt>dml12-compatibility.dml</tt> library,
       then a call to the <tt>transaction_access</tt> method will now
       trigger a proper bank access. Also, if a bank uses the
       <tt>dml12_compat_io_memory_access</tt> template, then overrides of
