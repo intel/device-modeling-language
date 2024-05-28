@@ -210,3 +210,13 @@
   (fixes SIMICS-19133).
 - `release 6 6354`
 - `release 7 7059`
+- `note 6` Log statements of kind `warning`, `error`, or `criticial` now
+  support the use of `5` as a subsequent log level, meaning the log will only
+  happen once. Any other value of the subsequent log level but `1` will be
+  treated as `5` for these logging kinds.
+- `note 6` Added checks that cause DMLC to reject the use of any log level but
+  `1` for log statements of kind `warning`, `error`, or `critical`; and reject
+  the use of any subsequent log level for these logging kinds but `1` or `5`
+  (fixes SIMICS-22401). For compatibility reasons, these checks are not
+  performed with Simics API version 7 or below unless
+  `--no-compat=meaningless_log_levels` is passed to DMLC.

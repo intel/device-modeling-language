@@ -623,6 +623,7 @@ template device {
     param _compat_legacy_attributes auto;
     param _compat_lenient_typechecking auto;
     param _compat_no_method_index_asserts auto;
+    param _compat_meaningless_log_levels auto;
     param _compat_dml12_inline auto;
     param _compat_dml12_not auto;
     param _compat_dml12_goto auto;

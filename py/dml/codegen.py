@@ -2636,10 +2636,16 @@ def stmt_log(stmt, location, scope):
 
     warn_mixup = False
 
+    error_logkind = logkind in ('error', 'critical', 'warning')
     adjusted_level = level = ctree.as_int(
         codegen_expression(level, location, scope))
-    if level.constant and not (1 <= level.value <= 4):
-        report(ELLEV(level.site, 4))
+    if (error_logkind
+        and compat.meaningless_log_levels not in dml.globals.enabled_compat):
+        if not level.constant or level.value != 1:
+            report(ELLEV(level.site, "1"))
+            adjusted_level = mkIntegerLiteral(site, 1)
+    elif level.constant and not (1 <= level.value <= 4):
+        report(ELLEV(level.site, "an integer between 1 and 4"))
         adjusted_level = mkIntegerLiteral(site, 1)
     else:
         warn_mixup = probable_loggroups_specification(level)
@@ -2655,14 +2661,22 @@ def stmt_log(stmt, location, scope):
                   if compat.shared_logs_on_device in dml.globals.enabled_compat
                   else PortObjectFromObjIdentity(site, identity))
 
+    log_wrapper = lambda stmt: stmt
+
     if later_level is not None:
         adjusted_later_level = later_level = ctree.as_int(codegen_expression(
             later_level, location, scope))
         if (later_level.constant and level.constant and
             later_level.value == level.value):
             report(WREDUNDANTLEVEL(site))
-        if later_level.constant and not (1 <= later_level.value <= 5):
-            report(ELLEV(later_level.site, 5))
+        if (error_logkind
+            and (compat.meaningless_log_levels
+                 not in dml.globals.enabled_compat)):
+            if not later_level.constant or later_level.value not in {1, 5}:
+                report(ELLEV(later_level.site, "a 1 or 5 constant"))
+                adjusted_later_level = mkIntegerLiteral(site, 1)
+        elif (later_level.constant and not (1 <= later_level.value <= 5)):
+            report(ELLEV(later_level.site, "an integer between 1 and 5"))
             adjusted_later_level = mkIntegerLiteral(site, 4)
         elif not warn_mixup:
             warn_mixup = probable_loggroups_specification(later_level)
@@ -2691,7 +2705,11 @@ def stmt_log(stmt, location, scope):
                                                            "_calculated_level",
                                                            TInt(64, False),
                                                            site=site))
-
+        if error_logkind:
+            log_wrapper = lambda stmt: mkIf(
+                site,
+                mkEquals(site, adjusted_level, mkIntegerLiteral(site, 1)),
+                stmt)
     else:
         pre_statements = []
 
@@ -2701,8 +2719,8 @@ def stmt_log(stmt, location, scope):
         report(WLOGMIXUP(site, logkind, level, later_level, groups))
     fmt, args = fix_printf(fmt, args, argsites, site)
     return [mkCompound(site, pre_statements + [
-        log_statement(site, logobj, logkind, adjusted_level, groups, fmt,
-                      *args)])]
+        log_wrapper(log_statement(site, logobj, logkind, adjusted_level,
+                                  groups, fmt, *args))])]
 @statement_dispatcher
 def stmt_try(stmt, location, scope):
     [tryblock, excblock] = stmt.args

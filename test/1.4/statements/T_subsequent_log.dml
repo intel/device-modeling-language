@@ -87,3 +87,19 @@ attribute test_arrays is bool_attr {
         }
     }
 }
+
+attribute test_warning_once is bool_attr {
+    method set(attr_value_t val) throws {
+        log warning, 1 then 5: "warning once";
+    }
+}
+attribute test_error_once is bool_attr {
+    method set(attr_value_t val) throws {
+        log error, 1 then 5: "error once";
+    }
+}
+attribute test_critical_once is bool_attr {
+    method set(attr_value_t val) throws {
+        log critical, 1 then 5: "critical once";
+    }
+}

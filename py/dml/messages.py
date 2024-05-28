@@ -771,10 +771,12 @@ class ELTYPE(DMLError):
 
 class ELLEV(DMLError):
     """
-    The log level given in a log statement must be an integer between 1 and 4.
-    Or 1 and 5 for a subsequent log level (`then ...`).
+    The log level given in a log statement must be an integer between 1 and 4,
+    or 1 and 5 for a subsequent log level (`then ...`), unless the log kind is
+    one of "warning", "error", or "critical", in which case it must be 1 (or 5
+    for subsequent log level).
     """
-    fmt = "log level must be an integer between 1 and %d"
+    fmt = "log level must be %s"
 
 class ESYNTAX(DMLError):
     """
