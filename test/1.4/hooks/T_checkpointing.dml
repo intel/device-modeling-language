@@ -63,7 +63,7 @@ attribute test_state is write_only_attr {
             count = storage = storage_indexed = 0;
             last_i_indexed = last_j_indexed = -1;
 
-            local int x = 4;
+            local bf_t x = 4;
             resumed = obj.h1.send_now(&x);
             assert resumed == 2 && x == 5 && storage == 9;
             storage = 0;

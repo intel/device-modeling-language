@@ -63,6 +63,7 @@ from . import compat
 from . import output
 import dml .globals
 import abc
+import zlib
 
 class DMLTypeError(Exception): pass
 
@@ -510,6 +511,27 @@ class IntegerType(DMLType):
     def is_bitfields(self):
         return self.members is not None
 
+    def describe_backing_type(self):
+        raise Exception("%s.describe_backing_type not implemented"
+                        % (self.__class__.__name__,))
+
+    def describe(self):
+        return (f'bitfields (backing type: {self.describe_backing_type()})'
+                if self.is_bitfields else self.describe_backing_type())
+
+    def key(self):
+        if not self.is_bitfields:
+            return DMLType.key(self)
+
+        backing = self.describe_backing_type()
+
+        # using adler32 as a quick, dirty, short, implementation-consistent
+        # hash that doesn't pull in any dependencies
+        hsh = zlib.adler32(';'.join(
+            f'{name}:{t.key()}@{msb}-{lsb}'
+            for (name, (t, msb, lsb)) in self.members.items()).encode('utf-8'))
+        return f'{self.const_str}bitfields({backing}, {hsh})'
+
     @property
     def bytes(self):
         return (self.bits - 1) // 8 + 1
@@ -543,8 +565,29 @@ class IntegerType(DMLType):
                 return NotImplemented
         elif other.is_endian:
             return NotImplemented
-        return (0 if (self.bits, self.signed) == (other.bits, other.signed)
-                else NotImplemented)
+        if (self.bits, self.signed) != (other.bits, other.signed):
+            return NotImplemented
+        if self.members is not other.members:
+            if self.members is None or other.members is None:
+                return NotImplemented
+
+            # Slow path, when the two bitfields types have different origins
+
+            # The specifications have to be completely equivalent.
+            # We don't normalize reps via any sorting, as the order matters for
+            # compound initializers; we are not lenient on names, as that
+            # affects mkSubRef and designated initializers; we are not lenient
+            # on types because they SHOULD affect mkSubRef even though they
+            # don't today (see SIMICS-8857 and SIMICS-18394)
+            if (len(self.members) != len(other.members)
+                or any((name0, msb0, lsb0) != (name1, msb1, lsb1)
+                       or t0.cmp(t1) != 0
+                       for ((name0, (t0, msb0, lsb0)),
+                            (name1, (t1, msb1, lsb1)))
+                       in zip(self.members.items(), other.members.items()))):
+                return NotImplemented
+
+        return 0
 
     def cmp_fuzzy(self, other):
         if not other.is_int:
@@ -570,7 +613,11 @@ class IntegerType(DMLType):
     def hashed(self):
         cls = type(self) if self.is_arch_dependent else IntegerType
         byte_order = self.byte_order if self.is_endian else None
-        return hash((cls, self.const, self.bits, self.signed, byte_order))
+        members = (tuple((name, typ.hashed(), lsb, msb)
+                         for (name, (typ, lsb, msb)) in self.members.items())
+                   if self.is_bitfields else None)
+        return hash((cls, self.const, self.bits, self.signed, members,
+                     byte_order))
 
     # This is the most restrictive canstore definition for
     # IntegerTypes, if this is overridden then it should be
@@ -600,12 +647,8 @@ class TInt(IntegerType):
     def __init__(self, bits, signed, members = None, const = False):
         IntegerType.__init__(self, bits, signed, members, const)
 
-    def describe(self):
-        s = 'int%d' % self.bits
-        if self.signed:
-            return s
-        else:
-            return 'u' + s
+    def describe_backing_type(self):
+        return f'{"u"*(not self.signed)}int{self.bits}'
     def __repr__(self):
         return 'TInt(%r,%r,%r,%r)' % (self.bits, self.signed,
                                       self.members, self.const)
@@ -671,7 +714,7 @@ class TLong(ArchDependentIntegerType):
     def c_name(self):
         return self.const_str + ('long' if self.signed else 'unsigned long')
 
-    def describe(self):
+    def describe_backing_type(self):
         return self.c_name()
 
     def __repr__(self):
@@ -692,7 +735,7 @@ class TSize(ArchDependentIntegerType):
     def c_name(self):
         return self.const_str + ('ssize_t' if self.signed else 'size_t')
 
-    def describe(self):
+    def describe_backing_type(self):
         return self.c_name()
 
     def __repr__(self):
@@ -719,7 +762,7 @@ class TInt64_t(ArchDependentIntegerType):
         name = 'int64_t' if self.signed else 'uint64_t'
         return f'const {name}' if self.const else name
 
-    def describe(self):
+    def describe_backing_type(self):
         return self.c_name()
 
     def __repr__(self):
@@ -755,7 +798,7 @@ class TEndianInt(IntegerType):
             self.const_str, "" if self.signed else "u", self.bits,
             "be" if self.big_endian else "le")
 
-    def describe(self):
+    def describe_backing_type(self):
         return self.c_name()
 
     def __repr__(self):

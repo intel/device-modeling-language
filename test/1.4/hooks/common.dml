@@ -4,48 +4,50 @@
 */
 dml 1.4;
 
-session int count;
+typedef bitfields 16 { uint6 a @[12:7]; } bf_t;
+
+session bf_t count;
 method no_params() {
     ++count;
 }
-method one_param(int *x) {
+method one_param(bf_t *x) {
     ++*x;
 }
-method two_params(int *x, int i) {
+method two_params(bf_t *x, bf_t i) {
     *x = i;
 }
-session int storage;
-method one_serializable_param(int i) {
+session bf_t storage;
+method one_serializable_param(bf_t i) {
     storage = i;
 }
 
-session int storage_indexed;
+session bf_t storage_indexed;
 session (int last_i_indexed, int last_j_indexed) = (-1, -1);
 group indexed[i < 5][j < 7] {
     method no_params() {
         (last_i_indexed, last_j_indexed) = (i, j);
     }
-    method one_param(int *x) {
+    method one_param(bf_t *x) {
         *x = i*7 + j;
     }
-    method two_params(int *x, int coeff) {
+    method two_params(bf_t *x, bf_t coeff) {
         *x = coeff * (i*7 + j);
     }
-    method one_serializable_param(int coeff) {
+    method one_serializable_param(bf_t coeff) {
         storage_indexed = coeff * (i*7 + j);
     }
 }
 
 template hookset {
     hook() _h0;
-    hook(int *) _h1;
-    hook(int *, int) _h2;
+    hook(bf_t *) _h1;
+    hook(bf_t *, bf_t) _h2;
 
     hook() _h3[6][8];
-    hook(int *) _h4[6][8];
-    hook(int *, int) _h5[6][8];
+    hook(bf_t *) _h4[6][8];
+    hook(bf_t *, bf_t) _h5[6][8];
 
-    hook(int) _h6;
+    hook(bf_t) _h6;
 
     param h0 default _h0;
     param h1 default _h1;
@@ -73,15 +75,15 @@ method enforce_h0_ref(hook() h) -> (hook()) {
     return h;
 }
 
-method enforce_h1_ref(hook(int *) h) -> (hook(int *)) {
+method enforce_h1_ref(hook(bf_t *) h) -> (hook(bf_t *)) {
     return h;
 }
 
-method enforce_h2_ref(hook(int *, int) h) -> (hook(int *, int)) {
+method enforce_h2_ref(hook(bf_t *, bf_t) h) -> (hook(bf_t *, bf_t)) {
     return h;
 }
 
-method enforce_h6_ref(hook(int) h) -> (hook(int)) {
+method enforce_h6_ref(hook(bf_t) h) -> (hook(bf_t)) {
     return h;
 }
 
@@ -89,8 +91,8 @@ group via_hookref is hookset_set {
     in each hookset {
         is init;
         session hook() h3_arr[6][8];
-        session hook(int *) h4_arr[6][8];
-        session hook(int *, int) h5_arr[6][8];
+        session hook(bf_t *) h4_arr[6][8];
+        session hook(bf_t *, bf_t) h5_arr[6][8];
         method init() {
             for (local int idx_0 = 0; idx_0 < 6; ++idx_0) {
                 for (local int idx_1 = 0; idx_1 < 8; ++idx_1) {
