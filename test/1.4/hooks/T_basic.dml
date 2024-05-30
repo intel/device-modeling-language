@@ -36,15 +36,15 @@ template hookset_test is hookset {
         assert h0.suspended == 0 && resumed == 2 && count == 2 && storage == 7;
         count = storage = 0;
 
-        local int i = 5;
+        local bf_t i = 5;
         after h1 -> p: one_param(p);
         assert h1.suspended == 1 && i == 5;
         resumed = h1.send_now(&i);
         assert h1.suspended == 0 && resumed == 1 && i == 6;
-        after h1 -> p: one_serializable_param(-5);
+        after h1 -> p: one_serializable_param(11);
         assert h1.suspended == 1 && storage == 0 && i == 6;
         resumed = h1.send_now(&i);
-        assert h1.suspended == 0 && resumed == 1 && storage == -5 && i == 6;
+        assert h1.suspended == 0 && resumed == 1 && storage == 11 && i == 6;
         storage = i = 0;
 
         after h2 -> (p, i): two_params(p, i);
@@ -85,11 +85,11 @@ template hookset_test is hookset {
         resumed = h1.send_now(&i);
         assert h1.suspended == 0 && resumed == 1 && i == 3 * 7 + 5;
         i = 0;
-        after h1 -> p: indexed[3][5].one_serializable_param(-5);
+        after h1 -> p: indexed[3][5].one_serializable_param(11);
         assert h1.suspended == 1 && storage_indexed == 0 && i == 0;
         resumed = h1.send_now(&i);
         assert h1.suspended == 0 && resumed == 1
-            && storage_indexed == -5 * (3 * 7 + 5) && i == 0;
+            && storage_indexed == 11 * (3 * 7 + 5) && i == 0;
         storage_indexed = 0;
 
         after h2 -> (p, i): indexed[3][5].two_params(p, i);
