@@ -561,7 +561,7 @@
   <build-id _6="6309" _7="7021"><add-note> Template <tt>function_io_memory</tt>
       now searches for the bank in the same <tt>subdevice</tt>/<tt>device</tt> scope as the
       <tt>implement</tt>. </add-note></build-id>
-  <build-id _6="next" _7="next"><add-note>Added a system
+  <build-id _6="6310" _7="next"><add-note>Added a system
       for <em>provisional language features</em>: language features
       that are disabled by default but can be explicitly enabled per
       DML file. Each provisional feature is named and documented in an
@@ -569,7 +569,7 @@
       named <tt>foo_bar</tt> in a DML file, write <tt>provisional
       foo_bar;</tt> in the top of the file, right after <tt>dml
       1.4;</tt>.</add-note></build-id>
-  <build-id _6="next" _7="next"><add-note>Added a provisional feature
+  <build-id _6="6310" _7="next"><add-note>Added a provisional feature
       <tt>explicit_param_decls</tt>, which can be enabled per file
       by a statement <tt>provisional explicit_param_decls;</tt>. This
       feature adds a syntax <tt>param NAME := VALUE;</tt>, which
@@ -579,7 +579,7 @@
       as an override. Inconsistent usage will trigger compile errors.
       This is useful to catch misspelled
       overrides <bug number="SIMICS-21451"/>.</add-note></build-id>
-  <build-id _6="next" _7="next"><add-note>Addressed a bug where DMLC did
+  <build-id _6="6310" _7="next"><add-note>Addressed a bug where DMLC did
       not report errors when a non-existing template is instantiated within
       an <tt>#if</tt> block. E.g., the following does not give an error:
       <pre>
