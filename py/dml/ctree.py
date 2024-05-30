@@ -1222,19 +1222,24 @@ def mkIfExpr(site, cond, texpr, fexpr):
                 (texpr, fexpr, utype) = usual_int_conv(
                     texpr, ttype, fexpr, ftype)
         else:
-            if not compatible_types_fuzzy(ttype, ftype):
-                raise EBINOP(site, ':', texpr, fexpr)
-            # TODO: in C, the rules are more complex,
-            # but our type system is too primitive to cover that
             if (isinstance(ttype, (TPtr, TArray))
-                and isinstance(ftype, (TPtr, TArray))):
+                and isinstance(ftype, (TPtr, TArray))
+                and (ttype.base.void or ftype.base.void
+                     or compatible_types(safe_realtype_unconst(ttype.base),
+                                         safe_realtype_unconst(ftype.base)))):
                 # if any branch is void, then the union is too
                 base = (ftype if ftype.base.void else ttype).base.clone()
                 # if any branch is const *, then the union is too
-                base.const = ttype.base.const or ftype.base.const
+                base.const = ((isinstance(ttype, TArray) and ttype.const)
+                              or (isinstance(ftype, TArray) and ftype.const)
+                              or shallow_const(ttype.base)
+                              or shallow_const(ftype.base))
                 utype = TPtr(base)
-            else:
+            elif compatible_types(safe_realtype_unconst(ttype),
+                                  safe_realtype_unconst(ftype)):
                 utype = ttype
+            else:
+                raise EBINOP(site, ':', texpr, fexpr)
         if cond.constant:
             # should be safe: texpr and fexpr now have compatible types
             return texpr if cond.value else fexpr
@@ -1396,7 +1401,8 @@ class Compare(BinOp):
         if ((lhtype.is_arith and rhtype.is_arith)
             or (isinstance(lhtype, (TPtr, TArray))
                 and isinstance(rhtype, (TPtr, TArray))
-                and compatible_types_fuzzy(lhtype.base, rhtype.base))):
+                and compatible_types(safe_realtype_unconst(lhtype.base),
+                                     safe_realtype_unconst(rhtype.base)))):
             return cls.make_simple(site, lh, rh)
         raise EILLCOMP(site, lh, lhtype, rh, rhtype)
 
@@ -1601,7 +1607,9 @@ class Equals(BinOp):
         if ((lhtype.is_arith and rhtype.is_arith)
             or (isinstance(lhtype, (TPtr, TArray))
                 and isinstance(rhtype, (TPtr, TArray))
-                and compatible_types_fuzzy(lhtype, rhtype))
+                and (compatible_types(safe_realtype_unconst(lhtype.base),
+                                      safe_realtype_unconst(rhtype.base))
+                     or lhtype.base.void or rhtype.base.void))
             or (isinstance(lhtype, TBool) and isinstance(rhtype, TBool))):
             return Equals(site, lh, rh)
 
