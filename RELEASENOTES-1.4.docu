@@ -590,4 +590,27 @@
       <tt>--no-compat=broken_conditional_is</tt> is passed to DMLC.
       This flag will be automatically enabled in Simics 8
       <bug number="SIMICS-22403"/>.</add-note></build-id>
+  <build-id _6="6310" _7="next"><add-note> When two conflicting
+      definitions of the same parameter are declared within the same
+      scope, then this will now be reported as an error also if they
+      are overridden by a third declaration. In the following example,
+      this gives a new compile error on the <tt>p</tt> declarations
+      within the <tt>t</tt> template:
+      <pre>
+        template t {
+          param p default 1;
+          param p default 1;
+        }
+        group g is t {
+          param p = 2;
+        }
+      </pre>
+      Previously, DMLC would only report an error on <tt>t</tt> if the
+      parameter was not overridden. If this is the desired behaviour,
+      then the idiomatic construct is:
+      <pre>
+        template t {
+          param p;
+        }
+      </pre></add-note></build-id>
 </rn>
