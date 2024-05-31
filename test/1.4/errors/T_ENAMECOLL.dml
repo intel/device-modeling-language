@@ -267,6 +267,16 @@ export m1 as "m_dup";
 /// ERROR ENAMECOLL
 export m2 as "m_dup";
 
+template param_clash {
+    /// ERROR ENAMECOLL
+    param overridden_clash default 1;
+    /// ERROR ENAMECOLL
+    param overridden_clash default 1;
+}
+group param_clash_override is param_clash {
+    param overridden_clash = 1;
+}
+
 method init() {
     local layout "little-endian" {
         /// ERROR ENAMECOLL
