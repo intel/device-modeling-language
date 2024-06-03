@@ -1391,6 +1391,20 @@ a private helper object.
 The `init_as_subobj` template accepts one parameter,
 `classname`. This defines the class of the automatically created object.
 
+<div class="note">
+
+**Note:** The subobject class defined by the `classname` parameter is looked up
+using `SIM_get_class` while the module of the device class is being
+loaded.
+This may cause problems if the subobject class is defined within the
+same module as the device class:
+if the device class is defined before the subobject class, then the subobject
+class will not yet be defined, and the `SIM_get_class` call will fail.
+This problem can be resolved by moving the subobject class to
+a separate module.
+
+</div>
+
 The template also overrides the `configuration` parameter to
 `"none"` by default, which makes the connect invisible to the end-user.
 
