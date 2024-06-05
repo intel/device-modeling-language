@@ -1831,7 +1831,7 @@ template event {
             error "bad value for parameter 'timebase'";
     }
 
-    method _cancel_all() {
+    method _cancel_all() nothrow {
         if (!SIM_object_clock($dev.obj)) {
             // If the object isn't bound to a single clock, it will have to
             // clean up after itself

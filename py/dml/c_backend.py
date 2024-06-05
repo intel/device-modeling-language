@@ -1543,14 +1543,6 @@ def generate_alloc(device):
     out('}\n\n', preindent = -1)
 
 def generate_initialize(device):
-    if dml.globals.api_version <= compat.api_6:
-        start_function_definition(
-            ('void %s_pre_del_notify(conf_object_t *_subscriber,'
-         ' conf_object_t *_notifier, lang_void *_data)') % crep.cname(device))
-        out('{\n', postindent = 1)
-        out(crep.cname(device)+'_deinit(_notifier);\n')
-        out('}\n\n', preindent = -1)
-
     start_function_definition(
         'lang_void *\n' +
         crep.cname(device)+'_init(conf_object_t *_obj)')
@@ -1587,9 +1579,8 @@ def generate_initialize(device):
             codegen_inline_byname(device, (), '_init', [], [],
                                   device.site).toc()
 
-    if dml.globals.api_version <= compat.api_6:
-        out('SIM_add_notifier(_obj, Sim_Notify_Object_Delete, _obj, '
-            + crep.cname(device) + '_pre_del_notify, NULL);\n')
+    out('SIM_add_notifier(_obj, Sim_Notify_Object_Delete, _obj, '
+        + crep.cname(device) + '_pre_delete, NULL);\n')
 
     out('return _obj;\n')
     out('}\n\n', preindent = -1)
@@ -1635,18 +1626,22 @@ def generate_objects_finalized(device):
         + '_dev->_immediate_after_state);\n')
     out('}\n\n', preindent = -1)
 
-def generate_deinit(device):
+def generate_pre_delete(device):
     start_function_definition(
-        'void %s_deinit(conf_object_t *_obj)' % (
-            crep.cname(device),))
+        ('void %s_pre_delete(conf_object_t *_subscriber,'
+         ' conf_object_t *_obj, lang_void *_data)') % crep.cname(device))
     out('{\n', postindent = 1)
-    out(crep.structtype(device) + ' *_dev UNUSED = ('
+    out(crep.structtype(device) + ' *_dev = ('
         + crep.structtype(device) + ' *)_obj;\n')
-    out('_DML_deinit_cancel_immediate_afters(_obj, '
+    out('_DML_pre_delete_cancel_immediate_afters(_obj, '
         + '_dev->_immediate_after_state);\n')
 
+    # Cancel all events. This is safety measure: we wouldn't need to do this
+    # if all event queues used by clocks were those of 'cycle-counter's and
+    # 'ps-counter's, or every clock otherwise took care to cancel events of
+    # objects that get marked for deletion, but neither is explicitly enforced
+    # by the Simics API.
     with crep.DeviceInstanceContext():
-        # Cancel all events
         events = device.get_recursive_components('event')
 
         by_dims = {}
@@ -1662,11 +1657,7 @@ def generate_deinit(device):
                             for i in range(len(dims)))
             for event in events:
                 method = event.get_component('_cancel_all', 'method')
-                # Functions called from pre_delete_instance shouldn't throw
-                # any exceptions. But we don't want to force them to insert
-                # try-catch in the init method.
-                with LogFailure(method.site, event, indices):
-                    codegen_inline(method.site, method, indices, [], []).toc()
+                codegen_inline(method.site, method, indices, [], []).toc()
             for i in range(len(dims)):
                 out('}\n', preindent=-1)
 
@@ -1674,6 +1665,18 @@ def generate_deinit(device):
             out(f'SIM_event_cancel_time(_obj, {crep.get_evclass(key)}, _obj, '
                 + '0, NULL);\n')
 
+    if dml.globals.api_version < compat.api_7:
+        out(f'{crep.cname(device)}_deinit(_obj);\n')
+    out('}\n\n', preindent = -1)
+
+def generate_deinit(device):
+    start_function_definition(
+        'void %s_deinit(conf_object_t *_obj)' % (
+            crep.cname(device),))
+    out('{\n', postindent = 1)
+    out(crep.structtype(device) + ' *_dev UNUSED = ('
+        + crep.structtype(device) + ' *)_obj;\n')
+    with crep.DeviceInstanceContext():
         with LogFailure(
                 device.get_component('destroy', 'method').site, device, ()):
             code = codegen_inline_byname(device, (), 'destroy', [], [],
@@ -3320,6 +3323,7 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     generate_initialize(device)
     generate_finalize(device)
     generate_objects_finalized(device)
+    generate_pre_delete(device)
     generate_deinit(device)
     generate_dealloc(device)
     generate_events(device)

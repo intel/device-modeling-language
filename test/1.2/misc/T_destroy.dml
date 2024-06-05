@@ -41,14 +41,6 @@ event ev_arr[i in 0..1][j in 0..1] {
     }
 }
 
-data bool notified;
-
-method del_notify_cb(conf_object_t *subscriber, void *data) {
-    $notified = true;
-}
-
-typedef void (*notify_cb_t)(conf_object_t *subscriber, void *data);
-
 method post_init {
     if (SIM_object_clock($dev.obj)) {
         SIM_require_object(SIM_object_clock($dev.obj));
@@ -56,19 +48,12 @@ method post_init {
         inline $ev.post(10, &$x);
         inline $ev_arr[1][1].post(10, &$x);
     }
-    SIM_add_global_notifier(Sim_Global_Notify_Object_Delete, $dev.obj,
-                            cast($del_notify_cb, notify_cb_t), NULL);
 }
 
 method destroy {
     // test for SIMICS-19598
     default();
 
-    // Notifier is triggered after pre-delete but before deinit.
-    // Hence the condition must be negated with API 7 or higher.
-    if ($notified) {
-        log "error": "notifier was triggered";
-    }
     /// GREP \[.* info\] destroy-device
     log "info": "destroy-device";
 }

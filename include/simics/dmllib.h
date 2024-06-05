@@ -1276,7 +1276,7 @@ typedef struct {
     bool posted;
     // Invariant: deleted implies posted and freed, empty queue
     bool deleted;
-    // If _DML_deinit_cancel_immediate_afters should warn if it cancels any
+    // If _DML_pre_delete_cancel_immediate_afters should warn if it cancels any
     // callbacks. This flag is set when the device object reaches
     // objects_finalized. If it's deleted before then, then that must be
     // because of configuration creation failure and rollback.
@@ -1295,11 +1295,11 @@ _DML_execute_immediate_afters_now(conf_object_t *dev,
     }
 }
 
-// Run at the beginning of device deinit. Drops all pending immediate afters
+// Run at the beginning of device deletion. Drops all pending immediate afters
 // and warns if there were any.
 UNUSED static void
-_DML_deinit_cancel_immediate_afters(conf_object_t *dev,
-                                    _dml_immediate_after_state_t *state) {
+_DML_pre_delete_cancel_immediate_afters(conf_object_t *dev,
+                                        _dml_immediate_after_state_t *state) {
     if (QEMPTY(state->queue)) return;
 
     if (state->warn_upon_deletion) {
