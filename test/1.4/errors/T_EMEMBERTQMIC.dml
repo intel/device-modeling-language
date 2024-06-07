@@ -12,6 +12,7 @@ template t0 {
 
 template t1 is t0 {
     shared method m1() default {}
+    shared method m2();
 }
 
 template t2 is t1 {
@@ -60,14 +61,16 @@ method init() {
     g.templates.t1.m1();
     cast(g, t3).templates.t1.m1();
 
-    /// ERROR EMEMBER
+    /// ERROR EMEMBERTQMIC
     g.templates.t1.nonexistent();
-    /// ERROR EMEMBER
+    /// ERROR EMEMBERTQMIC
+    g.templates.t1.m2();
+    /// ERROR EMEMBERTQMIC
     cast(g, t3).templates.t1.nonexistent();
 
     // no error (uses t1's implementation)
     g.templates.t2.m1();
-    /// ERROR EMEMBER
+    /// ERROR EMEMBERTQMIC
     g.templates.t2.m2();
 
     // no error
@@ -76,7 +79,7 @@ method init() {
 
     // Even though the in-each guarantees its existence, m3 is still not part
     // of the template.
-    /// ERROR EMEMBER
+    /// ERROR EMEMBERTQMIC
     g.templates.t1.m3();
 
 
@@ -86,6 +89,6 @@ method init() {
     // implementation, but rather, the instantation of 'subdeclarer' for the
     // device template. Because of that, m() is not considered a valid TQMIC
     // candidate.
-    /// ERROR EMEMBER
+    /// ERROR EMEMBERTQMIC
     subgroup.templates.subdeclarer.m();
 }

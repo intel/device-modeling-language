@@ -1695,9 +1695,14 @@ class EAMBTQMIC(DMLError):
     fmt = ("Ambiguous invocation of template-qualified method implementation "
            + "call. '%s' does not provide an implementation of '%s', and "
            + "inherits multiple unrelated implementations from its ancestor "
-           + "templates.")
-    def __init__(self, site, template, method, candidates):
-        DMLError.__init__(self, site, template, method)
+           + "templates.%s")
+    def __init__(self, site, template, method, spec_elims, candidates):
+        extra = (("\nnote: some implementation(s) have been eliminated by "
+                  + "#if statements, which may have caused the ambiguity.")
+                 * spec_elims)
+        extra += ("\nresolution: qualify the call instead by the "
+                  + "ancestor template with the desired implementation:")
+        DMLError.__init__(self, site, template, method, extra)
         self.candidates = candidates
     def log(self):
         DMLError.log(self)
@@ -1706,6 +1711,38 @@ class EAMBTQMIC(DMLError):
                 candidate.site,
                 "implementation candidate provided by ancestor template "
                 + f"'{ancestor.name}'")
+
+class EMEMBERTQMIC(DMLError):
+    """A template-qualified method implementation call can only be done if
+    the specified template actually does provide or inherit an implementation
+    of the named method for the object instantiating the template. That the
+    template provides or inherits an abstract declaration of the method is not
+    sufficient.
+
+    Apart from more mundane causes (e.g. misspellings), this error could happen
+    if all implementations that the specified template may provide/inherit end
+    up not being provided to the object instantiating the template, due to
+    every implementation being eliminated by an `#if` statement.
+    """
+    fmt = ("invalid template-qualified method implementation call, '%s' does "
+           + "not provide nor inherit an implementation of a method "
+           + "'%s'%s")
+    def __init__(self, site, template, method, abstract, node):
+        self.template = template
+        if node:
+            extra = (f" for the object '{node.identity()}': all "
+                     + "implementations that could have been given have been "
+                     + "eliminated by #if statements")
+        elif abstract:
+            extra = ", only an abstract declaration of it"
+        else:
+            extra = ""
+        DMLError.__init__(self, site, template.name, method, extra)
+
+    def log(self):
+        DMLError.log(self)
+        self.print_site_message(self.template.site, "template declaration")
+
 
 class ENSHAREDTQMIC(DMLError):
     """<a id="ENSHAREDTQMIC"/>

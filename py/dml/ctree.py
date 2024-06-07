@@ -4332,7 +4332,7 @@ def mkTemplatesSubRef(site, templates_ref, template_name):
     if tmpl is None:
         raise ENTMPL(site, template_name)
     if tmpl not in templates_ref.node.templates:
-        raise ETQMIC(site, templates_ref.node.ident, template_name)
+        raise ETQMIC(site, templates_ref.node.identity(), template_name)
     return TemplatesSubRef(site, templates_ref, template_name)
 
 def mkTemplateQualifiedMethodRef(site, templates_subref, method_name):
@@ -4340,6 +4340,7 @@ def mkTemplateQualifiedMethodRef(site, templates_subref, method_name):
     indices = templates_subref.templates_ref.indices
 
     template_name = templates_subref.template_name
+    template = dml.globals.templates[template_name]
 
     rank_to_candidate = {}
 
@@ -4353,11 +4354,13 @@ def mkTemplateQualifiedMethodRef(site, templates_subref, method_name):
             rank_to_candidate[impl_template.spec.rank] = (impl_template,
                                                           shared_method)
 
+    some_spec_eliminated = False
+
     # Don't bother going through regular methods if if some shared method
     # implementation is unoverridable (can only be one if so)
     if shared_method is None or shared_method.overridable:
         studied_templates = set()
-        pending_templates = [dml.globals.templates[template_name]]
+        pending_templates = [template]
         # Find the highest ranking candidate of each distinct template
         # hierarchy that is actually implemented for the object
         while pending_templates:
@@ -4374,6 +4377,8 @@ def mkTemplateQualifiedMethodRef(site, templates_subref, method_name):
                 if candidate is not None:
                     rank_to_candidate[tmpl.spec.rank] = (tmpl, candidate)
                     continue
+                else:
+                    some_spec_eliminated = True
 
             pending_templates.extend(next_templates)
 
@@ -4388,10 +4393,15 @@ def mkTemplateQualifiedMethodRef(site, templates_subref, method_name):
                   for r in get_highest_ranks(Set(rank_to_candidate))]
 
     if not candidates:
-        raise EMEMBER(site, templates_subref, method_name)
+        abstract = (trait is not None
+                    and trait.member_declaration(method_name) is not None
+                    and trait.member_kind(method_name) == 'method')
+        raise EMEMBERTQMIC(site, template, method_name, abstract,
+                           node if some_spec_eliminated else None)
 
     if len(candidates) > 1:
-        raise EAMBTQMIC(site, template_name, method_name, candidates)
+        raise EAMBTQMIC(site, template_name, method_name, some_spec_eliminated,
+                        candidates)
 
     (tmpl, method) = candidates[0]
 
@@ -4447,12 +4457,12 @@ def mkTraitTemplateQualifiedMethodRef(site, templates_subref, method_name):
 
     impl_traits = trait.method_impl_traits.get(method_name)
     if not impl_traits:
-        if ((trait.member_declaration(method_name) is not None
-             and trait.member_kind(method_name) == 'method')
-            or impl_tmpls):
+        if impl_tmpls:
             raise ENSHAREDTQMIC(site, trait, method_name)
         else:
-            raise EMEMBER(site, templates_subref, method_name)
+            abstract = (trait.member_declaration(method_name) is not None
+                        and trait.member_kind(method_name) == 'method')
+            raise EMEMBERTQMIC(site, trait, method_name, abstract, None)
 
     # If there is any non-shared method specification not lower in rank than
     # some shared method implementation, then it could be a potential
@@ -4464,9 +4474,9 @@ def mkTraitTemplateQualifiedMethodRef(site, templates_subref, method_name):
             raise ENSHAREDTQMIC(site, trait, method_name)
 
     if len(impl_traits) > 1:
-        raise EAMBTQMIC(site, trait.name, method_name,
-                         [(impl_trait, impl_trait.method_impls[method_name])
-                          for impl_trait in impl_traits])
+        raise EAMBTQMIC(site, trait.name, method_name, False,
+                        [(impl_trait, impl_trait.method_impls[method_name])
+                         for impl_trait in impl_traits])
 
     impl_trait = impl_traits[0]
     method = impl_trait.method_impls[method_name]
