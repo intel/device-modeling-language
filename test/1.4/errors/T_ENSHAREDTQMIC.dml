@@ -35,8 +35,7 @@ template t3 is t2 {
 
 in each t2 {
     // Since in-each bodies are not considered part of the template, they are
-    // not considered possible candidates and do not provoke
-    // ENSHAREDTQMIC
+    // not considered possible candidates and do not provoke ENSHAREDTQMIC
     method sm1() {}
 }
 
@@ -56,9 +55,9 @@ method init() {
 
     /// ERROR ENSHAREDTQMIC
     x.templates.t2.nonshared();
-    /// ERROR ENSHAREDTQMIC
+    /// ERROR EMEMBERTQMIC
     x.templates.t1.abstract1();
-    /// ERROR ENSHAREDTQMIC
+    /// ERROR EMEMBERTQMIC
     x.templates.t2.abstract2();
     /// ERROR ENSHAREDTQMIC
     x.templates.t2.sm3();
