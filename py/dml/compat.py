@@ -65,7 +65,8 @@ class broken_conditional_is(CompatFeature):
     Up to Simics 7, a bug prevented DMLC from reporting an error; this
     feature exists to preserve that behaviour.
     '''
-    short = "Generate proxy port interfaces for banks and ports"
+    short = ("Allow (and ignore) instantiating nonexistent templates within "
+             + "'#if' blocks")
     last_api_version = api_7
 
 
