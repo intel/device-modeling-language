@@ -1,0 +1,22 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+/// DMLC-FLAG --simics-api=7
+
+import "legacy_attributes.dml";
+
+attribute dict_attr is read_only_attr "some dict attr" {
+    param type = "D";
+    method get() -> (attr_value_t) {
+        return SIM_alloc_attr_dict(0);
+    }
+}
+
+method init() {
+    default();
+    assert SIM_attr_is_dict((SIM_get_attribute(dev.obj, "dict_attr")));
+}

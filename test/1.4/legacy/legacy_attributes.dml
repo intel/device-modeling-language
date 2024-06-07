@@ -1,0 +1,43 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+import "simics/simulator/conf-object.dml";
+
+saved int s;
+hook() h;
+
+attribute a is uint64_attr;
+
+bank b {
+    saved int s;
+    hook() h;
+    attribute a is uint64_attr;
+}
+
+method init() default {
+    local attr_value_t val = SIM_make_attr_uint64(0xC0FFEE);
+    #foreach r in ([dev, b]) {
+        local conf_class_t *cls = SIM_object_class(r.obj);
+        assert (SIM_get_attribute_attributes(cls, "s") & Sim_Attr_Legacy)
+               == 0;
+        assert (SIM_get_attribute_attributes(cls, "h") & Sim_Attr_Legacy)
+               == 0;
+
+        assert ((SIM_get_attribute_attributes(cls, "a") & Sim_Attr_Legacy)
+                != 0) == _compat_legacy_attributes;
+
+        SIM_set_attribute(r.obj, "a", &val);
+        assert SIM_attr_integer(SIM_get_attribute(r.obj, "a"))
+            == 0xC0FFEE;
+    }
+    assert ((SIM_get_attribute_attributes(SIM_object_class(dev.obj), "b_a")
+             & Sim_Attr_Legacy) != 0) == _compat_legacy_attributes;
+
+    val = SIM_make_attr_uint64(0xDEADBEEF);
+    SIM_set_attribute(dev.obj, "b_a", &val);
+    assert SIM_attr_integer(SIM_get_attribute(dev.obj, "b_a")) == 0xDEADBEEF;
+    assert SIM_attr_integer(SIM_get_attribute(b.obj, "a")) == 0xDEADBEEF;
+}

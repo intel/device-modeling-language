@@ -6,6 +6,8 @@ dml 1.4;
 
 device test;
 
+/// DMLC-FLAG --no-compat=legacy_attributes
+
 import "simics/simulator/conf-object.dml";
 
 bank b[i<2] {
