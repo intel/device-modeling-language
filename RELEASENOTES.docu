@@ -1775,4 +1775,12 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
       the <tt>dead_dml_methods</tt> library, which caused it to never
       detect methods as dead if they occur directly after
       a <tt>footer</tt> block.</add-note></build-id>
+  <build-id _6="next" _7="next"><add-note>DMLC's use of the legacy Simics API
+      for attribute registration is now controlled by the compatibility feature
+      <tt>legacy_attributes</tt>. This feature can be disabled by passing
+      <tt>--no-compat=legacy_attributes</tt> to DMLC, in which case the modern
+      API will be used instead, which does not support the use of dictionary
+      attribute values <bug number="SIMICS-22406"/>.
+      <tt>legacy_attributes</tt> will always be disabled with Simics API version
+      8 or above.</add-note></build-id>
 </rn>

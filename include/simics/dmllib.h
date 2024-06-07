@@ -8,6 +8,10 @@
 #ifndef SIMICS_DMLLIB_H
 #define SIMICS_DMLLIB_H
 
+#ifndef DML_LEGACY_ATTRS
+#define DML_LEGACY_ATTRS 0
+#endif
+
 #include <stddef.h>
 
 #include <simics/base/event.h>
@@ -1806,6 +1810,53 @@ typedef attr_value_t (*_get_attr_t)(conf_object_t *, lang_void *);
 typedef set_error_t (*_set_attr_t)(conf_object_t *, attr_value_t *,
                                    lang_void *);
 
+#if DML_LEGACY_ATTRS
+typedef struct {
+    _get_attr_t get_attr;
+    _set_attr_t set_attr;
+    lang_void   *user_data_get;
+    lang_void   *user_data_set;
+} _dml_legacy_attr_info_t;
+
+UNUSED static attr_value_t
+_DML_legacy_attr_get_trampoline(lang_void *_info, conf_object_t *obj,
+                                attr_value_t *_idx) {
+    const _dml_legacy_attr_info_t *info = (_dml_legacy_attr_info_t *)_info;
+    return info->get_attr(obj, info->user_data_get);
+}
+
+UNUSED static set_error_t
+_DML_legacy_attr_set_trampoline(lang_void *_info, conf_object_t *obj,
+                                attr_value_t *out, attr_value_t *_idx) {
+    const _dml_legacy_attr_info_t *info = (_dml_legacy_attr_info_t *)_info;
+    return info->set_attr(obj, out, info->user_data_set);
+}
+
+UNUSED static void
+_DML_register_attribute(
+    conf_class_t *NOTNULL cls, const char *NOTNULL name,
+    _get_attr_t get_attr, lang_void *user_data_get,
+    _set_attr_t set_attr, lang_void *user_data_set,
+    attr_attr_t attr, const char *type, const char *desc) {
+    _dml_legacy_attr_info_t *info = MM_MALLOC(1, _dml_legacy_attr_info_t);
+    info->get_attr = get_attr;
+    info->set_attr = set_attr;
+    info->user_data_get = user_data_get;
+    info->user_data_set = user_data_set;
+
+    SIM_register_typed_attribute(cls, name,
+                                 get_attr ? _DML_legacy_attr_get_trampoline
+                                          : NULL,
+                                 get_attr ? (lang_void *)info : NULL,
+                                 set_attr ? _DML_legacy_attr_set_trampoline
+                                          : NULL,
+                                 set_attr ? (lang_void *)info : NULL,
+                                 attr, type, NULL, desc);
+}
+#else
+#define _DML_register_attribute SIM_register_attribute_with_user_data
+#endif
+
 UNUSED static void
 _DML_register_hook_attribute(conf_class_t *cls, const char *attrname,
                              _get_attr_t getter, _set_attr_t setter,
@@ -1971,9 +2022,8 @@ _register_port_attr_no_aux(conf_class_t *portcls, const char *attrname,
                            attr_attr_t attr, const char *type,
                            const char *desc)
 {
-        SIM_register_attribute_with_user_data(
-                portcls, attrname, getter, NULL, setter, NULL,
-                attr, type, desc);
+        _DML_register_attribute(portcls, attrname, getter, NULL, setter, NULL,
+                                attr, type, desc);
 }
 
 // port_obj_offset is the offset within the device struct of a pointer to the
@@ -2002,7 +2052,8 @@ _register_port_legacy_proxy_attr(conf_class_t *devcls, conf_class_t *portcls,
         strbuf_t proxy_desc = sb_newf(
                 "Proxy attribute for %s.%s.%s",
                 is_bank ? "bank" : "port", portname, attrname);
-        SIM_register_attribute_with_user_data(
+
+        _DML_register_attribute(
                 devcls, name,
                 getter ? _get_legacy_proxy_attr : NULL, data,
                 setter ? _set_legacy_proxy_attr : NULL, data,
@@ -2103,7 +2154,7 @@ _register_port_array_legacy_proxy_attr(
                                       is_bank ? "bank" : "port",
                                       portname, attrname);
         strbuf_t proxy_type = sb_newf("[%s{%d}]", type, array_size);
-        SIM_register_attribute_with_user_data(
+        _DML_register_attribute(
                 devcls, name,
                 getter ? _get_legacy_proxy_array_attr : NULL, data,
                 setter ? _set_legacy_proxy_array_attr : NULL, data,
@@ -3401,7 +3452,7 @@ UNUSED static void _DML_register_attributes(
             MM_FREE(tmp_type);
         }
         conf_class_t *parent_obj_class = attr_info.parent_obj_class;
-        SIM_register_attribute_with_user_data(
+        _DML_register_attribute(
             parent_obj_class ? parent_obj_class : dev_class,
             attr_info.name,
             attr_info.readable ? parent_obj_class ? get_portobj_attr : get_attr

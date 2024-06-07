@@ -197,6 +197,23 @@ class suppress_WLOGMIXUP(CompatFeature):
     short = "Suppress the warning 'WLOGMIXUP' by default"
     last_api_version = api_6
 
+@feature
+class legacy_attributes(CompatFeature):
+    '''This compatibility feature makes DMLC register all attributes using the
+    legacy `SIM_register_typed_attribute` API function instead of the modern
+    `SIM_register_attribute` family of API functions.
+
+    Disabling this feature will make the dictionary attribute type ("D" in type
+    strings) to become unsupported, and any usage of it rejected by Simics.
+    Thus, when migrating away from this feature, any attribute of the model
+    that leverages dictionary values should be changed to leverage a different
+    representation. In general, any dictionary can instead be represented by a
+    list of two-element lists, e.g. <code>[[<em>X</em>,<em>Y</em>]*]</code>,
+    where _X_ describes the type of keys, and _Y_ describes the type of
+    values.'''
+    short = ("Use legacy attribute registration, which supports use of the "
+             + "dictionary type ('D')")
+    last_api_version = api_7
 
 @feature
 class dml12_inline(CompatFeature):
