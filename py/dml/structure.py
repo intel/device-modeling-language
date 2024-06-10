@@ -737,8 +737,13 @@ def typecheck_method_override(m1, m2, location):
             # TODO move to caller
             (_, type1) = eval_type(t1, a1.site, location, global_scope)
             (_, type2) = eval_type(t2, a2.site, location, global_scope)
-            if safe_realtype_unconst(type1).cmp(
-                    safe_realtype_unconst(type2)) != 0:
+            type1 = safe_realtype_unconst(type1)
+            type2 = safe_realtype_unconst(type2)
+
+            ok = (type1.cmp_fuzzy(type2)
+                  if compat.lenient_typechecking in dml.globals.enabled_compat
+                  else type1.cmp(type2)) == 0
+            if not ok:
                 raise EMETH(a1.site, a2.site,
                             f"mismatching types in input argument {n1}")
 
@@ -747,8 +752,12 @@ def typecheck_method_override(m1, m2, location):
             ((n1, t1), (n2, t2)) = (a1.args, a2.args)
             (_, type1) = eval_type(t1, a1.site, location, global_scope)
             (_, type2) = eval_type(t2, a2.site, location, global_scope)
-            if safe_realtype_unconst(type1).cmp(
-                    safe_realtype_unconst(type2)) != 0:
+            type1 = safe_realtype_unconst(type1)
+            type2 = safe_realtype_unconst(type2)
+            ok = (type1.cmp_fuzzy(type2)
+                  if compat.lenient_typechecking in dml.globals.enabled_compat
+                  else type1.cmp(type2)) == 0
+            if not ok:
                 msg = "mismatching types in return value"
                 if len(outp1) > 1:
                     msg += f" {i + 1}"

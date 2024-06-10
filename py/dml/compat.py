@@ -217,6 +217,23 @@ class legacy_attributes(CompatFeature):
     last_api_version = api_7
 
 @feature
+class lenient_typechecking(CompatFeature):
+    '''This compatibility feature makes DMLC's type checking very inexact and
+    lenient in multiple respects when compared to GCC's type checking of the
+    generated C.
+    This discrepency mostly affects method overrides or uses of `extern`:d C
+    macros, because in those scenarios DMLC can become wholly responsible for
+    proper type checking.
+
+    While migrating from this feature, novel type errors due to uses of
+    `extern`:d macros can often be resolved by changing the signature of
+    the `extern` declaration to more accurately reflect the macro's effective
+    type.
+    '''
+    short = "Make type checking inexact and lenient"
+    last_api_version = api_7
+
+@feature
 class dml12_inline(CompatFeature):
     '''When using `inline` to inline a method in a DML 1.2 device,
     constant arguments passed in typed parameters are inlined as
