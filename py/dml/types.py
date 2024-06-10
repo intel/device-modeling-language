@@ -936,6 +936,8 @@ class TPtr(DMLType):
                          and shallow_const(other.base))
             if self.base.void or other.base.void:
                 ok = True
+                if compat.lenient_typechecking in dml.globals.enabled_compat:
+                    constviol = False
             else:
                 unconst_self_base = safe_realtype_unconst(self.base)
                 unconst_other_base = safe_realtype_unconst(other.base)
@@ -945,7 +947,8 @@ class TPtr(DMLType):
                        else unconst_self_base.cmp)(unconst_other_base)
                       == 0)
         elif isinstance(other, TFunction):
-            ok = safe_realtype_unconst(self.base).cmp(other) == 0
+            ok = (compat.lenient_typechecking in dml.globals.enabled_compat
+                  or safe_realtype_unconst(self.base).cmp(other) == 0)
         # TODO gate this behind dml.globals.dml_version == (1, 2) or
         # dml12_misc?
         if self.base.void and isinstance(other, TDevice):

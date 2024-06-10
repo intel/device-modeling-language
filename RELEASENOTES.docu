@@ -1784,4 +1784,12 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
       attribute values <bug number="SIMICS-22406"/>.
       <tt>legacy_attributes</tt> will always be disabled with Simics API version
       8 or above.</add-note></build-id>
+  <build-id _6="next" _7="next"><add-note>Typechecking has been reworked
+      to be more strict, and more accurately reject type mismatch that would
+      result in invalid C or GCC warnings <bug number="SIMICS-9504"/>. To
+      avoid breakage from novel type errors from the stricter typechecking,
+      which particularly affects pointer types, the legacy lenient typechecking
+      is still used by default with Simics API version 7 or below. The strict
+      typechecking can be enabled by passing
+      <tt>--no-compat=lenient_typechecking</tt> to DMLC.</add-note></build-id>
 </rn>

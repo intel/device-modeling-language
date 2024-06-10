@@ -216,6 +216,7 @@ template device {
     parameter _compat_shared_logs_on_device auto;
     parameter _compat_suppress_WLOGMIXUP auto;
     parameter _compat_legacy_attributes auto;
+    parameter _compat_lenient_typechecking auto;
     parameter _compat_dml12_inline auto;
     parameter _compat_dml12_not auto;
     parameter _compat_dml12_goto auto;

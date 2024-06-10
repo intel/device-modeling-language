@@ -1,0 +1,44 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+// expectations in this file are selectively enabled using SCAN-FOR-TAGS
+
+template t {
+    shared method sm(const int *p) -> (const int *) default { return p; }
+    shared method m(const int *p) -> (const int *);
+    method n(const int *p) -> (const int *) default { return p; }
+}
+
+template u is t {
+    /// ERROR EMETH
+    shared method sm(int *p) -> (int *) { return p; }
+}
+
+group g is u {
+    /// ERROR EMETH
+    method m(int *p) -> (int *) { return p; }
+
+    /// ERROR EMETH
+    method n(int *p) -> (int *) { return p; }
+}
+
+header %{
+    #define MACRO(a,b,c) ((void)0)
+%}
+
+extern void MACRO(void *a, int *b, void (*c)(void));
+
+method init() {
+    // no error
+    MACRO(NULL, NULL, NULL);
+    /// ERROR ECONSTP
+    MACRO(cast(NULL, const int *), NULL, NULL);
+    /// ERROR ECONSTP
+    MACRO(NULL, cast(NULL, const void *), NULL);
+    /// ERROR EPTYPE
+    MACRO(NULL, NULL, MACRO);
+}
