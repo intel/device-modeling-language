@@ -1477,26 +1477,27 @@
     language version is
     documented in the <em>DML 1.4 reference manual</em>
     document. Some highlights:
-    <dl>
-    <dt>Better compilation performance</dt><dd>2-3 times faster
-    compile for devices with large register banks</dd>
-    <dt>Improved reset support</dt><dd>The reset mechanism in 1.4
-    is not hard-coded, and can be adapted to different reset
-    flows</dd>
-    <dt>Templates as types</dt><dd>You can pass around references to
-    banks/registers/fields etc in variables</dd>
-    <dt>Multiple levels of overrides</dt><dd>Methods and
-    parameters can be overridden any number of times. In 1.2,
-    this is often prevented by standard library legacy.</dd>
-    <dt>Syntax simplification</dt><dd>Many adjustments to improve
-    readability; for instance, removal of <tt>$</tt> and C-like
-    method syntax</dd>
-    <dt>Standard library API simplification</dt><dd>Clearer API,
-    easier to understand</dd>
-    <dt>Updated language semantics</dt><dd>More consistent and
-    well-specified behaviour of method bodies and expressions,
-    providing more predictable model behaviour</dd>
-    </dl> </add-note></build-id>
+    <ul>
+    <li><b>Better compilation performance</b><br/>
+    2-3 times faster compile for devices with large register banks</li>
+    <li><b>Improved reset support</b><br/>
+    The reset mechanism in 1.4 is not hard-coded, and can be adapted to
+    different reset flows</li>
+    <li><b>Templates as types</b><br/>
+    You can pass around references to banks/registers/fields etc in
+    variables</li>
+    <li><b>Multiple levels of overrides</b><br/>
+    Methods and parameters can be overridden any number of times. In 1.2,
+    this is often prevented by standard library legacy.</li>
+    <li><b>Syntax simplification</b><br/>
+    Many adjustments to improve readability; for instance, removal of
+    <tt>$</tt> and C-like method syntax</li>
+    <li><b>Standard library API simplification</b><br/>
+    Clearer API, easier to understand</li>
+    <li><b>Updated language semantics</b><br/>
+    More consistent and well-specified behaviour of method bodies and
+    expressions, providing more predictable model behaviour</li>
+    </ul> </add-note></build-id>
   <build-id value="6015"><add-note> Improved information provided by EATTRDATA
     error message. </add-note></build-id>
   <build-id value="6022"><add-note> The bank instrumentation framework no
