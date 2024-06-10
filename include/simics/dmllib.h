@@ -41,6 +41,19 @@ static inline uint64 DML_shlu(uint64 a, uint64 b)
         return b > 63 ? 0 : a << b;
 }
 
+// This is used instead of SIM_LOG_WARNING directly, as a SIM_get_api_function
+// indirection is needed to work with old 6 base packages
+// TODO scrap this once the base dependency of every package is bumped
+// to 6.0.188 or above.
+#define _DMLLIB_LOG_WARNING(dev, grps, ...) do {                              \
+    GET_API_FUNCTION(log_warning, VT_log_warning);                            \
+    if (log_warning) {                                                        \
+        log_warning(dev, grps, __VA_ARGS__);                                  \
+    } else {                                                                  \
+        SIM_LOG_ERROR(dev, grps, __VA_ARGS__);                                \
+    }                                                                         \
+} while (0)
+
 PRINTF_FORMAT(1, 2) UNUSED static void
 _signal_critical_error(const char *restrict format, ...) {
     va_list va;
@@ -1303,7 +1316,7 @@ _DML_pre_delete_cancel_immediate_afters(conf_object_t *dev,
     if (QEMPTY(state->queue)) return;
 
     if (state->warn_upon_deletion) {
-        SIM_LOG_WARNING(
+        _DMLLIB_LOG_WARNING(
             dev, 0,
             "DML device deleted while immediate after callbacks of it are "
             "still pending! These are now canceled. "
