@@ -1507,7 +1507,7 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
                     raise EBFLD(fsite, "field %s has wrong size" % name)
 
                 members[name] = (mtype, msb, lsb)
-            etype = TInt(width, False, members)
+            etype = TInt(width, False, members, label=typename)
         elif tag == 'typeof':
             expr = codegen_expression_maybe_nonvalue(info, location, scope)
             if isinstance(expr, NonValue):

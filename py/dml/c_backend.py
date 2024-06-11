@@ -805,13 +805,13 @@ def generate_implement_method(device, ifacestruct, meth, indices):
             # method in DML
             raise EMETH(meth.site, None, 'interface method is variadic')
         for ((mp, mt), it) in zip(meth.inp, iface_input_types):
-            if safe_realtype_unconst(mt).cmp(safe_realtype_unconst(it)) != 0:
+            if not safe_realtype_unconst(mt).eq(safe_realtype_unconst(it)):
                 raise EARGT(meth.site, 'implement', meth.name,
                             mt, mp, it, 'method')
         if iface_num_outputs and dml.globals.dml_version != (1, 2):
             [(_, mt)] = meth.outp
-            if safe_realtype_unconst(mt).cmp(
-                    safe_realtype_unconst(func_type.output_type)) != 0:
+            if not safe_realtype_unconst(mt).eq(
+                    safe_realtype_unconst(func_type.output_type)):
                 raise EARGT(meth.site, 'implement', meth.name,
                             mt, '<return value>', func_type.output_type,
                             'method')

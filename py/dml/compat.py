@@ -225,10 +225,16 @@ class lenient_typechecking(CompatFeature):
     macros, because in those scenarios DMLC can become wholly responsible for
     proper type checking.
 
-    While migrating from this feature, novel type errors due to uses of
-    `extern`:d macros can often be resolved by changing the signature of
-    the `extern` declaration to more accurately reflect the macro's effective
-    type.
+    While migrating away from this feature, the most common type errors that
+    its disablement introduces are due to discrepencies between pointer
+    types. In particular, implicitly discarding `const`-qualification of a
+    pointer's base type will never be tolerated, and `void` pointers are only
+    considered equivalent with any other pointer type in the same contexts as
+    C.
+
+    Novel type errors from uses of `extern`:d macros can often be resolved by
+    changing the signature of the `extern` declaration to more accurately
+    reflect the macro's effective type.
     '''
     short = "Make type checking inexact and lenient"
     last_api_version = api_7

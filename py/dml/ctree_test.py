@@ -284,8 +284,8 @@ class ExprTests(GccTests):
     @subtest()
     def long_types(self):
         def tcmp(t1, t2):
-            left = t1.cmp(t2)
-            right = t2.cmp(t1)
+            left = t1.eq(t2)
+            right = t2.eq(t1)
             self.assertEqual(left, right)
             return left
         u = types.TLong(False)
@@ -301,8 +301,7 @@ class ExprTests(GccTests):
         # incompatible
         for t1 in int_types:
             for t2 in int_types:
-                self.assertEqual(tcmp(t1, t2),
-                                 0 if t1 is t2 else NotImplemented, (t1, t2))
+                self.assertEqual(tcmp(t1, t2), t1 is t2, (t1, t2))
 
         return [u.declaration('u') + ';',
                 'unsigned long *up UNUSED = &u;',
@@ -399,7 +398,7 @@ class ExprTests(GccTests):
             curr_expr = base
             for t in cast_sequence:
                 curr_expr = ctree.mkCast(site, curr_expr, t)
-            self.assertEqual(cast_sequence[-1].cmp(curr_expr.ctype()), 0)
+            self.assertTrue(cast_sequence[-1].eq(curr_expr.ctype()))
             self.assertEqual(curr_expr.expr, base)
 
     @subtest()
@@ -417,7 +416,7 @@ class ExprTests(GccTests):
     def cast_to_int(self, old_type, old_value, new_type, new_value):
         cast = ctree.mkCast(site, ctree.mkLit(site, old_value, old_type),
                             new_type)
-        self.assertTrue(types.compatible_types(cast.ctype(), new_type))
+        self.assertTrue(cast.ctype().eq(new_type))
         return ['EXPECT(%s == %s);' % (cast.read(), new_value)]
 
     def unendianed_type(self, endian_type):
@@ -460,8 +459,8 @@ class ExprTests(GccTests):
     ])
     def endian_int_cast(self, expr, endiantype):
         """Check that casting to endianint results in the right type"""
-        self.assertEqual(
-            ctree.mkCast(site, expr, endiantype).ctype().cmp(endiantype), 0)
+        self.assertTrue(
+            ctree.mkCast(site, expr, endiantype).ctype().eq(endiantype))
 
     @subtest([(targettype, endiantype)
               for targettype in (
@@ -483,7 +482,7 @@ class ExprTests(GccTests):
                             ctree.mkIntegerConstant(site, -5, True),
                             endiantype)
         cast = ctree.mkCast(site, expr, targettype)
-        self.assertEqual(cast.ctype().cmp(targettype), 0)
+        self.assertTrue(cast.ctype().eq(targettype))
         return ['%s UNUSED = %s;' % (targettype.declaration('x'), cast.read())]
 
     @subtest([(op, lh, rh)
@@ -535,7 +534,7 @@ class ExprTests(GccTests):
                types.TInt(64, True))])
     def as_int_ifexpr(self, lh, rh, expected_type):
         expr = ctree.mkIfExpr(site, variable('b', types.TBool()), lh, rh)
-        self.assertEqual(expr.type.cmp(expected_type), 0)
+        self.assertTrue(expr.type.eq(expected_type))
         return ["bool b = false;",
                 "EXPECT(%s == %s);" % (
                     expr.read(), ctree.mkCast(site, rh, expected_type).read())]
@@ -572,7 +571,7 @@ class ExprTests(GccTests):
     def as_int_new_coverage(self, count):
         """Checks for as_int coverage"""
         expr = ctree.mkNew(site, types.TInt(8, False), count)
-        self.assertEqual(expr.type.cmp(types.TPtr(types.TInt(8, False))), 0)
+        self.assertTrue(expr.type.eq(types.TPtr(types.TInt(8, False))))
         return ["EXPECT(%s == 3);" % expr.count.read()]
 
     def expect_int_unop(self, const, unop, expected):
@@ -1025,8 +1024,7 @@ class ExprTests(GccTests):
             sub1 = ctree.mkSubtract(site, ptr, ctree.mkUnaryMinus(site, i))
             sub2 = ctree.mkSubtract(site, ptr, add1)
             for expr in (add1, add2, sub1):
-                self.assertTrue(types.compatible_types(
-                    expr.ctype().base, ptype))
+                self.assertTrue(expr.ctype().base.eq(ptype))
             self.expect_int_type(sub2.ctype(), True)
             stmts.extend([
                 'EXPECT(%s == exp);' % (add1.read(),),
@@ -1415,8 +1413,6 @@ class ExprTests(GccTests):
             types.DMLType,
             # abstract type
             types.IntegerType,
-            # abstract type
-            types.ArchDependentIntegerType,
             # abstract type
             types.StructType,
             # 1.2, weird
