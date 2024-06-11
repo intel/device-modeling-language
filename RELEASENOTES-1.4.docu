@@ -614,11 +614,11 @@
           param p;
         }
       </pre></add-note></build-id>
-  <build-id _6="next" _7="next"><add-note> Any immediate after callbacks posted
+  <build-id _6="next" _7="7023"><add-note> Any immediate after callbacks posted
       during object initialization and configuration are now guaranteed to be
       executed as part of <tt>objects_finalized</tt> of the
       device. </add-note></build-id>
-  <build-id _6="next" _7="next"><add-note> Any immediate after callbacks of
+  <build-id _6="next" _7="7023"><add-note> Any immediate after callbacks of
       a device that are still pending at the start of the device's deletion will
       be canceled and give rise to a warning <bug number="SIMICS-22268"/>.
       This can be resolved by leveraging <tt>SIM_process_pending_work()</tt>.
