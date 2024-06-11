@@ -403,18 +403,18 @@ def typecheck_method_override(left, right):
     for ((n, t0), (_, t1)) in zip(inp0, inp1):
         t0 = safe_realtype_unconst(t0)
         t1 = safe_realtype_unconst(t1)
-        ok = (t0.cmp_fuzzy(t1)
+        ok = (t0.eq_fuzzy(t1)
               if compat.lenient_typechecking in dml.globals.enabled_compat
-              else t0.cmp(t1)) == 0
+              else t0.eq(t1))
         if not ok:
             raise EMETH(site0, site1,
                         "mismatching types in input argument %s" % (n,))
     for (i, ((_, t0), (_, t1))) in enumerate(zip(outp0, outp1)):
         t0 = safe_realtype_unconst(t0)
         t1 = safe_realtype_unconst(t1)
-        ok = (t0.cmp_fuzzy(t1)
+        ok = (t0.eq_fuzzy(t1)
               if compat.lenient_typechecking in dml.globals.enabled_compat
-              else t0.cmp(t1)) == 0
+              else t0.eq(t1))
         if not ok:
             raise EMETH(site0, site1,
                         "mismatching types in output argument %d" % (i + 1,))

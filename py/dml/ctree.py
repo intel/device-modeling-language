@@ -1135,7 +1135,7 @@ def as_int(e):
     if t.is_endian:
         (fun, funtype) = t.get_load_fun()
         e = dml.expr.Apply(e.site, mkLit(e.site, fun, funtype), (e,), funtype)
-        if not compatible_types(realtype(e.ctype()), target_type):
+        if not realtype(e.ctype()).eq(target_type):
             e = mkCast(e.site, e, target_type)
         return e
     else:
@@ -1203,7 +1203,7 @@ def mkIfExpr(site, cond, texpr, fexpr):
             # Normally handled by expr_conditional; this only happens
             # in DMLC-internal mkIfExpr calls
             (result, rtype) = (texpr, ttype) if cond.value else (fexpr, ftype)
-            assert rtype.cmp(utype) == 0
+            assert rtype.eq(utype)
             return result
         return IfExpr(site, cond, texpr, fexpr, utype)
     else:
@@ -1225,8 +1225,8 @@ def mkIfExpr(site, cond, texpr, fexpr):
             if (isinstance(ttype, (TPtr, TArray))
                 and isinstance(ftype, (TPtr, TArray))
                 and (ttype.base.void or ftype.base.void
-                     or compatible_types(safe_realtype_unconst(ttype.base),
-                                         safe_realtype_unconst(ftype.base)))):
+                     or safe_realtype_unconst(ttype.base).eq(
+                         safe_realtype_unconst(ftype.base)))):
                 # if any branch is void, then the union is too
                 base = (ftype if ftype.base.void else ttype).base.clone()
                 # if any branch is const *, then the union is too
@@ -1235,8 +1235,7 @@ def mkIfExpr(site, cond, texpr, fexpr):
                               or shallow_const(ttype.base)
                               or shallow_const(ftype.base))
                 utype = TPtr(base)
-            elif compatible_types(safe_realtype_unconst(ttype),
-                                  safe_realtype_unconst(ftype)):
+            elif safe_realtype_unconst(ttype).eq(safe_realtype_unconst(ftype)):
                 utype = ttype
             else:
                 raise EBINOP(site, ':', texpr, fexpr)
@@ -1401,8 +1400,8 @@ class Compare(BinOp):
         if ((lhtype.is_arith and rhtype.is_arith)
             or (isinstance(lhtype, (TPtr, TArray))
                 and isinstance(rhtype, (TPtr, TArray))
-                and compatible_types(safe_realtype_unconst(lhtype.base),
-                                     safe_realtype_unconst(rhtype.base)))):
+                and safe_realtype_unconst(lhtype.base).eq(
+                    safe_realtype_unconst(rhtype.base)))):
             return cls.make_simple(site, lh, rh)
         raise EILLCOMP(site, lh, lhtype, rh, rhtype)
 
@@ -1565,7 +1564,7 @@ class Equals(BinOp):
                 return mkBoolConstant(site, (lhc.node is rhc.node
                                              and lhc_indices == rhc_indices))
             if (isinstance(lhc, HookRef) and isinstance(rhc, HookRef)
-                and lhtype.cmp(rhtype) == 0):
+                and lhtype.eq(rhtype)):
                 lh_indices = [idx.value for idx in lhc.indices]
                 rh_indices = [idx.value for idx in rhc.indices]
                 return mkBoolConstant(site, (lhc.hook is rhc.hook
@@ -1607,9 +1606,9 @@ class Equals(BinOp):
         if ((lhtype.is_arith and rhtype.is_arith)
             or (isinstance(lhtype, (TPtr, TArray))
                 and isinstance(rhtype, (TPtr, TArray))
-                and (compatible_types(safe_realtype_unconst(lhtype.base),
-                                      safe_realtype_unconst(rhtype.base))
-                     or lhtype.base.void or rhtype.base.void))
+                and (lhtype.base.void or rhtype.base.void
+                     or safe_realtype_unconst(lhtype.base).eq(
+                         safe_realtype_unconst(rhtype.base))))
             or (isinstance(lhtype, TBool) and isinstance(rhtype, TBool))):
             return Equals(site, lh, rh)
 
@@ -1618,7 +1617,7 @@ class Equals(BinOp):
             return IdentityEq(site, TraitObjIdentity(lh.site, lh),
                               TraitObjIdentity(rh.site, rh))
         if (isinstance(lhtype, THook) and isinstance(rhtype, THook)
-            and lhtype.cmp(rhtype) == 0):
+            and lhtype.eq(rhtype)):
             return IdentityEq(site, lh, rh)
 
         raise EILLCOMP(site, lh, lhtype, rh, rhtype)
@@ -2940,8 +2939,8 @@ def mkInterfaceMethodRef(site, iface_node, indices, method_name):
     if (not isinstance(ftype, TPtr)
         or not isinstance(ftype.base, TFunction)
         or not ftype.base.input_types
-        or TPtr(safe_realtype_unconst(TNamed('conf_object_t'))).cmp(
-            safe_realtype_unconst(ftype.base.input_types[0])) != 0):
+        or not TPtr(safe_realtype_unconst(TNamed('conf_object_t'))).eq(
+            safe_realtype_unconst(ftype.base.input_types[0]))):
         # non-method members are not accessible
         raise EMEMBER(site, struct_name, method_name)
 
@@ -4826,17 +4825,12 @@ def mkCast(site, expr, new_type):
         return Cast(site, expr, new_type)
     if isinstance(real, (TVoid, TArray, TFunction)):
         raise ECAST(site, expr, new_type)
-    if old_type.cmp(real) == 0:
-        if (old_type.is_int
-            and not old_type.is_endian
-            and dml.globals.compat_dml12_int(expr.site)):
+    if old_type.eq(real):
+        if (dml.globals.compat_dml12_int(expr.site)
+            and old_type.is_int
+            and not old_type.is_endian):
             # 1.2 integer expressions often lie about their actual type,
             # and require a "redundant" cast! Why yes, this IS horrid!
-            return Cast(site, expr, new_type)
-        if real.is_int and real.members is not None:
-            # An integer type can be compatible with a bitfields without being
-            # equal to it, as DMLC will treat bitfields differently. Leverage
-            # Cast in this case
             return Cast(site, expr, new_type)
         return mkRValue(expr)
     if isinstance(real, (TStruct, TExternStruct, TVector, TTraitList)):

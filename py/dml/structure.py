@@ -740,9 +740,9 @@ def typecheck_method_override(m1, m2, location):
             type1 = safe_realtype_unconst(type1)
             type2 = safe_realtype_unconst(type2)
 
-            ok = (type1.cmp_fuzzy(type2)
+            ok = (type1.eq_fuzzy(type2)
                   if compat.lenient_typechecking in dml.globals.enabled_compat
-                  else type1.cmp(type2)) == 0
+                  else type1.eq(type2))
             if not ok:
                 raise EMETH(a1.site, a2.site,
                             f"mismatching types in input argument {n1}")
@@ -754,9 +754,9 @@ def typecheck_method_override(m1, m2, location):
             (_, type2) = eval_type(t2, a2.site, location, global_scope)
             type1 = safe_realtype_unconst(type1)
             type2 = safe_realtype_unconst(type2)
-            ok = (type1.cmp_fuzzy(type2)
+            ok = (type1.eq_fuzzy(type2)
                   if compat.lenient_typechecking in dml.globals.enabled_compat
-                  else type1.cmp(type2)) == 0
+                  else type1.eq(type2))
             if not ok:
                 msg = "mismatching types in return value"
                 if len(outp1) > 1:
