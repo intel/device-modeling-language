@@ -40,8 +40,8 @@ __all__ = (
     'mkglobals', 'mkdev'
 )
 
-# A list of extern declarations, as tuples (name,site,type)
-externs = []
+# A dictionary of extern declarations: name -> (site,type)
+externs = {}
 
 # A list of independent methods declared startup
 startups = []
@@ -77,7 +77,7 @@ def mkglobals(stmts):
     by_name = {}
     assert not global_scope.symbols()
     for stmt in stmts:
-        if stmt.kind in ['extern', 'extern_typedef', 'dml_typedef']:
+        if stmt.kind in ('extern', 'extern_typedef', 'dml_typedef'):
             ((_, _, name, _),) = stmt.args
         else:
             name = stmt.args[0]
@@ -98,9 +98,15 @@ def mkglobals(stmts):
         if len(types) == 1:
             # types may clash with values
             clash.remove(types[0])
-        if len(clash) > 1:
-            report(ENAMECOLL(clash[1].site, clash[0].site, name))
-            stmts.remove(clash[1])
+
+        # Duplicate externs are handled seperately
+        extern_clash = [s for s in clash if s.kind == 'extern']
+        nonextern_clash = [s for s in clash if s.kind != 'extern']
+
+        if len(nonextern_clash) > 1 or (extern_clash and nonextern_clash):
+            second = extern_clash[0] if extern_clash else nonextern_clash[1]
+            report(ENAMECOLL(nonextern_clash[0].site, second.site, name))
+            stmts.remove(nonextern_clash[0])
             # retry with duplicate removed
             mkglobals(stmts)
             return
@@ -128,6 +134,8 @@ def mkglobals(stmts):
     anonymous_structs = {}
     # names of non-extern typedefs
     new_typedefs = set()
+    # Duplicate extern declarations
+    extern_clashes = {}
 
     for stmt in stmts:
         try:
@@ -180,8 +188,12 @@ def mkglobals(stmts):
                         allow_void=site.dml_version() == (1, 2))
                     # any substructs are converted to anonymous extern structs
                     assert not struct_defs
-                new_symbols.append(LiteralSymbol(name, typ, site))
-                externs.append((name, site, typ))
+                if name in externs:
+                    extern_clashes.setdefault(name, []).append((site, typ))
+                else:
+                    new_symbols.append(LiteralSymbol(name, typ, site))
+                    externs[name] = (site, typ)
+
             elif stmt[0] == 'extern_typedef':
                 (_, site, (_, _, name, typ)) = stmt
                 assert not typedefs.get(name, None)
@@ -244,6 +256,18 @@ def mkglobals(stmts):
         for sym in new_symbols:
             try:
                 safe_realtype(sym.type)
+            except ETYPE as e:
+                report(e)
+
+    # Resolve duplicate externs
+    for (name, clashes) in extern_clashes.items():
+        (canonical_site, canonical_t) = externs[name]
+        canonical_rt = safe_realtype(canonical_t)
+        for (site, typ) in clashes:
+            try:
+                if not canonical_rt.eq(safe_realtype(typ)):
+                    report(EEXTERNINCOMP(site, canonical_site, name, typ,
+                                         canonical_t))
             except ETYPE as e:
                 report(e)
 

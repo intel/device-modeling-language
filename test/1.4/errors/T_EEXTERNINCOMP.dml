@@ -1,0 +1,57 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// WARNING WEXPERIMENTAL T_EEXTERNINCOMP.dml
+
+typedef int vect int_vect_t;
+
+typedef object object_t;
+
+// no error
+extern uint32 ext0;
+extern uint32 ext0;
+
+extern bitfields 32 { uint1 x @[4]; } ext1;
+extern bitfields 32 { uint1 x @[4]; } ext1;
+
+/// ERROR EEXTERNINCOMP
+extern uint32 ext2;
+/// ERROR EEXTERNINCOMP
+extern bitfields 32 { uint1 x @[4]; } ext2;
+
+// no error
+extern object_t ext3;
+extern object ext3;
+
+/// ERROR EEXTERNINCOMP
+extern int vect ext4;
+/// ERROR EEXTERNINCOMP
+extern int vect ext4;
+
+// no error
+extern int_vect_t ext5;
+extern int_vect_t ext5;
+
+// no error
+extern void ext6();
+extern void ext6(void);
+
+/// ERROR EEXTERNINCOMP
+extern void ext7();
+/// ERROR EEXTERNINCOMP
+extern void ext7(int);
+
+/// ERROR EEXTERNINCOMP
+extern void ext8();
+/// ERROR EEXTERNINCOMP
+extern void ext8(...);
+
+/// ERROR EEXTERNINCOMP
+extern void ext9(int);
+/// ERROR EEXTERNINCOMP
+extern void ext9(...);

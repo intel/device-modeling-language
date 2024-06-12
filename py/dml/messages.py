@@ -1867,6 +1867,25 @@ class ETTQMIC(DMLError):
     fmt = ("invalid template-qualified method implementation call, "
            + "'%s' not a subtemplate of '%s'")
 
+class EEXTERNINCOMP(DMLError):
+    """Multiple `extern` declarations with mismatching types are given for the
+    same identifier."""
+    fmt = "incompatible extern declarations for '%s': type mismatch"
+    def __init__(self, site, other_site, name, typ, other_type):
+        DMLError.__init__(self, site, name)
+        self.other_site = other_site
+        self.typ = typ
+        self.other_type = other_type
+    def log(self):
+        DMLError.log(self)
+        self.print_site_message(
+            self.site,
+            "this declaration specifies the type: " + self.typ.describe())
+        self.print_site_message(
+            self.other_site,
+            "conflicting declaration, which specifies the type: "
+            + self.other_type.describe())
+
 #
 # WARNINGS (keep these as few as possible)
 #

@@ -68,11 +68,6 @@ typedef int t1;
 typedef int t1;
 
 /// ERROR ENAMECOLL
-extern int t2;
-/// ERROR ENAMECOLL
-extern int t2;
-
-/// ERROR ENAMECOLL
 typedef struct { int i; } s;
 /// ERROR ENAMECOLL
 typedef struct { int i; } s;

@@ -41,13 +41,14 @@ connect c {
 extern t3;
 extern int t3;
 extern t3;
+extern int t3;
 
 extern t4;
-/// ERROR ENAMECOLL
+/// ERROR EEXTERNINCOMP
 extern int t4;
 extern t4;
-/// ERROR ENAMECOLL
-extern int t4;
+/// ERROR EEXTERNINCOMP
+extern bool t4;
 
 // No error!
 extern typedef int t5;
