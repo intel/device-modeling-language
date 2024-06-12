@@ -2557,6 +2557,9 @@ extern int foo(int x);
 extern int printf(const char *format, ...);
 ```
 
+Multiple `extern` declarations for the same identifier are permitted as long as
+they all declare the same type for the identifier.
+
 ### Header Declarations
 
 ```
