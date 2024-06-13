@@ -1371,6 +1371,12 @@ class Compare(BinOp):
         if (lhtype.is_arith and rhtype.is_arith
             and lh.constant and rh.constant):
             return mkBoolConstant(site, cls.eval_const(lh.value, rh.value))
+        if (lhtype.is_int and rhtype.is_int
+            and ((not lhtype.signed and rh.constant and rh.value < 0)
+                 or (not rhtype.signed and lh.constant and lh.value < 0))):
+            (signed_expr, unsigned_expr) = ((lh, rh) if lhtype.signed
+                                            else (rh, lh))
+            report(WNEGCONSTCOMP(site, signed_expr, unsigned_expr.ctype()))
         if lhtype.is_int:
             lh = as_int(lh)
             lhtype = realtype(lh.ctype())
@@ -1382,9 +1388,6 @@ class Compare(BinOp):
             and lhtype.signed != rhtype.signed):
             (signed_expr, unsigned_expr) = ((lh, rh) if lhtype.signed
                                             else (rh, lh))
-            if signed_expr.constant and signed_expr.value < 0:
-                report(WNEGCONSTCOMP(site, signed_expr,
-                                     unsigned_expr.ctype()))
             # we must convert (uint64)x < (int64)y to DML_lt(x, y), because
             # C:'s < would do an unsigned comparison. No need to do this if y
             # is a small constant, though.
@@ -1579,6 +1582,12 @@ class Equals(BinOp):
                         assert isinstance(expr, (NullConstant, StringConstant,
                                                  AddressOfMethod))
                     return mkBoolConstant(site, False)
+        if (lhtype.is_int and rhtype.is_int
+            and ((not lhtype.signed and rh.constant and rh.value < 0)
+                 or (not rhtype.signed and lh.constant and lh.value < 0))):
+            (signed_expr, unsigned_expr) = ((lh, rh) if lhtype.signed
+                                            else (rh, lh))
+            report(WNEGCONSTCOMP(site, signed_expr, unsigned_expr.ctype()))
         if lhtype.is_int:
             lh = as_int(lh)
             lhtype = realtype(lh.ctype())
@@ -1594,8 +1603,6 @@ class Equals(BinOp):
             # unsigned to a constant literal.
             (signed_expr, unsigned_expr) = ((lh, rh) if lhtype.signed
                                             else (rh, lh))
-            if signed_expr.constant and signed_expr.value < 0:
-                report(WNEGCONSTCOMP(site, signed_expr, unsigned_expr.ctype()))
             if not (signed_expr.constant and 0 <= signed_expr.value < 1 << 63):
                 return mkApply(
                     site, mkLit(
