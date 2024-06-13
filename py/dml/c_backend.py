@@ -153,7 +153,7 @@ def print_device_substruct(node):
         return arraywrap(node, crep.node_storage_type(node, node.site))
     elif node.objtype == 'hook':
         return arraywrap(node, TNamed('_dml_hook_t'))
-    elif (node.objtype in ('register', 'field')
+    elif (node.objtype in {'register', 'field'}
           and dml.globals.dml_version == (1, 2)):
         allocate = param_bool_fixup(node, 'allocate', True)
         if node.simple_storage:
@@ -182,7 +182,7 @@ def print_device_substruct(node):
                     yield (crep.cname(sub), print_device_substruct(sub))
             return composite_ctype(node, members)
 
-    elif node.objtype in ('bank', 'port', 'subdevice'):
+    elif node.objtype in {'bank', 'port', 'subdevice'}:
         if node.name is None:
             assert dml.globals.dml_version == (1, 2)
             obj = []
@@ -215,7 +215,7 @@ def print_device_substruct(node):
         return composite_ctype(node,
                                [(crep.cname(sub), print_device_substruct(sub))
                                 for sub in node.get_components()])
-    elif node.objtype in ('parameter', 'method'):
+    elif node.objtype in {'parameter', 'method'}:
         return None
 
     else:
@@ -509,7 +509,7 @@ def check_attribute(node, port, prefix):
     if config_param == 'none':
         return
     if not get_long_doc(node):
-        if (node.objtype in ['attribute', 'connect']
+        if (node.objtype in {'attribute', 'connect'}
             and config_param == 'required'):
             report(WNDOCRA(node, node.logname()))
         elif node.objtype != 'register':
@@ -538,7 +538,7 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
         pass
     elif node.objtype == 'register':
         doc = 'register ' + node.logname_anonymized()
-    elif (node.objtype in ['attribute', 'connect']
+    elif (node.objtype in {'attribute', 'connect'}
           and config_param == 'required'):
         report(WNDOCRA(node, node.logname()))
         doc = "Undocumented"
@@ -665,7 +665,7 @@ def generate_attributes(initcode, node, port=None,
             generate_attributes(initcode, child, port, dimsizes, prefix,
                                 loopvars)
     elif node.objtype in {'device', 'bank', 'port', 'subdevice'}:
-        if node.objtype in ('bank', 'port', 'subdevice') and (
+        if node.objtype in {'bank', 'port', 'subdevice'} and (
                 # anonymous bank
                 dml.globals.dml_version != (1, 2) or node.name != None):
             port = node
@@ -2400,7 +2400,7 @@ fields.
         for name in tinit_args(parent):
             scrambled_name = scramble_argname(name)
             kind = parent.member_kind(name)
-            if kind in ('parameter', 'session', 'hook', 'memoized_outs'):
+            if kind in {'parameter', 'session', 'hook', 'memoized_outs'}:
                 args.append(scrambled_name)
             else:
                 assert kind == 'method'
@@ -2598,7 +2598,7 @@ def init_trait_vtable(node, trait, param_overrides):
                 args.append(override.tinit_arg())
         elif member_kind == 'session':
             session_node = node.get_component(name)
-            assert session_node.objtype in ('session', 'saved')
+            assert session_node.objtype in {'session', 'saved'}
             args.append('offsetof(%s, %s)' % (
                 crep.structtype(dml.globals.device),
                 crep.cref_session(
@@ -2849,7 +2849,7 @@ def generate_saved_userdata(node, dimensions, prefix):
                     except ESERIALIZE as e:
                         report(e)
         elif (isinstance(child, objects.CompositeObject)
-              and child.objtype not in ('bank', 'port', 'subdevice')):
+              and child.objtype not in {'bank', 'port', 'subdevice'}):
             if child.ident is None:
                 assert (dml.globals.dml_version == (1, 2)
                         and child.objtype == 'field')

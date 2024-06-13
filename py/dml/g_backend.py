@@ -142,27 +142,27 @@ def subobjs(node):
     for s in node.get_components():
         # skip auto and non-interested parameters
         if s.objtype == 'parameter':
-            if s.name in ('this', 'name', 'qname', 'parent', 'index',
+            if s.name in {'this', 'name', 'qname', 'parent', 'index',
                           'indexvar', '_confidentiality', 'desc', 'shown_desc',
                           'dev', 'bank', 'documentation', 'limitations',
-                          'subdevice'):
+                          'subdevice'}:
                 continue
             if (node.objtype == 'device' and
-                s.name in ('obj', 'logobj', 'simics_api_version',
-                           'banks', 'simics_bool_is_int')):
+                s.name in {'obj', 'logobj', 'simics_api_version',
+                           'banks', 'simics_bool_is_int'}):
                 continue
             if (node.objtype == 'bank' and
-                s.name in ('mapped_registers', 'unmapped_registers',
-                           'numbered_registers')):
+                s.name in {'mapped_registers', 'unmapped_registers',
+                           'numbered_registers'}):
                 continue
             if (node.objtype == 'register' and
-                s.name in ('notinregister', 'fields', '_regname')):
+                s.name in {'notinregister', 'fields', '_regname'}):
                 continue
             if (node.objtype == 'field' and
-                s.name in ('notinfield', 'reg',)):
+                s.name in {'notinfield', 'reg',}):
                 continue
             if (node.objtype == 'event' and
-                s.name in ('evclass',)):
+                s.name in {'evclass',}):
                 continue
         # skip implicit field
         if s.objtype == 'field' and not s.name:
