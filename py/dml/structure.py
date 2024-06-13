@@ -77,7 +77,7 @@ def mkglobals(stmts):
     by_name = {}
     assert not global_scope.symbols()
     for stmt in stmts:
-        if stmt.kind in ('extern', 'extern_typedef', 'dml_typedef'):
+        if stmt.kind in {'extern', 'extern_typedef', 'dml_typedef'}:
             ((_, _, name, _),) = stmt.args
         else:
             name = stmt.args[0]
@@ -93,8 +93,8 @@ def mkglobals(stmts):
                 stmts.remove(stmt)
         if len(clash) <= 1:
             continue
-        types = [s for s in clash if s.kind in ['extern_typedef', 'dml_typedef',
-                                                'template', 'template_dml12']]
+        types = [s for s in clash if s.kind in {'extern_typedef', 'dml_typedef',
+                                                'template', 'template_dml12'}]
         if len(types) == 1:
             # types may clash with values
             clash.remove(types[0])
@@ -139,7 +139,7 @@ def mkglobals(stmts):
 
     for stmt in stmts:
         try:
-            if stmt.kind in ['template', 'template_dml12']:
+            if stmt.kind in {'template', 'template_dml12'}:
                 (name, body) = stmt.args
                 template_body = []
                 trait_body = []
@@ -158,7 +158,7 @@ def mkglobals(stmts):
                             template_body.append(tstmt)
                         else:
                             template_body.append(tstmt)
-                    elif tstmt.kind in ('session', 'saved'):
+                    elif tstmt.kind in {'session', 'saved'}:
                         template_body.append(tstmt)
                         if stmt.kind == 'template':
                             trait_body.append(tstmt)
@@ -425,7 +425,7 @@ def is_unused_default(node):
     # Warn if the read or write method is overridden in a register
     # with fields
     if node.objtype == 'method' and parent.objtype == 'register':
-        return (node.name in ['read', 'write']
+        return (node.name in {'read', 'write'}
                 and not parent.wholefield
                 # Presence of non-None default_impl means that the
                 # method does have a non-default implementation
@@ -1178,7 +1178,7 @@ def make_autoparams(obj, index_vars, index_var_sites):
     elif obj.objtype == 'event':
         autoparams['evclass'] = EventClassParamExpr(obj)
 
-    if (obj.objtype in ('attribute', 'register', 'connect')
+    if (obj.objtype in {'attribute', 'register', 'connect'}
           and dml.globals.dml_version != (1, 2)):
         autoparams['_attr_name'] = ConfAttrNameParamExpr(site, obj)
         autoparams['_parent_obj_class'] = \
@@ -1570,7 +1570,7 @@ def process_method_implementations(obj, name, implementations,
         # Export hard_reset and soft_reset from device objects in 1.2
         # automatically
         if (obj.objtype == 'device' and
-            name in ('hard_reset', 'soft_reset')):
+            name in {'hard_reset', 'soft_reset'}):
             func = method_instance(method)
             mark_method_referenced(func)
             mark_method_exported(func, crep.cref_method(method), obj.site)
@@ -1705,7 +1705,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
 
             if ident is None:
                 assert (dml.globals.dml_version == (1, 2)
-                        and objtype in ['bank', 'field'])
+                        and objtype in {'bank', 'field'})
 
             subobj_def = (objtype, ident, arrayinfo, [subobj_spec])
             if ident in subobj_defs:
@@ -1897,7 +1897,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             override = obj.get_component(member)
             if member_kind == 'session':
                 # an implicit data object has been added earlier on
-                assert override and override.objtype in ('session', 'saved')
+                assert override and override.objtype in {'session', 'saved'}
                 # handled as a special case in vtable initialization
                 continue
             elif member_kind == 'hook':
@@ -1910,7 +1910,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                 if not impl_traits:
                     # report error: override required by parameter or
                     # abstract method
-                    assert member_kind in ['method', 'parameter']
+                    assert member_kind in {'method', 'parameter'}
                     for (tsite, t) in obj_traits:
                         if t.implements(decl_trait):
                             raise EABSTEMPLATE(
@@ -2166,7 +2166,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             confparam = param_str(obj, 'configuration')
             if not obj.writable and not obj.readable and confparam != "none":
                 raise EANULL(obj.site)
-            if confparam in ('required', 'optional'):
+            if confparam in {'required', 'optional'}:
                 raise EACHK(obj.site)
 
     elif obj.objtype == 'field':
@@ -2199,7 +2199,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             confparam = param_str(obj, 'configuration')
             if not obj.writable and not obj.readable and confparam != "none":
                 raise EANULL(obj.site)
-            if confparam in ('required', 'optional'):
+            if confparam in {'required', 'optional'}:
                 raise EACHK(obj.site)
 
         if logging.show_porting and dml.globals.dml_version == (1, 2):
@@ -2222,7 +2222,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                 elif atype.startswith('int'):
                     report(PATTRIBUTE(obj.site, 'int64_attr', param.site,
                                       type_site))
-                elif atype in ('double', 'bool'):
+                elif atype in {'double', 'bool'}:
                     report(PATTRIBUTE(obj.site, atype + '_attr', param.site,
                                       type_site))
 
@@ -2264,7 +2264,7 @@ def set_confidential_object(obj):
     val = expr_intval(expr) if defined(expr) else 0
     if (val - dml.globals.build_confidentiality) > 0:
         obj._confidential = True
-        if obj.objtype in ('register', 'field') and obj.name:
+        if obj.objtype in {'register', 'field'} and obj.name:
             setparam(obj, 'name', SimpleParamExpr(mkHiddenName(
                 obj.site, obj.name, obj)))
             setparam(obj, 'qname', HiddenQNameParamExpr(obj))
@@ -2839,12 +2839,12 @@ def mkparam(obj, autoparams, param):
     return objects.DMLParameter(name, site, obj, ASTParamExpr(value, obj))
 
 def port_builtin_method_overrides(name, site, inp_ast, parent_obj):
-    if ((name in ['read', 'write']
-         and parent_obj.objtype in ['register', 'field'])
-        or (name in ['get', 'set', 'read_access', 'write_access']
+    if ((name in {'read', 'write'}
+         and parent_obj.objtype in {'register', 'field'})
+        or (name in {'get', 'set', 'read_access', 'write_access'}
             and parent_obj.objtype == 'field')
-        or (name in ['hard_reset', 'soft_reset']
-            and parent_obj.objtype in ['bank', 'device'])):
+        or (name in {'hard_reset', 'soft_reset'}
+            and parent_obj.objtype in {'bank', 'device'})):
         tpl_name = {'read_access': 'read_field',
                     'write_access': 'write_field'}.get(name, name)
         report(PABSTRACT_TEMPLATE(site, tpl_name))

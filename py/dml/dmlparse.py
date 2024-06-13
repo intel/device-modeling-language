@@ -142,7 +142,7 @@ def lex_end_site(t, elt):
     return DumpableSite(info, end)
 
 def parse_bitorder(t, syn):
-    if syn not in ('be', 'le'):
+    if syn not in {'be', 'le'}:
         report(EBITO(site(t), syn))
         return 'le'
     return syn
@@ -557,7 +557,7 @@ def object_method(t):
     throws = t[8]
     if logging.show_porting and any(not typ for (_, _, name, typ) in inp):
         # some standard methods are assigned a type later on
-        if name not in ['set', 'write']:
+        if name not in {'set', 'write'}:
             report(PINLINEDECL(site(t), 'method', 'inline method'))
         for (_, decl_site, argname, typ) in inp:
             if not typ:
@@ -1475,7 +1475,7 @@ def layout_decl(t):
     else:
         fields = t[4]
         check_struct_namecoll(fields)
-    if endian not in ('big-endian', 'little-endian'):
+    if endian not in {'big-endian', 'little-endian'}:
         raise ESYNTAX(site(t, 2), '"%s"' % endian,
                       'not one of "big-endian" or "little-endian"')
 

@@ -25,7 +25,7 @@ class RankDesc(object):
     '''Description of a rank. Its purpose is to help identifying how to
     assign some other declaration a superior rank.'''
     def __init__(self, kind, text, in_eachs=()):
-        assert kind in ['file', 'template', 'verbatim']
+        assert kind in {'file', 'template', 'verbatim'}
         self.text = text
         self.kind = kind
         # list of nested 'in each' blocks within a template or file,
@@ -113,9 +113,9 @@ class ObjectSpec(object):
             symbols[p.args[0]] = ('param', p.site)
         for (_, shallow, composite) in self.blocks:
             for sub in shallow:
-                if sub.kind in ['method']:
+                if sub.kind in {'method'}:
                     symbols[sub.args[0]] = (sub.kind, sub.site)
-                elif sub.kind in ['session', 'saved']:
+                elif sub.kind in {'session', 'saved'}:
                     for decl_ast in sub.args[0]:
                         (name, _) = decl_ast.args
                         symbols[name] = (sub.kind, sub.site)
@@ -240,8 +240,8 @@ def flatten_ifs(stmts, preconds):
         elif stmt.kind == 'object':
             composite.append(stmt)
         else:
-            if stmt.kind not in ('method', 'session', 'saved',
-                                 'error', 'export', 'hook'):
+            if stmt.kind not in {'method', 'session', 'saved',
+                                 'error', 'export', 'hook'}:
                 raise ICE(stmt.site, 'unexpected AST kind %s' % (stmt.kind,))
             simple.append(stmt)
     result.append((preconds, simple, composite))

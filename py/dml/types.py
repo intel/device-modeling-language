@@ -763,7 +763,7 @@ class TEndianInt(IntegerType):
         if (bits % 8 != 0):
             raise DMLTypeError("Trying to create endian int without whole "
                                "byte size")
-        assert(byte_order in ('big-endian', 'little-endian'))
+        assert(byte_order in {'big-endian', 'little-endian'})
         self.byte_order = byte_order
     is_endian = True
 
@@ -1455,7 +1455,7 @@ def parse_type(typename):
                 "big-endian" if byte_order == "_be_t" else "little-endian")
         else:
             return TInt(bits, signed)
-    elif typename in ('double', 'float'):
+    elif typename in {'double', 'float'}:
         return TFloat(typename)
     elif typename == 'bool':
         return TBool()

@@ -1041,7 +1041,7 @@ def expr_binop(tree, location, scope):
                   % (repr(lh), repr(op), repr(rh)))
     lh = codegen_expression(lh, location, scope)
 
-    if op in ['&&', '||']:
+    if op in {'&&', '||'}:
         lh = as_bool(lh)
         if lh.constant and bool(lh.value) == (op == '||'):
             if tree.site.dml_version() == (1, 2):
@@ -1555,7 +1555,7 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
         elif asttype[0] == 'pointer':
             if (etype.is_int
                 and not etype.is_endian
-                and etype.bits not in (8, 16, 32, 64)):
+                and etype.bits not in {8, 16, 32, 64}):
                 raise EINTPTRTYPE(site, TPtr(etype))
             etype = TPtr(etype)
             asttype = asttype[1:]
@@ -2326,7 +2326,7 @@ def try_codegen_invocation(site, init_ast, outargs, location, scope):
 @statement_dispatcher
 def stmt_assign(stmt, location, scope):
     (_, site, tgt_ast, src_asts) = stmt
-    assert tgt_ast.kind in ('assign_target_chain', 'assign_target_tuple')
+    assert tgt_ast.kind in {'assign_target_chain', 'assign_target_tuple'}
     tgts = [codegen_expression(ast, location, scope)
             for ast in tgt_ast.args[0]]
     for tgt in tgts:

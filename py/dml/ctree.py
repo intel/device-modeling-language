@@ -3999,9 +3999,9 @@ class NodeRefWithStorage(NodeRef, LValue):
 
     def read(self):
         if (logging.show_porting
-            and self.node.objtype in ['field', 'register',
+            and self.node.objtype in {'field', 'register',
                                       'connect', 'attribute',
-                                      'interface']
+                                      'interface'}
             and not self.site.filename().endswith('dml-builtins.dml')
             # some DML-generated expressions, like 'parent', use
             # object's site
@@ -4039,7 +4039,7 @@ class SessionVariableRef(LValue):
     def __init__(self, site, node, indices):
         assert isinstance(node, objects.DMLObject)
         assert isinstance(indices, tuple)
-        assert node.objtype in ('session', 'saved')
+        assert node.objtype in {'session', 'saved'}
         self.type = node._type
         crep.require_dev(site)
     def __str__(self):
@@ -4140,7 +4140,7 @@ def mkNodeRef(site, node, indices):
         # Registers and fields have a type, but sometimes not a value
         if node.objtype == "register" and not node.wholefield:
             return RegisterWithFields(site, node, indices, t)
-        if (node.objtype in ('register', 'field')
+        if (node.objtype in {'register', 'field'}
             and not param_bool(node, 'allocate')):
             return NoallocNodeRef(site, node, indices, t)
         if node.objtype == 'method':
@@ -5064,7 +5064,7 @@ class HiddenName(StringConstant):
     type = TPtr(TNamed('char', const=True))
     @auto_init
     def __init__(self, site, value, node):
-        assert(node.objtype in ('register', 'field'))
+        assert(node.objtype in {'register', 'field'})
     def __str__(self):
         return dollar(self.site) + '%s.name' % (self.node,)
     def read(self):
@@ -5080,7 +5080,7 @@ class HiddenQName(Expression):
     type = TPtr(TNamed('char', const = True))
     @auto_init
     def __init__(self, site, node, indices):
-        assert(node.objtype in ('register', 'field'))
+        assert(node.objtype in {'register', 'field'})
     def __str__(self):
         return dollar(self.site) + '%s.qname' % (self.node)
     def read(self):
@@ -5454,7 +5454,7 @@ def log_object(site, node, indices):
                  TPtr(TNamed("conf_object_t")))
 
 def log_statement(site, logobj, logtype, level, groups, fmt, *args):
-    if logtype in ['warning', 'error', 'critical']:
+    if logtype in {'warning', 'error', 'critical'}:
         lvl = []
     else:
         if level is None:

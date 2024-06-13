@@ -131,7 +131,7 @@ def cref_session(node, indices):
         return cref_session(node.parent, indices)
 
     components = []
-    if node.objtype in ('register', 'field') and not node.simple_storage:
+    if node.objtype in {'register', 'field'} and not node.simple_storage:
         assert dml.globals.dml_version == (1, 2)
         components.append('__DMLfield')
     parent = node
@@ -210,15 +210,15 @@ def node_storage_type_dml12(node, site):
         lsb = expr_intval(param_expr(node, 'lsb', indices))
         signed = param_bool(node, 'signed')
         return TInt(msb - lsb + 1, signed)
-    elif node.objtype in ('bank', 'group', 'event', 'port', 'connect',
-                          'subdevice'):
+    elif node.objtype in {'bank', 'group', 'event', 'port', 'connect',
+                          'subdevice'}:
         return None
     else:
         raise ICE(site or node, "No storage type for a "+node.objtype)
 
 def conf_object(site, node, indices):
     '''return a C expression for the conf_object_t* the given node belongs to'''
-    while node.objtype not in ['bank', 'port', 'device', 'subdevice']:
+    while node.objtype not in {'bank', 'port', 'device', 'subdevice'}:
         node = node.parent
     if node.objtype == 'device' or (dml.globals.dml_version == (1, 2)
                                     and node.name is None):

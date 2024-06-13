@@ -100,7 +100,7 @@ import inspect
 trace_lvl = 0
 def mytrace(frame, event, arg):
     sys.settrace(None)
-    if event in ('call', 'return'):
+    if event in {'call', 'return'}:
         filename, lineno, fn, ctx, lidx = inspect.getframeinfo(frame)
         if re.match(r'.*/(codegen|c_backend|ctree)', filename):
             global trace_lvl
@@ -135,7 +135,7 @@ def parse_define(arg):
         value = ast.int(define_site, literal.value)
     elif literal.type == 'SCONST':
         value = ast.string(define_site, literal.value)
-    elif literal.type == 'ID' and literal.value in ['true', 'false']:
+    elif literal.type == 'ID' and literal.value in {'true', 'false'}:
         value = ast.variable(define_site, literal.value)
     else:
         raise ESYNTAX(define_site, '-D' + arg,

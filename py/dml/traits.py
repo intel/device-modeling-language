@@ -74,7 +74,7 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                 methods[mname] = (ast.site, inp, outp, throws, independent,
                                   startup, memoized, overridable, body,
                                   rbrace_site)
-            elif ast.kind in ('session', 'saved'):
+            elif ast.kind in {'session', 'saved'}:
                 (decls, _) = ast.args
                 for decl_ast in decls:
                     (sname, type_ast) = decl_ast.args
