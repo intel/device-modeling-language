@@ -2291,6 +2291,29 @@ class WHOOKSEND(DMLWarning):
            + "Declarations section in the DML 1.4 reference manual for "
            + "information about the differences between 'send' and 'send_now'")
 
+class WBIGUNROLL(DMLWarning):
+    limit = 64
+    __doc__ = f"""
+    A `#select` or `#foreach` statement was specified which caused DMLC to
+    study the body and generate duplicated C code for it a large number of
+    times (more than {limit} times.) This can dramatically increase both DMLC
+    and GCC compile times and code size, if not crash DMLC outright.
+
+    To address this, you have two options:
+    * Ensure most iterations can be entirely eliminated at compile-time by
+      DMLC. For `#select`, this can be done by ensuring that the `where` check
+      will be a constant value (e.g. a constant equality) for most if not all
+      items of the specified list. For `#foreach`, encase the body in an `#if`
+      check that is false for most items of the specified list.
+    * Don't use `#select` or `#foreach`. Represent the specified compile-time
+      list instead as a `session` array or an `extern`ed C array, and iterate
+      through it using traditional `for` loops. For more information, see [the
+      various answers to this Stack Overflow question.](https://stackoverflow.com/questions/75073681/cannot-use-variable-index-in-a-constant-list)
+    """
+    fmt = ("This '%s' statement compiles to an unrolled loop where the loop "
+           + "body is studied and generated %s times. This may dramatically "
+           + "increase both DMLC and GCC compilation times, if not crash DMLC "
+           + "outright!")
 
 class PSHA1(PortingMessage):
     """The `port-dml` script requires that the DML file has not been
