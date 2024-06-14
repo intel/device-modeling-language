@@ -2309,6 +2309,9 @@ class WBIGUNROLL(DMLWarning):
       list instead as a `session` array or an `extern`ed C array, and iterate
       through it using traditional `for` loops. For more information, see [the
       various answers to this Stack Overflow question.](https://stackoverflow.com/questions/75073681/cannot-use-variable-index-in-a-constant-list)
+
+    This warning is only enabled by default with Simics API version 8 or above
+    (due to the compatibility feature `suppress_WBIGUNROLL`.)
     """
     fmt = ("This '%s' statement compiles to an unrolled loop where the loop "
            + "body is studied and generated %s times. This may dramatically "

@@ -1,13 +1,10 @@
 /*
-  © 2023 Intel Corporation
+  © 2024 Intel Corporation
   SPDX-License-Identifier: MPL-2.0
 */
 dml 1.2;
 
-device test;
-
-/// COMPILE-ONLY
-/// NO-CC
+// expectations in this file are selectively enabled using SCAN-FOR-TAGS
 
 data int zero = 0;
 

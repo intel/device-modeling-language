@@ -1797,5 +1797,9 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
       for the identifier <bug number="SIMICS-22472"/>.</add-note></build-id>
   <build-id _6="next" _7="next"><add-note> Added the warning <tt>WBIGUNROLL</tt>
       which is emitted when a <tt>#select</tt> or <tt>#foreach</tt> statement is
-      compiled to a large unrolled loop.</add-note></build-id>
+      compiled to a large unrolled loop.
+      This warning is only enabled by default with Simics API version 8 or
+      above. With version 7 and below it must be explicitly enabledby passing
+      either <tt>--no-compat=suppress_WBIGUNROLL</tt> or
+      <tt>--warn=WBIGUNROLL</tt> to DMLC.</add-note></build-id>
 </rn>

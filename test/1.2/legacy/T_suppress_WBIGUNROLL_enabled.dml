@@ -1,0 +1,14 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+/// COMPILE-ONLY
+/// NO-CC
+
+/// DMLC-FLAG --simics-api=7
+
+import "suppress_WBIGUNROLL.dml";
