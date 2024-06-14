@@ -35,6 +35,7 @@ class Output(object):
         self.bol = True
         self.redirected_filename = None
         self.redirected_lineno = None
+        self.linemark_is_fresh = False
 
     def write(self, s):
         assert False
@@ -55,6 +56,7 @@ class Output(object):
                      % (lineno, quote_filename(filename)))
             self.redirected_filename = filename
             self.redirected_lineno = lineno
+        self.linemark_is_fresh = True
 
     def reset_line_directive(self):
         assert self.filename is not None
@@ -72,6 +74,12 @@ class Output(object):
 
     def out(self, output, preindent = 0, postindent = 0):
         self.indent += preindent * indent_level
+        if (self.bol and self.redirected_lineno is not None
+            and not self.linemark_is_fresh):
+            raise ICE(SimpleSite(f'{self.redirected_filename}'
+                                 f':{self.redirected_lineno}'),
+                                 'missing linemark')
+        self.linemark_is_fresh = False
         if output == '\n':
             # Don't indent empty lines...
             self.write('\n')
@@ -84,6 +92,10 @@ class Output(object):
             self.write(output)
             self.bol = (output.endswith('\n'))
         no_lines = output.count('\n')
+        if no_lines > 1 and self.redirected_lineno is not None:
+            raise ICE(SimpleSite(f'{self.redirected_filename}'
+                                 f':{self.redirected_lineno}'),
+                                 'missing linemark')
         self.indent += postindent * indent_level
         self.lineno += no_lines
         if self.redirected_lineno is not None:
