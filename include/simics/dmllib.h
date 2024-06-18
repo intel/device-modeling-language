@@ -41,11 +41,53 @@ static inline uint64 DML_combine_bits(uint64 x, uint64 y, uint64 mask)
 } while (0)
 
 
-#define DML_ASSERT_FMT(filename, lineno, expr, ...) do {                      \
-    if (unlikely(!(expr))) {                                                  \
-        strbuf_t sb = sb_newf(__VA_ARGS__);                                   \
-        assert_error((lineno), (filename), "", sb_str(&sb));                  \
-} while (0)
+UNUSED static char *
+_DML_format_indices(const char *fmt, const uint32 *indices, uint32 len) {
+    strbuf_t buf = SB_INIT;
+    for (uint32 i = 0; i < len; ++i) {
+        const char *next_index = strchr(fmt, '%');
+        ASSERT(next_index && next_index[1] == 'u');
+        sb_addfmt(&buf, "%.*s%u", (int)(next_index - fmt), fmt, indices[i]);
+        fmt = next_index + 2;
+    }
+    ASSERT(!strchr(fmt, '%'));
+    sb_addstr(&buf, fmt);
+    return sb_detach(&buf);
+}
+
+UNUSED NORETURN static void
+_DML_assert_indices_fail(const char *restrict logname,
+                         const char *restrict method_name,
+                         const uint32 *restrict indices,
+                         const uint32 *restrict dimsizes,
+                         int len) {
+    char *qname_indices = _DML_format_indices(logname, indices, len);
+    char *qname_dims = _DML_format_indices(logname, dimsizes, len);
+    FATAL_ERROR("Attempt made to call %s.%s(), which involves one or more "
+                "out-of-bounds array accesses. Array dimensions are as "
+                "follows: %s", qname_indices, method_name, qname_dims);
+}
+
+UNUSED static inline void
+_DML_assert_indices(const char *restrict logname,
+                    const char *restrict method_name,
+                    const uint32 *restrict indices,
+                    const uint32 *restrict dimsizes,
+                    int len) {
+    for (int i = 0; i < len; ++i) {
+        if (unlikely(indices[i] >= dimsizes[i])) {
+            _DML_assert_indices_fail(logname, method_name, indices, dimsizes,
+                                     len);
+        }
+    }
+}
+
+// Passed 'indices' and 'dimsizes' are expected to be compound literals.
+// This indirection is to delimit their life span.
+#define DML_ASSERT_INDICES(logname, method_name, indices, dimsizes, len) do { \
+        _DML_assert_indices(logname, method_name, indices, dimsizes, len);    \
+    } while (0)
+
 
 static inline uint64 DML_shlu(uint64 a, uint64 b)
 {
@@ -2248,17 +2290,9 @@ _DML_get_qname(_identity_t id, const _id_info_t *id_infos,
         index /= info.dimsizes[i];
     }
 
-    strbuf_t qname_buf = SB_INIT;
-    for (uint32 i = 0; i < info.dimensions; ++i) {
-        const char *next_index = strchr(logname, '%');
-        ASSERT(next_index && next_index[1] == 'u');
-        sb_addfmt(&qname_buf, "%.*s%u", (int)(next_index - logname),
-                  logname, indices[i]);
-        logname = next_index + 2;
-    }
-    ASSERT(!strchr(logname, '%'));
-    const char *qname = __qname(cache, "%s%s", sb_str(&qname_buf), logname);
-    sb_free(&qname_buf);
+    char *temp_qname = _DML_format_indices(logname, indices, info.dimensions);
+    const char *qname = __qname(cache, "%s", temp_qname);
+    MM_FREE(temp_qname);
     return qname;
 }
 
