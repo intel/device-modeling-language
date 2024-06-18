@@ -601,19 +601,14 @@ class IndicesAssert(Statement):
     def __init__(self, site, method, indices): pass
 
     def toc_stmt(self):
-        logname_indices = self.method.logname_anonymized(
-            ('%u',) * self.method.dimensions)
-        logname_dimsizes = self.method.parent.logname_anonymized(
-            self.method.dimsizes)
-        fmt = (f"Attempt made to call {logname_indices}(), which involves "
-               + "one or more out-of-bounds array accesses. Array dimensions "
-               + f"are as follows: {logname_dimsizes}")
-        check = ' && '.join(f'({idx.read()}) < {size}'
-                            for (idx, size) in zip(self.indices,
-                                                   self.method.dimsizes))
         self.linemark()
-        idx_args = ', '.join(f'({idx.read()})' for idx in self.indices)
-        out(f'ASSERT_FMT({check}, "{fmt}", {idx_args});\n')
+        length = len(self.indices)
+        indices = ', '.join(f'({idx.read()})' for idx in self.indices)
+        dimsizes = ', '.join(map(str, self.method.dimsizes))
+        out('DML_ASSERT_INDICES('
+            + f'_id_infos[{self.method.parent.uniq - 1}].logname, '
+            + f'"{self.method.name}", ((const uint32 []) {{ {indices} }}), '
+            + f'((const uint32 []) {{ {dimsizes} }}), {length});\n')
 
 mkIndicesAssert = IndicesAssert
 
