@@ -55,7 +55,7 @@ _DML_format_indices(const char *fmt, const uint32 *indices, uint32 len) {
     return sb_detach(&buf);
 }
 
-UNUSED NORETURN static void
+UNUSED NORETURN __attribute__((noinline)) static void
 _DML_assert_indices_fail(const char *restrict logname,
                          const char *restrict method_name,
                          const uint32 *restrict indices,
@@ -68,25 +68,13 @@ _DML_assert_indices_fail(const char *restrict logname,
                 "follows: %s", qname_indices, method_name, qname_dims);
 }
 
-UNUSED static inline void
-_DML_assert_indices(const char *restrict logname,
-                    const char *restrict method_name,
-                    const uint32 *restrict indices,
-                    const uint32 *restrict dimsizes,
-                    int len) {
-    for (int i = 0; i < len; ++i) {
-        if (unlikely(indices[i] >= dimsizes[i])) {
-            _DML_assert_indices_fail(logname, method_name, indices, dimsizes,
-                                     len);
-        }
-    }
-}
-
-// Passed 'indices' and 'dimsizes' are expected to be compound literals.
-// This indirection is to delimit their life span.
-#define DML_ASSERT_INDICES(logname, method_name, indices, dimsizes, len) do { \
-        _DML_assert_indices(logname, method_name, indices, dimsizes, len);    \
-    } while (0)
+#define DML_ASSERT_INDICES(badness_check, logname, method_name, indices,      \
+                           dimsizes, len) do {                                \
+    if (unlikely(badness_check)) {                                            \
+        _DML_assert_indices_fail(logname, method_name, indices, dimsizes,     \
+                                 len);                                        \
+    }                                                                         \
+} while (0)
 
 
 static inline uint64 DML_shlu(uint64 a, uint64 b)
