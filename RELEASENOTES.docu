@@ -1792,7 +1792,7 @@ extern typedef struct { } my_type_t;</pre> </add-note></build-id>
       is still used by default with Simics API version 7 or below. The strict
       typechecking can be enabled by passing
       <tt>--no-compat=lenient_typechecking</tt> to DMLC.</add-note></build-id>
-  <build-id _6="next" _7="next"><add-note>Multiple `extern` declarations for the
+  <build-id _6="next" _7="7025"><add-note>Multiple `extern` declarations for the
       same identifier are now allowed as long as they all declare the same type
       for the identifier <bug number="SIMICS-22472"/>.</add-note></build-id>
 </rn>
