@@ -605,8 +605,11 @@ class IndicesAssert(Statement):
         length = len(self.indices)
         indices = ', '.join(f'({idx.read()})' for idx in self.indices)
         dimsizes = ', '.join(map(str, self.method.dimsizes))
+        check = ' || '.join(f'({idx.read()}) >= {size}'
+                            for (idx, size) in zip(self.indices,
+                                                   self.method.dimsizes))
         out('DML_ASSERT_INDICES('
-            + f'_id_infos[{self.method.parent.uniq - 1}].logname, '
+            + f'{check}, _id_infos[{self.method.parent.uniq - 1}].logname, '
             + f'"{self.method.name}", ((const uint32 []) {{ {indices} }}), '
             + f'((const uint32 []) {{ {dimsizes} }}), {length});\n')
 
