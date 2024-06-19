@@ -3885,7 +3885,11 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
             assert ast.kind == 'compound'
             [subs, _] = ast.args
             with fail_handler, exit_handler:
-                body = prelude()
+                body = ([mkIndicesAssert(site, location.node,
+                                         location.indices)]
+                        if location.method() and location.node.dimsizes
+                        else [])
+                body.extend(prelude())
                 body.extend(codegen_statements(subs, location, fnscope))
                 code = mkCompound(site, body)
                 if code.control_flow().fallthrough:

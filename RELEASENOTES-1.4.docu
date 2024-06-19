@@ -625,4 +625,7 @@
       Immediate after callbacks posted <em>during</em> deletion (e.g. by
       <tt>destroy()</tt>) will still be executed at the end of device deletion,
       as before. </add-note></build-id>
+  <build-id _6="next" _7="next"><add-note>Calls to methods defined within object
+      arrays now assert that the specified indices for the object arrays are
+      in bounds <bug number="SIMICS-22491"/>.</add-note></build-id>
 </rn>

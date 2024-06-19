@@ -40,6 +40,13 @@ static inline uint64 DML_combine_bits(uint64 x, uint64 y, uint64 mask)
         assert_error((lineno), (filename), "", NULL);   \
 } while (0)
 
+
+#define DML_ASSERT_FMT(filename, lineno, expr, ...) do {                      \
+    if (unlikely(!(expr))) {                                                  \
+        strbuf_t sb = sb_newf(__VA_ARGS__);                                   \
+        assert_error((lineno), (filename), "", sb_str(&sb));                  \
+} while (0)
+
 static inline uint64 DML_shlu(uint64 a, uint64 b)
 {
         return b > 63 ? 0 : a << b;
