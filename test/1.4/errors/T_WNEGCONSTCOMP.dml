@@ -18,6 +18,11 @@ method init() {
     assert a >= -1;
     /// WARNING WNEGCONSTCOMP
     assert !(a <= -1);
+    local uint8 a8 = -1;
+    /// WARNING WNEGCONSTCOMP
+    assert a8 != -1;
+    /// WARNING WNEGCONSTCOMP
+    assert a8 > -1;
 
     // Sanity
     local int64 b = -1;
