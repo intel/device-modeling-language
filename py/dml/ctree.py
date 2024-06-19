@@ -50,6 +50,7 @@ __all__ = (
     'mkTryCatch',
     'mkInline',
     'mkInlinedMethod',
+    'mkIndicesAssert',
     'mkAssert',
     'mkReturn',
     'mkDelete',
@@ -594,6 +595,27 @@ def mkInlinedMethod(site, method, pre, body, post):
         elif not stmt.is_empty:
             collapsed.append(stmt)
     return InlinedMethod(site, method, pre, collapsed, post)
+
+class IndicesAssert(Statement):
+    @auto_init
+    def __init__(self, site, method, indices): pass
+
+    def toc_stmt(self):
+        logname_indices = self.method.logname_anonymized(
+            ('%u',) * self.method.dimensions)
+        logname_dimsizes = self.method.parent.logname_anonymized(
+            self.method.dimsizes)
+        fmt = (f"Attempt made to call {logname_indices}(), which involves "
+               + "one or more out-of-bounds array accesses. Array dimensions "
+               + f"are as follows: {logname_dimsizes}")
+        check = ' && '.join(f'({idx.read()}) < {size}'
+                            for (idx, size) in zip(self.indices,
+                                                   self.method.dimsizes))
+        self.linemark()
+        idx_args = ', '.join(f'({idx.read()})' for idx in self.indices)
+        out(f'ASSERT_FMT({check}, "{fmt}", {idx_args});\n')
+
+mkIndicesAssert = IndicesAssert
 
 class Assert(Statement):
     @auto_init
