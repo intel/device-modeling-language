@@ -1161,6 +1161,8 @@ class ExprTests(GccTests):
                 (int_const(0, True), int_const(0, True), (0, 1, 0, 1, 0, 1)),
                 (int_const(-1, True), int_const(0, False), (1, 1, 0, 0, 1, 0)),
                 (int_const(0, False), int_const(-1, True), (0, 0, 1, 1, 1, 0)),
+                (ctree.TypedIntegerConstant(site, 0, types.TInt(8, False)),
+                 int_const(-1, True), (0, 0, 1, 1, 1, 0)),
                 (int_const(-1, False), int_const(-1, True), (0, 0, 1, 1, 1, 0)),
                 (int_const(-1, True), int_const(-1, False), (1, 1, 0, 0, 1, 0)),
                 (int_const(0, True), int_const(1, False), (1, 1, 0, 0, 1, 0)),

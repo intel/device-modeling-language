@@ -1392,15 +1392,17 @@ class Compare(BinOp):
             and lh.constant and rh.constant):
             return mkBoolConstant(site, cls.eval_const(lh.value, rh.value))
         if lhtype.is_int:
+            lh_maybe_negative = lhtype.signed
             lh = as_int(lh)
             lhtype = realtype(lh.ctype())
         if rhtype.is_int:
+            rh_maybe_negative = rhtype.signed
             rh = as_int(rh)
             rhtype = realtype(rh.ctype())
         if (isinstance(lhtype, TInt)
             and isinstance(rhtype, TInt)
-            and lhtype.signed != rhtype.signed):
-            (signed_expr, unsigned_expr) = ((lh, rh) if lhtype.signed
+            and lh_maybe_negative != rh_maybe_negative):
+            (signed_expr, unsigned_expr) = ((lh, rh) if lh_maybe_negative
                                             else (rh, lh))
             if signed_expr.constant and signed_expr.value < 0:
                 report(WNEGCONSTCOMP(site, signed_expr,
@@ -1412,9 +1414,9 @@ class Compare(BinOp):
             if not (signed_expr.constant and 0 <= signed_expr.value < 1 << 63):
                 return mkApply(
                     site, mkLit(
-                        site, cls.cmp_functions[rhtype.signed],
-                        TFunction([TInt(64, lhtype.signed),
-                                   TInt(64, rhtype.signed)],
+                        site, cls.cmp_functions[rh_maybe_negative],
+                        TFunction([TInt(64, lh_maybe_negative),
+                                   TInt(64, rh_maybe_negative)],
                                   TBool())),
                     [lh, rh])
         if ((lhtype.is_arith and rhtype.is_arith)
@@ -1600,19 +1602,21 @@ class Equals(BinOp):
                                                  AddressOfMethod))
                     return mkBoolConstant(site, False)
         if lhtype.is_int:
+            lh_maybe_negative = lhtype.signed
             lh = as_int(lh)
             lhtype = realtype(lh.ctype())
         if rhtype.is_int:
+            rh_maybe_negative = rhtype.signed
             rh = as_int(rh)
             rhtype = realtype(rh.ctype())
 
         if (isinstance(lhtype, TInt) and isinstance(rhtype, TInt)
-            and lhtype.signed != rhtype.signed):
+            and lh_maybe_negative != rh_maybe_negative):
             # There is no primitive for signed/unsigned compare in C,
             # so use a lib function for it. However, we can fall back
             # to C's == in the very common case when comparing
             # unsigned to a constant literal.
-            (signed_expr, unsigned_expr) = ((lh, rh) if lhtype.signed
+            (signed_expr, unsigned_expr) = ((lh, rh) if lh_maybe_negative
                                             else (rh, lh))
             if signed_expr.constant and signed_expr.value < 0:
                 report(WNEGCONSTCOMP(site, signed_expr, unsigned_expr.ctype()))
@@ -1620,7 +1624,7 @@ class Equals(BinOp):
                 return mkApply(
                     site, mkLit(
                         site, 'DML_eq',
-                        TFunction([TInt(64, True), TInt(64, False)], TBool())),
+                        TFunction([TInt(64, False), TInt(64, False)], TBool())),
                     [lh, rh])
 
         if ((lhtype.is_arith and rhtype.is_arith)

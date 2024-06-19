@@ -628,4 +628,8 @@
   <build-id _6="6313" _7="next"><add-note>Calls to methods defined within object
       arrays now assert that the specified indices for the object arrays are
       in bounds <bug number="SIMICS-22491"/>.</add-note></build-id>
+  <build-id _6="next" _7="next"><add-note>The warning message for
+      comparing a value of unsigned type to a negative constant has
+      been improved to also warn for unsigned types shorter than 64
+      bits. </add-note></build-id>
 </rn>
