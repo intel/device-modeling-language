@@ -3887,7 +3887,9 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
             with fail_handler, exit_handler:
                 body = ([mkIndicesAssert(site, location.node,
                                          location.indices)]
-                        if location.method() and location.node.dimsizes
+                        if ((compat.no_method_index_asserts
+                             not in dml.globals.enabled_compat)
+                            and location.method() and location.node.dimsizes)
                         else [])
                 body.extend(prelude())
                 body.extend(codegen_statements(subs, location, fnscope))

@@ -240,6 +240,22 @@ class lenient_typechecking(CompatFeature):
     last_api_version = api_7
 
 @feature
+class no_method_index_asserts(CompatFeature):
+    '''This compatibility feature makes it so that methods defined under
+    object arrays don't implicitly assert that the indices used to reference
+    the object array when calling the method are in bounds.
+
+    Migrating away from this compatibility feature should be a priority. If
+    its disablement makes the simulation crash due to an assertion failing,
+    then that **definitely signifies a bug in your model; a bug that would
+    very likely result in memory corruption if the assertion were not to
+    be made.**'''
+    short = ("Disable assertions made by methods of object arrays that the "
+             + "the object array indices are valid. Migrate away from this "
+             + "ASAP!")
+    last_api_version = api_7
+
+@feature
 class dml12_inline(CompatFeature):
     '''When using `inline` to inline a method in a DML 1.2 device,
     constant arguments passed in typed parameters are inlined as
