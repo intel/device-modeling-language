@@ -233,11 +233,15 @@ def allow_linemarks():
             reset_line_directive()
 
 # Locally set dml.globals.linemarks to be False, even if it were already True
+# Will also disable the emission of coverity annotations
 @contextmanager
 def disallow_linemarks():
     prev_linemarks = dml.globals.linemarks
+    prev_coverity = dml.globals.coverity
     dml.globals.linemarks = False
+    dml.globals.coverity = False
     try:
         yield
     finally:
         dml.globals.linemarks = prev_linemarks
+        dml.globals.coverity = prev_coverity
