@@ -3031,12 +3031,19 @@ def stmt_select(stmt, location, scope):
                     else_dead = True
                     break
 
+            iterations = len(clauses)
             if else_dead:
                 (last_cond, last_stmt) = clauses.pop(-1)
                 assert last_cond.constant and last_cond.value
                 if_chain = last_stmt
             else:
                 if_chain = codegen_statement(else_ast, location, scope)
+            if iterations > WBIGUNROLL.limit and isinstance(lst, List):
+                report(WBIGUNROLL(stmt.site,
+                                  '#'*(stmt.site.dml_version() != (1, 2))
+                                  + 'select',
+                                  iterations))
+
             for (cond, stmt) in reversed(clauses):
                 if_chain = mkIf(cond.site, cond, stmt, if_chain)
             return [if_chain]
@@ -3162,6 +3169,10 @@ def foreach_constant_list(site, itername, lst, statement, location, scope):
                     stmt)
             spec.append(mkCompound(site, decls + [stmt]))
 
+        if len(spec) > WBIGUNROLL.limit and isinstance(lst, List):
+            report(WBIGUNROLL(site,
+                              '#'*(site.dml_version() != (1, 2)) + 'foreach',
+                              len(spec)))
         return [mkUnrolledLoop(site, spec,
                                context.label if context.used else None)]
 
