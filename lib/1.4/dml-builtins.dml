@@ -986,29 +986,29 @@ method _set_attribute_attr(const _dml_attr_getset_info_t *_conf_info,
     local size_t no_items = 1;
     local bool allow_cutoff = conf_info.allow_cutoff;
 
-    for (local int i = start_dim; i < cast(id_info.dimensions, int); ++i) {
+    for (local uint32 i = start_dim; i < id_info.dimensions; ++i) {
         local uint32 frag_size = id_info.dimsizes[i];
         local size_t new_no_items = no_items * frag_size;
         if (allow_cutoff) {
-            for (local int j = 0; j < no_items; ++j) {
+            for (local uint32 j = 0; j < no_items; ++j) {
                 local uint32 subfrag_size = SIM_attr_is_list(items[j])
                                           ? SIM_attr_list_size(items[j])
                                           : 0;
                 local attr_value_t *subfrags = subfrag_size > 0
                                              ? SIM_attr_list(items[j])
                                              : NULL;
-                for (local int k = 0; k < subfrag_size; ++k) {
+                for (local uint32 k = 0; k < subfrag_size; ++k) {
                     /*% COVERITY copy_paste_error FALSE %*/
                     items_buf[j * frag_size + k] = subfrags[k];
                 }
-                for (local int k = subfrag_size; k < frag_size; ++k) {
+                for (local uint32 k = subfrag_size; k < frag_size; ++k) {
                     items_buf[j * frag_size + k] = SIM_make_attr_nil();
                 }
             }
         } else {
-            for (local int j = 0; j < no_items; ++j) {
+            for (local uint32 j = 0; j < no_items; ++j) {
                 local attr_value_t *subfrags = SIM_attr_list(items[j]);
-                for (local int k = 0; k < frag_size; ++k) {
+                for (local uint32 k = 0; k < frag_size; ++k) {
                     items_buf[j * frag_size + k] = subfrags[k];
                 }
             }
@@ -1017,7 +1017,7 @@ method _set_attribute_attr(const _dml_attr_getset_info_t *_conf_info,
         no_items = new_no_items;
     }
     delete items_buf;
-    for (local int i = 0; i < no_items; ++i) {
+    for (local uint32 i = 0; i < no_items; ++i) {
         local _traitref_t traitref = {conf_info.vtable,
                                       {id_info.id, i + flat_index_offset}};
         local set_error_t status = cast(&traitref, _conf_attribute *)
