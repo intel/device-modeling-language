@@ -631,7 +631,7 @@
       asserts are not performed with Simics API version 7 or below unless
       <tt>--no-compat=no_method_index_asserts</tt> is passed to
       DMLC.</add-note></build-id>
-  <build-id _6="next" _7="next"><add-note>The warning message for
+  <build-id _6="9999" _7="next"><add-note>The warning message for
       comparing a value of unsigned type to a negative constant has
       been improved to also warn for unsigned types shorter than 64
       bits. </add-note></build-id>
