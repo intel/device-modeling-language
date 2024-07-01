@@ -85,7 +85,10 @@ Group: dmlc
 Require-tokens: public
 Release-notes: src/tools/dmlc/RELEASENOTES.docu,
                src/tools/dmlc/RELEASENOTES-1.2.docu,
-               src/tools/dmlc/RELEASENOTES-1.4.docu
+               src/tools/dmlc/RELEASENOTES-1.4.docu,
+               src/tools/dmlc/RELEASENOTES.md,
+               src/tools/dmlc/RELEASENOTES-1.2.md,
+               src/tools/dmlc/RELEASENOTES-1.4.md
 Make: dmlc
     @dmlc-lib
     @dml-1.2-reference-manual
