@@ -74,3 +74,4 @@
 - `note 6`  If a bank declared with `use_io_memory=false` in a DML 1.4 file is imported from a DML 1.2 device, using the `dml12-compatibility.dml` library, then a call to the `transaction_access` method will now trigger a proper bank access. Also, if a bank uses the `dml12_compat_io_memory_access` template, then overrides of the `transaction_access` method will be honored. This simplifies future transition to the Simics 7 API.
 - `release 6 6218`
 - `major 7`
+- `release 6 6316`

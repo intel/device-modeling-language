@@ -172,3 +172,4 @@
 - `note 6` Multiple \`extern\` declarations for the same identifier are now allowed as long as they all declare the same type for the identifier (fixes SIMICS-22472).
 - `release 6 6313`
 - `release 7 7025`
+- `release 6 6316`
