@@ -1186,9 +1186,9 @@ class ExprTests(GccTests):
         rh_var = variable('rh', rh.ctype())
         var_cond = op(site, lh_var, rh_var)
         # compare constant and variable
-        logging.ignore_warning('WNEGCONSTCOMP')
+        logging.ignore_warning('WTYPELIMITS')
         mix_cond = op(site, lh, rh_var)
-        logging.enable_warning('WNEGCONSTCOMP')
+        logging.enable_warning('WTYPELIMITS')
         self.assertIsInstance(var_cond.ctype(), types.TBool)
         self.assertIsInstance(mix_cond.ctype(), types.TBool)
         return ['%s = %s;' % (lh.ctype().declaration('lh'), lh.read()),

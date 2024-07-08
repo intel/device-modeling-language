@@ -2110,16 +2110,18 @@ class WTHROWS_DML12(DMLWarning):
             self.other_site,
             "original non-throwing declaration")
 
-class WNEGCONSTCOMP(DMLWarning):
-    """DML uses a special method when comparing an unsigned and signed integer,
-    meaning that comparing a negative constant to an unsigned integer always
-    has the same result, which is usually not the intended behaviour."""
-    def __init__(self, site, expr, ty):
-        DMLWarning.__init__(self, site)
+class WTYPELIMITS(DMLWarning):
+    """When comparing an integer with a constant outside the range of the
+    integer's type, the comparison always has the same result. One
+    common example is that a value of type `uint64` always is
+    considered to be different from -1; in this case, the constant
+    can be rewritten as `cast(-1, uint64)`.
+    """
+    def __init__(self, site, result, expr, ty):
+        super().__init__(site, "true" if result else "false")
         self.expr = expr
         self.ty = ty
-    fmt = ("Comparing negative constant to unsigned integer has a constant "
-           + "result")
+    fmt = 'comparison is always %s due to limited range of data type'
     def log(self):
         DMLError.log(self)
         self.print_site_message(

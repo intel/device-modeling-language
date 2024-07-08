@@ -511,6 +511,17 @@ class IntegerType(DMLType):
     is_arith = True
     is_endian = False
 
+    def min(self):
+        if self.signed:
+            return -(1 << (self.bits - 1))
+        else:
+            return 0
+    def max(self):
+        if self.signed:
+            return (1 << (self.bits - 1)) - 1
+        else:
+            return (1 << self.bits) - 1
+
     @property
     def is_bitfields(self):
         return self.members is not None

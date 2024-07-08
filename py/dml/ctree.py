@@ -1392,10 +1392,20 @@ class Compare(BinOp):
             and lh.constant and rh.constant):
             return mkBoolConstant(site, cls.eval_const(lh.value, rh.value))
         if lhtype.is_int:
+            if rh.constant and rhtype.is_arith and (
+                    cls.eval_const(lhtype.min(), rh.value)
+                    == cls.eval_const(lhtype.max(), rh.value)):
+                report(WTYPELIMITS(site, cls.eval_const(lhtype.min(), rh.value),
+                                   rh, lhtype))
             lh_maybe_negative = lhtype.signed
             lh = as_int(lh)
             lhtype = realtype(lh.ctype())
         if rhtype.is_int:
+            if lh.constant and lhtype.is_arith and (
+                    cls.eval_const(lh.value, rhtype.min())
+                    == cls.eval_const(lh.value, rhtype.max())):
+                report(WTYPELIMITS(site, cls.eval_const(lh.value, rhtype.min()),
+                                   lh, rhtype))
             rh_maybe_negative = rhtype.signed
             rh = as_int(rh)
             rhtype = realtype(rh.ctype())
@@ -1404,9 +1414,7 @@ class Compare(BinOp):
             and lh_maybe_negative != rh_maybe_negative):
             (signed_expr, unsigned_expr) = ((lh, rh) if lh_maybe_negative
                                             else (rh, lh))
-            if signed_expr.constant and signed_expr.value < 0:
-                report(WNEGCONSTCOMP(site, signed_expr,
-                                     unsigned_expr.ctype()))
+
             # we must convert (uint64)x < (int64)y to DML_lt(x, y), because
             # C:'s < would do an unsigned comparison. No need to do this if y
             # is a small constant, though.
@@ -1562,7 +1570,7 @@ class Equals(BinOp):
     op = '=='
 
     @classmethod
-    def make(cls, site, lh, rh):
+    def make(cls, site, lh, rh, not_equal=False):
         lhtype = realtype(lh.ctype())
         rhtype = realtype(rh.ctype())
 
@@ -1602,10 +1610,18 @@ class Equals(BinOp):
                                                  AddressOfMethod))
                     return mkBoolConstant(site, False)
         if lhtype.is_int:
+            if rh.constant and rhtype.is_arith and (
+                    not (lhtype.min() <= rh.value <= lhtype.max())
+                    or (rhtype.is_float and rh.value % 1)):
+                report(WTYPELIMITS(site, not_equal, rh, lhtype))
             lh_maybe_negative = lhtype.signed
             lh = as_int(lh)
             lhtype = realtype(lh.ctype())
         if rhtype.is_int:
+            if lh.constant and lhtype.is_arith and (
+                    not (rhtype.min() <= lh.value <= rhtype.max())
+                    or (lhtype.is_float and lh.value % 1)):
+                report(WTYPELIMITS(site, not_equal, lh, rhtype))
             rh_maybe_negative = rhtype.signed
             rh = as_int(rh)
             rhtype = realtype(rh.ctype())
@@ -1618,8 +1634,6 @@ class Equals(BinOp):
             # unsigned to a constant literal.
             (signed_expr, unsigned_expr) = ((lh, rh) if lh_maybe_negative
                                             else (rh, lh))
-            if signed_expr.constant and signed_expr.value < 0:
-                report(WNEGCONSTCOMP(site, signed_expr, unsigned_expr.ctype()))
             if not (signed_expr.constant and 0 <= signed_expr.value < 1 << 63):
                 return mkApply(
                     site, mkLit(
@@ -1696,7 +1710,7 @@ def mkNotEquals(site, lh, rh):
     if dml.globals.compat_dml12_int(site):
         return NotEquals_dml12.make(site, lh, rh)
     else:
-        return mkNot(site, Equals.make(site, lh, rh))
+        return mkNot(site, Equals.make(site, lh, rh, True))
 
 def usual_int_conv(lh, lhtype, rh, rhtype):
     assert lhtype.is_int and rhtype.is_int
