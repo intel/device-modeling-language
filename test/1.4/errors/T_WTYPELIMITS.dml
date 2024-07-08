@@ -1,0 +1,98 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+param inf = 1.0/+0.0;
+param nan = inf/inf;
+
+method init() {
+    local uint64 a = -1;
+    // Test all operands
+    /// WARNING WTYPELIMITS
+    assert a != -1;
+    /// WARNING WTYPELIMITS
+    assert -1 != a;
+    /// WARNING WTYPELIMITS
+    assert !(-1 == a);
+    /// WARNING WTYPELIMITS
+    assert a > -1;
+    /// WARNING WTYPELIMITS
+    assert !(a < -1);
+    /// WARNING WTYPELIMITS
+    assert a >= -1;
+    /// WARNING WTYPELIMITS
+    assert !(a <= -1);
+
+    // Upper and lower bounds are tight, regardless if the constant is on RH or
+    // LH side
+    local uint8 a8 = -1;
+    /// WARNING WTYPELIMITS
+    assert a8 != -1;
+    /// WARNING WTYPELIMITS
+    assert -1 != a8;
+    // no warning
+    assert a8 != 0;
+    assert 0 != a8;
+    /// WARNING WTYPELIMITS
+    assert a8 != 256;
+    /// WARNING WTYPELIMITS
+    assert 256 != a8;
+    // no warning
+    assert a8 == 255;
+    assert 255 == a8;
+    /// WARNING WTYPELIMITS
+    assert a8 >= 0;
+    /// WARNING WTYPELIMITS
+    assert 0 <= a8;
+    /// no warning
+    assert a8 > 0;
+    assert 0 < a8;
+    /// WARNING WTYPELIMITS
+    assert !(a8 > 255);
+    /// WARNING WTYPELIMITS
+    assert !(255 < a8);
+    /// no warning
+    assert a8 >= 255;
+    assert 255 <= a8;
+
+    // Limits for signed integers are tight
+    local int8 i8 = 128;
+    /// WARNING WTYPELIMITS
+    assert i8 != 128;
+    // no warning
+    assert i8 != 127;
+    /// WARNING WTYPELIMITS
+    assert i8 != -129;
+    // no warning
+    assert i8 == -128;
+
+    // Non-integer float constants also give warnings
+    /// WARNING WTYPELIMITS
+    assert i8 != 0.1;
+    /// WARNING WTYPELIMITS
+    assert 0.1 != i8;
+    // no warning
+    assert i8 != 0.0;
+    assert 0.0 != i8;
+
+    // Sanity
+    local int64 b = -1;
+    // No warning
+    assert b == -1;
+    // No warning
+    assert !(b < -1);
+    // No warnings for inf and nan, as they aren't considered constant by DML
+    assert a < inf;
+    assert a > -inf;
+    assert a != -inf;
+    assert !(a < nan);
+    assert !(a > nan);
+    assert a != nan;
+
+    // Test workaround
+    assert a == cast(-1, uint64);
+}

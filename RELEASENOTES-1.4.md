@@ -313,3 +313,6 @@
 - `release 7 7026`
 - `note 6` The warning message for comparing a value of unsigned type to a negative constant has been improved to also warn for unsigned types shorter than 64 bits. 
 - `release 6 6315`
+- `note 6` Added warnings for comparing an integer to constant values
+  outside the integer's range. E.g., given a variable `x` of type `uint8`,
+  warnings will now be reported on expressions like `x >= 256` or `x == 3.14`.
