@@ -152,8 +152,9 @@ def print_cdep(outputbase, headers, footers):
     generation'''
     f = output.FileOutput(outputbase + '-cdep.c')
     with f:
-        for block in headers + footers:
-            block.toc()
+        with output.allow_linemarks():
+            for block in headers + footers:
+                block.toc()
     f.close()
     f.commit()
 
