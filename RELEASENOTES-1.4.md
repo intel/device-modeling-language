@@ -314,3 +314,4 @@
 - `note 6` The warning message for comparing a value of unsigned type to a negative constant has been improved to also warn for unsigned types shorter than 64 bits. 
 - `release 6 6315`
 - `release 7 7027`
+- `release 6 6138`
