@@ -18,3 +18,43 @@ typedef undefined_type_t undef_ret();
 extern typedef void undef_arg(undefined_type_t);
 /// ERROR ETYPE
 extern typedef undefined_type undef_val;
+
+template t {
+    shared method m(
+        // no error
+        bool a,
+        /// ERROR ETYPE
+        undefined_type b)
+        /// ERROR ETYPE
+        -> (undefined_type);
+    shared method n(
+        // no error
+        bool a,
+        /// ERROR ETYPE
+        undefined_type b)
+        /// ERROR ETYPE
+        -> (undefined_type) {
+        assert false;
+    }
+    shared method o(
+        // no error
+        bool a,
+        /// ERROR ETYPE
+        undefined_type b)
+        /// ERROR ETYPE
+        -> (undefined_type) default {
+        assert false;
+    }
+}
+
+template u is t {
+    shared method o(
+        // no error
+        bool a,
+        /// ERROR ETYPE
+        undefined_type b)
+        /// ERROR ETYPE
+        -> (undefined_type) {
+        assert false;
+    }
+}
