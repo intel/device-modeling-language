@@ -14,9 +14,37 @@ template t {
     method int_args(uint32 a, int_alias_t b) default {}
     method int_return() -> (int) default { return 0; }
     method int_return_2() -> (int_alias_t, uint32) default { return 0; }
+
+    shared method downcast_with_fallback(u fallback) -> (u) default {
+        return fallback;
+    }
 }
 
 is t;
+
+template u is t {}
+
+template v1 is u {
+    // no error
+    shared method downcast_with_fallback(u fallback) -> (u) {
+        return cast(this, u);
+    }
+}
+
+template v2 is u {
+    /// ERROR EMETH
+    shared method downcast_with_fallback(object fallback) -> (u) {
+        return cast(this, u);
+    }
+}
+
+template v3 is u {
+    /// ERROR EMETH
+    shared method downcast_with_fallback(u fallback) -> (object) {
+        return cast(this, object);
+    }
+}
+
 /// ERROR EMETH
 inline method inline_args(int x, inline y) {}
 

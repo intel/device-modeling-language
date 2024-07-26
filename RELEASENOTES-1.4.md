@@ -323,3 +323,9 @@
 - `note 6` The `explicit_param_decls` provisional feature is now considered stable. Its use will be kept supported in the same way as any standard DML feature.
 - `release 7 7036`
 - `note 6` `after` statements now support picoseconds (`ps`) as a unit of time (fixes SIMICS-16019).
+- `note 6` Fixed an issue where overriding a `shared` method with another could
+  cause an internal compiler error if the method signature involves a template
+  type.
+- `note 6` Fixed an issue where the validity of referenced types in the
+  signatures of unused `shared` methods were not properly checked, leading to
+  invalid generated C.
