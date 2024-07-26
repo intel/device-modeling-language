@@ -1,0 +1,27 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+template t {
+    shared method downcast_with_fallback(u fallback) -> (u) default {
+        return fallback;
+    }
+}
+
+template u is t {
+    shared method downcast_with_fallback(u fallback) -> (u) {
+        return this;
+    }
+}
+
+is u;
+group g is u;
+
+method init() {
+    local t x = cast(dev, t);
+    local u y = x.downcast_with_fallback(cast(g, u));
+    assert x == cast(y, t);
+}

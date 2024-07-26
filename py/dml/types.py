@@ -8,6 +8,7 @@ __all__ = (
     'DMLUnknownType',
     'DMLUnkeyableType',
     'parse_type',
+    'check_named_types',
     'realtype_shallow',
     'realtype',
     'safe_realtype_shallow',
@@ -87,6 +88,32 @@ class DMLUnkeyableType(DMLTypeError):
 global_type_declaration_order = []
 # anonymous structs used by global typedefs, label -> type
 global_anonymous_structs = {}
+
+def check_named_types(t):
+    '''Checks that a type does not reference a non-existing type'''
+    if isinstance(t, TNamed):
+        if t.c not in typedefs:
+            raise ETYPE(t.declaration_site, t)
+    elif isinstance(t, TStruct):
+        t.resolve()
+        for (mn, mt) in t.members.items():
+            check_named_types(mt)
+    elif isinstance(t, (TPtr, TVector, TArray)):
+        check_named_types(t.base)
+    elif isinstance(t, TFunction):
+        for pt in t.input_types:
+            check_named_types(pt)
+        check_named_types(t.output_type)
+    elif isinstance(t, TTraitList):
+        if t.traitname not in dml.globals.traits:
+            raise ETYPE(t.declaration_site, t)
+    elif isinstance(t, THook):
+        for msg_t in t.msg_types:
+            check_named_types(msg_t)
+    elif isinstance(t, (TVoid, IntegerType, TBool, TFloat, TTrait)):
+        pass
+    else:
+        raise ICE(t.declaration_site, "unknown type %r" % t)
 
 # Convert named types to what they really are
 def realtype_shallow(t):
