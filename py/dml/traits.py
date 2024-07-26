@@ -66,8 +66,6 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                               + ' '.join(['independent']*independent
                                          + ['startup']*startup
                                          + ['memoized']*memoized))
-                # TODO: a trait method cannot use a subtrait in the
-                # argument list
                 inp = eval_method_inp(inp_asts, None, global_scope)
                 outp = eval_method_outp(outp_asts, None, global_scope)
                 check_namecoll(mname, ast.site)
@@ -349,18 +347,13 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
                     report(EDMETH(msite, orig_trait.method_impls[name].site,
                                   name))
                     bad_methods.add(name)
-                else:
-                    if name not in ancestor_vtables:
-                        raise ICE(msite,
-                                  'ancestor is overridable but not in vtable')
-                    try:
-                        typecheck_method_override(
-                            (msite, inp, outp, throws, independent, startup,
-                             memoized),
-                            ancestor_vtables[name].vtable_methods[name])
-                    except DMLError as e:
-                        report(e)
-                        bad_methods.add(name)
+                elif name not in ancestor_vtables:
+                    raise ICE(msite,
+                              'ancestor is overridable but not in vtable')
+
+                # Type-checking of overrides is done later, after typedefs
+                # have been populated with all template types.
+                # See Trait.typecheck_methods()
 
     for name in bad_methods:
         del methods[name]
@@ -758,6 +751,40 @@ class Trait(SubTrait):
 
     def type(self):
         return TTrait(self)
+
+    def typecheck_methods(self):
+        for (_, inp, outp, _, _, _, _) in self.vtable_methods.values():
+            for (_, t) in inp + outp:
+                try:
+                    check_named_types(t)
+                except DMLError as e:
+                    report(e)
+
+        for sm in self.method_impls.values():
+            # To avoid duplicating error messages
+            bad = False
+            if sm.name not in self.vtable_methods:
+                for (_, t) in sm.inp + sm.outp:
+                    try:
+                        check_named_types(t)
+                    except DMLError as e:
+                        bad = True
+                        report(e)
+
+            if not bad and sm.name in self.ancestor_vtables:
+                try:
+                    typecheck_method_override(
+                        (sm.site, sm.inp, sm.outp, sm.throws, sm.independent,
+                         sm.startup, sm.memoized),
+                        self.ancestor_vtables[sm.name].vtable_methods[sm.name])
+                except DMLError as e:
+                    report(e)
+
+        # We don't attempt to purge the bad methods. Subtemplates could
+        # be referencing them, and there is no good way to purge those
+        # references. This doesn't seem to be too big of a deal; DMLC stops
+        # early enough that the bad overrides don't cause ICE:s to happen
+        # (though their presence may lead to other strange behaviour.)
 
     def scope(self, global_scope):
         '''Return a scope for looking up sibling objects in this trait'''
