@@ -199,6 +199,30 @@ class suppress_WLOGMIXUP(CompatFeature):
     last_api_version = api_6
 
 @feature
+class suppress_WBIGUNROLL(CompatFeature):
+    '''This compatibility feature makes it so the warning `WBIGUNROLL` is
+    suppressed by default. `WBIGUNROLL` warns about `#foreach` and `#select`
+    statements that compile to large unrolled loops &mdash; for more
+    information, see the documentation of `WBIGUNROLL` in the
+    [Messages](messages.html) section.
+
+    `WBIGUNROLL` is suppressed by default below Simics API version 8 in order
+    to avoid overwhelming users with warnings. Addressing occurences of large
+    unrolled loops should be done before or as part of migration to Simics API
+    version 8.
+
+    Passing `--no-compat=suppress_WBUGUNROLL` to DMLC has almost the same effect
+    as passing `--warn=WBIGUNROLL`; either will cause DMLC to report the warning
+    even when the Simics API version in use is below 8. The only difference
+    between these two options is that if `--no-compat=suppress_WBIGUNROLL` is
+    used (and `--warn=WBIGUNROLL` is not), then `WBIGUNROLL` may still be
+    explicitly suppressed via `--no-warn=WBIGUNROLL`. In contrast,
+    `--warn=WBIGUNROLL` doesn't allow for `WBIGUNROLL` to be suppressed at
+    all.'''
+    short = "Suppress the warning 'WBIGUNROLL' by default"
+    last_api_version = api_7
+
+@feature
 class legacy_attributes(CompatFeature):
     '''This compatibility feature makes DMLC register all attributes using the
     legacy `SIM_register_typed_attribute` API function instead of the modern

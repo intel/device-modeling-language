@@ -600,6 +600,8 @@ def main(argv):
 
     if compat.suppress_WLOGMIXUP in dml.globals.enabled_compat:
         ignore_warning('WLOGMIXUP')
+    if compat.suppress_WBIGUNROLL in dml.globals.enabled_compat:
+        ignore_warning('WBIGUNROLL')
 
     for w in options.disabled_warnings:
         if not is_warning_tag(w):

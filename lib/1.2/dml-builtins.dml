@@ -215,6 +215,7 @@ template device {
     parameter _compat_io_memory auto;
     parameter _compat_shared_logs_on_device auto;
     parameter _compat_suppress_WLOGMIXUP auto;
+    parameter _compat_suppress_WBIGUNROLL auto;
     parameter _compat_legacy_attributes auto;
     parameter _compat_lenient_typechecking auto;
     parameter _compat_no_method_index_asserts auto;
