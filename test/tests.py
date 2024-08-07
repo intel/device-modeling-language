@@ -1700,6 +1700,12 @@ class CompareIllegalAttrs(BaseTestCase):
                       encoding='utf-8').stdout.splitlines()
               if x.startswith('ATTR ')}
 
+        # access count is added for objects implementing io_memory or
+        # transaction interfaces. In DML the name is illegal to avoid a clash in
+        # bank objects. TODO: we should adjust the test to also extract the set
+        # of attributes from an empty bank, not only the device object.
+        sl.add("access_count")
+
         # Extract list of illegal attributes from dmlc
         dl = dml.globals.illegal_attributes
 
