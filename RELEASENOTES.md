@@ -169,7 +169,7 @@
 - `note 6` DMLC's use of the legacy Simics API for attribute registration is now controlled by the compatibility feature `legacy_attributes`. This feature can be disabled by passing `--no-compat=legacy_attributes` to DMLC, in which case the modern API will be used instead, which does not support the use of dictionary attribute values (fixes SIMICS-22406). `legacy_attributes` will always be disabled with Simics API version 8 or above.
 - `note 6` Typechecking has been reworked to be more strict, and more accurately reject type mismatch that would result in invalid C or GCC warnings (fixes SIMICS-9504). To avoid breakage from novel type errors from the stricter typechecking, which particularly affects pointer types, the legacy lenient typechecking is still used by default with Simics API version 7 or below. The strict typechecking can be enabled by passing `--no-compat=lenient_typechecking` to DMLC.
 - `release 7 7024`
-- `note 6` Multiple \`extern\` declarations for the same identifier are now allowed as long as they all declare the same type for the identifier (fixes SIMICS-22472).
+- `note 6` Multiple `extern` declarations for the same identifier are now allowed as long as they all declare the same type for the identifier (fixes SIMICS-22472).
 - `release 6 6313`
 - `release 7 7025`
 - `release 6 6316`
