@@ -1828,6 +1828,7 @@ SPDX-License-Identifier: MPL-2.0
             # config files
             '.gitignore',
             '_config.yml',
+            'syntaxes/Dml.tmlanguage',
         }
         for f in ignorelist:
             assert (root / f).is_file(), f
