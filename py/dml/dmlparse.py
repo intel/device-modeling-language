@@ -1027,7 +1027,7 @@ def object_else_if(t):
 # Parameter specification
 @prod_dml12
 def object_parameter(t):
-    '''param : PARAMETER objident paramspec'''
+    '''param : PARAMETER objident paramspec_maybe_empty'''
     if logging.show_porting:
         report(PPARAMETER(site(t)))
     if logging.show_porting:
@@ -1046,7 +1046,7 @@ def object_parameter_auto(t):
 
 @prod_dml14
 def object_param(t):
-    '''param : PARAM objident paramspec'''
+    '''param : PARAM objident paramspec_maybe_empty'''
     t[0] = ast.param(site(t), t[2], None, *t[3])
 
 @prod_dml14
@@ -1057,13 +1057,15 @@ def object_param_auto(t):
 @prod_dml14
 def object_param_walrus(t):
     '''param : PARAM objident COLON paramspec'''
+    param_type = ast.walrus(site(t, 3))
     if provisional.explicit_param_decls not in t.parser.file_info.provisional:
         report(ESYNTAX(site(t, 3), ':', "expected '=' or 'default'"))
-    t[0] = ast.param(site(t), t[2], ast.walrus(site(t, 3)), *t[4])
+        param_type = None
+    t[0] = ast.param(site(t), t[2], param_type, *t[4])
 
 @prod_dml14
 def object_param_typed(t):
-    '''param : PARAM objident COLON ctypedecl paramspec'''
+    '''param : PARAM objident COLON ctypedecl paramspec_maybe_empty'''
     (is_default, value) = t[5]
     if (value is not None
         and (provisional.explicit_param_decls
@@ -1075,8 +1077,13 @@ def object_param_typed(t):
                      is_default, value)
 
 @prod
-def paramspec_empty(t):
-    'paramspec : SEMI'
+def paramspec_maybe_empty_nonempty(t):
+    'paramspec_maybe_empty : paramspec'
+    t[0] = t[1]
+
+@prod
+def paramspec_maybe_empty_empty(t):
+    'paramspec_maybe_empty : SEMI'
     t[0] = (True, None)
 
 @prod
