@@ -320,3 +320,4 @@
 - `release 6 6321`
 - `release 7 7033`
 - `release 6 6324`
+- `note 6` The `explicit_param_decls` provisional feature is now considered stable. Its use will be kept supported in the same way as any standard DML feature.

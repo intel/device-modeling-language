@@ -69,7 +69,7 @@ class explicit_param_decls(ProvisionalFeature):
     the parameter definitions specified in that file.
     '''
     short = "Require := syntax for defining new params"
-    stable = False
+    stable = True
 
 def parse_provisional(
         provs: list[("Site", str)]) -> dict[ProvisionalFeature, "Site"]:
