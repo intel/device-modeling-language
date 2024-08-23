@@ -48,6 +48,7 @@ template t {
     /// ERROR EOVERRIDE
     param p8b: int default 6;
     param p9: int = 7;
+    param p10 := 10;
 }
 
 group g is t {
@@ -66,4 +67,6 @@ group g is t {
     param p8a default 88;
     /// ERROR EOVERRIDE
     param p8b :default 88;
+    // no error
+    param p10;
 }
