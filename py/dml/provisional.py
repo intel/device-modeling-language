@@ -32,9 +32,10 @@ def feature(cls: type[ProvisionalFeature]):
 
 @feature
 class explicit_param_decls(ProvisionalFeature):
-    '''This feature extends the DML syntax for parameter declarations to
+    '''This feature extends the DML syntax for parameter definitions to
     distinguish between an intent to declare a new parameter, and an intent to
-    override an existing parameter. This distinction allows DML to capture
+    override an existing parameter (including when providing a definition
+    for an abstract parameter). This distinction allows DML to capture
     misspelled parameter overrides as compile errors.
 
     The following new forms are introduced to mark the intent of
@@ -65,9 +66,9 @@ class explicit_param_decls(ProvisionalFeature):
     an override or a new parameter, and no error will be printed.
 
     Enabling the `explicit_param_decls` feature in a file only affects
-    parameter declarations in that file.
+    the parameter definitions specified in that file.
     '''
-    short = "Require := syntax for assigning new params"
+    short = "Require := syntax for defining new params"
     stable = False
 
 def parse_provisional(

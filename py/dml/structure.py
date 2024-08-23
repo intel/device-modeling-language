@@ -675,9 +675,10 @@ def merge_parameters(params, obj_specs):
 
     all_ranks = {rank for (rank, _) in params}
     minimal_ancestry = traits.calc_minimal_ancestry(frozenset(all_ranks))
+
     for (rank, p) in defs.items():
         if p.site.provisional_enabled(provisional.explicit_param_decls):
-            (_, type_info, is_default, _) = p.args
+            (name, type_info, is_default, _) = p.args
             if type_info is None:
                 declared_as_override = True
             else:
@@ -687,10 +688,10 @@ def merge_parameters(params, obj_specs):
             if not declared_as_override and parent_ranks:
                 [parent, *_] = (parent for (parent_rank, parent) in params
                                 if parent_rank in parent_ranks)
-                report(EOVERRIDE(type_info.site, parent.site,
+                report(EOVERRIDE(type_info.site, parent.site, name,
                                  'default' if is_default else '='))
             if not declared_as_override and rank in decls:
-                report(EOVERRIDE(type_info.site, decls[rank].site,
+                report(EOVERRIDE(type_info.site, decls[rank].site, name,
                                  'default' if is_default else '='))
             elif (not parent_ranks and declared_as_override
                   and rank not in decls):

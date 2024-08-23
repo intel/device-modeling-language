@@ -1140,10 +1140,12 @@ class EAUTOPARAM(DMLError):
 
 class ENOVERRIDE(DMLError):
     """When the `explict_param_decls` provisional feature is enabled, parameter
-    declarations that do not override existing declarations must be
-    declared using the `:=` or `:default` syntax.
+    definitions written using `=` and `default` are only accepted if the
+    parameter has already been declared.
+    To declare and define a new parameter not already declared, use the `:=` or
+    `:default` syntax.
     """
-    fmt = ("parameter '%s' not previously declared."
+    fmt = ("parameter '%s' not declared previously."
            " To declare and define a new parameter, use the ':%s' syntax.")
 
     def log(self):
@@ -1158,16 +1160,19 @@ class ENOVERRIDE(DMLError):
 
 class EOVERRIDE(DMLError):
     """When the `explict_param_decls` provisional feature is enabled,
-    parameters declared using `:=` or `:default` syntax may not override
-    other parameters.
+    any parameter declared via `:=` or `:default` may not already
+    have been declared. This means `:=` or `:default` syntax can't be used
+    to override existing parameter declarations (not even those lacking a
+    definition of the parameter.)
     """
-    fmt = "The :%s syntax may not be used to override an existing parameter"
-    def __init__(self, site, other_site, token):
-        super().__init__(site, token)
+    fmt = ("the parameter '%s' has already been declared "
+           + "(':%s' syntax may not be used for parameter overrides)")
+    def __init__(self, site, other_site, name, token):
+        super().__init__(site, name, token)
         self.other_site = other_site
     def log(self):
         DMLError.log(self)
-        self.print_site_message(self.other_site, "overridden parameter")
+        self.print_site_message(self.other_site, "existing declaration")
 
 class EVARPARAM(DMLError):
     """
