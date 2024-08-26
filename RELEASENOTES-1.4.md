@@ -322,3 +322,4 @@
 - `release 6 6324`
 - `note 6` The `explicit_param_decls` provisional feature is now considered stable. Its use will be kept supported in the same way as any standard DML feature.
 - `release 7 7036`
+- `note 6` `after` statements now support picoseconds (`ps`) as a unit of time (fixes SIMICS-16019).

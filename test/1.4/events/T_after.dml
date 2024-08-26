@@ -54,12 +54,12 @@ attribute operate is (write_only_attr) {
     method set(attr_value_t val) throws {
         local chunk_t c = {{3,5}};
         after 0.1 s: single_operator.modify(c, 1);
-        after 0.1 s: multi_operator[0][1].modify(c, 1);
+        after cast(1e11, uint64) ps: multi_operator[0][1].modify(c, 1);
         after 0.1 s: multi_operator[1][0].modify(c, 0);
         after 200000 cycles: single_operator.modify(c, 0);
 
         after 0.1 s: hook_operator[0][1].h.send_now(c, 1);
-        after 0.1 s: hook_operator[1][0].h.send_now(c, 0);
+        after cast(0.1*1e12, uint64) ps: hook_operator[1][0].h.send_now(c, 0);
     }
 }
 

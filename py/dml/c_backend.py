@@ -1231,14 +1231,28 @@ def generate_immediate_after_callbacks(device):
 
 def generate_simple_events_control_methods(device):
     start_function_definition(
-        'void _cancel_simple_events(conf_object_t *_obj, _identity_t domain)')
+        'void _cancel_simple_delay_events(conf_object_t *_obj, '
+        'conf_object_t *_clock, const _identity_t *_domain)')
+    out('{\n', postindent=1)
+    out('int (*_pred)(lang_void *, lang_void *) UNUSED = '
+        + '_domain ? _simple_event_predicate : NULL;\n')
+    for key in dml.globals.after_delay_infos:
+        out('SIM_event_cancel_time('
+            + f'_clock, {crep.get_evclass(key)}, _obj, _pred, '
+            + '(lang_void *)_domain);\n')
+    out('}\n', preindent=-1)
+
+    start_function_definition(
+        'void _cancel_simple_events(conf_object_t *_obj, _identity_t _domain)')
     out('{\n', postindent = 1)
     out(crep.structtype(device) + ' *_dev UNUSED = ('
         + crep.structtype(device) + '*)_obj;\n')
-    for key in dml.globals.after_delay_infos:
-        out('SIM_event_cancel_time('
-            + f'SIM_object_clock(_obj), {crep.get_evclass(key)}, _obj, '
-            + '_simple_event_predicate, (lang_void *) &domain);\n')
+    out('if (SIM_object_clock(_obj)) {\n', postindent=1)
+    out('_cancel_simple_delay_events(_obj, SIM_object_clock(_obj), '
+        + '&_domain);\n')
+    out('_cancel_simple_delay_events(_obj, SIM_picosecond_clock(_obj), '
+        + '&_domain);\n')
+    out('}\n', preindent=-1)
 
     site = logging.SimpleSite('<_cancel_simple_events>')
     by_dims = {}
@@ -1254,16 +1268,16 @@ def generate_simple_events_control_methods(device):
                         for i in range(len(dims)))
         for hook in hooks:
             out('_DML_cancel_afters_in_hook_queue('
-                + f'&_dev->{crep.cref_hook(hook, indices)}.queue, domain, '
+                + f'&_dev->{crep.cref_hook(hook, indices)}.queue, _domain, '
                 + '0);\n')
         for i in range(len(dims)):
             out('}\n', preindent=-1)
 
     out('_DML_cancel_afters_in_detached_hook_queues('
-        + '_dev->_detached_hook_queue_stack, domain);\n')
+        + '_dev->_detached_hook_queue_stack, _domain);\n')
     if dml.globals.immediate_after_infos:
         out('_DML_cancel_immediate_afters(_dev->_immediate_after_state, '
-            + 'domain);\n')
+            + '_domain);\n')
     out('}\n\n', preindent = -1)
     splitting_point()
 
@@ -1659,9 +1673,12 @@ def generate_pre_delete(device):
             for i in range(len(dims)):
                 out('}\n', preindent=-1)
 
-        for key in dml.globals.after_delay_infos:
-            out(f'SIM_event_cancel_time(_obj, {crep.get_evclass(key)}, _obj, '
-                + '0, NULL);\n')
+        out('if (SIM_object_clock(_obj)) {\n', postindent=1)
+        out('_cancel_simple_delay_events(_obj, SIM_object_clock(_obj), '
+            + 'NULL);\n')
+        out('_cancel_simple_delay_events(_obj, SIM_picosecond_clock(_obj), '
+            + 'NULL);\n')
+        out('}\n', preindent=-1)
 
     if dml.globals.api_version < compat.api_7:
         out(f'{crep.cname(device)}_deinit(_obj);\n')

@@ -2234,7 +2234,7 @@ def statement_delay(t):
     'statement_except_hashif : AFTER expression ID COLON expression SEMI'
     unit = t[3]
     # can easily be extended to other time units later
-    supported_units = ['s', 'cycles']
+    supported_units = ['s', 'ps', 'cycles']
     if unit not in supported_units:
         suggestions = ' or '.join(f"'{unit}'" for unit in supported_units)
         raise ESYNTAX(site(t, 3), t[3],

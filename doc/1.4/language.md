@@ -3466,7 +3466,8 @@ after <em>scalar</em> <em>unit</em>: <em>method</em>(<em>e1</em>, ... <em>eN</em
 In this form, the specified point in the future is given through a time delay
 (in simulated time, measured in the specified time unit) relative to the time
 when the after delay statement is executed. The currently supported time units
-are `s` for seconds and `cycles` for cycles.
+are `s` for seconds (with type `double`), `ps` for picoseconds
+(with type `uint64`), and `cycles` for cycles (with type `uint64`).
 
 Every argument to the called method is evaluated at the time the `after`
 statement is executed, and stored so that they may be used when the method call
