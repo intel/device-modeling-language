@@ -20,4 +20,9 @@ method init() {
     after cast(4.5, int64) cycles: m();
     /// WARNING WTTYPEC
     after 4.5 cycles: m();
+
+    // no warning
+    after cast(4.5, int64) ps: m();
+    /// WARNING WTTYPEC
+    after 4.5 ps: m();
 }

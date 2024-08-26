@@ -13,6 +13,8 @@ method init() {
     after 'a' s: m();
     after 'a' cycles: m();
     after cast(1,uint64_be_t) cycles: m();
+    after 'a' ps: m();
+    after cast(1,uint64_be_t) ps: m();
     /// ERROR EBTYPE
     after true s: m();
     /// ERROR EBTYPE
@@ -21,6 +23,10 @@ method init() {
     after true cycles: m();
     /// ERROR EBTYPE
     after NULL cycles: m();
+    /// ERROR EBTYPE
+    after true ps: m();
+    /// ERROR EBTYPE
+    after NULL ps: m();
 
     local struct { hook() h; } str;
     // The precedence rules gives usages of "->" as binds precedence before

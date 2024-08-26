@@ -11,6 +11,8 @@ method m() {
     after 1 s: m();
     // no error
     after 1 cycles: m();
+    // no error
+    after 1 ps: m();
     /// ERROR ESYNTAX
     after 1 invalid: m();
 }

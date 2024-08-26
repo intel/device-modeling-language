@@ -2720,9 +2720,15 @@ def stmt_after(stmt, location, scope):
     delay = codegen_expression(delay, location, scope)
     old_delay_type = delay.ctype()
     if unit == 's':
+        clock = 'SIM_object_clock(&_dev->obj)'
         api_unit = 'time'
         unit_type = TFloat('double')
     elif unit == 'cycles':
+        clock = 'SIM_object_clock(&_dev->obj)'
+        api_unit = 'cycle'
+        unit_type = TInt(64, True)
+    elif unit == 'ps':
+        clock = 'SIM_picosecond_clock(&_dev->obj)'
         api_unit = 'cycle'
         unit_type = TInt(64, True)
     else:
@@ -2733,7 +2739,7 @@ def stmt_after(stmt, location, scope):
     except EASTYPE:
         raise EBTYPE(site, old_delay_type, unit_type)
 
-    if unit == 'cycles' and not safe_realtype(old_delay_type).is_int:
+    if unit in {'cycles', 'ps'} and not safe_realtype(old_delay_type).is_int:
         report(WTTYPEC(site, old_delay_type, unit_type, unit))
 
     # TODO after statement should be extended to allow the user to explicitly
@@ -2793,7 +2799,7 @@ def stmt_after(stmt, location, scope):
             args_init = AfterIntoSendNowArgsInit(inargs,
                                                  methodref.hookref_expr)
 
-    return [mkAfter(site, api_unit, delay, domains, after_info, indices,
+    return [mkAfter(site, clock, api_unit, delay, domains, after_info, indices,
                     args_init)]
 
 

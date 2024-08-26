@@ -675,7 +675,7 @@ def toc_constsafe_pointer_assignment(site, source, target, typ):
 
 class After(Statement):
     @auto_init
-    def __init__(self, site, unit, delay, domains, info, indices,
+    def __init__(self, site, clock, unit, delay, domains, info, indices,
                  args_init):
         crep.require_dev(site)
 
@@ -728,7 +728,7 @@ class After(Statement):
             data = '(lang_void *)_data'
         else:
             data = 'NULL'
-        lm_out(f'SIM_event_post_{self.unit}(SIM_object_clock({objarg}), '
+        lm_out(f'SIM_event_post_{self.unit}({self.clock}, '
                + f'{crep.get_evclass(self.info.key)}, {objarg}, '
                + f'{self.delay.read()}, {data});\n')
         lm_out("}\n", preindent = -1)

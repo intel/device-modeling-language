@@ -18,11 +18,17 @@ stest.expect_equal(obj.multi_operator, [[1, 1], [1, 1]])
 SIM_continue(2)
 stest.expect_equal(obj.single_operator, 216)
 stest.expect_equal(obj.multi_operator, [[1, 216], [1, 1]])
-init()
-obj.test_2 = None
-SIM_continue(99999)
-stest.expect_equal(obj.single_operator, 1)
-stest.expect_equal(obj.multi_operator, [[1, 1], [1, 1]])
-SIM_continue(2)
-stest.expect_equal(obj.single_operator, 2)
-stest.expect_equal(obj.multi_operator, [[1, 5], [1, 1]])
+
+for i in (0,1,2):
+    try:
+        init()
+        obj.test_2 = i
+        SIM_continue(99999)
+        stest.expect_equal(obj.single_operator, 1)
+        stest.expect_equal(obj.multi_operator, [[1, 1], [1, 1]])
+        SIM_continue(2)
+        stest.expect_equal(obj.single_operator, 2)
+        stest.expect_equal(obj.multi_operator, [[1, 5], [1, 1]])
+    except Exception as e:
+        print(f'i = {i}')
+        raise

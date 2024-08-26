@@ -5,74 +5,140 @@
 dml 1.4;
 device test;
 
+param USE_S = 0;
+param USE_CYCLES = 1;
+param USE_PS = 2;
+
 template domain {
-    shared method post_single_operator_dbl_shared(bool use_cycles, double t) {
-        if (use_cycles) {
-            after cast(t, uint64) cycles: single_operator.dbl();
-        } else {
+    shared method post_single_operator_dbl_shared(int unit, double t) {
+        switch (unit) {
+        case USE_S:
             after t s: single_operator.dbl();
-        }
-    }
-
-    method post_single_operator_dbl_unshared(bool use_cycles, double t) {
-        if (use_cycles) {
+            break;
+        case USE_CYCLES:
             after cast(t, uint64) cycles: single_operator.dbl();
-        } else {
+            break;
+        case USE_PS:
+            after cast(t, uint64) ps: single_operator.dbl();
+            break;
+        default:
+            assert false;
+        }
+    }
+
+    method post_single_operator_dbl_unshared(int unit, double t) {
+        switch (unit) {
+        case USE_S:
             after t s: single_operator.dbl();
+            break;
+        case USE_CYCLES:
+            after cast(t, uint64) cycles: single_operator.dbl();
+            break;
+        case USE_PS:
+            after cast(t, uint64) ps: single_operator.dbl();
+            break;
+        default:
+            assert false;
         }
     }
 
-    shared method post_single_operator_modify_shared(
-        bool use_cycles, double t, int v) {
-        if (use_cycles) {
-            after cast(t, uint64) cycles: single_operator.modify(v);
-        } else {
+    shared method post_single_operator_modify_shared(int unit, double t,
+                                                     int v) {
+        switch (unit) {
+        case USE_S:
             after t s: single_operator.modify(v);
-        }
-    }
-
-    method post_single_operator_modify_unshared(
-        bool use_cycles, double t, int v) {
-        if (use_cycles) {
+            break;
+        case USE_CYCLES:
             after cast(t, uint64) cycles: single_operator.modify(v);
-        } else {
+            break;
+        case USE_PS:
+            after cast(t, uint64) ps: single_operator.modify(v);
+            break;
+        default:
+            assert false;
+        }
+    }
+
+    method post_single_operator_modify_unshared(int unit, double t, int v) {
+        switch (unit) {
+        case USE_S:
             after t s: single_operator.modify(v);
+            break;
+        case USE_CYCLES:
+            after cast(t, uint64) cycles: single_operator.modify(v);
+            break;
+        case USE_PS:
+            after cast(t, uint64) ps: single_operator.modify(v);
+            break;
+        default:
+            assert false;
         }
     }
 
-    shared method post_multi_operator_dbl_shared(
-        bool use_cycles, double t, int i, int j) {
-        if (use_cycles) {
-            after cast(t, uint64) cycles: multi_operator[i][j].dbl();
-        } else {
+    shared method post_multi_operator_dbl_shared(int unit, double t, int i,
+                                                 int j) {
+        switch (unit) {
+        case USE_S:
             after t s: multi_operator[i][j].dbl();
+            break;
+        case USE_CYCLES:
+            after cast(t, uint64) cycles: multi_operator[i][j].dbl();
+            break;
+        case USE_PS:
+            after cast(t, uint64) ps: multi_operator[i][j].dbl();
+            break;
+        default:
+            assert false;
         }
     }
 
-    method post_multi_operator_dbl_unshared(
-        bool use_cycles, double t, int i, int j) {
-        if (use_cycles) {
-            after cast(t, uint64) cycles: multi_operator[i][j].dbl();
-        } else {
+    method post_multi_operator_dbl_unshared(int unit, double t, int i, int j) {
+        switch (unit) {
+        case USE_S:
             after t s: multi_operator[i][j].dbl();
+            break;
+        case USE_CYCLES:
+            after cast(t, uint64) cycles: multi_operator[i][j].dbl();
+            break;
+        case USE_PS:
+            after cast(t, uint64) ps: multi_operator[i][j].dbl();
+            break;
+        default:
+            assert false;
         }
     }
 
     shared method post_multi_operator_modify_shared(
-        bool use_cycles, double t, int i, int j, int v) {
-        if (use_cycles) {
-            after cast(t, uint64) cycles: multi_operator[i][j].modify(v);
-        } else {
+        int unit, double t, int i, int j, int v) {
+        switch (unit) {
+        case USE_S:
             after t s: multi_operator[i][j].modify(v);
+            break;
+        case USE_CYCLES:
+            after cast(t, uint64) cycles: multi_operator[i][j].modify(v);
+            break;
+        case USE_PS:
+            after cast(t, uint64) ps: multi_operator[i][j].modify(v);
+            break;
+        default:
+            assert false;
         }
     }
 
     method post_multi_operator_modify_unshared(
-        bool use_cycles, double t, int i, int j, int v) {
-        if (use_cycles) {
-            after cast(t, uint64) cycles: multi_operator[i][j].modify(v);
-        } else {
+        int unit, double t, int i, int j, int v) {
+        switch (unit) {
+        case USE_S:
             after t s: multi_operator[i][j].modify(v);
+            break;
+        case USE_CYCLES:
+            after cast(t, uint64) cycles: multi_operator[i][j].modify(v);
+            break;
+        case USE_PS:
+            after cast(t, uint64) ps: multi_operator[i][j].modify(v);
+            break;
+        default:
+            assert false;
         }
     }
 }
@@ -87,52 +153,54 @@ group dom_A {
 
 param dom_B = dom_A.subgroup;
 
-template ttest is (write_only_attr) {
-    param type = "n";
-    shared method set(attr_value_t val) throws {
-        run();
-    }
-    shared method run() throws;
-}
-
 // cancellation works correctly no matter use of indices or params
-attribute test_1 is (ttest) {
-    method run() throws {
+attribute test_1 is (write_only_attr) {
+    param type = "n";
+    method set(attr_value_t val) throws {
         after 0.1 s: single_operator.dbl();
-        dom_A.post_single_operator_dbl_shared(false, 0.1);
-        dom_A.post_single_operator_dbl_unshared(false, 0.1);
-        dom_B.post_single_operator_dbl_shared(false, 0.1);
-        dom_B.post_single_operator_dbl_unshared(false, 0.1);
+        dom_A.post_single_operator_dbl_shared(USE_S, 0.1);
+        dom_A.post_single_operator_dbl_unshared(USE_S, 0.1);
+        dom_B.post_single_operator_dbl_shared(USE_S, 0.1);
+        dom_B.post_single_operator_dbl_unshared(USE_S, 0.1);
 
         after 0.1 s: single_operator.modify(3);
-        dom_A.post_single_operator_modify_shared(false, 0.1, 3);
-        dom_A.post_single_operator_modify_unshared(false, 0.1, 3);
-        dom_B.post_single_operator_modify_shared(false, 0.1, 3);
-        dom_B.post_single_operator_modify_unshared(false, 0.1, 3);
+        dom_A.post_single_operator_modify_shared(USE_S, 0.1, 3);
+        dom_A.post_single_operator_modify_unshared(USE_S, 0.1, 3);
+        dom_B.post_single_operator_modify_shared(USE_S, 0.1, 3);
+        dom_B.post_single_operator_modify_unshared(USE_S, 0.1, 3);
 
         after 0.1 s: multi_operator[0][1].dbl();
-        dom_A.post_multi_operator_dbl_shared(false, 0.1, 0, 1);
-        dom_A.post_multi_operator_dbl_unshared(false, 0.1, 0, 1);
-        dom_B.post_multi_operator_dbl_shared(false, 0.1, 0, 1);
-        dom_B.post_multi_operator_dbl_unshared(false, 0.1, 0, 1);
+        dom_A.post_multi_operator_dbl_shared(USE_S, 0.1, 0, 1);
+        dom_A.post_multi_operator_dbl_unshared(USE_S, 0.1, 0, 1);
+        dom_B.post_multi_operator_dbl_shared(USE_S, 0.1, 0, 1);
+        dom_B.post_multi_operator_dbl_unshared(USE_S, 0.1, 0, 1);
 
         after 0.1 s: multi_operator[0][1].modify(3);
-        dom_A.post_multi_operator_modify_shared(false, 0.1, 0, 1, 3);
-        dom_A.post_multi_operator_modify_unshared(false, 0.1, 0, 1, 3);
-        dom_B.post_multi_operator_modify_shared(false, 0.1, 0, 1, 3);
-        dom_B.post_multi_operator_modify_unshared(false, 0.1, 0, 1, 3);
+        dom_A.post_multi_operator_modify_shared(USE_S, 0.1, 0, 1, 3);
+        dom_A.post_multi_operator_modify_unshared(USE_S, 0.1, 0, 1, 3);
+        dom_B.post_multi_operator_modify_shared(USE_S, 0.1, 0, 1, 3);
+        dom_B.post_multi_operator_modify_unshared(USE_S, 0.1, 0, 1, 3);
 
         dom_A.cancel_after();
     }
 }
 
 // cancellation/post-checks works on all time units
-attribute test_2 is (ttest) {
-    method run() throws {
-        dom_A.post_single_operator_dbl_shared(true, 100000);
-        dom_A.post_multi_operator_modify_shared(true, 100000, 0, 1, 5);
-        dom_B.post_single_operator_modify_shared(true, 100000, 5);
-        dom_B.post_multi_operator_dbl_shared(true, 100000, 0, 1);
+attribute test_2 is (write_only_attr) {
+    param type = "i";
+    method set(attr_value_t val) throws {
+        local int unit = SIM_attr_integer(val);
+        local double delay;
+        switch (unit) {
+        case USE_S: delay = 0.1; break;
+        case USE_CYCLES: delay = 100000; break;
+        case USE_PS: delay = 0.1*1e12; break;
+        default: assert false;
+        }
+        dom_A.post_single_operator_dbl_shared(unit, delay);
+        dom_A.post_multi_operator_modify_shared(unit, delay, 0, 1, 5);
+        dom_B.post_single_operator_modify_shared(unit, delay, 5);
+        dom_B.post_multi_operator_dbl_shared(unit, delay, 0, 1);
         dom_B.cancel_after();
     }
 }
