@@ -329,3 +329,4 @@
 - `note 6` Fixed an issue where the validity of referenced types in the
   signatures of unused `shared` methods were not properly checked, leading to
   invalid generated C.
+- `release 6 6329`
