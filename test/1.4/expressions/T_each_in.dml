@@ -31,6 +31,16 @@ group test is t2 {
     group sub is t2;
 }
 
+template t3 {}
+
+group g1 is t3;
+
+group g2[i < 2][j < 3] is t3;
+
+group p[i < 2][j < 3] {
+    group g3[k < 5] is t3;
+}
+
 method init() {
     local bool found = false;
     foreach obj in (each tr in (a.b[0].d)) {
@@ -75,4 +85,22 @@ method init() {
     assert test.name == dev.name;
     assert (each t2 in (test)).len == 1;
     assert (each t2 in (dev)).len == 1;
+
+    local uint32 count = 0;
+    foreach g in (each t3 in (dev)) {
+        // Meant to smoke-test that continue only skips one particular flat_index
+        // for one particular node
+        if (cast(g1, t3) == g
+            || cast(g2[0][0], t3) == g
+            || cast(g2[0][2], t3) == g
+            || cast(g2[1][2], t3) == g
+            || cast(p[1][1].g3[0], t3) == g
+            || cast(p[1][2].g3[2], t3) == g) {
+            continue;
+        }
+        ++count;
+    }
+
+    // total - skipped
+    assert count == 1 + 2*3 + 2*3*5 - 6;
 }
