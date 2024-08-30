@@ -35,37 +35,69 @@ method m5() {
     }
 }
 
-// Groups and ports may not be named "bank" or "port" in devices
-// since thy might otherwise cause Simics conf-object names to clash.
-/// ERROR EERRSTMT
-group bank;
+// Subdevices may not be named "bank" or "port" in devices
+// since that might otherwise cause Simics conf-object names to clash.
 /// ERROR EERRSTMT
 subdevice port;
+/// ERROR EERRSTMT
+subdevice bank;
+
+// Banks, ports, and subdevices may not be declared underneath any group named
+// "bank" or "port" (as that would introduce conflicting namespaces)
 group g1 {
+    group bank {
+        /// ERROR EERRSTMT
+        subdevice s;
+        /// ERROR EERRSTMT
+        port p;
+        /// ERROR EERRSTMT
+        bank b;
+        group g {
+            /// ERROR EERRSTMT
+            subdevice s;
+            /// ERROR EERRSTMT
+            port p;
+            /// ERROR EERRSTMT
+            bank b;
+        }
+    }
+}
+
+group g2 {
     // no error
+    bank port;
     port bank;
+}
+
+group g3 {
     /// ERROR EERRSTMT
     subdevice port_ { param name = "port"; }
     // no error
     subdevice port { param name = "port_"; }
-    group g {
-        /// ERROR EERRSTMT
-        group port;
-    }
 }
-subdevice p1 {
+
+subdevice s {
     group g {
-        /// ERROR EERRSTMT
-        group port;
+        group port {
+            group g {
+                /// ERROR EERRSTMT
+                subdevice s;
+                /// ERROR EERRSTMT
+                port p;
+                /// ERROR EERRSTMT
+                bank b;
+            }
+        }
         /// ERROR EERRSTMT
         subdevice bank;
     }
 }
 
-// no error: name clash cannot happen since ports/banks can't have subobjects
-port p2 {
-    group port;
-    group bank;
+// no error
+port p {
+    group port {
+        group bank;
+    }
 }
 bank b {
     group port {

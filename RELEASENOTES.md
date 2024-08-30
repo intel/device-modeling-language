@@ -180,3 +180,10 @@
 - `release 6 6321`
 - `release 7 7033`
 - `release 6 6324`
+- `note 6` Relaxed the rule which conditionally forbade naming a `group` "port"
+  or "bank". Any `group` may now be named "port" or "bank" regardless of
+  context, but `port`s, `bank`s, or `subdevice`s may not be declared underneath
+  any `group` named "port" or "bank". (For DML 1.2 devices, this change only
+  applies to naming a group "port", as naming any object "bank" in 1.2 devices
+  is impossible due to every object of a 1.2 device having the `bank`
+  parameter.)
