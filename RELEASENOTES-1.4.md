@@ -330,3 +330,5 @@
   signatures of unused `shared` methods were not properly checked, leading to
   invalid generated C.
 - `release 6 6329`
+- `note 6` `continue` can now be used within `foreach` loops (use within
+  `#foreach` loops remains unsupported)

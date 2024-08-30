@@ -956,8 +956,8 @@ class ECONT(DMLError):
 
 class ECONTU(DMLError):
     """
-    A `continue` statement cannot be used in a `foreach`
-    or `select` statement.
+    A `continue` statement cannot be used in a `#foreach`
+    or `#select` statement.
     """
     fmt = "continue is not possible here"
 

@@ -3784,7 +3784,8 @@ within the body.
 DML currently only supports `foreach` iteration on values of `sequence` types
 &mdash; which are created through [Each-In expressions](#each-in-expressions).
 
-The `break` statement can be used within a `foreach` loop to exit it.
+The `continue` statement can be used within a `foreach` loop to continue to the
+next element, and the `break` statement can be used to exit the loop.
 
 <pre>
 #foreach <em>identifier</em> in (<em>expr</em>) <em>statement</em>

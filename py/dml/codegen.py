@@ -104,11 +104,17 @@ class LoopContext:
     def __exit__(self, exc_type, exc_val, exc_tb):
         assert LoopContext.current is self
         LoopContext.current = self.prev
+    @abstractmethod
+    def break_(self, site): pass
+    def continue_(self, site):
+        raise ECONTU(site)
 
 class CLoopContext(LoopContext):
     '''DML loop context corresponding to a C loop'''
     def break_(self, site):
         return [mkBreak(site)]
+    def continue_(self, site):
+        return [mkContinue(site)]
 
 class NoLoopContext(LoopContext):
     '''DML loop context corresponding to an inlined method call.
@@ -116,6 +122,8 @@ class NoLoopContext(LoopContext):
     the inline method call and the method called.'''
     def break_(self, site):
         raise EBREAK(site)
+    def continue_(self, site):
+        raise ECONT(site)
 
 class GotoLoopContext(LoopContext):
     '''DML loop context not directly corresponding to a single C loop
@@ -130,6 +138,13 @@ class GotoLoopContext(LoopContext):
     def break_(self, site):
         self.used = True
         return [mkGotoBreak(site, self.label)]
+
+class ForeachSequenceLoopContext(GotoLoopContext):
+    '''DML loop context corresponding to a foreach loop on an each-in sequence
+    Uses of `break` is codegen:d as a goto past the outer loop, and `continue`
+    is codegen:d as a `continue` of the inner loop'''
+    def continue_(self, site):
+        return [mkContinue(site)]
 
 class Failure(ABC):
     '''Handle exceptions failure handling is supposed to handle the various kind of
@@ -3065,7 +3080,7 @@ def foreach_each_in(site, itername, trait, each_in,
     inner_scope.add_variable(
         itername, type=trait_type, site=site,
         init=ForeachSequence.itervar_initializer(site, trait))
-    context = GotoLoopContext()
+    context = ForeachSequenceLoopContext()
     with context:
         inner_body = mkCompound(site, declarations(inner_scope)
             + codegen_statements([body_ast], location, inner_scope))
@@ -3261,13 +3276,10 @@ def stmt_switch(stmt, location, scope):
 
 @statement_dispatcher
 def stmt_continue(stmt, location, scope):
-    if (LoopContext.current is None
-        or isinstance(LoopContext.current, NoLoopContext)):
+    if LoopContext.current is None:
         raise ECONT(stmt.site)
-    elif isinstance(LoopContext.current, CLoopContext):
-        return [mkContinue(stmt.site)]
     else:
-        raise ECONTU(stmt.site)
+        return LoopContext.current.continue_(stmt.site)
 
 @statement_dispatcher
 def stmt_break(stmt, location, scope):
