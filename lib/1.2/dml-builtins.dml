@@ -185,12 +185,9 @@ template group {
     is object;
     parameter objtype = "group";
     parameter log_group = undefined;
-    if (($this._nongroup_parent.objtype == "port"
-         || $this._nongroup_parent.objtype == "device")
-        && $this.name == "port") {
-         error "Cannot name a group 'port' in a location where"
-             + " port objects are allowed";
-    }
+    parameter _simics_namespace_clash =
+        $this.name == "port" || ($parent.objtype == "group"
+                                 ? $parent._simics_namespace_clash : false);
 }
 
 template device {
@@ -385,6 +382,9 @@ template bank {
     is object;
     is _hard_reset;
     is _soft_reset;
+
+    // Need not check if any parent groups are named 'port': banks must be
+    // top-level in 1.2 devices due to SIMICS-19009
 
     data _callback_vect_t _before_read_callbacks;
     data _callback_vect_t _after_read_callbacks;
@@ -1926,6 +1926,10 @@ template event {
 template port {
     is object;
     parameter objtype = "port";
+
+    if ($parent.objtype == "group" ? $parent._simics_namespace_clash : false) {
+        error "Cannot declare a port underneath a group named 'port'";
+    }
 }
 
 template subdevice {
@@ -1933,6 +1937,9 @@ template subdevice {
     parameter objtype = "subdevice";
     if ($this.name == "port") {
          error "A subdevice may not be named 'port'";
+    }
+    if ($parent.objtype == "group" ? $parent._simics_namespace_clash : false) {
+        error "Cannot declare a subdevice underneath a group named 'port'";
     }
 }
 

@@ -659,19 +659,17 @@ as parent.
 The `group` template contains no particular methods or parameters other
 than what is inherited from the [`object`](#object) template.
 
-In a group hierarchy directly below a `port` or `device` object, none of the
-group object may be named `bank` or `port`; this is to avoid name clashes.
+You may not declare any `bank`, `port` or `subdevice` underneath any group
+named "bank" or "port". This is to avoid namespace clashes in Simics.
 */
 template group is object {
     param objtype = "group";
     param _is_simics_object = false;
     param log_group = undefined;
-    #if ((_nongroup_parent.objtype == "subdevice"
-          || _nongroup_parent.objtype == "device")
-         && (this.name == "port" || this.name == "bank")) {
-         error "Cannot name a group 'port' or 'bank' in a location where"
-             + " port or bank objects are allowed";
-    }
+    param _simics_namespace_clash =
+        this.name == "bank" || this.name == "port"
+        || (parent.objtype == "group"
+            #? parent._simics_namespace_clash #: false);
 }
 
 session bool _issuing_state_callbacks = false;
@@ -1532,6 +1530,12 @@ template port is object {
     param limitations = undefined;
     param obj = dev._compat_port_obj_param #? dev.obj #: _port_obj();
 
+    #if (parent.objtype == "group"
+         #? parent._simics_namespace_clash #: false) {
+        error "Cannot declare a port underneath a group named 'port' or "
+            + "'bank'";
+    }
+
     session conf_object_t *_cached_port_obj;
     shared method _port_obj() -> (conf_object_t *) {
         if (this._cached_port_obj != NULL) {
@@ -1569,6 +1573,11 @@ template subdevice is object {
     }
     #if (this.name == "port" || this.name == "bank") {
          error "A subdevice may not be named 'port' or 'bank'";
+    }
+    #if (parent.objtype == "group"
+         #? parent._simics_namespace_clash #: false) {
+        error "Cannot declare a subdevice underneath a group named 'port' or "
+            + "'bank'";
     }
 }
 
@@ -1859,6 +1868,12 @@ When compiling with Simics API 6 or newer, evaluates to the bank's port object.
 </dd></dl>
 */
 template bank is (object, shown_desc) {
+    #if (parent.objtype == "group"
+         #? parent._simics_namespace_clash #: false) {
+        error "Cannot declare a bank underneath a group named 'port' or "
+            + "'bank'";
+    }
+
     // compatibility: referencing 'obj' in a bank method must evaluate to
     // dev.obj in code that can compile on both 5 and 6
     // TODO: we should probably make obj an immutable session variable

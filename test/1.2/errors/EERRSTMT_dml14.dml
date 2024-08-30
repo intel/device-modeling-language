@@ -19,29 +19,60 @@ method m_dml14() {
     }
 }
 
-// Groups and ports may not be named "port" in devices
-// since thy might otherwise cause Simics conf-object names to clash.
+// Subdevices may not be named "port" in devices
+// since that might otherwise cause Simics conf-object names to clash.
 // Unlike DML 1.4, no need to test 'bank' here since that ENAMECOLLs with
 // a parameter.
 /// ERROR EERRSTMT
 subdevice port;
+
+// Banks, ports, and subdevices may not be declared underneath any group named
+// "port" (as that would introduce conflicting namespaces)
 group g1 {
-    /// ERROR EERRSTMT
-    subdevice port;
-    group g {
+    group port {
         /// ERROR EERRSTMT
-        group port;
+        subdevice s;
+        /// ERROR EERRSTMT
+        port p;
+        group g {
+            /// ERROR EERRSTMT
+            subdevice s;
+            /// ERROR EERRSTMT
+            port p;
+        }
     }
 }
-subdevice p1 {
-    group g {
+
+group g2 {
+    port port;
+}
+
+group g3 {
+    /// ERROR EERRSTMT
+    subdevice port;
+}
+
+subdevice s {
+    group g1 {
+        group port {
+            group g {
+                /// ERROR EERRSTMT
+                subdevice s;
+                /// ERROR EERRSTMT
+                port p;
+            }
+        }
+    }
+    group g2 {
         /// ERROR EERRSTMT
         subdevice port;
     }
 }
-port p2 {
-    // currently an error (but harmless, really: port in port is not allowed)
-    /// ERROR EERRSTMT
+
+// no error
+port p {
     group port;
 }
-
+bank b {
+    group port;
+}
