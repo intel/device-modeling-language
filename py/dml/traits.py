@@ -222,7 +222,7 @@ class TraitMethod(TraitVTableItem):
               if not self.independent else contextlib.nullcontext()):
             scope = MethodParamScope(self.trait.scope(global_scope))
             implicit_inargs = self.vtable_trait.implicit_args()
-            site = SimpleSite(self.site.loc())
+            site = as_simple_site(self.site)
             if len(self.default_traits) > 1:
                 default = AmbiguousDefaultSymbol(
                     [trait.method_impls[self.name].site

@@ -22,6 +22,8 @@ __all__ = (
     'DumpableSite',
     'TemplateSite',
 
+    'as_simple_site',
+
     'dbg',
     )
 
@@ -258,6 +260,17 @@ class PortingMessage(LogMessage):
                 # messages on Windows
                 os.path.normcase(arg.loc()) if isinstance(arg, Site) else arg
                 for arg in self.args]))
+
+def as_simple_site(site):
+    '''Make a SimpleSite whose description is based on the .loc() of an actual
+    site.
+
+    This is useful for generated statements that are related to DML code at a
+    particular line, but that line can't reasonably be said to describe the
+    generated code. `as_simple_site` can then be used to easily give that
+    generated statement an informative site while guaranteeing that statement
+    won't get linemarked.'''
+    return SimpleSite(site.loc())
 
 class Site(metaclass=abc.ABCMeta):
     __slots__ = ()

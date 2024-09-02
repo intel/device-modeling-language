@@ -331,8 +331,7 @@ class IndependentMemoized(Memoization):
         assert func.method.independent
         self.func = func
         self.method = func.method
-        # SimpleSite wrapper to avoid linemarks being generated.
-        self.site = SimpleSite(self.method.site.loc())
+        self.site = as_simple_site(self.method.site)
 
     def make_ref(self, ref, typ):
         indexing = ''.join([f'[_idx{i}]'
@@ -354,18 +353,18 @@ class IndependentMemoized(Memoization):
             self.method.logname_anonymized(), self.site, self.func.outp,
             self.func.throws, self.make_ref)
     def exit_handler(self):
-        return MemoizedReturnExit(self.method.site, self.func.outp,
-                                  self.func.throws, self.make_ref)
+        return MemoizedReturnExit(self.site, self.func.outp, self.func.throws,
+                                  self.make_ref)
     def fail_handler(self):
-        return (MemoizedReturnFailure(self.method.rbrace_site, self.make_ref)
+        return (MemoizedReturnFailure(as_simple_site(self.method.rbrace_site),
+                                      self.make_ref)
                 if self.func.throws else NoFailure(self.method.site))
 
 class SharedIndependentMemoized(Memoization):
     def __init__(self, method):
         assert method.independent
         self.method = method
-        # SimpleSite wrapper to avoid linemarks being generated.
-        self.site = SimpleSite(self.method.site.loc())
+        self.site = as_simple_site(method.site)
     def make_ref(self, ref, typ):
         traitname = cident(self.method.trait.name)
         return mkLit(self.site,
@@ -377,10 +376,11 @@ class SharedIndependentMemoized(Memoization):
             self.method.name, self.site, self.method.outp, self.method.throws,
             self.make_ref)
     def exit_handler(self):
-        return MemoizedReturnExit(self.method.site, self.method.outp,
+        return MemoizedReturnExit(self.site, self.method.outp,
                                   self.method.throws, self.make_ref)
     def fail_handler(self):
-        return (MemoizedReturnFailure(self.method.rbrace_site, self.make_ref)
+        return (MemoizedReturnFailure(as_simple_site(self.method.rbrace_site),
+                                      self.make_ref)
                 if self.method.throws else NoFailure(self.method.site))
 
 def memoization_common_prelude(name, site, outp, throws, make_ref):
@@ -3779,7 +3779,7 @@ def codegen_method_func(func):
                 method.parent, indices,
                 [mkLit(method.site, n, t) for (n, t) in func.inp],
                 [mkLit(method.site, "*%s" % n, t) for (n, t) in func.outp],
-                SimpleSite(method.site.loc()))
+                as_simple_site(method.site))
     inline_scope = MethodParamScope(global_scope)
     for (name, e) in func.inp:
         if dml.globals.dml_version == (1, 2) and (
@@ -3846,6 +3846,7 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
 
         fnscope.add(default)
 
+        implicit_ret_site = as_simple_site(rbrace_site)
         if memoization:
             prelude = memoization.prelude
             fail_handler = memoization.fail_handler()
@@ -3853,7 +3854,7 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
         else:
             def prelude():
                 return []
-            fail_handler = (ReturnFailure(rbrace_site) if throws
+            fail_handler = (ReturnFailure(implicit_ret_site) if throws
                             else NoFailure(site))
             exit_handler = (GotoExit_dml12()
                             if ast.site.dml_version() == (1, 2)
@@ -3893,8 +3894,8 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
             with fail_handler, exit_handler:
                 code.append(codegen_statement(ast, location, fnscope))
             if exit_handler.used:
-                code.append(mkLabel(rbrace_site, exit_handler.label))
-            code.append(codegen_return(rbrace_site, outp, throws, [
+                code.append(mkLabel(implicit_ret_site, exit_handler.label))
+            code.append(codegen_return(implicit_ret_site, outp, throws, [
                 lookup_var(site, fnscope, varname) for (varname, _) in outp]))
             to_return = mkCompound(site, code)
         else:
@@ -3917,8 +3918,9 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
                         report(ENORET(site))
                     else:
                         code = mkCompound(site,
-                                          body + [codegen_exit(rbrace_site,
-                                                               [])],
+                                          body
+                                          + [codegen_exit(implicit_ret_site,
+                                                          [])],
                                           rbrace_site)
             to_return = code
         return to_return

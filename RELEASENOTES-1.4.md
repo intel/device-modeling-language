@@ -332,3 +332,7 @@
 - `release 6 6329`
 - `note 6` `continue` can now be used within `foreach` loops (use within
   `#foreach` loops remains unsupported)
+- `note 6` C code generated for any implicit return of a method will no longer
+  receive a `#line` directive pointing it to the closing brace of the DML
+  method (fixes SIMICS-22685). This should make coverage and debugging tools
+  ignore implicit returns, as with C.
