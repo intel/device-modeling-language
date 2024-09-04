@@ -332,4 +332,5 @@
 - `release 6 6329`
 - `note 6` `continue` can now be used within `foreach` loops (use within
   `#foreach` loops remains unsupported)
+- `release 7 7037`
 - `release 6 6330`
