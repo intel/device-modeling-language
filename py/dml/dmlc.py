@@ -224,9 +224,6 @@ def dump_input_files(outputbase, imported):
                     '../' * (len(symlink.split(os.sep)) - 1) + prefix, base))
                 tf.addfile(ti)
 
-def is_warning_tag(w):
-    return w and w[0] == 'W' and hasattr(messages, w)
-
 def unexpected_error(exc_type, exc_value, exc_traceback):
     if debug_mode:
         traceback.print_exception(exc_type, exc_value, exc_traceback)
@@ -623,6 +620,10 @@ def main(argv):
     if options.debuggable and options.porting_filename:
         prerr("dmlc: the -P flag cannot be used together with -g")
         sys.exit(1)
+
+    if options.dep:
+        # stops parser warnings from appearing twice during a build
+        dml.globals.ignore_all_warnings = True
 
     if options.porting_filename:
         porting_dirname = os.path.dirname(options.porting_filename)

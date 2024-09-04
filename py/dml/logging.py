@@ -8,6 +8,7 @@ __all__ = (
     'ICE',
 
     'show_porting',
+    'is_warning_tag',
     'ignore_warning',
     'warning_is_ignored',
     'enable_warning',
@@ -31,6 +32,8 @@ import bisect
 import abc
 import contextlib
 
+import dml.globals
+
 show_porting = False
 
 # Signal translation failure
@@ -45,6 +48,11 @@ def set_include_tag(val):
     global include_tag
     include_tag = val
 
+def is_warning_tag(tag):
+    from . import messages
+    cls = getattr(messages, tag, None)
+    return isinstance(cls, type) and issubclass(cls, DMLWarning)
+
 # A set of ignored warnings
 ignored_warnings = {}
 def ignore_warning(tag):
@@ -54,7 +62,7 @@ def enable_warning(tag):
     ignored_warnings[tag] = False
 
 def warning_is_ignored(tag):
-    return ignored_warnings.get(tag, False)
+    return dml.globals.ignore_all_warnings or ignored_warnings.get(tag, False)
 
 class ErrorContext(object):
     __slots__ = ('node', 'site')

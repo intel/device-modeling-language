@@ -69,6 +69,9 @@ coverity = False
 
 coverity_pragmas = {}
 
+# all warnings are disabled by the --dep flag
+ignore_all_warnings = False
+
 # Enable features that are not supported in any capacity, for testing purposes.
 # This is reserved for features that are fully implemented, but whose design
 # cannot be finalized until later in the future.
