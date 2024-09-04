@@ -1,0 +1,17 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+// Test that passing --dep silences warnings. This avoids reporting the same
+// warning twice for the same device.
+
+/// COMPILE-ONLY
+/// NO-CC
+
+device test;
+
+/// DMLC-FLAG --dep
+/// DMLC-FLAG T_WREDUNDANTLEVEL.dmldep
+import "WREDUNDANTLEVEL.dml";

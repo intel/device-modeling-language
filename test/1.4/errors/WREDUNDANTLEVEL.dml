@@ -1,0 +1,10 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+method init() {
+    /// WARNING WREDUNDANTLEVEL
+    log info, 1 then 1: "init";
+}

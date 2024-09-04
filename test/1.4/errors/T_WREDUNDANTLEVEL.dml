@@ -8,7 +8,5 @@ dml 1.4;
 
 device test;
 
-method init() {
-    /// WARNING WREDUNDANTLEVEL
-    log info, 1 then 1: "init";
-}
+/// SCAN-FOR-TAGS WREDUNDANTLEVEL.dml
+import "WREDUNDANTLEVEL.dml";
