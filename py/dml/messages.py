@@ -1893,10 +1893,11 @@ class EEXTERNINCOMP(DMLError):
 class WNOVER(DMLWarning):
     """
     A DML file must start with a version statement, such as `dml 1.4;`
+
+    This warning becomes an error in Simics API 8 and newer, when the
+    compatibility feature `optional_version_statement` is disabled.
     """
     fmt = "file has no version tag, assuming version 1.2"
-
-    """
 
 class WNDOCRA(DMLWarning):
     """
@@ -1916,10 +1917,11 @@ class WNEGOFFS(DMLWarning):
 
 class WUNUSEDDEFAULT(DMLWarning):
     """
-    The object is not referenced anywhere but it matches a name of an
-    object automatically referenced in another scope. This is the same
-    as WUNUSED but only for known common errors and it will never be
-    emitted if WUNUSED is enabled.
+    In DML 1.2, it is usually a mistake to implement a method named
+    `after_write` in a field, because only register objects recognize that
+    method. The `WUNUSEDDEFAULT` warning captures this kind of mistake
+    by reporting a warning when a method is implemented that is unused,
+    but whose name matches a method commonly implemented in other objects.
     """
     fmt = "unused: %s methods are not called automatically for %s objects in %s"
     def __init__(self, obj):
@@ -1945,11 +1947,11 @@ class WUNUSED_DML12(DMLWarning):
     def __init__(self, obj):
         DMLWarning.__init__(self, obj, obj.name)
 
-
 class WSIZEOFTYPE(DMLWarning):
     """
-    The 'sizeof' operator is used on a type name, but expects an
-    expression. Use the 'sizeoftype' operator for types.
+    In DML 1.4 it is an error to pass a type name as the operand of `sizeof`.
+    In DML 1.2 it instead emits a `WSIZEOFTYPE` warning, for legacy reasons.
+    To get the size of a type, the `sizeoftype` operator should be used.
     """
     fmt = "sizeof on a type is not legal, use sizeoftype instead"
 
@@ -2007,8 +2009,8 @@ class WWRNSTMT(DMLWarning):
 class WREF(DMLWarning):
     """An unused parameter refers to an object that has not been declared.
 
-    This warning message will be replaced with a hard error in future
-    major versions of Simics.
+    This warning message is replaced with a hard error for modules compiled
+    with Simics API 6 or newer.
     """
     instances = []
     fmt = "unused parameter %s contains %s"
