@@ -2033,9 +2033,7 @@ class ShR_dml12(BitShift_dml12):
         etype = realtype(expr.ctype())
         assert etype.is_int
         ltype = realtype(lh.ctype())
-        if etype.bits < 1:
-            report(WSHALL(site, lh, rh))
-        elif ltype.bits > 32 and etype.bits <= 32:
+        if ltype.bits > 32 and etype.bits <= 32:
             expr = mkCast(site, expr, etype)
         return expr
 

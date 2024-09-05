@@ -512,8 +512,6 @@ def check_attribute(node, port, prefix):
         if (node.objtype in {'attribute', 'connect'}
             and config_param == 'required'):
             report(WNDOCRA(node, node.logname()))
-        elif node.objtype != 'register':
-            report(WNDOC(node, node.logname()))
     attrname = get_attr_name(prefix, node)
     register_attribute(node.site, port, attrname)
     if port and need_port_proxy_attrs(port):
@@ -543,7 +541,6 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
         report(WNDOCRA(node, node.logname()))
         doc = "Undocumented"
     else:
-        report(WNDOC(node, node.logname()))
         doc = "Undocumented"
 
     # append the required interfaces to the docstring
@@ -1954,8 +1951,6 @@ def generate_init(device, initcode, outprefix):
     out('.description = '+doc.read()+',\n')
     if sdoc:
         out('.short_desc = '+sdoc.read()+',\n')
-    else:
-        report(WNSHORTDESC(device.site))
     out('};\n', preindent = -1)
     out('\n')
     out('conf_class_t *class = SIM_create_class("'

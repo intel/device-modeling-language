@@ -35,13 +35,6 @@ outputbase = None
 output_c = True
 
 
-# Ignore some warnings by default
-ignore_warning('WASSERT')
-ignore_warning('WNDOC')
-ignore_warning('WSHALL')
-ignore_warning('WUNUSED')
-ignore_warning('WNSHORTDESC')
-
 if os.getenv('DMLC_DEBUG'):
     debug_mode = True
 else:

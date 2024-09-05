@@ -175,3 +175,11 @@
 - `release 6 6316`
 - `release 7 7027`
 - `release 6 6138`
+- `note 6` Removed the obsolete warning types `WSYSTEMC` and `WDUPEVENT`. These
+  warnings were never reported. This change will cause errors if existing
+  makefiles pass e.g. `--nowarn=WSYSTEMC`.
+- `note 6` Removed the obsolete warning types `WSHALL`, `WNDOC`, and
+  `WNSHORTDESC`. These are all disabled by default and have no known uses,
+  typically because enabling them produced a overwhelming noise from false
+  positives. This change will cause errors if exiting makefiles pass e.g.
+  `--warn=WSHALL`.

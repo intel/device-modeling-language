@@ -463,9 +463,7 @@ def check_unused_and_warn(node):
     not used. This usually applies to methods and parameters."""
 
     if node.refcount == 0:
-        if not warning_is_ignored('WUNUSED'):
-            report(WUNUSED(node))
-        elif is_unused_default(node):
+        if is_unused_default(node):
             report(WUNUSEDDEFAULT(node))
         elif dml.globals.dml_version != (1, 2) and is_dml12_method(node):
             report(WUNUSED_DML12(node))

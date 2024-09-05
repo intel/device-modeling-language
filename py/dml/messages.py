@@ -1896,32 +1896,7 @@ class WNOVER(DMLWarning):
     """
     fmt = "file has no version tag, assuming version 1.2"
 
-class WSHALL(DMLWarning):
     """
-    The result of the shift operation will always be zero.
-    (This warning is disabled by default.)
-    """
-    fmt = "shifting away all data\n%s"
-    def __init__(self, node, lh, rh):
-        DMLWarning.__init__(self, node, binary_dump(lh, rh))
-
-class WNDOC(DMLWarning):
-    """
-    No documentation string was specified for the attribute.
-    (This warning is disabled by default.)
-    """
-    fmt = "no documentation for '%s'"
-    def __init__(self, node, member):
-        DMLWarning.__init__(self, node, member)
-
-class WNSHORTDESC(DMLWarning):
-    """
-    No short description string was specified using the 'desc' parameter.
-    (This warning is disabled by default.)
-    """
-    fmt = "no 'desc' parameter specified for device"
-    def __init__(self, node):
-        DMLWarning.__init__(self, node)
 
 class WNDOCRA(DMLWarning):
     """
@@ -1938,16 +1913,6 @@ class WNEGOFFS(DMLWarning):
     a negative offset expression translates to a very large offset.
     """
     fmt = "negative register offset: %d"
-
-class WUNUSED(DMLWarning):
-    """
-    The object is not referenced anywhere.
-    (This warning is disabled by default.; it typically causes many false
-    warnings.)
-    """
-    fmt = "unused: %s"
-    def __init__(self, obj):
-        DMLWarning.__init__(self, obj, obj.identity())
 
 class WUNUSEDDEFAULT(DMLWarning):
     """
@@ -1980,16 +1945,6 @@ class WUNUSED_DML12(DMLWarning):
     def __init__(self, obj):
         DMLWarning.__init__(self, obj, obj.name)
 
-class WDUPEVENT(DMLWarning):
-    """
-    Two or more events will be checkpointed using the same name, which
-    means that the checkpoint cannot be safely read back.
-    """
-    fmt = "duplicate event checkpoint names: %s"
-    def __init__(self, site, objlist):
-        DMLWarning.__init__(self, site,
-                            ", ".join(dollar(self.site) + o.logname()
-                                      for o in objlist))
 
 class WSIZEOFTYPE(DMLWarning):
     """
@@ -2028,11 +1983,6 @@ class WCONFIDENTIAL(DMLWarning):
     def __init__(self, site):
         DMLWarning.__init__(self, site)
 
-# Not used (see ctree.py class CopyData), not documented.
-# class WASSIGN(DMLWarning):
-#     def __init__(self, site):
-#         DMLWarning.__init__(self, site, "cannot perform assignment")
-
 class WOLDAST(DMLWarning):
     """
     A precompiled DML file has an old time-stamp. This may happen if a
@@ -2052,11 +2002,8 @@ class WWRNSTMT(DMLWarning):
     """
     fmt = "%s"
 
-class WSYSTEMC(DMLWarning):
-    """ SystemC specific warnings """
-    fmt = "%s"
 
-    # This message should be removed, SIMICS-9886
+# This message should be removed, SIMICS-9886
 class WREF(DMLWarning):
     """An unused parameter refers to an object that has not been declared.
 

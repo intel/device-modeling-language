@@ -60,7 +60,7 @@ The following sections list the warnings and error messages from
 ## Warning Messages
 
 The messages are listed in alphabetical order; the corresponding tags
-are shown within brackets, e.g., `[WNDOC]`.
+are shown within brackets, e.g., `[WNDOCRA]`.
 
 """)
 
