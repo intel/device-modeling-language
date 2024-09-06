@@ -315,7 +315,8 @@ class DMLFileTestCase(BaseTestCase):
                                      stderr=stderr,
                                      cwd=self.scratchdir, env = env)
         if status == 0:
-            if pypy_dmlc:
+            # NO-CC might mean that no C file was produced
+            if pypy_dmlc and not self.test_flags().no_cc:
                 return self.compare_pypy_dmlc(reaper, args, env)
             return 0
         elif status == 1:
