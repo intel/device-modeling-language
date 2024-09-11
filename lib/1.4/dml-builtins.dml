@@ -408,6 +408,56 @@ template post_init {
 }
 
 /**
+### destroy
+Provides an abstract method `destroy`, which is called when the
+device is being deleted. Typically used to `delete` any device state that has
+been dynamically allocated using `new`.
+
+The method `destroy` is automatically called on all objects that implement the
+`destroy` template. The order in which `destroy` of objects are called is not
+defined, except that `destroy` of a particular object is guaranteed to be
+called before `destroy` of any of its parent objects.
+In particular, `destroy` of the device object will be called only after all
+other implementations of `destroy`.
+
+Usage note: while the device is being deleted, it is not allowed to communicate
+with any other Simics object (whether that is by accessing `connect`ed devices
+or by leveraging the Simics API.) This includes even the device's own clock;
+don't attempt to post or cancel time/cycle-based events in `destroy()`
+(including posting events using `after` with a time/cycle delay). The
+cancellation of such events is handled automatically, before the `destroy()`
+calls are invoked. The use of `.cancel_after()` inside `destroy()` is tolerated
+(even if almost always redundant.)
+
+<div class="note">
+
+**Note:** the `destroy` template can't be instantiated for
+`event` objects. This is because `event` objects, through the
+`custom_time_event` or `custom_cycle_event` template, may already require
+defining a method named `destroy` whose purpose is different from the one
+required by the `destroy` template. To work around this limitation, you may
+declare a `group` within the `event` object that instantiates the `destroy`
+template instead.
+
+</div>
+*/
+template destroy {
+    param _each_destroy : sequence(destroy);
+    param _each_destroy = each destroy in (this);
+    shared method _rec_destroy() {
+        foreach obj in (this._each_destroy)
+            obj._rec_destroy();
+        this.destroy();
+    }
+    // Perform local destruction (deallocation etc.)
+    shared method destroy();
+
+    #if (this.objtype == "event") {
+        error "event objects may not instantiate the 'destroy' template";
+    }
+}
+
+/**
 ### object
 
 Base template, implemented by all objects. Inherits the templates
@@ -449,9 +499,10 @@ The `object` template provides the non-overridable method `cancel_after()`,
 which cancels all pending events posted using `after` which are associated with
 the object (any events associated with subobjects are unaffected).
 
-There are no other methods common for all objects, but the methods `init`
-and `post_init` are automatically called on all objects that implement
-the [`init`](#init) and [`post_init`](#post_init) template, respectively.
+There are no other methods common for all objects, but the methods `init`,
+`post_init`, and `destroy` are automatically called on all objects that
+implement the [`init`](#init), [`post_init`](#post_init), and
+[`destroy`](#destroy) template, respectively.
 
 */
 template object is (name, _qname, desc, documentation, limitations) {
@@ -498,8 +549,8 @@ template object is (name, _qname, desc, documentation, limitations) {
 ## Device objects
 
 The top-level scope of a DML file defines the *device object*, defined by the
-template `device`. This template inherits the [`init`](#init) and
-[`post_init`](#post_init) templates.
+template `device`. This template inherits the [`init`](#init),
+[`post_init`](#post_init), and [`destroy`](#destroy) templates.
 
 The `device` template contains the following methods:
 
@@ -545,6 +596,8 @@ template device {
     // _init and _post_init are called automatically on object instantiation
     is init;
     is post_init;
+    // _destroy is called automatically on object deletion
+    is destroy;
 
     // structural info
     param objtype = "device";
@@ -589,10 +642,10 @@ template device {
 
     method _init() { _rec_init(); }
     method _post_init() { _rec_post_init(); }
+    method _destroy() { _rec_destroy(); }
     method init() default {}
     method post_init() default {}
-
-    method destroy() default { }
+    method destroy() default {}
 }
 
 /**

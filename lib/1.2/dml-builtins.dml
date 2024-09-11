@@ -244,6 +244,13 @@ template device {
     }
     method post_init() default { }
     method destroy() default { }
+    method _destroy() nothrow {
+        try {
+            inline $destroy;
+        } catch {
+            log error: "Uncaught DML exception";
+        }
+    }
 
     method _default_hard_reset() {
         foreach bank in ($banks)

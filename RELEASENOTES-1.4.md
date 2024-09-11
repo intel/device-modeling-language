@@ -334,3 +334,7 @@
   `#foreach` loops remains unsupported)
 - `release 7 7037`
 - `release 6 6330`
+- `note 6` Added the `destroy` template, the device deletion equivalent of the
+  `init` and `post_init` templates. When the device is being deleted,
+  `destroy()` will be called of every object that instantiates the `destroy`
+  template. The device object always instantiates this template.

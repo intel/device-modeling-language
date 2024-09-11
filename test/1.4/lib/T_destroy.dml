@@ -1,0 +1,64 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+session const char *invocations[4];
+session uint32 invocation_count = 0;
+
+method destroy_invocation(const char *name) {
+    assert invocation_count < invocations.len;
+    invocations[invocation_count++] = name;
+}
+
+attribute post_ev is write_only_attr {
+    param type = "n";
+    method set(attr_value_t _val) throws {
+        g1.ev.post(1, NULL);
+    }
+}
+
+group g1 is destroy {
+    method destroy() {
+        destroy_invocation("g1");
+    }
+    event ev is custom_time_event {
+        method event(void *data) {
+            assert false;
+        }
+
+        method destroy(void *data) {
+            destroy_invocation("ev");
+        }
+
+        method get_event_info(void *data) -> (attr_value_t) {
+            return SIM_make_attr_nil();
+        }
+
+        method set_event_info(attr_value_t val) -> (void *) {
+            return NULL;
+        }
+
+        group g2 is destroy {
+            method destroy() {
+                destroy_invocation("g2");
+            }
+        }
+    }
+}
+
+method destroy() {
+    destroy_invocation("dev");
+    local attr_value_t arg_list = SIM_alloc_attr_list(invocation_count);
+    local attr_value_t *args = SIM_attr_list(arg_list);
+    for (local uint32 i = 0; i < invocation_count; ++i) {
+        args[i] = SIM_make_attr_string(invocations[i]);
+    }
+    local attr_value_t val = VT_call_python_module_function(
+        "__main__", "on_destroyed", &arg_list);
+    SIM_attr_free(&val);
+    SIM_attr_free(&arg_list);
+}
