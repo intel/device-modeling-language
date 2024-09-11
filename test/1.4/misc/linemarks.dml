@@ -170,21 +170,19 @@ saved int sav_2;
 // linemarks for their statements appear within the C functions for the methods
 // in which they are inlined.
 inline method inline_m(inline x) -> (int) {
-    // BEGIN-LINEMARKS-FUNC _DML_M_init test_deinit
+    // BEGIN-LINEMARKS-FUNC _DML_M_init _DML_M_destroy
     return x + 4;
     // END-LINEMARKS
 }
 
-// destroy() is the only overridable method in DML 1.4 which is ad-hoc invoked
-// by DMLC via a codegen_inline_byname, and can possibly never be called
-// otherwise.
-method destroy() {
-    // BEGIN-LINEMARKS-FUNC test_deinit
+method destroy()
+// BEGIN-LINEMARKS-FUNC _DML_M_destroy
+{
     local int x;
     x = inline_m(x);
     assert x == 4;
-    // END-LINEMARKS
 }
+// END-LINEMARKS
 
 method init()
 // BEGIN-LINEMARKS-FUNC _DML_M_init

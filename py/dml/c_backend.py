@@ -1247,7 +1247,10 @@ def generate_simple_events_control_methods(device):
     out('{\n', postindent = 1)
     out(crep.structtype(device) + ' *_dev UNUSED = ('
         + crep.structtype(device) + '*)_obj;\n')
-    out('if (SIM_object_clock(_obj)) {\n', postindent=1)
+    # !SIM_marked_for_deletion(_obj) is in case .cancel_after() is called
+    # during deletion
+    out('if (!SIM_marked_for_deletion(_obj) && SIM_object_clock(_obj)) {\n',
+        postindent=1)
     out('_cancel_simple_delay_events(_obj, SIM_object_clock(_obj), '
         + '&_domain);\n')
     out('_cancel_simple_delay_events(_obj, SIM_picosecond_clock(_obj), '
@@ -1692,11 +1695,15 @@ def generate_deinit(device):
     out(crep.structtype(device) + ' *_dev UNUSED = ('
         + crep.structtype(device) + ' *)_obj;\n')
     with crep.DeviceInstanceContext():
-        with LogFailure(
-                device.get_component('destroy', 'method').site, device, ()):
-            code = codegen_inline_byname(device, (), 'destroy', [], [],
-                                         device.site)
-        code.toc()
+        codegen_inline_byname(device, (), '_destroy', [], [],
+                              device.site).toc()
+
+        # Execute all immediate afters posted by destruction code
+        # Unlike immediate afters pending from before destruction, these
+        # callbacks are executed and not warned about, as they can be assumed
+        # to be aware that they are called in a deletion context.
+        out('_DML_execute_immediate_afters_now(_obj, '
+            + '_dev->_immediate_after_state);\n')
 
         # Cancel all pending afters on hooks
         by_dims = {}
@@ -1715,13 +1722,6 @@ def generate_deinit(device):
                     + f'&_dev->{crep.cref_hook(hook, indices)}.queue);\n')
             for i in range(len(dims)):
                 out('}\n', preindent=-1)
-
-        # Execute all immediate afters posted by destruction code
-        # Unlike immediate afters pending from before destruction, these
-        # callbacks are executed and not warned about, as they can be assumed
-        # to be aware that they are called in a deletion context.
-        out('_DML_execute_immediate_afters_now(_obj, '
-            + '_dev->_immediate_after_state);\n')
 
         # Free the tables used for log_once after all calls into device code
         # are done
