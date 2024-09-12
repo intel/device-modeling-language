@@ -338,3 +338,4 @@
   `init` and `post_init` templates. When the device is being deleted,
   `destroy()` will be called of every object that instantiates the `destroy`
   template. The device object always instantiates this template.
+- `release 6 6333`
