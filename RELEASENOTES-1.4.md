@@ -339,4 +339,5 @@
   `destroy()` will be called of every object that instantiates the `destroy`
   template. The device object always instantiates this template.
 - `release 6 6333`
+- `release 7 7042`
 - `release 7 7041`
