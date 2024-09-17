@@ -57,7 +57,7 @@
 		</dict>
 		<dict>
 			<key>match</key>
-			<string>\b(#if|#else|connect|constant|device|dml|bank|bitorder|param|import|interface|loggroup|log|local|template|is|implement|method|independent|memoized|saved|startup|inline|event|attribute|throw|try|catch|nothrow|delete|group|port|size|sizeoftype|shared|#select|%header|%footer|subdevice|then)\b</string>
+			<string>\b(#if|#else|connect|constant|device|dml|bank|bitorder|param|import|interface|loggroup|log|local|template|is|implement|method|independent|memoized|saved|startup|inline|event|attribute|throw|try|catch|nothrow|delete|group|port|size|sizeoftype|shared|#select|%header|%footer|subdevice|then|provisional)\b</string>
 			<key>name</key>
 			<string>keyword.control.dml</string>
 		</dict>
