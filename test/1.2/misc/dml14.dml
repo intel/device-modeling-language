@@ -303,7 +303,7 @@ template transaction_access_bank is bank {
         local atom_t atoms[3] = {
             ATOM_data(val),
             ATOM_size(4),
-            ATOM_list_end(0)
+            ATOM_LIST_END,
         };
         // the override is honored if sending a transaction to the bank.
         local transaction_t t;
@@ -325,7 +325,7 @@ bank transaction_access_bank_compat is (
         local atom_t atoms[3] = {
             ATOM_data(val),
             ATOM_size(4),
-            ATOM_list_end(0)
+            ATOM_LIST_END,
         };
         local transaction_t t;
         t.atoms = atoms;
