@@ -46,6 +46,8 @@ extern size_t strlen(const char *s);
 extern char *strcpy(char *s, const char *s);
 extern void *memcpy(void *dest, const void *src, size_t n);
 
+extern const atom_t ATOM_LIST_END;
+
 extern typedef struct {
 } _callback_entry_t;
 
