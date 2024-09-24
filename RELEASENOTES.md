@@ -187,5 +187,6 @@
   applies to naming a group "port", as naming any object "bank" in 1.2 devices
   is impossible due to every object of a 1.2 device having the `bank`
   parameter.)
+- `release 7 7044`
 - `note 6` The `ATOM_LIST_END` macro has been made referencable in DML
   (equivalent to `ATOM_list_end(0)`) (fixes SIMICS-22363).
