@@ -1691,7 +1691,7 @@ Entry point for an access based on `generic_transaction_t`.
 Entry point for an access based on the `transaction` interface.  Extracts all
 needed info from `t`, calls appropriate access methods (`read`, `write`, `get`,
 `set`), and updates the `t` parameter accordingly. Returns
-`Sim_PE_No_Exception` if the access succeeded, and `SIM_PE_IO_Not_Taken`
+`Sim_PE_No_Exception` if the access succeeded, and `Sim_PE_IO_Not_Taken`
 otherwise. The `offset` parameter is the offset of the access relative to the
 bank. The `aux` parameter is NULL by default, and is passed on to bank methods.
 In order to pass additional information on the access down to register and
@@ -3391,7 +3391,7 @@ Extends the [`get_val`](#get_val) template. Provides a single
 overrideable method `get() -> (uint64)`, which retrieves the
 register's value, without side-effects, used for checkpointing and
 inspection. The default is to retrieve the value using the
-get_val` method.
+`get_val` method.
 
 In a field, this template must be explicitly instantiated in order for an
 override to take effect. Note however that field objects do provide a
