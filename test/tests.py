@@ -1168,13 +1168,13 @@ class DmlDep(DmlDepBase):
         target_prereqs = self.load_dependencies(self.cfilename + '.dmldep')
         c_target = 'T_%s.c' % (self.shortname,)
         dmldep_target = 'T_%s.dmldep' % (self.shortname,)
-        non_lib = {os.path.normpath(p) for p in target_prereqs[c_target]
+        non_lib = {Path(p).resolve() for p in target_prereqs[c_target]
                    if not p.startswith(project_host_path())}
         # Main .c target depends on main DML file and all DML imports.
         # We test that all non-library DML files are included, as well as
         # one library file
         self.expect_equal_sets(non_lib, {
-            os.path.normpath(join(testdir, '1.2', 'misc', f + '.dml'))
+            Path(join(testdir, '1.2', 'misc', f + '.dml')).resolve()
             for f in ['T_import_rel_1', 'rel/a/x', 'rel/a/y',
                       'rel/z', 'rel/misc/rel/z']})
         self.expect_equal_sets(target_prereqs[dmldep_target],
@@ -1182,7 +1182,7 @@ class DmlDep(DmlDepBase):
         base_types_dml = os.path.join(
             project_host_path(), 'bin', 'dml', 'api', latest_api_version,
             '1.2', 'simics', 'base-types.dml')
-        if all(os.path.normpath(p) != os.path.normpath(base_types_dml)
+        if all(Path(p).resolve() != Path(base_types_dml).resolve()
                for p in target_prereqs[c_target]):
             raise TestFail('missing %s' % (base_types_dml,))
         # each DML import has a dummy target, depending on nothing
