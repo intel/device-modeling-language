@@ -191,3 +191,4 @@
 - `note 6` The `ATOM_LIST_END` macro has been made referencable in DML
   (equivalent to `ATOM_list_end(0)`) (fixes SIMICS-22363).
 - `release 6 6336`
+- `release 7 7045`
