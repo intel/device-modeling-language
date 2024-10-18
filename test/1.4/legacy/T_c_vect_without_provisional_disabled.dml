@@ -1,0 +1,13 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+device test;
+
+/// DMLC-FLAG --simics-api=7
+/// DMLC-FLAG --no-compat=c_vect_without_provisional
+/// ERROR ECVECT
+typedef int vect x;

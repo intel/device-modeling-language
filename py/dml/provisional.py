@@ -83,6 +83,57 @@ class explicit_param_decls(ProvisionalFeature):
     short = "Require := syntax for defining new params"
     stable = True
 
+
+@feature
+class c_vect(ProvisionalFeature):
+    '''<a id="c_vect"/>
+    This feature enables the `vect` type, based on the
+    `VECT` macro from the Simics C API (`simics/util/vect.h`).
+
+    This is a simple wrapping that behaves inconsistently in many
+    ways, and we plan to eventually introduce a cleaner mechanism for
+    vectors; the `c_vect` is supported as an interim solution until we
+    have that in place.
+
+    The syntax is `BASETYPE vect`, e.g. `typedef int vect int_vect_t;`
+    to define a type for vectors of the `int` type.
+
+    Some caveats:
+
+    * `vect` types typically need to be `typedef`:ed before they are
+      used.  This is because `int vect` is blindly expanded into
+      `VECT(int)` in C, which in turn expands into a `struct`
+      definition, meaning that saying `VECT(int)` twice yields two
+      incompatible types. This means, for instance, that `typeof` in
+      DML doesn't work properly for `vect` types unless `typedef`:ed
+
+    * Importing `"internal.dml"` exposes various C macros from
+      `vect.h` to DML: `VINIT`, `VELEMSIZE`, `VRESIZE`,
+      `VRESIZE_FREE`, `VADD`, `VREMOVE`, `VDELETE_ORDER`, `VINSERT`,
+      `VSETLAST`, `VLEN`, `VVEC`, `VGROW`, `VSHRINK`, `VFREE`,
+      `VTRUNCATE`, `VCLEAR`, and `VCOPY`.
+
+    * DML natively supports indexing syntax, which is translated to
+      `VGET` (or `VSET` for assignment). For instance:
+      ```
+      typedef int vect int_vect_t;
+      method first_element(int_vect_t v) -> (int) {
+          assert VLEN(v) > 0;
+          return v[0];
+      }
+      ```
+
+    Enabling the `c_vect` feature in a file only affects
+    the `vect` declarations in that file.
+
+    When the `c_vect` feature is disabled, usage of `vect` is an
+    error unless the [`c_vect_without_provisional` compatibility
+    feature](deprecations-auto.html#c_vect_without_provisional) is enabled.
+    '''
+    short = "Allow vect syntax based on the VECT macro"
+    stable = True
+    dml12 = True
+
 def parse_provisional(
         provs: list[("Site", str)]) -> dict[ProvisionalFeature, "Site"]:
     ret = {}

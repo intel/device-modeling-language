@@ -1,0 +1,18 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+provisional c_vect;
+
+device test;
+
+/// COMPILE-ONLY
+
+// Error reporting tested by 1.4/legacy/c_vect_without_provisional_*.dml
+
+/// DMLC-FLAG --no-compat=c_vect_without_provisional
+// no warning
+typedef int vect x;

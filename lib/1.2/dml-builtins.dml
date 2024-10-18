@@ -5,6 +5,7 @@
 
 dml 1.2;
 
+provisional c_vect;
 bitorder le;
 
 loggroup Register_Read;
@@ -227,6 +228,7 @@ template device {
     parameter _compat_dml12_goto auto;
     parameter _compat_dml12_misc auto;
     parameter _compat_dml12_int auto;
+    parameter _compat_c_vect_without_provisional auto;
 
     // automatic parameters
     parameter obj                       auto;

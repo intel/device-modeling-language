@@ -1,0 +1,19 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+/// COMPILE-ONLY
+
+// c_vect_without_provisional compat feature enabled
+/// DMLC-FLAG --simics-api=7
+
+// No complaint, even though the c_vect provisional is not enabled.
+// This gives a warning in DML 1.4, see
+// 1.4/legacy/c_vect_without_provisional_enabled,
+// and an ECVECT with c_vect_without_provisional disabled,
+// see 1.4/legacy/c_vect_without_provisional_disabled.
+typedef int vect int_vect_t;
