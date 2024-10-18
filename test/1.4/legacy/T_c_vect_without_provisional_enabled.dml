@@ -1,0 +1,13 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+device test;
+
+/// COMPILE-ONLY
+/// DMLC-FLAG --simics-api=7
+/// WARNING WEXPERIMENTAL
+typedef int vect x;

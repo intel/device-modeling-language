@@ -13,6 +13,7 @@ import dml.globals
 from . import dmllex12
 from . import dmllex14
 from . import provisional
+from . import compat
 
 assert lex.__version__ == yacc.__version__ == "3.4"
 
@@ -1327,18 +1328,18 @@ def cdecl2_ptr(t):
     'cdecl2 : TIMES cdecl2'
     t[0] = ['pointer'] + t[2]
 
-@prod_dml14
+@prod
 def cdecl2_vect(t):
     'cdecl2 : VECT cdecl2'
-    # vect is actually experimental in 1.2 as well, but we will probably
-    # defensively keep it the way it is, because it's used a lot.
-    # TODO: improve how vect works in 1.4, and make it public (US325)
-    report(WEXPERIMENTAL(site(t), 'vect types'))
-    t[0] = ['vect'] + t[2]
-
-@prod_dml12
-def cdecl2_vect(t):
-    'cdecl2 : VECT cdecl2'
+    if provisional.c_vect not in t.parser.file_info.provisional:
+        if compat.c_vect_without_provisional in dml.globals.enabled_compat:
+            vsite = site(t)
+            if vsite.dml_version() != (1, 2):
+                # defensively suppress warning in 1.2, for
+                # compatibility
+                report(WEXPERIMENTAL(site(t), 'vect types'))
+        else:
+            report(ECVECT(site(t)))
     t[0] = ['vect'] + t[2]
 
 @prod_dml12

@@ -1893,6 +1893,11 @@ class EPRAGMA(DMLError):
     """
     fmt = "Unknown pragma: %s"
 
+class ECVECT(DMLError):
+    """`vect` types are only permitted if the [`c_vect` provisional
+    feature](provisional-auto.html#c_vect) is enabled."""
+    fmt = "declaration of vect type without c_vect provisional"
+
 #
 # WARNINGS (keep these as few as possible)
 #
