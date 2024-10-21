@@ -179,7 +179,7 @@ def top(t):
     t[0] = ast.dml(site(t), t[2], t[4])
 
 
-@prod_dml14
+@prod
 def maybe_provisional_yes(t):
     'maybe_provisional : PROVISIONAL ident_list SEMI'
     t.parser.file_info.provisional = provisional.parse_provisional(t[2])
@@ -2241,22 +2241,22 @@ def statement_delay(t):
                       f"expected time unit ({suggestions})")
     t[0] = ast.after(site(t), unit, t[2], t[5])
 
-@prod_dml14
+@prod
 def ident_list_empty(t):
     'ident_list : '
     t[0] = []
 
-@prod_dml14
+@prod
 def ident_list_nonempty(t):
     'ident_list : nonempty_ident_list'
     t[0] = t[1]
 
-@prod_dml14
+@prod
 def ident_list_one(t):
     'nonempty_ident_list : ident'
     t[0] = [(site(t, 1), t[1])]
 
-@prod_dml14
+@prod
 def ident_list_many(t):
     'nonempty_ident_list : nonempty_ident_list COMMA ident'
     t[0] = t[1] + [(site(t, 3), t[3])]
