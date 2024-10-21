@@ -3,6 +3,7 @@
   SPDX-License-Identifier: MPL-2.0
 */
 dml 1.4;
+provisional c_vect;
 
 device test;
 
@@ -34,7 +35,6 @@ typedef void (*f)();
 saved f f_ptr;
 
 // TODO: vectors should be serializable
-/// WARNING WEXPERIMENTAL
 typedef int vect int_vect;
 /// ERROR ESERIALIZE
 saved int_vect x;

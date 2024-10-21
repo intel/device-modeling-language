@@ -3,10 +3,9 @@
   SPDX-License-Identifier: MPL-2.0
 */
 dml 1.4;
+provisional c_vect;
 
 device test;
-
-/// WARNING WEXPERIMENTAL T_EEXTERNINCOMP.dml
 
 typedef int vect int_vect_t;
 
