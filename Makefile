@@ -205,6 +205,10 @@ generated-md-1.2/grammar.md generated-md-1.4/grammar.md: generated-md-1.%/gramma
 	$(PYTHON) $(SRC_BASE)/$(TARGET)/grammar_to_md.py $(PYTHONPATH) $< $@
 generated-md-1.2/messages.md generated-md-1.4/messages.md: generated-md-%/messages.md: $(SRC_BASE)/$(TARGET)/messages_to_md.py $(DMLC_BIN)
 	$(PYTHON) $< $(PYTHONPATH) $* $@
+generated-md-1.2/deprecations-auto.md: $(SRC_BASE)/$(TARGET)/deprecations_to_md.py $(SRC_BASE)/$(TARGET)/doc/1.2/deprecations-header.md $(DMLC_BIN) | generated-md-1.2
+	$(PYTHON) $< $(PYTHONPATH) $(word 2,$^) $@
+generated-md-1.2/provisional-auto.md: $(SRC_BASE)/$(TARGET)/provisional_to_md.py $(SRC_BASE)/$(TARGET)/doc/1.2/provisional-header.md $(DMLC_BIN) | generated-md-1.2
+	$(PYTHON) $< $(PYTHONPATH) $(word 2,$^) $@ 1.2
 
 DOC_SRC_DIR_14 := $(SRC_BASE)/$(TARGET)/doc/1.4
 DOC_FILES_14 := $(wildcard $(DOC_SRC_DIR_14)/*.md) $(DOC_SRC_DIR_14)/toc.json
@@ -218,7 +222,7 @@ generated-md-1.4/changes-auto.md: $(SRC_BASE)/$(TARGET)/porting_to_md.py $(DMLC_
 generated-md-1.4/deprecations-auto.md: $(SRC_BASE)/$(TARGET)/deprecations_to_md.py $(SRC_BASE)/$(TARGET)/doc/1.4/deprecations-header.md $(DMLC_BIN) | generated-md-1.4
 	$(PYTHON) $< $(PYTHONPATH) $(word 2,$^) $@
 generated-md-1.4/provisional-auto.md: $(SRC_BASE)/$(TARGET)/provisional_to_md.py $(SRC_BASE)/$(TARGET)/doc/1.4/provisional-header.md $(DMLC_BIN) | generated-md-1.4
-	$(PYTHON) $< $(PYTHONPATH) $(word 2,$^) $@
+	$(PYTHON) $< $(PYTHONPATH) $(word 2,$^) $@ 1.4
 
 generated-md-1.4/dml-builtins.md generated-md-1.4/utility.md: generated-md-1.4/%.md: $(DMLC_DIR)/lib/1.4/%.dml
 	$(PYTHON) $(DMLC_DIR)/dmlcomments_to_md.py $< $@
@@ -236,7 +240,7 @@ DOC_FILES_12 := $(wildcard $(DOC_SRC_DIR_12)/*.md) $(DOC_SRC_DIR_12)/toc.json
 DOC_DEST_12 := $(SIMICS_PROJECT)/$(HOST_TYPE)/doc/html/dml-1.2-reference-manual
 DOC_MARKER_12 := $(DOC_DEST_12)/filelist.json
 
-GENERATED_MD_FILES_12 = $(addprefix generated-md-1.2/,grammar.md messages.md)
+GENERATED_MD_FILES_12 = $(addprefix generated-md-1.2/,grammar.md messages.md deprecations-auto.md provisional-auto.md)
 DOC_FILES_12 += $(GENERATED_MD_FILES_12)
 $(GENERATED_MD_FILES_12): | generated-md-1.2
 $(DOC_MARKER_12): $(DOC_FILES_12)

@@ -18,6 +18,8 @@ class ProvisionalFeature(abc.ABC):
     @abc.abstractproperty
     def stable(self) -> str: pass
 
+    # Whether the feature is included in 1.2 documentation
+    dml12 = False
 
 # tag -> feature
 features: dict[str, ProvisionalFeature] = {}
