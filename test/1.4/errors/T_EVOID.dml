@@ -3,6 +3,7 @@
   SPDX-License-Identifier: MPL-2.0
 */
 dml 1.4;
+provisional c_vect;
 
 device test;
 
@@ -34,9 +35,7 @@ typedef void void_t;
 extern typedef const void ext_void_t;
 
 /// ERROR EVOID
-session void
-/// WARNING WEXPERIMENTAL
-    vect v;
+session void vect v;
 
 // this is allowed in 1.2, and even used by dml-builtins, unclear why
 /// ERROR EVOID

@@ -3,14 +3,13 @@
   SPDX-License-Identifier: MPL-2.0
 */
 dml 1.4;
+provisional c_vect;
 
 device test;
 
 typedef struct { uint32 x; } s_t;
 typedef layout "little-endian" { uint32 x; } l_t;
-/// WARNING WEXPERIMENTAL
 typedef int vect v_t;
-/// WARNING WEXPERIMENTAL
 typedef int vect alt_v_t;
 typedef int a_t[1];
 typedef void f_t(void);
