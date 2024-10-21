@@ -915,8 +915,8 @@ class DumpInputFilesTestCase(CTestCase):
         super().test()
         dir = Path(self.scratchdir) / 'dumped'
         dir.mkdir()
-        with tarfile.open(Path(self.scratchdir) / f'T_{self.shortname}.tar.xz',
-                          'r:xz') as tf:
+        with tarfile.open(Path(self.scratchdir) / f'T_{self.shortname}.tar.bz2',
+                          'r:bz2') as tf:
             tf.extractall(dir)
         assert (dir.joinpath(*self.prefix)
                 / os.path.basename(self.filename)).is_file()

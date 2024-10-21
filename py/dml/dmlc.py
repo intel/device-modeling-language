@@ -182,7 +182,7 @@ def dump_input_files(outputbase, imported):
     prefix = '/'.join(['_'] * max_dotdot)
     # map basename to one of its absolute paths
     basenames: dict[str, str] = {}
-    with tarfile.open(outputbase + ".tar.xz", 'w:xz') as tf:
+    with tarfile.open(outputbase + ".tar.bz2", 'w:bz2') as tf:
         # HACK: if two different files foo.dml are imported, where one is
         # imported as "foo.dml" or "./foo.dml" and the other is only
         # imported using a qualified path such as "bar/foo.dml", then

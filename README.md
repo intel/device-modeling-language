@@ -83,7 +83,7 @@ Override the default compiler in unit tests.
 When set, DMLC does self-profiling and writes the profile to a .prof file.
 
 ### DMLC_DUMP_INPUT_FILES
-When set, DMLC emits a `.tar.xz` archive containing all DML source files,
+When set, DMLC emits a `.tar.bz2` archive containing all DML source files,
 packaged on a form that can be compiled standalone. This is useful when a DML
 problem appears within a complex build environment, and you want to reproduce
 the problem in isolation. In the created archive, all DML files are located in
