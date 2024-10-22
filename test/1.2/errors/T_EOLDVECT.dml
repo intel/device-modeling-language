@@ -14,6 +14,6 @@ device test;
 // No complaint, even though the c_vect provisional is not enabled.
 // This gives a warning in DML 1.4, see
 // 1.4/legacy/c_vect_without_provisional_enabled,
-// and an ECVECT with c_vect_without_provisional disabled,
+// and an EOLDVECT with c_vect_without_provisional disabled,
 // see 1.4/legacy/c_vect_without_provisional_disabled.
 typedef int vect int_vect_t;

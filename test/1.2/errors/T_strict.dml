@@ -3,7 +3,7 @@
   SPDX-License-Identifier: MPL-2.0
 */
 dml 1.2;
-provisional c_vect;
+provisional simics_util_vect;
 
 /* <add id="dml changes strict"/> */
 

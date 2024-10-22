@@ -85,14 +85,14 @@ class explicit_param_decls(ProvisionalFeature):
 
 
 @feature
-class c_vect(ProvisionalFeature):
-    '''<a id="c_vect"/>
+class simics_util_vect(ProvisionalFeature):
+    '''<a id="simics_util_vect"/>
     This feature enables the `vect` type, based on the
     `VECT` macro from the Simics C API (`simics/util/vect.h`).
 
     This is a simple wrapping that behaves inconsistently in many
     ways, and we plan to eventually introduce a cleaner mechanism for
-    vectors; the `c_vect` is supported as an interim solution until we
+    vectors; the `simics_util_vect` is supported as an interim solution until we
     have that in place.
 
     The syntax is `BASETYPE vect`, e.g. `typedef int vect int_vect_t;`
@@ -123,12 +123,12 @@ class c_vect(ProvisionalFeature):
       }
       ```
 
-    Enabling the `c_vect` feature in a file only affects
+    Enabling the `simics_util_vect` feature in a file only affects
     the `vect` declarations in that file.
 
-    When the `c_vect` feature is disabled, usage of `vect` is an
-    error unless the [`c_vect_without_provisional` compatibility
-    feature](deprecations-auto.html#c_vect_without_provisional) is enabled.
+    When the `simics_util_vect` feature is disabled, usage of `vect` is an
+    error unless the [`experimental_vect` compatibility
+    feature](deprecations-auto.html#experimental_vect) is enabled.
     '''
     short = "Allow vect syntax based on the VECT macro"
     stable = True
