@@ -420,3 +420,12 @@ class c_vect_without_provisional(CompatFeature):
     '''
     short = "Permit vect syntax without 'provisional c_vect'"
     last_api_version = api_7
+
+
+@feature
+class warning_statement(CompatFeature):
+    '''This compatibility feature enables the `_warning` statement.
+    This turned out to not be very useful, so in Simics API 8 and
+    newer the feature is no longer allowed.'''
+    short = "Allow the `_warning` statement"
+    last_api_version = api_7

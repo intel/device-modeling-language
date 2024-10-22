@@ -2498,6 +2498,8 @@ def warning_statement(t):
 @prod
 def warning_stmt(t):
     'warning_stmt : _WARNING bracketed_string_literal SEMI'
+    if compat.warning_statement not in dml.globals.enabled_compat:
+        raise ESYNTAX(site(t), '_warning', 'deprecated _warning statement')
     report(WEXPERIMENTAL(site(t), "_warning statement"))
     t[0] = ast.warning(site(t), t[2])
 

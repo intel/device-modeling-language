@@ -8,8 +8,11 @@ def create_dmlasts(dmlc_path, dmlast_path, dml_path, depfile):
     sys.path.append(str(dmlc_path))
     from dml.toplevel import produce_dmlast
     from dml.logging import ignore_warning
+    import dml.globals
+    from dml import compat
 
     ignore_warning('WEXPERIMENTAL')
+    dml.globals.enabled_compat.add(compat.warning_statement)
     dml_files_abs = list(dml_path.rglob('*.dml'))
     dml_files = [p.relative_to(dml_path) for p in dml_files_abs]
     assert dml_files

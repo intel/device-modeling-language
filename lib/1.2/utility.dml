@@ -169,8 +169,15 @@ template write_only {
             log spec_viol, log_level, Register_Read:
                 "Read from write-only register %s (returning 0).", $qname;
             log_level = 2;
-        } else {
+        } else if ($dev._compat_warning_statement) {
+            // note: this can be parsed because the .dmlast is generated with
+            // warning_statement compatibility enabled. We'll want to remove
+            // this compatibility support When API 7 goes EOL, but luckily we'll
+            // also be able to remove this statement at that time.
             _warning "The write_only template only makes sense on registers."
+                + " For fields, use read_zero instead.";
+        } else {
+            error "The write_only template only makes sense on registers."
                 + " For fields, use read_zero instead.";
         }
         value = 0;
@@ -541,8 +548,18 @@ template _unimpl_base_write_warn {
             }
             $this = value;
             if (defined ($reg.limitations)
-                && $reg.limitations == "Not implemented.")
-                _warning "unimplemented template used in both field and register";
+                && $reg.limitations == "Not implemented.") {
+                if ($dev._compat_warning_statement) {
+                    // note: this can be parsed because the .dmlast is
+                    // generated with warning_statement compatibility
+                    // enabled. We'll want to remove this compatibility support
+                    // When API 7 goes EOL, but luckily we'll also be able to
+                    // remove this statement at that time.
+                    _warning "unimplemented template used in both field and register";
+                } else {
+                    error "unimplemented template used in both field and register";
+                }
+            }
         }
     }
 }

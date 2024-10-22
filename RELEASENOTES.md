@@ -240,3 +240,6 @@
   syntax is only permitted when this feature is enabled. This feature will be
   disabled in Simics API versions \> 7, where all uses of `vect` instead require
   explicit `provisional` declarations.
+- `note 6` The rarely used `_warning` statement has been deprecated, through
+  the introduction of a new compatibility feature `warning_statement`.
+  Warning statements will be illegal when Simics API 8 or newer is used.
