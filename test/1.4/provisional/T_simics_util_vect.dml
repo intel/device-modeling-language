@@ -5,14 +5,14 @@
 
 dml 1.4;
 
-provisional c_vect;
+provisional simics_util_vect;
 
 device test;
 
 /// COMPILE-ONLY
 
-// Error reporting tested by 1.4/legacy/c_vect_without_provisional_*.dml
+// Error reporting tested by 1.4/legacy/experimental_vect_*.dml
 
-/// DMLC-FLAG --no-compat=c_vect_without_provisional
+/// DMLC-FLAG --no-compat=experimental_vect
 // no warning
 typedef int vect x;

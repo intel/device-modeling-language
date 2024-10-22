@@ -1331,15 +1331,15 @@ def cdecl2_ptr(t):
 @prod
 def cdecl2_vect(t):
     'cdecl2 : VECT cdecl2'
-    if provisional.c_vect not in t.parser.file_info.provisional:
-        if compat.c_vect_without_provisional in dml.globals.enabled_compat:
+    if provisional.simics_util_vect not in t.parser.file_info.provisional:
+        if compat.experimental_vect in dml.globals.enabled_compat:
             vsite = site(t)
             if vsite.dml_version() != (1, 2):
                 # defensively suppress warning in 1.2, for
                 # compatibility
                 report(WEXPERIMENTAL(site(t), 'vect types'))
         else:
-            report(ECVECT(site(t)))
+            report(EOLDVECT(site(t)))
     t[0] = ['vect'] + t[2]
 
 @prod_dml12

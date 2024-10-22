@@ -405,20 +405,20 @@ class dml12_int(CompatFeature):
 
 
 @feature
-class c_vect_without_provisional(CompatFeature):
-    '''<a id="c_vect_without_provisional"/> This compat feature
+class experimental_vect(CompatFeature):
+    '''<a id="experimental_vect"/> This compat feature
     controls how DMLC reacts to uses of the `vect` syntax in files
-    where the [`c_vect` provisional feature](provisional-auto.html#c_vect)
+    where the [`simics_util_vect` provisional feature](provisional-auto.html#simics_util_vect)
     is not enabled.
 
-    When the `c_vect_without_provisional` compatibility feature is
+    When the `experimental_vect` compatibility feature is
     enabled, such uses are permitted, and give a `WEXPERIMENTAL`
     warning in DML 1.4 (but no warning in DML 1.2). When
-    `c_vect_without_provisional` is disabled, DMLC forbids the `vect`
+    `experimental_vect` is disabled, DMLC forbids the `vect`
     syntax.
 
     '''
-    short = "Permit vect syntax without 'provisional c_vect'"
+    short = "Permit vect syntax without 'provisional simics_util_vect'"
     last_api_version = api_7
 
 

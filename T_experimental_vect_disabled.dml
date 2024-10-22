@@ -8,6 +8,6 @@ dml 1.4;
 device test;
 
 /// DMLC-FLAG --simics-api=7
-/// DMLC-FLAG --no-compat=c_vect_without_provisional
-/// ERROR ECVECT
+/// DMLC-FLAG --no-compat=experimental_vect
+/// ERROR EOLDVECT
 typedef int vect x;
