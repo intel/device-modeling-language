@@ -34,8 +34,10 @@ and create a Simics project (automatic in the default installation flow).
 
 ### Building DMLC from a Simics project
 In your Simics project, check out the DML repository into the `modules/dmlc`
-directory.  At the top-level of the project, do `make dmlc`
-(or `bin\make dmlc` on Windows). 
+directory.  At the top-level of the project, do `make dmlc` (or `bin\make dmlc`
+on Windows).  The build depends on some standard Unix tools like `touch`; on
+Windows this means you also need to install a GNU toolchain such as
+[msys2](https://www.msys2.org/).
 
 ### Testing DMLC from a Simics project
 To run the unit tests provided with DMLC, run `make test-dmlc` or
