@@ -4,6 +4,7 @@
 */
 
 dml 1.2;
+provisional simics_util_vect;
 
 template _reg_or_field {
     parameter is_register  = ($objtype == "register");
