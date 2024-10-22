@@ -229,6 +229,7 @@ template device {
     parameter _compat_dml12_misc auto;
     parameter _compat_dml12_int auto;
     parameter _compat_c_vect_without_provisional auto;
+    parameter _compat_warning_statement auto;
 
     // automatic parameters
     parameter obj                       auto;

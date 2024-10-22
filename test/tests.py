@@ -1463,6 +1463,7 @@ all_tests.append(PortingConvert(
        ('utility.dml', None, 'PRENAME_TEMPLATE'),
        ('utility.dml', None, 'PABSTRACT_TEMPLATE'),
        ('utility.dml', None, 'PHASH'),
+       ('utility.dml', None, 'PHASHELSE'),
        ('utility.dml', None, 'PIFAND'),
        ('utility.dml', None, 'PANDOR'),
        ('utility.dml', None, 'PCHANGE_INARGS'),

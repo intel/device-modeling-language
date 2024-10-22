@@ -1,0 +1,15 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+/// COMPILE-ONLY
+/// DMLC-FLAG --simics-api=7
+
+method m() {
+    // method is dead, so no WWRNSTMT
+    /// WARNING WEXPERIMENTAL
+    _warning "foo";
+}
