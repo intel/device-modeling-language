@@ -148,25 +148,29 @@ def scan_statements(filename, site, stmts):
             [text] = s.args
             footers.append(ctree.mkCText(s.site, text))
         elif s.kind == 'toplevel_if':
-            [cond, tbranch, fbranch] = s.args
+            [cond, tbranch, fbranch, bad_stmts] = s.args
             scope = symtab.Symtab()
             bsite = SimpleSite('<builtin>',
                                dml_version=dml.globals.dml_version)
             # HACK Add constants to scope typically defined by dml-builtins,
             # which is not accessible here
-            def add_constant(name, expr):
+            constants = {
+                'dml_1_2': ctree.BoolConstant(
+                    bsite, dml.globals.dml_version == (1, 2)),
+                'true': ctree.BoolConstant(bsite, True),
+                'false': ctree.BoolConstant(bsite, False),
+            }
+            for (name, expr) in constants.items():
                 scope.add(ctree.ExpressionSymbol(name, expr, bsite))
 
-            add_constant(
-                'dml_1_2',
-                ctree.BoolConstant(bsite, dml.globals.dml_version == (1, 2)))
-            add_constant('true', ctree.BoolConstant(bsite, True))
-            add_constant('false', ctree.BoolConstant(bsite, False))
             try:
                 expr = ctree.as_bool(codegen.codegen_expression(
                     cond, None, scope))
                 if not expr.constant:
                     raise ENCONST(expr.site, expr)
+            except EIDENT:
+                for stmt in bad_stmts:
+                    report(EBADCONDSTMT(stmt.site, stmt.kind))
             except DMLError as e:
                 report(e)
             else:
