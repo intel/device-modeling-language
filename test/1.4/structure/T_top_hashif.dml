@@ -1,0 +1,51 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// COMPILE-ONLY
+
+#if (true) {
+extern typedef int a_t;
+typedef int b_t;
+param p = 1;
+} #else {
+extern void *x;
+import "nonexisting.dml";
+param p = 2;
+error;
+}
+
+#if (p != 1) { error; }
+
+#if (false) {
+typedef void *a_t;
+extern typedef void *b_t;
+error;
+template t { error; }
+} #else {
+extern int x;
+import "imported.dml";
+template t { param from_t = true; }
+}
+
+#if (!imported) { error; }
+
+is t;
+#if (!from_t) { error; }
+
+#if (dml_1_2 || false) {
+error;
+} #else {
+  #if (true) {
+    #if (!false) {
+      // nested top-level #ifs are permitted
+      param foo = true;
+    }
+  }
+}
+
+#if (!foo) { error; }
