@@ -401,7 +401,6 @@ bank testbank is (miss_pattern_bank, function_mapped_bank) {
 
 bank overridden_bank is (unified_hard_reset, unified_soft_reset);
 
-/// WARNING WEXPERIMENTAL
 #if (dml_1_2) {
     import "io-memory.dml";
 } #else {
@@ -475,10 +474,8 @@ attribute woa is (write_only_attr) {
 
 param global_sym = 14;
 
-/// WARNING WEXPERIMENTAL
 #if (!dml_1_2) {
     param cond = false;
-/// WARNING WEXPERIMENTAL
 } #else #if (!dml_1_2) {
     error;
 } #else {

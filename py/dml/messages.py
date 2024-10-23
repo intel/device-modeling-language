@@ -829,6 +829,18 @@ class ECONDINEACH(DMLError):
     version = "1.4"
     fmt = "conditional 'in each' is not allowed"
 
+class EBADCONDSTMT(DMLError):
+    """
+    `#if` statements in object scope are only allowed to contain
+    certain kinds of declarations: objects, `method`, `session`,
+    `saved`, `#if`, or `error`.
+
+    A special exception is that a `#if` on top scope may contain any
+    kind of statement as long as the `#if` condition doesn't reference
+    any identifiers other than `dml_1_2`, `true`, and `false`.
+    """
+    fmt = "object of type %s not allowed inside `#if`"
+
 # TODO: Consider re-wording the semantics of this error, allocate_type is only
 # relevant in 1.4 when imported from 1.2, and as per SIMICS-9393 this
 # error might not even be necessary
