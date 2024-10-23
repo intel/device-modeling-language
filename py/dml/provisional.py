@@ -18,6 +18,8 @@ class ProvisionalFeature(abc.ABC):
     @abc.abstractproperty
     def stable(self) -> str: pass
 
+    # Whether the feature is included in 1.2 documentation
+    dml12 = False
 
 # tag -> feature
 features: dict[str, ProvisionalFeature] = {}
@@ -70,6 +72,72 @@ class explicit_param_decls(ProvisionalFeature):
     '''
     short = "Require := syntax for defining new params"
     stable = True
+
+
+@feature
+class simics_util_vect(ProvisionalFeature):
+    '''<a id="simics_util_vect"/>
+    This feature enables the `vect` type, based on the
+    `VECT` macro from the Simics C API (`simics/util/vect.h`).
+
+    This is a simple wrapping that behaves inconsistently in many
+    ways, and we plan to eventually introduce a cleaner mechanism for
+    vectors; the `simics_util_vect` is supported as an interim solution until we
+    have that in place.
+
+    The syntax is `BASETYPE vect`, e.g. `typedef int vect int_vect_t;`
+    to define a type for vectors of the `int` type.
+
+    Some caveats:
+
+    * `vect` types typically need to be `typedef`:ed before they are
+      used.  This is because `int vect` is blindly expanded into
+      `VECT(int)` in C, which in turn expands into a `struct`
+      definition, meaning that saying `VECT(int)` twice yields two
+      incompatible types. This means, for instance, that `typeof` in
+      DML doesn't work properly for `vect` types unless `typedef`:ed
+
+    * Importing `"internal.dml"` exposes various C macros from
+      `vect.h` to DML: `VINIT`, `VELEMSIZE`, `VRESIZE`,
+      `VRESIZE_FREE`, `VADD`, `VREMOVE`, `VDELETE_ORDER`, `VINSERT`,
+      `VSETLAST`, `VLEN`, `VVEC`, `VGROW`, `VSHRINK`, `VFREE`,
+      `VTRUNCATE`, `VCLEAR`, and `VCOPY`.
+
+    * DML natively supports indexing syntax, which is translated to
+      `VGET`. For instance:
+      ```
+      typedef int vect int_vect_t;
+      method first_element(int_vect_t v) -> (int) {
+          assert VLEN(v) > 0;
+          return v[0];
+      }
+      ```
+
+    * DML natively supports `vect` types in `foreach` statements.
+      The loop variable must be declared outside the loop, and
+      must be a pointer to the vector's base type. For instance:
+      ```
+      typedef int vect int_vect_t;
+      method sum(int_vect_t v) -> (int) {
+          local int *i;
+          local int ret = 0;
+          foreach i in (v) {
+              ret += *i;
+          }
+          return ret;
+      }
+      ```
+
+    Enabling the `simics_util_vect` feature in a file only affects
+    the `vect` declarations in that file.
+
+    When the `simics_util_vect` feature is disabled, usage of `vect` is an
+    error unless the [`experimental_vect` compatibility
+    feature](deprecations-auto.html#experimental_vect) is enabled.
+    '''
+    short = "Allow vect syntax based on the VECT macro"
+    stable = True
+    dml12 = True
 
 def parse_provisional(
         provs: list[("Site", str)]) -> dict[ProvisionalFeature, "Site"]:

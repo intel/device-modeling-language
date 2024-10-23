@@ -1891,6 +1891,12 @@ class EEXTERNINCOMP(DMLError):
             "conflicting declaration, which specifies the type: "
             + self.other_type.describe())
 
+
+class EOLDVECT(DMLError):
+    """`vect` types are only permitted if the [`simics_util_vect` provisional
+    feature](provisional-auto.html#simics_util_vect) is enabled."""
+    fmt = "declaration of vect type without simics_util_vect provisional"
+
 #
 # WARNINGS (keep these as few as possible)
 #

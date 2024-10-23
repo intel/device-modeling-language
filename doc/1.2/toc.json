@@ -19,6 +19,12 @@
         {"file": "messages.md",
          "numbering": true,
          "appendix": true},
+        {"file": "provisional-auto.md",
+         "numbering": true,
+         "appendix": true},
+        {"file": "deprecations-auto.md",
+         "numbering": true,
+         "appendix": true},
         {"file": "grammar.md",
          "numbering": true,
          "appendix": true}

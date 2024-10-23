@@ -3,17 +3,20 @@
 
 import sys
 from pathlib import Path
-[path_to_dml, header, outfile] = sys.argv[1:]
+[path_to_dml, header, outfile, dml_version] = sys.argv[1:]
 sys.path.append(path_to_dml)
+dml12_only = {'1.2': True, '1.4': False}[dml_version]
 
 from dml import provisional
 from dml.env import api_versions, default_api_version
 
 with open(outfile, 'w') as f:
     f.write(Path(header).read_text())
-    stable = [feature for feature in provisional.features.values()
+    features = [feature for feature in provisional.features.values()
+                if not dml12_only or feature.dml12]
+    stable = [feature for feature in features
               if feature.stable]
-    unstable = [feature for feature in provisional.features.values()
+    unstable = [feature for feature in features
                 if not feature.stable]
     for (heading, features) in [
             ('List of stable provisional features', stable),

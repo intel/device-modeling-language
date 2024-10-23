@@ -196,3 +196,14 @@
   various operations that rely on the `register_view` interface, such as the
   `dev_util.bank_regs` function and the `write-device-reg` and `probe-address`
   CLI commands.
+- `note 6` A new provisional feature `simics_util_vect` has been added. When
+  `provisional simics_util_vect;` appears in the top of a DML file, DMLC will
+  no longer print warnings when the `vect` syntax is used in that file.
+- `note 6` A new compatibility feature `simics_util_vect_without_provisional` has been
+  created. In files without a `provisional simics_util_vect;` declaration, the `vect`
+  syntax is only permitted when this feature is enabled. his feature will be
+  disabled in Simics API versions \> 7, where all uses of `vect` instead require
+  explicit `provisional` declarations.
+- `note 6` The rarely used `_warning` statement has been deprecated, through
+  the introduction of a new compatibility feature `warning_statement`.
+  Warning statements will be illegal when Simics API 8 or newer is used.

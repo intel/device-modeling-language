@@ -358,10 +358,14 @@ class FileInfo(object):
 
     def __getstate__(self):
         return (self.name, self.version, self.bitorder, self._line_offsets,
-                self.utf8_columns, self.provisional)
+                self.utf8_columns, {p.tag(): site
+                                    for (p, site) in self.provisional.items()})
     def __setstate__(self, data):
+        from . import provisional
         (self.name, self.version, self.bitorder, self._line_offsets,
-         self.utf8_columns, self.provisional) = data
+         self.utf8_columns, provisionals) = data
+        self.provisional = {provisional.features[tag]: site
+                            for (tag, site) in provisionals.items()}
     def loc_from_offset(self, offset):
         '''Calculate a file location as a (line, col) pair'''
         line = bisect.bisect_right(self._line_offsets, offset) - 1

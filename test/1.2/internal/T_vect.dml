@@ -3,6 +3,7 @@
   SPDX-License-Identifier: MPL-2.0
 */
 dml 1.2;
+provisional simics_util_vect;
 
 device test;
 

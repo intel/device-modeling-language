@@ -13,6 +13,7 @@ import dml.globals
 from . import dmllex12
 from . import dmllex14
 from . import provisional
+from . import compat
 
 assert lex.__version__ == yacc.__version__ == "3.4"
 
@@ -179,7 +180,7 @@ def top(t):
     t[0] = ast.dml(site(t), t[2], t[4])
 
 
-@prod_dml14
+@prod
 def maybe_provisional_yes(t):
     'maybe_provisional : PROVISIONAL ident_list SEMI'
     t.parser.file_info.provisional = provisional.parse_provisional(t[2])
@@ -1327,18 +1328,18 @@ def cdecl2_ptr(t):
     'cdecl2 : TIMES cdecl2'
     t[0] = ['pointer'] + t[2]
 
-@prod_dml14
+@prod
 def cdecl2_vect(t):
     'cdecl2 : VECT cdecl2'
-    # vect is actually experimental in 1.2 as well, but we will probably
-    # defensively keep it the way it is, because it's used a lot.
-    # TODO: improve how vect works in 1.4, and make it public (US325)
-    report(WEXPERIMENTAL(site(t), 'vect types'))
-    t[0] = ['vect'] + t[2]
-
-@prod_dml12
-def cdecl2_vect(t):
-    'cdecl2 : VECT cdecl2'
+    if provisional.simics_util_vect not in t.parser.file_info.provisional:
+        if compat.experimental_vect in dml.globals.enabled_compat:
+            vsite = site(t)
+            if vsite.dml_version() != (1, 2):
+                # defensively suppress warning in 1.2, for
+                # compatibility
+                report(WEXPERIMENTAL(site(t), 'vect types'))
+        else:
+            report(EOLDVECT(site(t)))
     t[0] = ['vect'] + t[2]
 
 @prod_dml12
@@ -2241,22 +2242,22 @@ def statement_delay(t):
                       f"expected time unit ({suggestions})")
     t[0] = ast.after(site(t), unit, t[2], t[5])
 
-@prod_dml14
+@prod
 def ident_list_empty(t):
     'ident_list : '
     t[0] = []
 
-@prod_dml14
+@prod
 def ident_list_nonempty(t):
     'ident_list : nonempty_ident_list'
     t[0] = t[1]
 
-@prod_dml14
+@prod
 def ident_list_one(t):
     'nonempty_ident_list : ident'
     t[0] = [(site(t, 1), t[1])]
 
-@prod_dml14
+@prod
 def ident_list_many(t):
     'nonempty_ident_list : nonempty_ident_list COMMA ident'
     t[0] = t[1] + [(site(t, 3), t[3])]
@@ -2497,6 +2498,8 @@ def warning_statement(t):
 @prod
 def warning_stmt(t):
     'warning_stmt : _WARNING bracketed_string_literal SEMI'
+    if compat.warning_statement not in dml.globals.enabled_compat:
+        raise ESYNTAX(site(t), '_warning', 'deprecated _warning statement')
     report(WEXPERIMENTAL(site(t), "_warning statement"))
     t[0] = ast.warning(site(t), t[2])
 
