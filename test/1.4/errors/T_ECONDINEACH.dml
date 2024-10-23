@@ -22,7 +22,6 @@ port p {
     }
 }
 
-/// WARNING WEXPERIMENTAL
 #if (false && true && dml_1_2) {
     // Experimental support for complex top-level conditionals allows in-each
     // to be used

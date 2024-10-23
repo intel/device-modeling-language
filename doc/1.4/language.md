@@ -2318,8 +2318,8 @@ The *object declarations* are any number of declarations of objects, session
 variables, saved variables, methods, or other `#if` statements, but not
 parameters, `is` statements, or `in each` statements . When the conditional is
 `true` (or if it's the else branch of a false conditional), the object
-declarations are treated as if they had appeared without any surrounding *#if*.
-So the two following declarations are equivalent:
+declarations are treated as if they had appeared without any surrounding `#if`.
+Thus, the two following snippets are equivalent:
 
 ```
 #if (true) {
@@ -2329,11 +2329,33 @@ So the two following declarations are equivalent:
 }
 ```
 
-is equivalent to
-
 ```
 register R size 4;
 ```
+
+As a special exception, an `#if` statement that appears on top level is allowed
+to contain any type of statement, as long as the condition doesn't reference
+any identifiers other than `dml_1_2`, `true` and `false`. This is often useful
+while migrating the devices of a system from DML 1.2 to DML 1.4,
+as it allows conditional definitions of templates in common code used from both DML 1.2 and DML 1.4. For example, let's say an existing template `reset_to_seven`
+is used in DML 1.2 code to set the reset value of a field to 7 in DML 1.2.
+The parameters that control reset values have changed from DML 1.2 to DML 1.4,
+and one way to handle this is to provide separate template definitions
+depending on whether the device uses DML 1.2 or DML 1.4:
+```
+#if (dml_1_2) {
+    template seven is field {
+        param hard_reset_value = 7;
+        param soft_reset_value = 7;
+    }
+} #else {
+    template seven is field {
+        param init_val = 7;
+    }
+}
+```
+Later, when all related devices have been ported to DML 1.4,
+the `dml_1_2` clause can be removed.
 
 ## In Each Declarations
 

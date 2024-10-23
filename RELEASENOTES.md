@@ -204,3 +204,11 @@
   (fixes SIMICS-22848).
 - `release 6 6349`
 - `release 7 7054`
+- `note 6` DMLC no longer emits warnings saying
+  `top-level 'if' body with unsupported statements`. These warnings were
+  often triggered in common code, causing excessive polution in build logs.
+  The same rules as before apply to `#if` statements: Statements such as
+  `param` and `template` are forbidden inside `#if`, but a special exception
+  allows forbidden statements to appear specifically inside an `#if (dml_1_2)`
+  block. The warning message was meant to highlight this irregularity, but
+  caused more harm than good; error messages surrounding the special case have been improved instead.
