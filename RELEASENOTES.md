@@ -196,3 +196,4 @@
   various operations that rely on the `register_view` interface, such as the
   `dev_util.bank_regs` function and the `write-device-reg` and `probe-address`
   CLI commands.
+- `release 6 6345`
