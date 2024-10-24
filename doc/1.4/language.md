@@ -2176,9 +2176,6 @@ register regs[i < 16][j < ...] size 2 @ 0x0100 + 16 * i + 2 * j;
 register regs[i < ...][j < 8] is (read_only);
 ```
 
-Note that in Simics 5, `port` arrays and `bank` arrays
-cannot be multi-dimensional.
-
 The following sections give further details on declarations for object
 types that have special conventions.
 
