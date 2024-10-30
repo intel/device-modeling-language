@@ -197,3 +197,4 @@
   `dev_util.bank_regs` function and the `write-device-reg` and `probe-address`
   CLI commands.
 - `release 6 6345`
+- `release 7 7051`
