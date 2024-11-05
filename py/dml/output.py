@@ -3,6 +3,7 @@
 
 import os
 from contextlib import contextmanager
+from pathlib import Path
 
 import dml.globals
 from .logging import ICE, SimpleSite
@@ -101,7 +102,7 @@ class FileOutput(Output):
         self.set_file(open(filename + ".tmp", "w"), filename)
 
     def set_file(self, f, filename):
-        self.filename = filename
+        self.filename = str(Path(filename).resolve())
         self.__file = f
         self.write = self.__file.write
         self.lineno = 1

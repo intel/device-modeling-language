@@ -198,3 +198,7 @@
   CLI commands.
 - `release 6 6345`
 - `release 7 7051`
+- `note 6` Line directives in generated C files will now always use absolute
+  file paths. This is to resolve an issue where debugging or coverage tools may
+  be unable to locate the referenced file in certain contexts
+  (fixes SIMICS-22848).
