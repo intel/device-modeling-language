@@ -6,6 +6,7 @@
 import re
 import os
 import sys
+from pathlib import Path
 
 import bz2
 import hashlib
@@ -359,7 +360,8 @@ def exists(filename):
 def parse_main_file(inputfilename, explicit_import_path):
     if not exists(inputfilename):
         raise ENOFILE(SimpleSite(f"{inputfilename}:0"))
-    (kind, site, name, stmts) = parse_dmlast_or_dml(inputfilename)
+    (kind, site, name, stmts) = parse_dmlast_or_dml(
+        str(Path(inputfilename).resolve()))
     # guaranteed by grammar
     assert kind == 'dml'
 
@@ -422,7 +424,7 @@ def parse_main_file(inputfilename, explicit_import_path):
 
             deps.setdefault(path, set()).add(importfile)
 
-            path = os.path.abspath(os.path.realpath(path))
+            path = str(Path(path).resolve())
             normalized = os.path.normcase(path)
             if normalized in imported:
                 # Already imported
