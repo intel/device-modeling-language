@@ -30,6 +30,7 @@ for (file, lines) in dead.items():
 from pathlib import Path
 import re
 import math
+import os
 
 __all__ = ('dml_sources', 'find_dead_methods')
 
@@ -148,15 +149,16 @@ def find_dead_methods(c_files: set[Path], dml_files: set[Path]) -> (
         linemarks_by_pathstr : dict[str, list[int]] = {}
         for match in line_directive_re.finditer(c_file.read_text()):
             (line_str, dml_file) = match.groups()
+            assert os.path.isabs(dml_file), (c_file, dml_file)
             linemarks_by_pathstr.setdefault(
                 dml_file, []).append(int(line_str))
         # normalize method filenames, possibly merging line lists
         for (dml_file, linemarks) in linemarks_by_pathstr.items():
-            abs_path = (c_file.parent / dml_file).resolve()
+            resolved = Path(dml_file).resolve()
             # disregard self-referencing `#line 4711 "foo-dml.c"`
             # directives
-            if abs_path != c_file:
-                linemarks_by_path.setdefault(abs_path, set()).update(linemarks)
+            if resolved != c_file:
+                linemarks_by_path.setdefault(resolved, set()).update(linemarks)
     skipped : list[Path] = []
     dead : dict[Path, list[int]] = {}
     for (dml_file, linemarks) in linemarks_by_path.items():
