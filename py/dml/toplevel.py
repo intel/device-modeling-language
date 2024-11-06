@@ -308,7 +308,7 @@ def produce_dmlast(dml_file):
 
 def parse_dmlast_or_dml(dml_filename):
     ast_filename = dml_filename + 'ast'
-    if os.path.exists(ast_filename):
+    if dml_filename.endswith('.dml') and os.path.exists(ast_filename):
         # 10 seconds of fuzz, in case someone copies the installation
         # on a slow filesystem. Happened at least twice, see bug 17707
         if os.stat(ast_filename).st_mtime + 10 < os.stat(dml_filename).st_mtime:

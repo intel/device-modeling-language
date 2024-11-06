@@ -962,8 +962,8 @@ all_tests.append(ErrorTest(["missing"], "xyz",
                            includepath=()))
 all_tests.append(ErrorTest(
     ["empty"], os.devnull,
-    errors=[(os.path.basename(os.devnull), 1, "EDEVICE")],
-    warnings=[(os.path.basename(os.devnull), 1, "WNOVER")],
+    errors=[(str(Path(os.devnull).resolve()), 1, "EDEVICE")],
+    warnings=[(str(Path(os.devnull).resolve()), 1, "WNOVER")],
     includepath=()))
 all_tests.append(CTestCase(["minimal"], join(testdir, "minimal.dml")))
 
