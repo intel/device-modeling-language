@@ -18,6 +18,11 @@ template t {
     shared method downcast_with_fallback(u fallback) -> (u) default {
         return fallback;
     }
+    /// ERROR EMETH
+    independent method indep() default {
+    }
+    /// ERROR EMETH
+    independent method indep_ret() -> (int) default { return 0; }
 }
 
 is t;
@@ -42,6 +47,28 @@ template v3 is u {
     /// ERROR EMETH
     shared method downcast_with_fallback(u fallback) -> (object) {
         return cast(this, object);
+    }
+}
+
+group g4 is t {
+    /// ERROR EMETH
+    method indep() {
+    }
+
+    /// ERROR EMETH
+    independent method int_return() -> (int) {
+        return 0;
+    }
+}
+
+group g5 is t {
+    /// ERROR EMETH
+    independent startup method indep() {
+    }
+
+    /// ERROR EMETH
+    independent startup memoized method indep_ret() -> (int) {
+        return 0;
     }
 }
 
