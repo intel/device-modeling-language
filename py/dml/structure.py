@@ -777,7 +777,7 @@ def typecheck_method_override(m1, m2, location):
                         (f"overriding method is declared {qualifier_name}, "
                          + "but the overridden method is not"))
         elif qualifier1 < qualifier2:
-            raise EMETH(site0, site1,
+            raise EMETH(m1.site, m2.site,
                         (f"overridden method is declared {qualifier_name}, "
                          + "but the overriding method is not"))
 
