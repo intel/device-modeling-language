@@ -202,3 +202,4 @@
   file paths. This is to resolve an issue where debugging or coverage tools may
   be unable to locate the referenced file in certain contexts
   (fixes SIMICS-22848).
+- `release 6 6349`
