@@ -341,3 +341,6 @@
 - `release 6 6333`
 - `release 7 7042`
 - `release 7 7041`
+- `note 6` Fixed an issue where initializing a `local` variable via a method call
+  was not properly type-checked, and could result in incorrect semantics,
+  invalid generated C, or undefined behaviour (fixes SIMICS-22874).
