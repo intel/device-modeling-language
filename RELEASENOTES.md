@@ -203,3 +203,4 @@
   be unable to locate the referenced file in certain contexts
   (fixes SIMICS-22848).
 - `release 6 6349`
+- `release 7 7054`
