@@ -226,8 +226,7 @@ def parse_pragma(filename, start_lineno, end_lineno, pragma, data):
             return ('COVERITY',
                     (filename, start_lineno, end_lineno + 1, data.groups()))
     else:
-        # TODO should be reported once pragmas are officially supported
-        # report(WPRAGMA(SimpleSite(f"{filename}:{start_lineno}"), pragma))
+        report(WPRAGMA(SimpleSite(f"{filename}:{start_lineno}"), pragma))
         return None
 
 def process_pragma(t):
