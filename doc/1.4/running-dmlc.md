@@ -114,7 +114,9 @@ causes generated C code to follow the DML code more closely.
 </dt><dd>
 
 Adds Synopsys® Coverity® analysis annotations to suppress common false positives
-in generated C code created from DML 1.4 device models.
+in generated C code created from DML 1.4 device models. It also allows for
+false positives to be suppressed manually through the use of the [`COVERITY`
+pragma](language.html#coverity-pragma)
 
 Analysis annotation generation impacts the generation of line directives in a
 way that may cause debugging or coverage tools besides Coverity to display

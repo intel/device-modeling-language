@@ -204,3 +204,9 @@
   (fixes SIMICS-22848).
 - `release 6 6349`
 - `release 7 7054`
+- `note 6` Added a system and syntax for DMLC pragmas. Every supported pragma is
+  named and documented within the _Pragmas_ subsection of the DML 1.4 Reference
+  Manual.
+- `note 6` Added the `COVERITY` pragma, which allows for the manual suppression
+  of defects reported by Synopsys® Coverity® for particular DML lines, as long
+  as Coverity support is enabled by passing `--coverity` to DMLC.
