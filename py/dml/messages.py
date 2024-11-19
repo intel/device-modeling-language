@@ -2256,12 +2256,11 @@ class WLOGMIXUP(DMLWarning):
 
         DMLWarning.__init__(self, site, details)
 
-# TODO this should exist once pragmas are officially supported
-# class WPRAGMA(DMLWarning):
-#     """
-#     An unknown pragma was specified
-#     """
-#     fmt = "Unknown pragma: %s"
+class WPRAGMA(DMLWarning):
+    """
+    An unknown pragma was specified
+    """
+    fmt = "Unknown pragma: %s"
 
 class WIMMAFTER(DMLWarning):
     """
