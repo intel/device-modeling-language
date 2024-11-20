@@ -3670,7 +3670,7 @@ response of manager, even if the manager responds synchronously.
 ### Log Statements
 
 <pre>
-log <em>log-type</em>[, <em>level</em> [ then <em>subsequent_level</em> ] [, <em>groups</em>] ]: <em>format-string</em>, <em>e1</em>, ..., <em>eN</em>;
+log <em>log-type</em>[, <em>level</em> [ then <em>subsequent-level</em> ] [, <em>groups</em>] ]: <em>format-string</em>, <em>e1</em>, ..., <em>eN</em>;
 </pre>
 
 Outputs a formatted string to the Simics logging facility. The string
@@ -3702,10 +3702,16 @@ messages, by matching on the three main properties of each message:
   4. Debugging level with low level model detail (Mainly used for model
      development)
 
-* If *`subsequent_level`* is specified, then all logs after the first
-  issued will be on the level *`subsequent_level`*. You are allowed
-  to specify a *`subsequent_level`* of 5, meaning no logging after the
+  If the *`log-type`* is one of `warning`, `error` or `critical`, then *`level`*
+  may only be 1.
+
+* If *`subsequent-level`* is specified, then all logs after the first
+  issued will be on the level *`subsequent-level`*. You are allowed
+  to specify a *`subsequent-level`* of 5, meaning no logging after the
   initial log.
+
+  If the *`log-type`* is one of `warning`, `error` or `critical`, then
+  *`subsequent-level`* may only be either 1 or 5.
 
 * The *`groups`* argument is an integer whose bit
   representation is used to select which log groups the message belongs
