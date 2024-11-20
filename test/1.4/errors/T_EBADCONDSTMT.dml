@@ -1,0 +1,28 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+constant x = 1;
+
+#if (x == 1) {
+/// ERROR EBADCONDSTMT
+param p = 3;
+/// ERROR EBADCONDSTMT
+typedef int i_t;
+} #else {
+/// ERROR EBADCONDSTMT
+template t {
+}
+
+/// ERROR EBADCONDSTMT
+extern typedef int i_t;
+}
+
+#if (true) {
+// no error
+param p = 3;
+}
