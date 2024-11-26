@@ -106,3 +106,7 @@ method init() {
     /// ERROR ESYNTAX
     goto foo;
 }
+
+// bad spec of COVERITY pragma
+/// ERROR ESYNTAX
+/*% COVERITY %*/
