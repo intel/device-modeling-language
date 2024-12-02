@@ -13,7 +13,6 @@ header %{
     #include <simics/dmllib.h>
 %}
 
-import "simics/C.dml";
 import "simics/devs/io-memory.dml";
 import "simics/model-iface/bank-instrumentation.dml";
 import "simics/model-iface/int-register.dml";
@@ -36,17 +35,22 @@ constant unmapped_offset = 0xffff_ffff_ffff_ffff;
 
 param NULL auto;
 
-// Handy macros
+// Handy macros and types
+extern int strcmp(const char *__s1, const char *__s2);
+extern void *memset(void *__s, int __c, size_t __n);
+extern typedef uint64_t uintptr_t;
+
 extern char *MM_STRDUP(const char *s);
 extern void MM_FREE(void *m);
-
-extern char *_DML_describe_uint64_event(const char *base, uint64 data);
 
 extern size_t strlen(const char *s);
 extern char *strcpy(char *s, const char *s);
 extern void *memcpy(void *dest, const void *src, size_t n);
 
 extern const atom_t ATOM_LIST_END;
+
+
+extern char *_DML_describe_uint64_event(const char *base, uint64 data);
 
 extern typedef struct {
 } _callback_entry_t;
