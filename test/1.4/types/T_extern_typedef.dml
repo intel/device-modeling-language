@@ -18,4 +18,8 @@ method init() {
     assert a.y.x == 5;
     a.y = c.y;
     assert a.y.x == 7;
+
+    // This tests that GCC considers uint64_t and uintptr_t compatible
+    local uintptr_t *p = NULL;
+    local uint64_t *pp = p;
 }

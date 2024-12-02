@@ -117,5 +117,14 @@ import "simics-processor.dml";
 
 // C library stuff
 
-import "simics/C.dml";
 import "simics/util/bitcount.dml";
+
+extern int feof(FILE *__stream);
+extern int strcmp(const char *__s1, const char *__s2);
+extern char *strdup(const char *__s);
+extern void *memset(void *__s, int __c, size_t __n);
+extern size_t fwrite(const void *__ptr, size_t __size, size_t __n, FILE *__s);
+extern size_t fread(void *__ptr, size_t __size, size_t __n, FILE *__stream);
+extern void rewind(FILE *__stream);
+extern typedef struct { } FILE;
+extern typedef uint64_t uintptr_t;
