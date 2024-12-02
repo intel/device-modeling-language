@@ -14,5 +14,4 @@ subprocess.check_call(
     ["--batch-mode", "--quiet", "--no-copyright", "--dump-core", "--werror",
      '--project', conf.sim.project,
      "-L", scratchdir,
-     "-c", "checkpointing.chkp",
-     "-p", join(basedir, "T_checkpointing.cont.py")])
+     join(basedir, "T_checkpointing.cont.py")])
