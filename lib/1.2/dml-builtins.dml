@@ -217,6 +217,7 @@ template device {
     parameter _compat_legacy_attributes auto;
     parameter _compat_lenient_typechecking auto;
     parameter _compat_no_method_index_asserts auto;
+    parameter _compat_meaningless_log_levels auto;
     parameter _compat_dml12_inline auto;
     parameter _compat_dml12_not auto;
     parameter _compat_dml12_goto auto;

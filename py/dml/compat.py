@@ -256,6 +256,18 @@ class no_method_index_asserts(CompatFeature):
     last_api_version = api_7
 
 @feature
+class meaningless_log_levels(CompatFeature):
+    '''The log level that may be specified for logs of kind "warning", "error"
+    or "critical" typically must be 1, and any subsequent log level must
+    typically be 5. This compatibility feature makes it so either log level may
+    be any integer between 1 and 4 for these log kinds. The primary log level
+    is always treated as 1, and any other value than 1 for the subsequent log
+    level will be treated as 5 (that is, the log will only happen once)'''
+    short = ("Allow other log levels than '1' and '1 then 5' for log kinds "
+             + "'warning', 'error', and 'critical'")
+    last_api_version = api_7
+
+@feature
 class dml12_inline(CompatFeature):
     '''When using `inline` to inline a method in a DML 1.2 device,
     constant arguments passed in typed parameters are inlined as

@@ -1,0 +1,42 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+// expectations in this file are selectively enabled using SCAN-FOR-TAGS
+
+method init() {
+    // no error
+    log error, 1: "log";
+    log warning, 1: "log";
+    log critical, 1: "log";
+
+    log error,
+        /// ERROR ELLEV
+        2: "log";
+    log warning,
+        /// ERROR ELLEV
+        2: "log";
+    log critical,
+        /// ERROR ELLEV
+        2: "log";
+
+    // no error
+    log error, 1 then 1: "log";
+    log warning, 1 then 5: "log";
+
+    log error, 1 then
+        /// ERROR ELLEV
+        2: "log";
+    log warning, 1 then
+        /// ERROR ELLEV
+        2: "log";
+
+    log critical,
+        /// ERROR ELLEV
+        2 then
+        /// ERROR ELLEV
+        3: "log";
+}
