@@ -1586,7 +1586,7 @@ class LineIterTestCase(CTestCase):
             elif stripped.startswith('#endif'):
                 cpp_if_depth -= 1
                 base_if_depth = min(base_if_depth, cpp_if_depth)
-                assert cpp_if_depth >= 0, 'nonsense: unclosed endif'
+                assert cpp_if_depth >= 0, 'nonsense: #endif closing nothing'
             if dml_lineno is not None:
                 yield self.RedirectedLine(dml_lineno, c_lineno,
                                           curr_func, list(curr_suppressions))
