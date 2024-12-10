@@ -204,3 +204,7 @@
   (fixes SIMICS-22848).
 - `release 6 6349`
 - `release 7 7054`
+- `note 6` The DML files wrapping the Simics API now expose every type and
+  (for `enum`s) associated symbols by default, addressing the issue where
+  several useful types provided by the Simics API were not made available
+  (fixes SIMICS-19133).
