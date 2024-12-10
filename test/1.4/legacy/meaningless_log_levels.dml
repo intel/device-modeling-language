@@ -7,36 +7,48 @@ dml 1.4;
 
 // expectations in this file are selectively enabled using SCAN-FOR-TAGS
 
-method init() {
-    // no error
-    log error, 1: "log";
-    log warning, 1: "log";
-    log critical, 1: "log";
+template test_attr is write_only_attr {
+    param type = "n";
+    shared method test();
+    shared method set(attr_value_t val) throws { test(); }
+}
 
-    log error,
-        /// ERROR ELLEV
-        2: "log";
-    log warning,
-        /// ERROR ELLEV
-        2: "log";
-    log critical,
-        /// ERROR ELLEV
-        2: "log";
+attribute good_logs is test_attr {
+    method test() {
+        // no error
+        log error, 1: "error 1";
+        log warning, 1: "warning 1";
+        log critical, 1: "critical 1";
 
-    // no error
-    log error, 1 then 1: "log";
-    log warning, 1 then 5: "log";
+        // no error
+        log error, 1 then 1: "error 1 then 1";
+        log warning, 1 then 5: "warning 1 then 5";
+    }
+}
 
-    log error, 1 then
-        /// ERROR ELLEV
-        2: "log";
-    log warning, 1 then
-        /// ERROR ELLEV
-        2: "log";
+attribute bad_logs is test_attr {
+    method test() {
+        log error,
+            /// ERROR ELLEV
+            2: "error 2";
+        log warning,
+            /// ERROR ELLEV
+            2: "warning 2";
+        log critical,
+            /// ERROR ELLEV
+            2: "critical 2";
 
-    log critical,
-        /// ERROR ELLEV
-        2 then
-        /// ERROR ELLEV
-        3: "log";
+        log error, 1 then
+            /// ERROR ELLEV
+            2: "error 1 then 2";
+        log warning, 1 then
+            /// ERROR ELLEV
+            2: "warning 1 then 2";
+
+        log critical,
+            /// ERROR ELLEV
+            2 then
+            /// ERROR ELLEV
+            3: "critical 2 then 3";
+    }
 }
