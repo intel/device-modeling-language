@@ -2636,14 +2636,20 @@ def stmt_log(stmt, location, scope):
 
     warn_mixup = False
 
-    error_logkind = logkind in ('error', 'critical', 'warning')
+    error_logkind = logkind in {'error', 'critical', 'warning'}
     adjusted_level = level = ctree.as_int(
         codegen_expression(level, location, scope))
-    if (error_logkind
-        and compat.meaningless_log_levels not in dml.globals.enabled_compat):
-        if not level.constant or level.value != 1:
+    bad_error_level = (error_logkind
+                       and (not level.constant or level.value != 1))
+
+    # This correction must be done independently of
+    # compat.meaningless_log_levels, otherwise existing usages of
+    # e.g. log error, 2: "..." will become noops
+    if bad_error_level:
+        adjusted_level = mkIntegerLiteral(site, 1)
+    if compat.meaningless_log_levels not in dml.globals.enabled_compat:
+        if bad_error_level:
             report(ELLEV(level.site, "1"))
-            adjusted_level = mkIntegerLiteral(site, 1)
     elif level.constant and not (1 <= level.value <= 4):
         report(ELLEV(level.site, "an integer between 1 and 4"))
         adjusted_level = mkIntegerLiteral(site, 1)

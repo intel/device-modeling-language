@@ -6,7 +6,6 @@ dml 1.4;
 
 device test;
 
-/// COMPILE-ONLY
 /// DMLC-FLAG --simics-api=7
 /// WARNING WREDUNDANTLEVEL meaningless_log_levels.dml
 import "meaningless_log_levels.dml";
