@@ -208,3 +208,4 @@
   (for `enum`s) associated symbols by default, addressing the issue where
   several useful types provided by the Simics API were not made available
   (fixes SIMICS-19133).
+- `release 6 6354`
