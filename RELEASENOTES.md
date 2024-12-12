@@ -209,3 +209,4 @@
   several useful types provided by the Simics API were not made available
   (fixes SIMICS-19133).
 - `release 6 6354`
+- `release 7 7059`
