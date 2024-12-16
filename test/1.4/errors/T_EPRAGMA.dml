@@ -6,29 +6,29 @@ dml 1.4;
 
 device test;
 
-// no warning
+// no error
 /*% COVERITY irrelevant %*/
 
-/// WARNING WPRAGMA
+/// ERROR EPRAGMA
 /*% MYVERYCOOLPRAGMA %*/
 
-/// WARNING WPRAGMA
+/// ERROR EPRAGMA
 /*% 😀 %*/
 
-/// WARNING WPRAGMA
+/// ERROR EPRAGMA
 /*%
   MYVERYCOOLPRAGMA%*/
 
-// no warning (parses as a pragma)
+// no error (parses as a pragma)
 /*%
   COVERITY
   irrelevant%*/
 
-// no warning (doesn't parse as a pragma)
+// no error (doesn't parse as a pragma)
 /*% %*/
 
-// no warning (doesn't parse as a pragma)
+// no error (doesn't parse as a pragma)
 /*% MYVERYCOOLPRAGMA % */
 
-// no warning (doesn't parse as a pragma)
+// no error (doesn't parse as a pragma)
 //% MYVERYCOOLPRAGMA

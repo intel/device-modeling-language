@@ -1893,6 +1893,12 @@ class EEXTERNINCOMP(DMLError):
             "conflicting declaration, which specifies the type: "
             + self.other_type.describe())
 
+class EPRAGMA(DMLError):
+    """
+    An unknown pragma was specified
+    """
+    fmt = "Unknown pragma: %s"
+
 #
 # WARNINGS (keep these as few as possible)
 #
@@ -2255,12 +2261,6 @@ class WLOGMIXUP(DMLWarning):
                            '\n'.join(suggestions)))
 
         DMLWarning.__init__(self, site, details)
-
-class WPRAGMA(DMLWarning):
-    """
-    An unknown pragma was specified
-    """
-    fmt = "Unknown pragma: %s"
 
 class WIMMAFTER(DMLWarning):
     """
