@@ -187,12 +187,26 @@ def coverity_markers(markers, site=None):
     if dml.globals.coverity and site_with_loc:
         custom_markers = []
         filename = site.filename()
-        lineno = site.lineno
+        tgt_lineno = site.lineno
 
-        while (filename, lineno) in dml.globals.coverity_pragmas:
-            (lineno,
-             inline_markers) = dml.globals.coverity_pragmas[(filename, lineno)]
+        while (filename, tgt_lineno) in dml.globals.coverity_pragmas:
+            (start_lineno,
+             inline_markers) = dml.globals.coverity_pragmas[(filename,
+                                                             tgt_lineno)]
             custom_markers.extend(reversed(inline_markers))
+
+            # A minor HACK to handle the case of:
+            #   /*% COVERITY foo %*/ /*% COVERITY
+            #   bar %*/
+            #   some_statement
+            #
+            # Otherwise 'foo' won't be captured
+            if (start_lineno + 1 < tgt_lineno
+                and ((filename, start_lineno + 1)
+                     in dml.globals.coverity_pragmas)):
+                tgt_lineno = start_lineno + 1
+            else:
+                tgt_lineno = start_lineno
 
         custom_markers.reverse()
         markers = custom_markers + markers
