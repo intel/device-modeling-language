@@ -43,12 +43,19 @@ method init() {
 
     /*% COVERITY irrelevant %*/
 
-    /*% COVERITY foo %*/
-    /*% COVERITY bar %*/ /*% COVERITY baz
+    /*% COVERITY foo
+      %*/ /*% COVERITY bar %*/
+    /*% COVERITY baz %*/ /*% COVERITY qux
       FALSE
     %*/
     assert true;
-    // SUPPRESSIONS-ABOVE [foo] [bar] [baz:FALSE]
+    // SUPPRESSIONS-ABOVE [foo] [bar] [baz] [qux:FALSE]
+
+
+    /*% COVERITY foo %*/
+    /*% COVERITY bar %*/ /*% COVERITY irrelevant
+    %*/ assert true;
+    // SUPPRESSIONS-ABOVE [foo] [bar]
 
     try {
         if (s.x == 0) {
