@@ -1,0 +1,68 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+device test;
+
+/// COMPILE-ONLY
+/// DMLC-FLAG --coverity
+
+// This test is limited by the fact it relies on test annotations and line
+// directives from generated C. Notably, it has no means of properly testing
+// `--coverity` and the COVERITY pragma in the case of `--noline`.
+//
+// Annotation semantics:
+// * `SUPPRESSIONS-ABOVE [suppressions...]`
+//    One or more C lines are generated from the above DML line,
+//    and each of them receives exactly the suppressions specified
+// * `SUPPRESSIONS-ABOVE-LAX [suppressions...]`
+//    One or more C lines are generated from the above DML line,
+//    and *at least one* of them receives exactly the suppressions specified
+
+session struct { const int x; } s = {4};
+// SUPPRESSIONS-ABOVE [store_writes_const_field : FALSE]
+
+template t {
+    method m() {
+        /*% COVERITY foo %*/
+        if (s.x == 4) { after 1 s: m(); }
+        // SUPPRESSIONS-ABOVE [foo]
+    }
+}
+
+is t;
+
+group g is t;
+
+method init() {
+    assert true; // a sanity test that this gets no suppressions
+    // SUPPRESSIONS-ABOVE
+
+    /*% COVERITY irrelevant %*/
+
+    /*% COVERITY foo %*/
+    /*% COVERITY bar %*/ /*% COVERITY baz
+      FALSE
+    %*/
+    assert true;
+    // SUPPRESSIONS-ABOVE [foo] [bar] [baz:FALSE]
+
+    try {
+        if (s.x == 0) {
+            throw;
+        }
+    } catch
+    ;
+    // SUPPRESSIONS-ABOVE-LAX [unreachable]
+
+    /*% COVERITY foo %*/
+    foreach x in (each group in (dev))
+    // SUPPRESSIONS-ABOVE-LAX [foo] [unreachable]
+    {}
+
+    dev.m();
+    g.m();
+}

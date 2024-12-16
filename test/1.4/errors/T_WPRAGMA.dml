@@ -1,0 +1,34 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+// no warning
+/*% COVERITY irrelevant %*/
+
+/// WARNING WPRAGMA
+/*% MYVERYCOOLPRAGMA %*/
+
+/// WARNING WPRAGMA
+/*% 😀 %*/
+
+/// WARNING WPRAGMA
+/*%
+  MYVERYCOOLPRAGMA%*/
+
+// no warning (parses as a pragma)
+/*%
+  COVERITY
+  irrelevant%*/
+
+// no warning (doesn't parse as a pragma)
+/*% %*/
+
+// no warning (doesn't parse as a pragma)
+/*% MYVERYCOOLPRAGMA % */
+
+// no warning (doesn't parse as a pragma)
+//% MYVERYCOOLPRAGMA
