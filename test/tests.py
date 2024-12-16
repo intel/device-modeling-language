@@ -10,8 +10,10 @@ import threading
 import random
 import subprocess
 import difflib
+import dataclasses
 from pathlib import Path
 from os.path import join, isdir, exists
+from typing import Optional
 import glob
 import json
 from simicsutils.host import host_type, is_windows, batch_suffix
@@ -1501,12 +1503,19 @@ class DeadMethods(CTestCase):
 all_tests.append(DeadMethods(["dead_methods"],
                              join(testdir, "1.4", "misc", "dead_methods.dml")))
 
-
 func_start_re = re.compile(r'^static +\S+ +(\S+)\(.*\)$')
-begin_linemarks_func_re = re.compile(r'^// BEGIN-LINEMARKS-FUNC((?:\s+\S+)+)$')
+analysis_annotation_re = re.compile(
+    r'^ */\* *coverity *\[([^:\]]+)(?::([^\]]+))?\] *\*/$')
 
-class Linemarks(CTestCase):
+class LineIterTestCase(CTestCase):
     __slots__ = ()
+
+    @dataclasses.dataclass
+    class RedirectedLine:
+        dml_lineno : int
+        c_lineno : int
+        func : str
+        suppressions : list[(str, Optional[str])]
 
     class Error(Exception):
         def __init__(self, messages: list[(str, int, str)]):
@@ -1514,33 +1523,50 @@ class Linemarks(CTestCase):
             self.messages = messages
 
     def dml_lines_iter(self, c_file, c_lines_iter):
-        reset = True
+        reset = True # Ternary: True/False/Indeterminate(None)
+        # In case we are inside a header file
+        base_if_depth = 0
+        cpp_if_depth = 0
         dml_lineno = None
         curr_func = None
+        pending_suppressions = []
         for (c_lineno, line) in enumerate(c_lines_iter, 1):
             if dml_lineno is not None:
                 dml_lineno += 1
             line = line.rstrip()
+            curr_suppressions = pending_suppressions
+            s_m = analysis_annotation_re.match(line)
+            if s_m is not None:
+                pending_suppressions.append((
+                    s_m.group(1).strip(),
+                    s_m.group(2).strip()
+                    if s_m.group(2) is not None else None))
+                continue
+            else:
+                pending_suppressions = []
+
             m = line_directive_re.match(line)
             if m is not None:
                 (lineno, filename) = m.groups()
                 lineno = int(lineno)
                 redir_file = Path(self.scratchdir) / filename
                 if redir_file.samefile(c_file):
-                    assert not reset, \
+                    assert cpp_if_depth == base_if_depth, \
+                           f'line directive reset inside #if at {c_lineno}'
+                    assert reset is not True, \
                            f'Redundant line directive reset at {c_lineno}'
                     assert lineno == c_lineno + 1, \
                            f'Incorrect line directive reset at {c_lineno}'
                     reset = True
                     dml_lineno = None
                 elif redir_file.samefile(self.filename):
-                    assert dml_lineno != lineno, \
+                    assert dml_lineno != lineno or reset is None, \
                            (f'Redundant linemark for {dml_lineno} at '
                             + f'{c_lineno}')
-                    reset = False
+                    reset = None if cpp_if_depth > base_if_depth else False
                     dml_lineno = lineno - 1
                 else:
-                    reset = False
+                    reset = None if cpp_if_depth > base_if_depth else False
                     dml_lineno = None
                 continue
             m = func_start_re.match(line)
@@ -1550,13 +1576,31 @@ class Linemarks(CTestCase):
                 assert reset, \
                        f'Line directive not reset by start of {curr_func}'
                 continue
+
+            stripped = line.lstrip()
+            if stripped.startswith('#ifndef ') and stripped.endswith("_H"):
+                assert cpp_if_depth == base_if_depth == 0
+                base_if_depth = 1
+            if stripped.startswith('#if'):
+                cpp_if_depth += 1
+            elif stripped.startswith('#endif'):
+                cpp_if_depth -= 1
+                base_if_depth = min(base_if_depth, cpp_if_depth)
+                assert cpp_if_depth >= 0, 'nonsense: #endif closing nothing'
             if dml_lineno is not None:
-                yield (dml_lineno, c_lineno, curr_func)
+                yield self.RedirectedLine(dml_lineno, c_lineno,
+                                          curr_func, list(curr_suppressions))
             if curr_func is not None and line == '}':
                 curr_func = None
 
+        assert cpp_if_depth == 0, "nonsense: unclosed #if"
         assert reset, "Line directive not reset by end of C file"
         assert curr_func is None, "Unterminated C function"
+
+begin_linemarks_func_re = re.compile(r'^// BEGIN-LINEMARKS-FUNC((?:\s+\S+)+)$')
+
+class Linemarks(LineIterTestCase):
+    __slots__ = ()
 
     def parse_annotations(self):
         base_file = Path(self.filename).resolve()
@@ -1608,8 +1652,10 @@ class Linemarks(CTestCase):
         for curr_file in files:
             with open(curr_file) as file_handle:
                 curr_cblock_expected = []
-                for (dml_lineno, c_lineno, curr_func) in self.dml_lines_iter(
-                        curr_file, file_handle.readlines()):
+                for redir in self.dml_lines_iter(curr_file,
+                                                 file_handle.readlines()):
+                    (dml_lineno, c_lineno, curr_func) = (
+                        redir.dml_lineno, redir.c_lineno, redir.curr_func)
                     if curr_cblock_expected:
                         (expected_dml_lineno,
                          expected_c_lineno) = curr_cblock_expected.pop()
@@ -1617,7 +1663,7 @@ class Linemarks(CTestCase):
                             != (expected_dml_lineno, expected_c_lineno)):
                             raise self.Error(
                                 [(curr_file, expected_c_lineno,
-                                  f"Redirected to wrong DML line"),
+                                  "Redirected to wrong DML line"),
                                  (Path(self.filename).resolve(),
                                   expected_dml_lineno,
                                   "Expected redirection to this line,"
@@ -1630,7 +1676,7 @@ class Linemarks(CTestCase):
                             (line, c_lineno + (line - dml_lineno))
                             for line in range(dml_lineno + 1,
                                               cblock_spans[dml_lineno] + 1)
-                            if not line in not_linemarked)
+                            if line not in not_linemarked)
                         # Need to reverse as .pop() pops from the end
                         curr_cblock_expected.reverse()
                         continue
@@ -1651,7 +1697,7 @@ class Linemarks(CTestCase):
                         + f'({curr_cblock_expected})')
 
         remaining_cblocks = [c_block for c_block in cblock_spans
-                             if not c_block in found_cblocks]
+                             if c_block not in found_cblocks]
 
         assert not remaining_cblocks, \
             f'Linemarked C blocks missing: {remaining_cblocks}'
@@ -1660,18 +1706,6 @@ class Linemarks(CTestCase):
                 if not was_linemarked:
                     raise self.Error([(Path(self.filename).resolve(), line,
                                        f'Line not found inside {func_name}')])
-
-    def test(self):
-        super().test()
-        c_file = Path(f'{self.cfilename}.c').resolve()
-        h_file = Path(f'{self.cfilename}.h').resolve()
-        try:
-            self.analyze_c_files((c_file, h_file),
-                                 *self.parse_annotations())
-        except self.Error as e:
-            for (path, line, msg) in e.messages:
-                self.pr(f'{path}:{line}: error: {msg}')
-            raise TestFail('error')
 
 all_tests.append(Linemarks(["linemarks"],
                            join(testdir, "1.4", "misc", "linemarks.dml")))
@@ -1682,6 +1716,79 @@ all_tests.append(Linemarks(["linemarks"],
 all_tests.append(Linemarks(["linemarks-size-stats"],
                            join(testdir, "1.4", "misc", "linemarks.dml"),
                            extraenv={'DMLC_GATHER_SIZE_STATISTICS': '1'}))
+
+suppressions_above_re = re.compile(
+    r'^// SUPPRESSIONS-ABOVE(-LAX)?((?:\s+\[.+\])*)$')
+
+class PragmaCOVERITY(LineIterTestCase):
+    __slots__ = ()
+
+    def parse_annotations(self):
+        base_file = Path(self.filename).resolve()
+
+        suppressions : dict[int, (bool, list((str, Optional[str])))] = {}
+        with open(base_file) as base_file_handle:
+            for (lineno, line) in enumerate(base_file_handle, 1):
+                line = line.strip()
+                m = suppressions_above_re.match(line)
+                if m:
+                    line_suppressions = []
+                    relaxed = bool(m.group(1))
+                    for s in m.group(2).split('[')[1:]:
+                        s = s.replace(']', '').strip()
+                        if not s:
+                            continue
+                        [event, *cls] = s.split(':')
+                        line_suppressions.append((
+                            event.strip(),
+                            cls[0].strip() if cls else None))
+
+                    suppressions[lineno-1] = (relaxed, line_suppressions)
+        return suppressions
+
+    def analyze_c_files(self, files, suppressions):
+        suppressed_lines_remaining = set(suppressions)
+
+        for curr_file in files:
+            with open(curr_file) as file_handle:
+                for redir in self.dml_lines_iter(curr_file,
+                                                 file_handle.readlines()):
+                    if redir.dml_lineno in suppressions:
+                        (relaxed, expected_suppressions) = suppressions[
+                             redir.dml_lineno]
+                        expected_suppressions = sorted(expected_suppressions)
+                        actual_suppressions = sorted(redir.suppressions)
+                        if expected_suppressions != actual_suppressions:
+                            if relaxed:
+                                continue
+                            raise self.Error([(
+                                curr_file, redir.c_lineno,
+                                "redirected C line with incorrect suppressions"
+                                + f": {actual_suppressions}"),
+                                (Path(self.filename).resolve(),
+                                 redir.dml_lineno,
+                                 "annotation below this line demands: "
+                                 + str(expected_suppressions))])
+                        suppressed_lines_remaining.discard(redir.dml_lineno)
+
+        assert not suppressed_lines_remaining, (
+            'DML lines never properly suppressed: '
+            + str(suppressed_lines_remaining))
+
+    def test(self):
+        super().test()
+        c_file = Path(f'{self.cfilename}.c').resolve()
+        h_file = Path(f'{self.cfilename}.h').resolve()
+        try:
+            self.analyze_c_files((c_file, h_file), self.parse_annotations())
+        except self.Error as e:
+            for (path, line, msg) in e.messages:
+                self.pr(f'{path}:{line}: error: {msg}')
+            raise TestFail('error')
+
+all_tests.append(PragmaCOVERITY(
+    ["1.4", "pragmas", "COVERITY"],
+    join(testdir, "1.4", "pragmas", "COVERITY.dml")))
 
 class CompareIllegalAttrs(BaseTestCase):
     __slots__ = ()
