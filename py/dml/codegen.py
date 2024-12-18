@@ -2039,8 +2039,8 @@ def stmt_local(stmt, location, scope):
                 report(ERETLVALS(stmt.site, 1, len(tgts)))
             else:
                 sym = syms_to_add[0]
-                sym.init = ExpressionInitializer(
-                    codegen_expression(inits[0].args[0], location, scope))
+                sym.init = eval_initializer(
+                    inits[0].site, sym.type, inits[0], location, scope, False)
                 scope.add(sym)
                 stmts.append(sym_declaration(sym))
     else:
