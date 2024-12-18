@@ -240,4 +240,9 @@ method init() {
     assert (iarrp + var) == &iarr[2];
     assert (var + iarrp) == &iarr[2];
     assert (iarrp - var) == &iarr[0];
+
+    // Regression test for SIMICS-22874
+    local uint32_be_t x = m();
 }
+
+method m() -> (uint32) { return 0; }
