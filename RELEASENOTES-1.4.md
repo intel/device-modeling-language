@@ -345,3 +345,4 @@
   call was not properly type-checked, which could result in invalid code being
   accepted, as well as incorrect semantics, invalid generated C, or undefined
   behaviour (fixes SIMICS-22874).
+- `release 6 6356`
