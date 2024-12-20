@@ -227,3 +227,4 @@
   of defects reported by Synopsys® Coverity® for particular DML lines, as long
   as Coverity support is enabled by passing `--coverity` to DMLC.
 - `release 6 6356`
+- `release 7 7060`

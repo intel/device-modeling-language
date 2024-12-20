@@ -346,3 +346,4 @@
   accepted, as well as incorrect semantics, invalid generated C, or undefined
   behaviour (fixes SIMICS-22874).
 - `release 6 6356`
+- `release 7 7060`
