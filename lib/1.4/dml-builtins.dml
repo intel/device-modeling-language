@@ -40,6 +40,8 @@ extern int strcmp(const char *__s1, const char *__s2);
 extern void *memset(void *__s, int __c, size_t __n);
 extern typedef uint64_t uintptr_t;
 
+extern typedef struct { } conf_object_t;
+
 extern char *MM_STRDUP(const char *s);
 extern void MM_FREE(void *m);
 
