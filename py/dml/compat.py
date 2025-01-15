@@ -50,6 +50,22 @@ def feature(cls: type[CompatFeature]):
 
 
 @feature
+class broken_unused_types(CompatFeature):
+    '''This compatibility feature prevents DML from
+    reporting errors on unused `extern`-declared types:
+    ```
+    extern typedef struct {
+        undefined_type_t member;
+    } never_used_t;
+    ```
+    Up to Simics 7, a bug prevented DMLC from reporting an error; this
+    feature exists to preserve that behaviour.
+    '''
+    short = "Allow (and ignore) errors in unused types"
+    last_api_version = api_7
+
+
+@feature
 class broken_conditional_is(CompatFeature):
     '''This compatibility feature prevents DML from
     reporting errors when instantiating a template within an `#if` block:

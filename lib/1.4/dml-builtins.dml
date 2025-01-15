@@ -613,6 +613,7 @@ template device {
 
     param simics_api_version auto;
 
+    param _compat_broken_unused_types auto;
     param _compat_broken_conditional_is auto;
     param _compat_port_proxy_ifaces auto;
     param _compat_port_proxy_attrs auto;
