@@ -247,7 +247,18 @@ def mkglobals(stmts):
     global_anonymous_structs.clear()
     global_anonymous_structs.update(anonymous_structs)
 
-    if dml.globals.dml_version != (1, 2):
+    if compat.broken_unused_types not in dml.globals.enabled_compat:
+        for t in typedefs.values():
+            try:
+                check_named_types(t)
+            except ETYPE as e:
+                report(e)
+        for sym in new_symbols:
+            try:
+                check_named_types(sym.type)
+            except ETYPE as e:
+                report(e)
+    elif dml.globals.dml_version != (1, 2):
         for t in typedefs.values():
             try:
                 safe_realtype(t)
