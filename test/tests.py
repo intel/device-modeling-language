@@ -214,7 +214,7 @@ class DMLFileTestCase(BaseTestCase):
             assert self.api_version
             if self.api_version == "4.8":
                 libdir = "dml-old-4.8"
-            else: 
+            else:
                 libdir = "dml"
             self.includepath = (join(project_host_path(), "bin", libdir),
                                 join(project_host_path(), "bin", "dml", "api",
@@ -2052,6 +2052,7 @@ class ImportTest(CTestCase):
             print("dml %s;" % (self.dml_version,), file=f)
             print("device test;", file=f)
             print("/// COMPILE-ONLY", file=f)
+            print("/// DMLC-FLAG --no-compat=broken_unused_types", file=f)
             for apifile in self.files:
                 print('import "%s";' % apifile.replace('\\', '/'), file=f)
             print(self.extra_code, file=f)
