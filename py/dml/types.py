@@ -94,7 +94,7 @@ def check_named_types(t):
     if isinstance(t, TNamed):
         if t.c not in typedefs:
             raise ETYPE(t.declaration_site, t)
-    elif isinstance(t, TStruct):
+    elif isinstance(t, StructType):
         t.resolve()
         for (mn, mt) in t.members.items():
             check_named_types(mt)
@@ -111,6 +111,8 @@ def check_named_types(t):
         for msg_t in t.msg_types:
             check_named_types(msg_t)
     elif isinstance(t, (TVoid, IntegerType, TBool, TFloat, TTrait)):
+        pass
+    elif dml.globals.dml_version == (1, 2) and isinstance(t, TUnknown):
         pass
     else:
         raise ICE(t.declaration_site, "unknown type %r" % t)
