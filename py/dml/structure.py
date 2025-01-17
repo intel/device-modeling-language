@@ -250,12 +250,12 @@ def mkglobals(stmts):
     if dml.globals.dml_version != (1, 2):
         for t in typedefs.values():
             try:
-                safe_realtype(t)
+                check_named_types(t)
             except ETYPE as e:
                 report(e)
         for sym in new_symbols:
             try:
-                safe_realtype(sym.type)
+                check_named_types(sym.type)
             except ETYPE as e:
                 report(e)
 
