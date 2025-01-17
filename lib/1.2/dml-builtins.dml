@@ -37,6 +37,8 @@ constant true = (0 == 0);
 
 extern void *const NULL;
 
+extern typedef struct { } conf_object_t;
+
 extern const atom_t ATOM_LIST_END;
 
 extern typedef struct {
