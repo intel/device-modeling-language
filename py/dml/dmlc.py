@@ -578,8 +578,8 @@ def main(argv):
                 if tag in features:
                     del features[tag]
             else:
-                options.error(f'invalid tag {tag} for --no-compat.'
-                              ' Try --help-no-compat.')
+                parser.error(f'invalid tag {tag} for --no-compat.'
+                             ' Try --help-no-compat.')
 
     if options.strict_int:
         tag = compat.dml12_int.tag()
