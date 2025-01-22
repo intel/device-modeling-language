@@ -526,7 +526,7 @@ class DMLFileTestCase(BaseTestCase):
         else:
             flags = append_to
         for (linenum, line) in enumerate(open(filename, "rb"), 2):
-            m = annotation_re.match(line)
+            m = annotation_re.match(line.rstrip(b'\r\n'))
             if not m:
                 continue
             (key, data) = m.groups()
