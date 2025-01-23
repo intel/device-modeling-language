@@ -19,7 +19,7 @@ import json
 from simicsutils.host import host_type, is_windows, batch_suffix
 from simicsutils.internal import get_simics_major
 import testparams
-from testparams import package_path, simics_base_path
+from testparams import package_path, simics_base_path, project_path
 import traceback
 from depfile import parse_depfile
 import pstats
@@ -745,7 +745,7 @@ class CTestCase(DMLFileTestCase):
         sc.close()
 
         self.pr("Running Simics")
-        args = [join(simics_base_path(), "bin", "simics" + bat_sfx),
+        args = [join(project_path(), "bin", "simics" + bat_sfx),
                 "--batch-mode", "--quiet", "--no-copyright", "--no-settings",
                 "--dump-core", "--werror",
                 "--project", testparams.project_path(),
@@ -1797,7 +1797,7 @@ class CompareIllegalAttrs(BaseTestCase):
         # Extract list of automatic attributes from Simics
         sl = {x[5:].strip()
               for x in subprocess.run(
-                      [join(simics_base_path(), "bin", "simics" + bat_sfx),
+                      [join(project_path(), "bin", "simics" + bat_sfx),
                        "--batch-mode", "--quiet", "--no-copyright",
                        "--no-settings", "--dump-core", "--werror",
                        "--module-path", join(testparams.sandbox_path(),
