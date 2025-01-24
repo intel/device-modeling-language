@@ -354,3 +354,4 @@
   } never_used_t;
   ```
   The bugfix is opt-in, because an immediate bugfix would risk breaking existing builds; the error will only be reported when the flag `--no-compat=broken_unused_types` is passed to DMLC. This flag will be automatically enabled in Simics 8.
+- `release 7 7063`
