@@ -14,6 +14,7 @@ header %{
     #include <simics/dmllib.h>
 %}
 
+import "simics/device-api.dml";
 import "simics-api.dml";
 import "simics/devs/io-memory.dml";
 import "simics/model-iface/bank-instrumentation.dml";
