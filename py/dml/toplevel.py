@@ -373,8 +373,7 @@ def parse_main_file(inputfilename, explicit_import_path):
             dml.globals.enabled_compat.discard(feature)
 
     implicit_imports = [
-        ast.import_(site, "dml-builtins.dml"),
-        ast.import_(site, "simics/device-api.dml")]
+        ast.import_(site, "dml-builtins.dml")]
 
     (unimported, headers, footers, global_defs, spec_asts) = scan_statements(
         inputfilename, site, implicit_imports + stmts)
