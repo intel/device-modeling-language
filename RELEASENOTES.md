@@ -228,3 +228,9 @@
   as Coverity support is enabled by passing `--coverity` to DMLC.
 - `release 6 6356`
 - `release 7 7060`
+- `note 6` Made some changes in the auto-generation of DML bindings of the
+  Simics API. Some symbols that previously were omitted from the DML bindings
+  are now included. This can in principle break existing code that provides
+  corresponding `extern` declarations manually; however, the impact is expected
+  to be small since the new symbols are mostly internal functions unrealted to
+  device modeling.
