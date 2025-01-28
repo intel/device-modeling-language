@@ -228,3 +228,6 @@
   as Coverity support is enabled by passing `--coverity` to DMLC.
 - `release 6 6356`
 - `release 7 7060`
+- `note 6` Added the `stringify_list` provisional feature, which extends
+  `stringify` to support compile-time lists. This is primarily meant to provide
+  a means of expressing lists within documentation strings.
