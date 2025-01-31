@@ -230,3 +230,4 @@
 - `release 7 7060`
 - `note 6` Elements of compile-time list expressions are now allowed to be
   non-constant expressions (fixes SIMICS-13113).
+- `release 6 6363`
