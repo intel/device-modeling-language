@@ -419,8 +419,11 @@ template post_init {
 /**
 ### destroy
 Provides an abstract method `destroy`, which is called when the
-device is being deleted. Typically used to `delete` any device state that has
-been dynamically allocated using `new`.
+device is being deleted. This provides a means to clean up resources associated
+with the device instance that are not managed by DMLC (and `destroy` should not
+be used for any other purpose). This typically amounts to invoking
+[`delete`](language.html#delete-statements) on any device state that has been
+dynamically allocated using [`new`](language.html#new-expressions).
 
 The method `destroy` is automatically called on all objects that implement the
 `destroy` template. The order in which `destroy` of objects are called is not
@@ -429,7 +432,8 @@ called before `destroy` of any of its parent objects.
 In particular, `destroy` of the device object will be called only after all
 other implementations of `destroy`.
 
-Usage note: while the device is being deleted, it is not allowed to communicate
+Usage notes:
+* While the device is being deleted, it is not allowed to communicate
 with any other Simics object (whether that is by accessing `connect`ed devices
 or by leveraging the Simics API.) This includes even the device's own clock;
 don't attempt to post or cancel time/cycle-based events in `destroy()`
@@ -437,6 +441,12 @@ don't attempt to post or cancel time/cycle-based events in `destroy()`
 cancellation of such events is handled automatically, before the `destroy()`
 calls are invoked. The use of `.cancel_after()` inside `destroy()` is tolerated
 (even if almost always redundant.)
+* Exiting Simics, even gracefully, will not perform device deletion and cause
+`destroy()` to be called on its own. Simics instead simply relies on all
+resources being released by virtue of the process terminating. This means that
+side-effects within `destroy()` such as logging will not be visible upon
+program exit unless deletion is explicitly performed beforehand &mdash; hence
+why `destroy` should *only* be used to ensure resources get cleaned up.
 
 <div class="note">
 
