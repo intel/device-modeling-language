@@ -325,7 +325,7 @@ def type_deps(t, include_structs, expanded_typedefs):
         deps = []
         if include_structs:
             deps.append(t.label)
-        for (mn, mt) in t.members.items():
+        for (_, mt) in t.members:
             deps.extend(type_deps(mt, True, expanded_typedefs))
         return deps
     elif isinstance(t, TArray):

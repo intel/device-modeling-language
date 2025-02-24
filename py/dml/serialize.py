@@ -99,6 +99,25 @@ def prepare_array_de_serialization(site, t):
     dimsizes_expr = expr.mkLit(site, dimsizes_lit, TPtr(TInt(32, False)))
     return (base, dims, sizeof_base, dimsizes_expr)
 
+def mkSubRefLit(site, expr, sub, typ, op):
+    real_etype = safe_realtype_shallow(expr.ctype())
+
+    if isinstance(real_etype, TPtr):
+        if op == '.':
+            raise ENOSTRUCT(site, expr)
+        basetype = real_etype.base
+        real_basetype = safe_realtype(basetype)
+    else:
+        if op == '->':
+            raise ENOPTR(site, expr)
+        real_basetype = safe_realtype(etype)
+
+    real_basetype = real_basetype.resolve()
+
+    return ctree.StructMember(site, expr, sub,
+                              conv_const(real_basetype.const, typ), op)
+
+
 # This works on the assumption that args do not need to be hard-cast
 # to fit the actual fun signature
 def apply_c_fun(site, fun, args, rettype):
@@ -354,7 +373,7 @@ def map_dmltype_to_attrtype(site, dmltype):
         return 'f'
     if isinstance(real_type, TStruct):
         return '[%s]' % "".join([map_dmltype_to_attrtype(site, mt)
-                                 for mt in real_type.members.values()])
+                                 for (_, mt) in real_type.members])
     if isinstance(real_type, TArray):
         assert real_type.size.constant
         arr_attr_type = map_dmltype_to_attrtype(site, real_type.base)
@@ -375,7 +394,7 @@ def mark_for_serialization(site, dmltype):
     '''
     real_type = safe_realtype(dmltype)
     if isinstance(real_type, TStruct):
-        for mt in real_type.members.values():
+        for (_, mt) in real_type.members:
             mark_for_serialization(site, mt)
     elif isinstance(real_type, TArray):
         # Can only serialize constant-size arrays
@@ -496,9 +515,12 @@ def generate_serialize(real_type):
         in_arg_decl.toc()
         out_arg_decl.toc()
         if isinstance(real_type, TStruct):
-            sources = ((ctree.mkSubRef(site, in_arg, name, "->"),
-                        safe_realtype(typ))
-                       for (name, typ) in real_type.members.items())
+            sources = (
+                (mkSubRefLit(
+                    site, in_arg, name or TStruct.anon_member_cident(i),
+                    typ, "->"),
+                 safe_realtype(typ))
+                for (i, (name, typ)) in enumerate(real_type.members))
             serialize_sources_to_list(site, sources, out_arg)
         elif isinstance(real_type, TVector):
             raise ICE(site, "TODO: serialize vector")
@@ -619,9 +641,12 @@ def generate_deserialize(real_type):
                            else ctree.mkCast(site, tmp_out_ref, TPtr(void)))
             cleanup.append(ctree.mkDelete(site, cleanup_ref))
             tmp_out_decl.toc()
-            targets = tuple((ctree.mkSubRef(site, tmp_out_ref, name, "->"),
-                             conv_const(real_type.const, safe_realtype(typ)))
-                            for (name, typ) in real_type.members.items())
+            targets = tuple(
+                (mkSubRefLit(
+                    site, tmp_out_ref,
+                    name or TStruct.anon_member_cident(i), typ, "->"),
+                 conv_const(real_type.const, safe_realtype(typ)))
+                for (i, (name, typ)) in enumerate(real_type.members))
             def error_out_at_index(_i, exc, msg):
                 return error_out(exc, msg)
             deserialize_list_to_targets(site, in_arg, targets,

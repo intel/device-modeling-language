@@ -1400,8 +1400,8 @@ class ExprTests(GccTests):
             types.TExternStruct({}, 'struct_t', 'struct_t'),
             types.TStruct({'x': types.TBool()}, 'struct_label'),
             types.TLayout(
-                'big-endian', {
-                    'x': (site, types.TEndianInt(24, True, 'big-endian'))},
+                'big-endian', [(site, 'x',
+                                types.TEndianInt(24, True, 'big-endian'))],
                 'struct_label'),
             types.THook([]),
         ]

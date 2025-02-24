@@ -370,7 +370,7 @@
 - `note 6` '`_`' can no longer be used as the name for arbitrary declarations.
   Instead, it is now only permitted in particular contexts, and in these
   contexts, '`_`' will affect the declaration in a way suitable for when the
-  declaration is _unused_. These contexts are:
+  declaration is _unused_ in some particular way. These contexts are:
     - Method-local bindings (e.g. variables and input parameters.)
 
       When a method-local binding is given the name '`_`', it will not be added
@@ -384,6 +384,12 @@
       definition that gives the index variable a different name. This is useful
       when defining an object array specification which does not depend on the
       index.
+    - Layout member names
+
+      When a layout member is given the name '`_`', that member will not be
+      referencable within DML code, but will still affect the memory
+      representation of the layout. This is useful to represent e.g. reserved
+      or padding bytes.
 
   Note that as a consequence of these semantics, any reference to '`_`' in code
   will _always_ resolve to the discard reference.
