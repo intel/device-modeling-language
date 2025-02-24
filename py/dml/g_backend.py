@@ -68,7 +68,7 @@ def en_method(node):
     for f in list(node.funcs.values()):
         fs.append((f.get_cname(),
                    f.independent,
-                   tuple((n, str(t)) for n, t in f.inp),
+                   tuple((p.ident, str(p.typ)) for p in f.inp),
                    tuple((n, str(t)) for n, t in f.outp)))
     return (ID_METHOD, node.name, tuple(fs))
 

@@ -267,7 +267,13 @@ def typecheck_inargs(site, args, inp, kind="function", known_arglen=None):
     if arglen != len(inp):
         raise EARG(site, kind)
 
-    for (i, (arg, (pname, ptype))) in enumerate(zip(args, inp)):
+    for (i, (arg, p)) in enumerate(zip(args, inp)):
+        if kind == 'method':
+            logref = p.logref
+            ptype = p.typ
+        else:
+            (pname, ptype) = p
+            logref = f"'{pname}'"
         argtype = safe_realtype(arg.ctype())
         if not argtype:
             raise ICE(site, "unknown expression type")
@@ -277,9 +283,9 @@ def typecheck_inargs(site, args, inp, kind="function", known_arglen=None):
         (ok, trunc, constviol) = rtype.canstore(argtype)
         if ok:
             if constviol:
-                raise ECONSTP(site, pname, kind + " call")
+                raise ECONSTP(site, logref, kind + " call")
         else:
-            raise EPTYPE(site, arg, rtype, pname, kind)
+            raise EPTYPE(site, arg, rtype, logref, kind)
 
 # Typecheck a DML method application, where the arguments are given as a list
 # where each element is either an AST of an initializer, or an initializer
@@ -298,7 +304,14 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
     from .ctree import Initializer, ExpressionInitializer
 
     args = []
-    for (init, (pname, ptype)) in zip(inits, inp):
+    for (init, p) in zip(inits, inp):
+        if kind == 'method':
+            logref = p.logref
+            ptype = p.typ
+        else:
+            (pname, ptype) = p
+            logref = pname
+
         if isinstance(init, Initializer):
             if ptype is None:
                 assert isinstance(init, ExpressionInitializer)
@@ -308,13 +321,13 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
                     arg = init.as_expr(ptype)
                 except EASTYPE as e:
                     if e.site is init.site:
-                        raise EPTYPE(site, e.source, e.target_type, pname,
+                        raise EPTYPE(site, e.source, e.target_type, logref,
                                      kind) from e
                     raise
                 # better error message
                 except EDISCONST as e:
                     if e.site is init.site:
-                        raise ECONSTP(site, pname, kind + " call") from e
+                        raise ECONSTP(site, logref, kind + " call") from e
                     raise
         elif ptype is None:
             if init.kind != 'initializer_scalar':
@@ -341,22 +354,22 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
 
             if ok:
                 if constviol:
-                    raise ECONSTP(site, pname, kind + " call")
+                    raise ECONSTP(site, logref, kind + " call")
             else:
-                raise EPTYPE(site, arg, rtype, pname, kind)
+                raise EPTYPE(site, arg, rtype, logref, kind)
         else:
             try:
                 arg = eval_initializer(init.site, ptype, init, location,
                                        scope, False).as_expr(ptype)
             except EASTYPE as e:
                 if e.site is init.site:
-                    raise EPTYPE(site, e.source, e.target_type, pname,
+                    raise EPTYPE(site, e.source, e.target_type, logref,
                                  kind) from e
                 raise
             # better error message
             except EDISCONST as e:
                 if e.site is init.site:
-                    raise ECONSTP(site, pname, kind + " call") from e
+                    raise ECONSTP(site, logref, kind + " call") from e
                 raise
         if (on_ptr_to_stack
             and isinstance(safe_realtype_shallow(ptype), TPtr)
@@ -467,6 +480,6 @@ class StaticIndex(NonValue):
     def __init__(self, site, var):
         pass
     def __str__(self):
-        return dollar(self.site) + self.var
+        return dollar(self.site) + ("_" if self.var is None else self.var)
     def exc(self):
-        return EIDXVAR(self.site, dollar(self.site) + self.var)
+        return EIDXVAR(self.site, str(self))

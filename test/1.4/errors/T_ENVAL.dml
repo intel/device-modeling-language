@@ -47,6 +47,9 @@ method init() {
     /// ERROR ENVAL
     b.r2.f;
 
+    // Discard identifier; not added to scope
+    local int _;
+    // ... so this resolves to the discard reference
     /// ERROR EDISCARDREF
     _;
     // no error

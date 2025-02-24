@@ -209,11 +209,14 @@ class TraitMethod(TraitVTableItem):
 
     def declaration(self):
         implicit_inargs = self.vtable_trait.implicit_args()
-        args = ", ".join(t.declaration(n)
-                         for (n, t) in c_inargs(
-                                 crep.maybe_dev_arg(self.independent)
-                                 + implicit_inargs + list(self.inp),
-                                 self.outp, self.throws))
+        args = ", ".join([t.declaration(n)
+                          for (n, t) in (
+                                  crep.maybe_dev_arg(self.independent)
+                                  + implicit_inargs)]
+                         + [p.declaration() for p in self.inp]
+                         + [t.declaration(n)
+                            for (n, t) in c_extra_inargs(self.outp,
+                                                         self.throws)])
         return c_rettype(self.outp, self.throws).declaration(
             '%s(%s)' % (self.cname(), args))
 
@@ -254,8 +257,8 @@ class TraitMethod(TraitVTableItem):
             else:
                 memoization = None
             body = codegen_method(
-                self.astbody.site, self.inp, self.outp, self.throws, self.independent,
-                memoization, self.astbody, default,
+                self.astbody.site, self.inp, self.outp, self.throws,
+                self.independent, memoization, self.astbody, default,
                 Location(dml.globals.device, ()), scope, self.rbrace_site)
 
             downcast_path = self.downcast_path()
@@ -322,14 +325,15 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
         del sessions[name]
 
     bad_methods = set()
-    for (name, (msite, inp, outp, throws, independent, startup, memoized, overridable,
-                body, rbrace_site)) in list(methods.items()):
+    for (name, (msite, inp, outp, throws, independent, startup, memoized,
+                overridable, body, rbrace_site)) in list(methods.items()):
         argnames = set()
-        for (pname, _) in inp:
-            if pname in argnames:
-                report(EARGD(msite, pname))
-                bad_methods.add(name)
-            argnames.add(pname)
+        for p in inp:
+            if p.ident:
+                if p.ident in argnames:
+                    report(EARGD(msite, p.ident))
+                    bad_methods.add(name)
+                argnames.add(p.ident)
         for ancestor in direct_parents:
             coll = ancestor.member_declaration(name)
             if coll:
@@ -399,15 +403,15 @@ def typecheck_method_override(left, right):
         raise EMETH(site0, site1, "different number of output arguments")
     if throws0 != throws1:
         raise EMETH(site0, site1, "different nothrow annotations")
-    for ((n, t0), (_, t1)) in zip(inp0, inp1):
-        t0 = safe_realtype_unconst(t0)
-        t1 = safe_realtype_unconst(t1)
+    for (p0, p1) in zip(inp0, inp1):
+        t0 = safe_realtype_unconst(p0.typ)
+        t1 = safe_realtype_unconst(p1.typ)
         ok = (t0.eq_fuzzy(t1)
               if compat.lenient_typechecking in dml.globals.enabled_compat
               else t0.eq(t1))
         if not ok:
             raise EMETH(site0, site1,
-                        "mismatching types in input argument %s" % (n,))
+                        f"mismatching types in input argument {p0.logref}")
     for (i, ((_, t0), (_, t1))) in enumerate(zip(outp0, outp1)):
         t0 = safe_realtype_unconst(t0)
         t1 = safe_realtype_unconst(t1)
@@ -760,7 +764,7 @@ class Trait(SubTrait):
 
     def typecheck_methods(self):
         for (_, inp, outp, _, _, _, _) in self.vtable_methods.values():
-            for (_, t) in inp + outp:
+            for t in [p.typ for p in inp] + [t for (_, t) in outp]:
                 try:
                     check_named_types(t)
                 except DMLError as e:
@@ -770,7 +774,7 @@ class Trait(SubTrait):
             # To avoid duplicating error messages
             bad = False
             if sm.name not in self.vtable_methods:
-                for (_, t) in sm.inp + sm.outp:
+                for t in [p.typ for p in sm.inp] + [t for (_, t) in sm.outp]:
                     try:
                         check_named_types(t)
                     except DMLError as e:
@@ -917,9 +921,10 @@ class Trait(SubTrait):
 
     def vtable_method_type(self, inp, outp, throws, independent):
         return TPtr(TFunction(
-            [t for (n, t) in c_inargs(
-                crep.maybe_dev_arg(independent) + self.implicit_args() + inp,
-                outp, throws)],
+            [t for (_, t) in
+             crep.maybe_dev_arg(independent) + self.implicit_args()]
+            + [p.typ for p in inp]
+            + [t for (_, t) in c_extra_inargs(outp, throws)],
             c_rettype(outp, throws)))
 
     def mark_referenced(self):
