@@ -3531,7 +3531,7 @@ The default behaviour depends on whether the register has fields:
   new value, using the `set` method.
 
 * If the register has fields, then the default behavior is to
-  invoke the `write_fields` method of all sub-fields covered at
+  invoke the `write_field` method of all sub-fields covered at
   least partially by `enabled_bytes`, in order from
   least to most significant bit. Then `write_unmapped_bits`
   is called with the enabled bits that were not covered by fields.

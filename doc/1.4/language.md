@@ -573,9 +573,9 @@ categories of templates:
   the `read` or `write` template. The template leaves
     a simple method `read` (or `write`) abstract;
     custom behaviour is provided by overriding the method. There is
-    also a pair of templates `read_bits`
-    and `write_bits`, which similarly provide abstract
-    methods `read_bits` and `write_bits`. These
+    also a pair of templates `read_field`
+    and `write_field`, which similarly provide abstract
+    methods `read_field` and `write_field`. These
     functions have some extra parameters, making them less convenient
     to use, but they also offer some extra information about the
     access.
