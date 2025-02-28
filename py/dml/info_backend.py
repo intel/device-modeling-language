@@ -182,3 +182,103 @@ def generate(device, filename):
     classname = param_str_fixup(device, 'classname', '-')
     with XMLWriter(filename) as outfile:
         dev_info(outfile, device, classname)
+
+import json
+from dml.types import *
+from . import crep
+from .expr import mkLit
+from .expr_util import *
+from .structure import get_attr_name
+
+def gen_attribute(indent, node, port, prefix):
+    d = {}
+    d['name'] = get_attr_name(prefix, node)
+    if param_defined(node, 'desc'):
+        d['desc'] = param_str(node, 'desc')
+    if param_defined(node, 'documentation'):
+        d['documentation'] = param_str(node, 'documentation')
+    if param_defined(node, 'limitations'):
+        d['limitations'] = param_str(node, 'limitations')
+    if node.get_component('type') != None and param_defined(node, 'type'):
+        d['type'] = param_str(node, 'type') # not correct
+    if node.get_component('type_desc') != None and param_defined(node, 'type_desc'):
+        d['type_desc'] = param_str(node, 'type_desc')
+    return d
+
+def gen_interface(indent, node):
+    i = {}
+    i['name'] = param_str(node, 'name') + "_interface"
+    i['required'] = param_bool(node, 'required')
+    return i
+
+def gen_connect(indent, node, port, prefix):
+    d = gen_attribute(indent, node, port, prefix)
+    i = []
+    children = sorted(node.get_components(), key=lambda o: o.name or '')
+    for child in children:
+        if child.objtype == 'interface':
+             i.append(gen_interface(indent, child))
+    if i:
+        d['interface'] = i
+    return d
+
+def gen_implement(indent, node):
+    d = {}
+    d['name'] = param_str(node, 'name') + "_interface"
+    if param_defined(node, 'desc'):
+        d['desc'] = param_str(node, 'desc')
+    if param_defined(node, 'documentation'):
+        d['documentation'] = param_str(node, 'documentation')
+    if param_defined(node, 'limitations'):
+        d['limitations'] = param_str(node, 'limitations')
+    return d
+
+def gen_objects(indent, node, port=None, dimsizes=(), prefix='', loopvars=()):
+
+    if node.objtype in {'parameter', 'method', 'session', 'saved', 'hook',
+                        'register', 'event'}:
+        return
+
+    if node.objtype == 'attribute':
+        return gen_attribute(indent, node, port, prefix)
+    if node.objtype == 'connect':
+        return gen_connect(indent, node, port, prefix)
+    if node.objtype == 'implement':
+        return gen_implement(indent, node)
+
+    # Registration order is undefined but has significance, so
+    # register attributes of subobjects in an order that is deterministic,
+    # platform-independent, and unaffected by adding or removing objects.
+    if node.objtype == 'group':
+        prefix += crep.cname(node) + '_'
+        for _ in node.arraylens():
+            loopvars += (mkLit(None, '_i' + str(len(loopvars) + 1),
+                               TInt(32, False)),)
+        dimsizes += node.arraylens()
+    elif node.objtype in {'device', 'bank', 'port', 'subdevice'}:
+        if node.objtype in {'bank', 'port', 'subdevice'} and (
+                # anonymous bank
+                dml.globals.dml_version != (1, 2) or node.name != None):
+            port = node
+    else:
+        raise ICE(node, f"unknown object type {node.objtype}")
+
+    d = {}
+    d['name'] = param_str(node, 'name')
+    children = sorted(node.get_components(), key=lambda o: o.name or '')
+    for child in children:
+        cd = gen_objects(indent + "  ", child, port, dimsizes, prefix, loopvars)
+        if cd:
+            l = []
+            if child.objtype in d.keys():
+                l = d[child.objtype]
+            l.append(cd)
+            d[child.objtype] = l
+
+    return d
+
+
+def generate_json(device, filename):
+    json_data = gen_objects("", device)
+    with open(filename, mode="w", encoding="utf-8") as write_file:
+         json.dump(json_data, write_file, sort_keys=False, indent=2, separators=(',', ': '))

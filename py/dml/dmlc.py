@@ -721,6 +721,8 @@ def main(argv):
                                        dev, dml_version, outputbase + '.g')
                 logtime("g")
 
+        dml.info_backend.generate_json(dev, outputbase + '.json')
+
         if not logging.failure:
             # report WREF for broken unused parameters. But just ignore it
             # if there's already a hard error somewhere, because if the
