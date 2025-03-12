@@ -79,8 +79,8 @@ obj.saved_uint48_be = 0xF00F00F00
 stest.expect_equal(obj.saved_uint48_be, 0xF00F00F00)
 obj.saved_bitfields = 0xF0F0FF
 stest.expect_equal(obj.saved_bitfields, 0xF0F0FF)
-obj.saved_layout = [-5, [0xFF0FF00F0], 0xFF00F0]
-stest.expect_equal(obj.saved_layout, [-5, [0xFF0FF00F0], 0xFF00F0])
+obj.saved_layout = [-5, [0xFF0FF00F0], 17, -13, 0xFF00F0]
+stest.expect_equal(obj.saved_layout, [-5, [0xFF0FF00F0], 17, -13, 0xFF00F0])
 obj.port.p_saved1.v = -5
 stest.expect_equal(obj.port.p_saved1.v, -5)
 obj.port.p_saved2.v = 5

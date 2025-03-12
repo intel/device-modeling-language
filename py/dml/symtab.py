@@ -75,6 +75,7 @@ class Symtab(object):
         global symtab_idx
         symtab_idx += 1
         self.idx = symtab_idx
+        self.anonymous_count = 0
 
         self.symdict = {}
         self.symlist = []
@@ -91,6 +92,8 @@ class Symtab(object):
     def add(self, sym):
         if not isinstance(sym, Symbol):
             raise TypeError(repr(sym) + " is not a Symbol")
+        if sym.name is None:
+            raise ICE(sym.site, "Anonymous symbol added to Symtab")
         if sym.name in self.symdict:
             raise ICE(sym.site, "duplicate symbol %s" % sym.name)
         self.symdict[sym.name] = sym
@@ -117,6 +120,9 @@ class Symtab(object):
         return sym
 
     def unique_cname(self, name):
+        if name is None:
+            name = f'_anon_var_{self.anonymous_count}'
+            self.anonymous_count += 1
         return f'v{self.idx}_{name}'
 
 class MethodParamScope(Symtab):

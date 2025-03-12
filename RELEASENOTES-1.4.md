@@ -356,3 +356,40 @@
   The bugfix is opt-in, because an immediate bugfix would risk breaking existing builds; the error will only be reported when the flag `--no-compat=broken_unused_types` is passed to DMLC. This flag will be automatically enabled in Simics 8.
 - `release 7 7063`
 - `release 6 6362`
+- `note 6` Added the _discard reference_ '`_`' &mdash; a non-value expression
+  which may be used as an assign target in order to explictly discard the result
+  of an evaluated expression or return value of a method call (fixes
+  SIMICS-21584.)
+
+  Example usage:
+  ```
+  _ = any_expression;
+  _ = throwing_method();
+  (_, x, _) = method_with_multiple_return_values();
+  ```
+- `note 6` '`_`' can no longer be used as the name for arbitrary declarations.
+  Instead, it is now only permitted in particular contexts, and in these
+  contexts, '`_`' will affect the declaration in a way suitable for when the
+  declaration is _unused_ in some particular way. These contexts are:
+    - Method-local bindings (e.g. variables and input parameters.)
+
+      When a method-local binding is given the name '`_`', it will not be added
+      to scope. This is useful for e.g. unused method parameters.
+    - Index variables for object arrays
+
+      When '`_`' is specified as an index variable, a parameter will not be
+      created for it, meaning it cannot conflict with any other definition, and
+      it cannot be referenced in the code in order to get the value of the index
+      in question. It also isn't considered to conflict with any other
+      definition that gives the index variable a different name. This is useful
+      when defining an object array specification which does not depend on the
+      index.
+    - Layout member names
+
+      When a layout member is given the name '`_`', that member will not be
+      referencable within DML code, but will still affect the memory
+      representation of the layout. This is useful to represent e.g. reserved
+      or padding bytes.
+
+  Note that as a consequence of these semantics, any reference to '`_`' in code
+  will _always_ resolve to the discard reference.

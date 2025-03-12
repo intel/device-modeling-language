@@ -109,10 +109,18 @@ class Expression(Code):
     # bitslicing.
     explicit_type = False
 
-    # Can the expression be assigned to?
-    # If writable is True, there is a method write() which returns a C
-    # expression to make the assignment.
+    # Can the expression be safely assigned to in DML?
+    # This implies write() can be safely used.
     writable = False
+
+    # Can the address of the expression be taken safely in DML?
+    # This implies c_lval, and typically implies writable.
+    addressable = False
+
+    # Is the C representation of the expression an lvalue?
+    # If True, then the default implementation of write() must not be
+    # overridden; otherwise, it must be.
+    c_lval = False
 
     def __init__(self, site):
         assert not site or isinstance(site, Site)
@@ -128,8 +136,16 @@ class Expression(Code):
         raise ICE(self.site, "can't read %r" % self)
 
     # Produce a C expression but don't worry about the value.
-    def discard(self):
-        return self.read()
+    def discard(self, explicit=False):
+        if not explicit or safe_realtype_shallow(self.ctype()).void:
+            return self.read()
+
+        if self.constant:
+            return '(void)0'
+        from .ctree import Cast
+        expr = (f'({self.read()})'
+                if self.priority < Cast.priority else self.read())
+        return f'(void){expr}'
 
     def ctype(self):
         '''The corresponding DML type of this expression'''
@@ -140,9 +156,15 @@ class Expression(Code):
         return mkApplyInits(self.site, self, inits, location, scope)
 
     @property
+    def is_stack_allocated(self):
+        '''Returns true only if it's known that the storage for the value that
+           this expression evaluates to is temporary to a method scope'''
+        return False
+
+    @property
     def is_pointer_to_stack_allocation(self):
         '''Returns True only if it's known that the expression is a pointer
-           to stack-allocated data'''
+           to storage that is temporary to a method scope'''
         return False
 
     def incref(self):
@@ -155,6 +177,15 @@ class Expression(Code):
         "Create an identical expression, but with a different site."
         return type(self)(
             site, *(getattr(self, name) for name in self.init_args[2:]))
+
+    # Return a (principally) void-typed C expression that write a source to the
+    # storage this expression represents
+    # This should only be called if either writable or c_lval is True
+    def write(self, source):
+        assert self.c_lval, repr(self)
+        # Wrap .read() in parantheses if its priority is less than that of &
+        dest = self.read() if self.priority >= 150 else f'({self.read()})'
+        return source.assign_to(dest, self.ctype())
 
 class NonValue(Expression):
     '''An expression that is not really a value, but which may validly
@@ -202,11 +233,14 @@ class Lit(Expression):
         return self.str or self.cexpr
     def read(self):
         return self.cexpr
-    def write(self, source):
-        assert self.writable
-        return "%s = %s" % (self.cexpr, source.read())
     @property
     def writable(self):
+        return self.c_lval
+    @property
+    def addressable(self):
+        return self.c_lval
+    @property
+    def c_lval(self):
         return self.type is not None
 
 mkLit = Lit
@@ -233,7 +267,13 @@ def typecheck_inargs(site, args, inp, kind="function", known_arglen=None):
     if arglen != len(inp):
         raise EARG(site, kind)
 
-    for (i, (arg, (pname, ptype))) in enumerate(zip(args, inp)):
+    for (i, (arg, p)) in enumerate(zip(args, inp)):
+        if kind == 'method':
+            logref = p.logref
+            ptype = p.typ
+        else:
+            (pname, ptype) = p
+            logref = f"'{pname}'"
         argtype = safe_realtype(arg.ctype())
         if not argtype:
             raise ICE(site, "unknown expression type")
@@ -243,9 +283,9 @@ def typecheck_inargs(site, args, inp, kind="function", known_arglen=None):
         (ok, trunc, constviol) = rtype.canstore(argtype)
         if ok:
             if constviol:
-                raise ECONSTP(site, pname, kind + " call")
+                raise ECONSTP(site, logref, kind + " call")
         else:
-            raise EPTYPE(site, arg, rtype, pname, kind)
+            raise EPTYPE(site, arg, rtype, logref, kind)
 
 # Typecheck a DML method application, where the arguments are given as a list
 # where each element is either an AST of an initializer, or an initializer
@@ -264,7 +304,14 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
     from .ctree import Initializer, ExpressionInitializer
 
     args = []
-    for (init, (pname, ptype)) in zip(inits, inp):
+    for (init, p) in zip(inits, inp):
+        if kind == 'method':
+            logref = p.logref
+            ptype = p.typ
+        else:
+            (pname, ptype) = p
+            logref = pname
+
         if isinstance(init, Initializer):
             if ptype is None:
                 assert isinstance(init, ExpressionInitializer)
@@ -274,13 +321,13 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
                     arg = init.as_expr(ptype)
                 except EASTYPE as e:
                     if e.site is init.site:
-                        raise EPTYPE(site, e.source, e.target_type, pname,
+                        raise EPTYPE(site, e.source, e.target_type, logref,
                                      kind) from e
                     raise
                 # better error message
                 except EDISCONST as e:
                     if e.site is init.site:
-                        raise ECONSTP(site, pname, kind + " call") from e
+                        raise ECONSTP(site, logref, kind + " call") from e
                     raise
         elif ptype is None:
             if init.kind != 'initializer_scalar':
@@ -307,22 +354,22 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
 
             if ok:
                 if constviol:
-                    raise ECONSTP(site, pname, kind + " call")
+                    raise ECONSTP(site, logref, kind + " call")
             else:
-                raise EPTYPE(site, arg, rtype, pname, kind)
+                raise EPTYPE(site, arg, rtype, logref, kind)
         else:
             try:
                 arg = eval_initializer(init.site, ptype, init, location,
                                        scope, False).as_expr(ptype)
             except EASTYPE as e:
                 if e.site is init.site:
-                    raise EPTYPE(site, e.source, e.target_type, pname,
+                    raise EPTYPE(site, e.source, e.target_type, logref,
                                  kind) from e
                 raise
             # better error message
             except EDISCONST as e:
                 if e.site is init.site:
-                    raise ECONSTP(site, pname, kind + " call") from e
+                    raise ECONSTP(site, logref, kind + " call") from e
                 raise
         if (on_ptr_to_stack
             and isinstance(safe_realtype_shallow(ptype), TPtr)
@@ -433,6 +480,6 @@ class StaticIndex(NonValue):
     def __init__(self, site, var):
         pass
     def __str__(self):
-        return dollar(self.site) + self.var
+        return dollar(self.site) + ("_" if self.var is None else self.var)
     def exc(self):
-        return EIDXVAR(self.site, dollar(self.site) + self.var)
+        return EIDXVAR(self.site, str(self))

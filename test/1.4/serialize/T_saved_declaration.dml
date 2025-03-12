@@ -10,6 +10,8 @@ device test;
 
 import "utility.dml";
 
+extern int memcmp(const void *s1, const void *s2, size_t n);
+
 // Simple types
 saved int saved_int = 2;
 
@@ -108,6 +110,13 @@ typedef layout "little-endian" {
 saved layout "big-endian" {
     int32 i32;
     inner_layout_t il;
+    // It's important that the values of members with the discard identifier
+    // are preserved.
+    // Imagine reading a packet from software, checkpointing, and then
+    // propagating that packet elsewere; the device may not care about a
+    // particular field, but it may still matter for what it interacts with.
+    uint32 _;
+    int16 _;
     bitfields 24 {
         uint24 f @ [23:0];
     } b24;
@@ -323,6 +332,10 @@ attribute test_later is write_only_attr {
         assert saved_layout.i32 == -5;
         assert saved_layout.il.i == 0xFF0FF00F0;
         assert saved_layout.b24 == 0xFF00F0;
+        local uint32_be_t expected_1 = 17;
+        assert memcmp(cast(&saved_layout, char *) + 11, &expected_1, 4) == 0;
+        local int16_be_t expected_2 = -13;
+        assert memcmp(cast(&saved_layout, char *) + 15, &expected_2, 2) == 0;
 
         assert p_saved1.v == -5;
         assert p_saved2.v == 5;

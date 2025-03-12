@@ -9,3 +9,20 @@ device test;
 /// ERROR EARGD
 method m(int x, int x) {
 }
+
+template t {
+    /// ERROR EARGD
+    shared method m(int x, int x);
+    /// ERROR EARGD
+    shared method n(int x, int x) {}
+}
+
+is t;
+
+method init() {
+    // Ensure that the bad methods do not become part of the device structure
+    /// ERROR EREF
+    this.m(1,1);
+    /// ERROR EREF
+    this.n(1,1);
+}

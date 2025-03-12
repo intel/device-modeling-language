@@ -78,9 +78,19 @@ Identifiers
 
 Identifiers in DML are defined as in C; an identifier may begin
 with a letter or underscore, followed by any number of letters,
-numbers, or underscores. Identifiers that begin with an underscore (`_`)
-are reserved by the DML language and standard library and should not
-be used.
+numbers, or underscores.
+
+<a id="discard-identifier"/>
+Identifiers that begin with an underscore (`_`) are reserved by the DML language
+and standard library and should not be used, with the exception of the single
+underscore `_`; this is considered to be the *discard identifier*, and is only
+permitted as the name of a declaration in specific contexts, where it gives the
+declaration special semantics. Currently, these contexts are:
+* Method-local bindings, e.g. [local variables](#local-statements) &mdash;
+see that section for more information.
+* Index parameters for object arrays. See the documentation for the
+  [`object` template](dml-builtins.html#object) for more information.
+* As the name of one or more members of a [layout type](#layouts).
 
 </dd><dt>
 
@@ -1471,6 +1481,7 @@ typedef struct { <em>member declarations</em> } <em>name</em>;
 
 Layouts
 </dt><dd>
+<a id="layouts"/>
 
 A layout is similar to a struct in many ways.  The important
 difference is that there is a well-defined mapping between a layout
@@ -1505,6 +1516,24 @@ integer members (and arrays of similar) are translated
 to endian integers (or arrays of such) of similar size,
 with endianness matching the layout. Layout and endian integer
 members are accessed normally.
+
+The *discard identifer* "\_" may be used as the name of any number of members
+within a layout, making these *anonymous*. Anonymous layout members cannot be
+referenced within DML code, but will still influence the underlying memory
+representation of the layout in the same way as regular members.
+This is useful to represent reserved or padding bytes, or bytes that the device
+otherwise doesn't study or manipulate.
+
+Note that when a compound initializer is given for a variable of layout type,
+an initializer must still be given for each anonymous member:
+```
+local layout "little-endian" { uint32 x; uint32 _; uint32 y} = {1,0,2};
+```
+... unless designated initializers are used, in which case anonymous members
+can (and must) be omitted:
+```
+local layout "little-endian" { uint32 x; uint32 _; uint32 y} = {.x = 1, .y = 2};
+```
 </dd><dt>
 
 Bitfields
@@ -3175,6 +3204,24 @@ local (bool a, int i) = m();
 In the absence of explicit initializer expressions, a default
 "all zero" initializer will be applied to each declared object.
 
+The *discard identifier* "\_" may be used as an identifier for local variables,
+as well as other method-local bindings such as the method parameters, the bound
+identifier in `foreach`/`#foreach`/`#select` statements, and message component
+parameters of [hook-bound after statements](#hook-bound-after-statements).
+Any method-local binding named "\_" *will not be added to scope.* This is useful
+for when a method parameter is unused, or if you perform a method call where
+only a subset of returned values are of interest:
+```
+local (bool a, int _) = m();
+// No conflicts since "_" is not added to scope
+local (bool a, int _, float _) = returns_three_vals();
+```
+
+An alternative to this pattern is to leverage the [discard
+reference](#discard-reference) ``` local bool a; (a, _, _) =
+returns_three_vals(); ``` ... which does not require you to specify the types of
+the discarded values, may require multiple lines.
+
 ### Session Statements
 <pre>
 session <em>type</em> <em>identifier</em> [= <em>initializer</em>];
@@ -4062,6 +4109,32 @@ independent method callback(int i, void *aux) {
   (&my_method)(obj, i);
 }
 ```
+
+### The Discard Reference (`_`)
+<a id="discard-reference"/>
+```
+_
+```
+
+The discard reference *`_`* is an expression without any run-time representation
+that may be used as the target of an assignment in order to explicitly discard
+the result of an evaluated expression or return value of a method call.
+
+Example usage:
+```
+// Evaluate an expression and explicitly discard its result.
+// Can be relevant to e.g. suppress Coverity's CHECKED_RETURN checker
+_ = nonthrowing_single_return_method();
+
+// Calls to methods that throw or have multiple return values require a target
+// for each return value. `_` can be used to discard return values not of
+// interest.
+_ = throwing_method();
+(_, x, _) = method_with_multiple_return_values();
+```
+
+The discard reference is related to the [discard
+identifier](#discard-identifier), and have some use-cases in common.
 
 ### New Expressions
 

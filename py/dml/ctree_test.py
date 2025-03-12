@@ -1368,9 +1368,8 @@ class ExprTests(GccTests):
     @subtest()
     def assign_trunc(self):
         target_type = types.TInt(5, True)
-        stmt = ctree.mkAssignStatement(
-            site, variable('x', target_type),
-            ctree.ExpressionInitializer(int_const(0x5f)))
+        stmt = ctree.mkCopyData(site, int_const(0x5f),
+                                variable('x', target_type))
         code = output.StrOutput()
         with code:
             stmt.toc()
@@ -1401,8 +1400,8 @@ class ExprTests(GccTests):
             types.TExternStruct({}, 'struct_t', 'struct_t'),
             types.TStruct({'x': types.TBool()}, 'struct_label'),
             types.TLayout(
-                'big-endian', {
-                    'x': (site, types.TEndianInt(24, True, 'big-endian'))},
+                'big-endian', [(site, 'x',
+                                types.TEndianInt(24, True, 'big-endian'))],
                 'struct_label'),
             types.THook([]),
         ]

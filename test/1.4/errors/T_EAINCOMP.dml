@@ -9,3 +9,7 @@ device test;
 group g[i < ...];
 /// ERROR EAINCOMP
 group g[j < 4];
+
+// No error
+group h[i < ...];
+group h[_ < 4];
