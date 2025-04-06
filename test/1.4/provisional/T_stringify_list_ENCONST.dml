@@ -1,0 +1,15 @@
+/*
+  © 2025 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+provisional stringify_list;
+
+device test;
+
+/// COMPILE-ONLY
+
+/// ERROR ENCONST
+param p = stringify([["a",0],["b",1],["c",dev]]);
