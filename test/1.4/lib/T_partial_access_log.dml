@@ -1,0 +1,18 @@
+/*
+  © 2025 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+device test;
+
+/// DMLC-FLAG --no-compat=shared_logs_on_device
+bank le {
+    param byte_order = "little-endian";
+    register r size 4 @ 4;
+}
+bank be {
+    param byte_order = "big-endian";
+    register r size 4 @ 4;
+}

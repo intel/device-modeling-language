@@ -2162,9 +2162,9 @@ template bank is (object, shown_desc) {
                     hits[r]._qname(), cast(size*2, int), r_val;
             } else {
                 log info, 4, Register_Read:
-                    "Partial read from register %s: bytes %d-%d -> 0x%0*x",
-                        hits[r]._qname(), r_start, r_end-1,
-                        cast(r_end - r_start, int),
+                    "Partial read from register %s[%d:%d] -> 0x%0*x",
+                        hits[r]._qname(), r_end * 8 - 1, r_start * 8,
+                        cast((r_end - r_start) * 2, int),
                         r_val[r_end * 8 - 1 : r_start * 8];
             }
 
@@ -2255,10 +2255,10 @@ template bank is (object, shown_desc) {
 	            hits[r]._qname(), cast(size*2, int), r_value;
             } else {
                 log info, 4, Register_Write:
-                    "Partial write to register %s: bytes %d-%d <- 0x%0*x",
-                    hits[r]._qname(), r_start, r_end-1,
-                    cast(r_end - r_start, int),
-                    r_value[r_end * 8 - 1 : r_start * 8];
+                    "Partial write to register %s[%d:%d] <- 0x%0*x",
+                        hits[r]._qname(), r_end * 8 - 1, r_start * 8,
+                        cast((r_end - r_start) * 2, int),
+                        r_value[r_end * 8 - 1 : r_start * 8];
             }
 
             hits[r].write_register(r_value & r_enabled_bytes, r_enabled_bytes,
@@ -2297,9 +2297,9 @@ template bank is (object, shown_desc) {
 	            hits[r]._qname(), cast(size*2, int), r_value;
             } else {
                 log info, 4, Register_Write:
-                    "Partially setting register %s: bytes %d-%d <- 0x%0*x",
-                    hits[r]._qname(), r_start, r_end-1,
-                    cast(r_end - r_start, int),
+                    "Partially setting register %s[%d:%d] <- 0x%0*x",
+                    hits[r]._qname(), r_end * 8 - 1, r_start * 8,
+                    cast((r_end - r_start) * 2, int),
                     r_value[r_end * 8 - 1 : r_start * 8];
             }
 

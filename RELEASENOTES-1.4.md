@@ -356,3 +356,4 @@
   The bugfix is opt-in, because an immediate bugfix would risk breaking existing builds; the error will only be reported when the flag `--no-compat=broken_unused_types` is passed to DMLC. This flag will be automatically enabled in Simics 8.
 - `release 7 7063`
 - `release 6 6362`
+- `note 6` Improved the log messages that are output by default for partial register accesses (fixes [#356](https://github.com/intel/device-modeling-language/issues/356)).
