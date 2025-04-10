@@ -189,62 +189,70 @@ from . import crep
 from .expr import mkLit
 from .expr_util import *
 from .structure import get_attr_name
+import os 
+import sys 
 
-def gen_attribute(indent, node, port, prefix):
+
+def gen_params(config, node, type):
     d = {}
-    d['name'] = get_attr_name(prefix, node)
-    if param_defined(node, 'desc'):
-        d['desc'] = param_str(node, 'desc')
-    if param_defined(node, 'documentation'):
-        d['documentation'] = param_str(node, 'documentation')
-    if param_defined(node, 'limitations'):
-        d['limitations'] = param_str(node, 'limitations')
-    if node.get_component('type') != None and param_defined(node, 'type'):
-        d['type'] = param_str(node, 'type') # not correct
-    if node.get_component('type_desc') != None and param_defined(node, 'type_desc'):
-        d['type_desc'] = param_str(node, 'type_desc')
+    for a in config[type]:
+        p = a['param']
+        if node.get_component(p) != None and param_defined(node, p):
+            # not sure about types, maybe param_expr() is the best options
+            if p == "init_val":
+                a = param_expr(node, p)
+                d[p] = str(a)
+                continue
+            type = a['type']
+            if type == "str":
+                d[p] = param_str(node, p)
+            elif type == "bool":
+                d[p] = param_bool(node, p)
+            elif type == "int":
+                d[p] = param_int(node, p)
     return d
 
-def gen_interface(indent, node):
-    i = {}
-    i['name'] = param_str(node, 'name') + "_interface"
-    i['required'] = param_bool(node, 'required')
-    return i
+def gen_attribute(config, node, port, prefix):
+    d = gen_params(config, node, 'attribute')
+    d['name'] = param_str(node, 'name')
+    d['full_name'] = get_attr_name(prefix, node)
+    return d
 
-def gen_connect(indent, node, port, prefix):
-    d = gen_attribute(indent, node, port, prefix)
+def gen_interface(config, node):
+    d = gen_params(config, node, 'interface')
+    d['name'] = param_str(node, 'name')
+    return d
+
+def gen_connect(config, node, port, prefix):
+    d = gen_params(config, node, 'connect')
+    d['name'] = param_str(node, 'name')
+    d['full_name'] = get_attr_name(prefix, node)
     i = []
     children = sorted(node.get_components(), key=lambda o: o.name or '')
     for child in children:
         if child.objtype == 'interface':
-             i.append(gen_interface(indent, child))
+             i.append(gen_interface(config, child))
     if i:
         d['interface'] = i
     return d
 
-def gen_implement(indent, node):
-    d = {}
-    d['name'] = param_str(node, 'name') + "_interface"
-    if param_defined(node, 'desc'):
-        d['desc'] = param_str(node, 'desc')
-    if param_defined(node, 'documentation'):
-        d['documentation'] = param_str(node, 'documentation')
-    if param_defined(node, 'limitations'):
-        d['limitations'] = param_str(node, 'limitations')
+def gen_implement(config, node):
+    d = gen_params(config, node, 'implement')
+    d['name'] = param_str(node, 'name')
     return d
 
-def gen_objects(indent, node, port=None, dimsizes=(), prefix='', loopvars=()):
+def gen_objects(config, node, port=None, dimsizes=(), prefix='', loopvars=()):
 
-    if node.objtype in {'parameter', 'method', 'session', 'saved', 'hook',
-                        'register', 'event'}:
+    if node.objtype in {'parameter', 'method', 'session', 'saved',
+                        'hook', 'register', 'event'}:
         return
 
     if node.objtype == 'attribute':
-        return gen_attribute(indent, node, port, prefix)
+        return gen_attribute(config, node, port, prefix)
     if node.objtype == 'connect':
-        return gen_connect(indent, node, port, prefix)
+        return gen_connect(config, node, port, prefix)
     if node.objtype == 'implement':
-        return gen_implement(indent, node)
+        return gen_implement(config, node)
 
     # Registration order is undefined but has significance, so
     # register attributes of subobjects in an order that is deterministic,
@@ -267,7 +275,7 @@ def gen_objects(indent, node, port=None, dimsizes=(), prefix='', loopvars=()):
     d['name'] = param_str(node, 'name')
     children = sorted(node.get_components(), key=lambda o: o.name or '')
     for child in children:
-        cd = gen_objects(indent + "  ", child, port, dimsizes, prefix, loopvars)
+        cd = gen_objects(config, child, port, dimsizes, prefix, loopvars)
         if cd:
             l = []
             if child.objtype in d.keys():
@@ -278,7 +286,89 @@ def gen_objects(indent, node, port=None, dimsizes=(), prefix='', loopvars=()):
     return d
 
 
-def generate_json(device, filename):
-    json_data = gen_objects("", device)
+def load_config(filename):
+    script_directory = os.path.dirname(os.path.abspath(sys.argv[0])) 
+    print(script_directory)
+    with open(filename) as config_file:
+        d = json.loads(config_file)
+        config_file.close()
+
+
+def save_objects(filename, data):
     with open(filename, mode="w", encoding="utf-8") as write_file:
-         json.dump(json_data, write_file, sort_keys=False, indent=2, separators=(',', ': '))
+        json.dump(data, write_file, sort_keys=False, indent=2, separators=(',', ': '))
+        write_file.close()
+
+default_config = {
+    "attribute": [
+        {
+            "param": "desc",
+            "type": "str"
+        },
+        { 
+            "param": "documentation",
+            "type": "str"
+        },
+        { 
+            "param": "limitations",
+            "type": "str"
+        },
+        { 
+            "param": "type",
+            "type": "str"
+        },
+        { 
+            "param": "internal",
+            "type": "bool"
+        },
+        { 
+            "param": "init_val",
+            "type": "str"
+        }
+    ],
+    "interface": [
+        {
+            "param": "required",
+            "type": "bool"
+        }
+    ],
+    "implement": [
+        {
+            "param": "desc",
+            "type": "str"
+        },
+        { 
+            "param": "documentation",
+            "type": "str"
+        },
+        { 
+            "param": "limitations",
+            "type": "str"
+        }
+    ],
+    "connect": [
+        {
+            "param": "desc",
+            "type": "str"
+        },
+        { 
+            "param": "documentation",
+            "type": "str"
+        },
+        { 
+            "param": "limitations",
+            "type": "str"
+        },
+        { 
+            "param": "type",
+            "type": "str"
+        }
+    ],
+}
+
+def generate_json(device, filename):
+#TODO add an user config file option
+#    config = load_config(".json")
+    config = default_config
+    data = gen_objects(config, device)
+    save_objects(filename, data)
