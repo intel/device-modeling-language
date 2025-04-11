@@ -357,3 +357,4 @@
 - `release 7 7063`
 - `release 6 6362`
 - `note 6` Improved the log messages that are output by default for partial register accesses (fixes [#356](https://github.com/intel/device-modeling-language/issues/356)).
+- `release 6 6385`
