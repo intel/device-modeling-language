@@ -12,7 +12,7 @@ import os
 import math
 
 from . import objects, crep, ctree, ast, int_register, logging, serialize
-from . import dmlparse, output, compat
+from . import dmlparse, output, compat, provisional
 from .logging import *
 from .expr import *
 from .ctree import *
@@ -1138,6 +1138,13 @@ def expr_unop(tree, location, scope):
                     if not func.independent:
                         mark_method_statically_exported(func)
                     return ctree.AddressOfMethod(tree.site, func)
+        if (tree.site.provisional_enabled(provisional.stringify_list)
+            and op == 'stringify' and isinstance(rh, List)):
+            if not rh.constant:
+                raise ENCONST(rh, rh)
+
+            return mkStringConstant(tree.site, str(rh))
+
         raise rh.exc()
     if   op == '!':
         if compat.dml12_not in dml.globals.enabled_compat:

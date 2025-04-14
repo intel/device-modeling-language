@@ -71,6 +71,29 @@ class explicit_param_decls(ProvisionalFeature):
     short = "Require := syntax for defining new params"
     stable = True
 
+@feature
+class stringify_list(ProvisionalFeature):
+    '''This feature extends upon `stringify`, making it able to stringify
+    compile-time lists that feature stringifiable items. As with all other
+    valid uses of `stringify`, the resulting string will be considered
+    constant.
+
+    This is primarily meant as a stop-gap solution for expressing lists of
+    items in documentation strings, which would not be possible otherwise as
+    e.g. the `documentation` parameter requires the definition to be a constant
+    string. `stringify_list` is provisional rather than built-in as it's a
+    sub-par solution to the problem, while also making `stringify` more open to
+    abuse.
+
+    Don't take advantage of this feature so that you may use `stringify` as a
+    means of determining whether or not something is a compile-time list, as
+    that is not considered a valid, supported use-case. You are only meant
+    to use `stringify` to produce user-facing strings (e.g. for documentation
+    or logging), or for anonymization (the `name` param).
+    '''
+    short = "Extend 'stringify' to support compile-time lists"
+    stable = True
+
 def parse_provisional(
         provs: list[("Site", str)]) -> dict[ProvisionalFeature, "Site"]:
     ret = {}
