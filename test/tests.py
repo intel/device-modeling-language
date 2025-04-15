@@ -962,10 +962,13 @@ class ErrorTest(CTestCase):
 all_tests.append(ErrorTest(["missing"], "xyz",
                            errors=[("xyz", 0, "ENOFILE")],
                            includepath=()))
+devnull_path = str(Path(os.devnull).resolve())
+if is_windows() and sys.version_info.minor > 10:
+    devnull_path += '\\'
 all_tests.append(ErrorTest(
     ["empty"], os.devnull,
-    errors=[(str(Path(os.devnull).resolve()), 1, "EDEVICE")],
-    warnings=[(str(Path(os.devnull).resolve()), 1, "WNOVER")],
+    errors=[(devnull_path, 1, "EDEVICE")],
+    warnings=[(devnull_path, 1, "WNOVER")],
     includepath=()))
 all_tests.append(CTestCase(["minimal"], join(testdir, "minimal.dml")))
 
