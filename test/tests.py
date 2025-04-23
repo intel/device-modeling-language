@@ -962,9 +962,12 @@ class ErrorTest(CTestCase):
 all_tests.append(ErrorTest(["missing"], "xyz",
                            errors=[("xyz", 0, "ENOFILE")],
                            includepath=()))
-devnull_path = str(Path(os.devnull).resolve())
-if is_windows() and sys.version_info.minor > 10:
-    devnull_path += '\\'
+# On Windows NUL is not exactly a file in the same way.
+# Path resolve into an UNC path, i.e. with extra characters.
+if is_windows():
+    devnull_path = "NUL"
+else:
+    devnull_path = str(Path(os.devnull).resolve())
 all_tests.append(ErrorTest(
     ["empty"], os.devnull,
     errors=[(devnull_path, 1, "EDEVICE")],
