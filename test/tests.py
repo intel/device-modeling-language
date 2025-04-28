@@ -1412,6 +1412,7 @@ all_tests.append(PortingConvert(
         'PABSTRACT_TEMPLATE',
         'PCHANGE_INARGS',
         'PBITNEQ',
+        'PZEROCOND',
         'PVAL',
         'PNODOLLAR',
         'PDOLLAR_QUALIFY',

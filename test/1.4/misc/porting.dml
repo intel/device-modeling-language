@@ -418,6 +418,8 @@ template evt is event {
 event ev2 is (custom_time_event, evt) {
 }
 
+param zero = 0;
+
 method init() {
     local uint1 i1;
 
@@ -454,5 +456,10 @@ method init() {
         if (!c.signal.signal_lower) {
             c.signal.signal_raise();
         }
+    }
+    if (true) {
+        assert zero != 0;
+    } else {
+        assert false;
     }
 }
