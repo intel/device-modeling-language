@@ -1542,7 +1542,7 @@ def process_method_implementations(obj, name, implementations,
         if template is not None:
             if (template, name) in obj.template_method_impls:
                 raise ICE(impl.site,
-                          f"{tmpl.name} provides multiple"
+                          f"{template.name} provides multiple"
                           + f"implementations of {name} for {obj.ident}")
             obj.template_method_impls[(template, name)] = method
 
