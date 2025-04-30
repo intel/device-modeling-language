@@ -1367,7 +1367,7 @@ class PortingConvert(CTestCase):
 
 class PortingConvertFail(PortingConvert):
     __slots__ = ()
-    port_dml_status = 1
+    port_dml_status = 2
     def test(self):
         super(PortingConvert, self).test()
         stdout = join(self.scratchdir, 'stdout.port-dml')
