@@ -409,6 +409,8 @@ class PINARGTYPE(Transformation):
         f.edit(offset, length, decl)
 
 class PINVOKE(Transformation):
+    # before PEVENT_NO_ARG, PEVENT_UINT64_ARG
+    phase = 0
     def apply(self, f):
         [offs, expr_offs, outarg_offs, semi_offs] = [
             self.offset(f, loc)
@@ -634,6 +636,10 @@ def instantiate_template(f, decl_offset, new_tpl):
     f.edit(offs, length, '(%s)' % (', '.join(sorted(tpls + [new_tpl])),))
 
 class PATTRIBUTE(Transformation):
+    # after PEVENT_UINT64_ARG
+    phase = 2
+    uint64_event_sites = set()
+
     def remove_param_decl(self, f, param_site):
         offs = self.offset(f, param_site)
         # skip spaces backward
@@ -648,6 +654,8 @@ class PATTRIBUTE(Transformation):
     def apply(self, f):
         offs = self.offset(f)
         (template, allocate_type_param, type_param) = self.params
+        if self.loc in self.uint64_event_sites:
+            template = template.replace('custom_', 'uint64_')
         instantiate_template(f, offs, template)
         self.remove_param_decl(f, allocate_type_param)
         if type_param:
@@ -664,6 +672,37 @@ class PEVENT_NO_ARG(Transformation):
         end_offs = self.offset(f, end_site)
         end_offs -= 1
         f.edit(start_offs, end_offs - start_offs, '')
+
+class PEVENT_UINT64_ARG(Transformation):
+    # after PINVOKE
+    phase = 1
+    def apply(self, f):
+        start_offs = self.offset(f)
+        (end_site, event_site) = self.params
+        PATTRIBUTE.uint64_event_sites.add(event_site)
+        # remove `cast(..., void *)`
+        end_offs = self.offset(f, end_site)
+        line = f.read_line_up_to(end_offs)
+        voidp_chars = len(line) - line.rindex(',')
+        f.edit(end_offs - voidp_chars, voidp_chars + 1, '')
+        f.edit(start_offs, 'cast(', '')
+
+class RemoveMethod(Transformation):
+    # after PRETVAL
+    phase = 3
+    def apply(self, f):
+        offs = self.offset(f)
+        (end_site,) = self.params
+        end_offs = self.offset(f, end_site)
+        offs -= len(rspace(f.read_line_up_to(offs)))
+        end_offs += len(f.read_regexp(end_offs, re.compile(' *[}] *'))) + 1
+        extra_blank = f.read_line(end_offs)
+        sys.stderr.write(repr([end_offs, extra_blank]))
+        if not extra_blank.strip():
+            end_offs += len(extra_blank) + 1
+
+        f.edit(offs, end_offs - offs, '')
+
 
 class POVERRIDE(Transformation):
     class EPOVERRIDE(PortingFailure): tag = 'EPOVERRIDE'
@@ -1010,6 +1049,8 @@ tags = {
     'PATTRIBUTE': PATTRIBUTE,
     'PEVENT': PATTRIBUTE,
     'PEVENT_NO_ARG': PEVENT_NO_ARG,
+    'PEVENT_UINT64_ARG': PEVENT_UINT64_ARG,
+    'PEVENT_REMOVE_INFO': RemoveMethod,
     'POVERRIDE': POVERRIDE,
     'POVERRIDE_IMPORT': POVERRIDE_IMPORT,
     'PBEFAFT': PBEFAFT,

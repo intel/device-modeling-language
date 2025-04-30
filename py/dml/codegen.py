@@ -3538,6 +3538,18 @@ def report_pevent_data_arg(meth_node, site, inargs):
         if structure.method_is_std(meth_node.parent, 'get_event_info'):
             report(PEVENT_NO_ARG(dmlparse.start_site(inargs[-1].site),
                                    dmlparse.end_site(site)))
+        elif (isinstance(inargs[-1], ctree.Cast)
+              and safe_realtype(inargs[-1].expr.ctype()).is_int):
+            report(PEVENT_UINT64_ARG(
+                inargs[-1].site, dmlparse.end_site(inargs[-1].site),
+                meth_node.parent.site))
+            event_meth_node = meth_node.parent.get_component('event')
+            (argname, _) = event_meth_node.inp[0]
+            report(PCHANGE_INARGS(event_meth_node.site,
+                                  f'method event(uint64 {argname})'))
+            for methname in ['get_event_info', 'set_event_info']:
+                meth = meth_node.parent.get_component(methname)
+                report(PEVENT_REMOVE_INFO(meth.site, dmlparse.end_site(meth.site)))
 
 def codegen_inline(site, meth_node, indices, inargs, outargs,
                    inhibit_copyin = False):

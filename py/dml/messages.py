@@ -2519,6 +2519,21 @@ class PEVENT_NO_ARG(PortingMessage):
     `post`, `posted`, `next` and `remove` are removed.
     """
 
+class PEVENT_UINT64_ARG(PortingMessage):
+    """When one of the methods `post`, `posted`, `next` and `remove`
+    is called with an integer value cast to a pointer in the `data`
+    arg, that event is converted to a `uint64_time_event` or
+    `uint64_cycle_event`. The converter removes the cast and
+    causes the event object to be converted to a
+    `uint64_time_event` instead of `uint64_custom_event`.
+    """
+
+class PEVENT_REMOVE_INFO(PortingMessage):
+    """When an event is converted to a `uint64_time_event` or
+    `uint64_cycle_event`, the `set_event_info` and `get_event_info` methods
+    are removed.
+    """
+
 class POVERRIDE(PortingMessage):
     """If a method has exactly one default and one non-default
     declaration, and the non-default declaration resides in a

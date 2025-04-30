@@ -1408,6 +1408,8 @@ all_tests.append(PortingConvert(
         'PATTRIBUTE',
         'PEVENT',
         'PEVENT_NO_ARG',
+        'PEVENT_UINT64_ARG',
+        'PEVENT_REMOVE_INFO',
         'POVERRIDE',
         'PBEFAFT',
         'PABSTRACT_TEMPLATE',

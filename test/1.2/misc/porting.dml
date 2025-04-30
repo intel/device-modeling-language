@@ -378,6 +378,18 @@ event simple_ev2 {
     method event(data) {}
 }
 
+event uint64_ev {
+    parameter timebase = "seconds";
+    method event(data) {}
+    method get_event_info(void *data) -> (attr_value_t attr) {
+        attr = SIM_make_attr_uint64(cast(data, uintptr_t));
+    }
+
+    method set_event_info(attr_value_t attr) -> (void *data) {
+        data = cast(SIM_attr_integer(attr), void *);
+    }
+}
+
 event custom_ev {
     parameter timebase = "cycles";
     method get_event_info(void *data) -> (attr_value_t attr) {
@@ -445,4 +457,9 @@ method init() {
     local uint64 next;
     call $simple_ev.next(NULL) -> (next);
     $simple_ev.remove(NULL);
+
+    inline $uint64_ev.post(1, cast(7 + 84, void *));
+    call $uint64_ev.posted(cast(0, void *)) -> (posted);
+    call $uint64_ev.next(cast(74, void *)) -> (next);
+    $uint64_ev.remove(cast(cast(4, uintptr_t), void*));
 }
