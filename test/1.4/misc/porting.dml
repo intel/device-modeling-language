@@ -399,6 +399,10 @@ event simple_ev2 is simple_time_event {
     method event() {}
 }
 
+event uint64_ev is uint64_time_event {
+    method event(uint64 data) {}
+}
+
 event custom_ev is custom_cycle_event {
     method get_event_info(void *data) -> (attr_value_t) {
         return SIM_make_attr_nil();
@@ -470,4 +474,9 @@ method init() {
     local uint64 next;
     next = simple_ev.next();
     simple_ev.remove();
+
+    uint64_ev.post(1, 7 + 84);
+    posted = uint64_ev.posted(0);
+    next = uint64_ev.next(74);
+    uint64_ev.remove(cast(4, uintptr_t));
 }
