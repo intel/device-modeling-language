@@ -1130,7 +1130,7 @@ def main(argv):
         sys.stderr.write(f'''\
 *** Failed to apply {errors} out of {total} porting tags; partial result saved to {args.dest}. Consider applying the failed tags manually.
 ''')
-        exit(1)
+        exit(2)
 
 if __name__ == '__main__':
     main(sys.argv)
