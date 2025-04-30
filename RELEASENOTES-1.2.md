@@ -84,3 +84,4 @@
 - `release 6 6324`
 - `note 6` Fixed a regression where e.g. `cast(0x400000000, uint64)` would not
   be considered a constant value (fixes SIMINT-1675).
+- `note 6` Added support for the templates `simple_cycle_event`, `simple_time_event`, `uint64_cycle_event` and `uint64_time_event` in the forward compatibility layer provided by `dml12-compatibility.dml`.
