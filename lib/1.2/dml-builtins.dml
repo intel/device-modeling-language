@@ -1834,7 +1834,76 @@ template event {
     method extern destroy(void *data) default {
     }
 
-    method post(when, void *data) {
+    parameter _dml12_compat_simple_event default false;
+    parameter _dml12_compat_uint64_event default false;
+    if ($_dml12_compat_simple_event) {
+        method post(when) {
+            inline $_post(when, NULL);
+        }
+        method posted() -> (bool truth) nothrow {
+            inline $_posted(NULL) -> (truth);
+        }
+        method remove() nothrow {
+            inline $_remove(NULL);
+        }
+        if ($timebase == "seconds") {
+            method next() -> (double when) nothrow {
+                inline $_next(NULL) -> (when);
+            }
+        } else if ($timebase == "cycles") {
+            method next() -> (cycles_t when) nothrow {
+                inline $_next(NULL) -> (when);
+            }
+        } else { error; }
+        // event() is abstract
+    } else if ($_dml12_compat_uint64_event) {
+        method _p(uint64 i) -> (void *p) nothrow {
+            p = cast(cast(i, uintptr_t), void *);
+        }
+        method post(when, uint64 data) {
+            inline $_post(when, $_p(data));
+        }
+        method posted(uint64 data) -> (bool truth) nothrow {
+            inline $_posted($_p(data)) -> (truth);
+        }
+        method remove(uint64 data) nothrow {
+            inline $_remove($_p(data));
+        }
+        if ($timebase == "seconds") {
+            method next(uint64 data) -> (double when) nothrow {
+                inline $_next($_p(data)) -> (when);
+            }
+        } else if ($timebase == "cycles") {
+            method next(uint64 data) -> (cycles_t when) nothrow {
+                inline $_next($_p(data)) -> (when);
+            }
+        } else { error; }
+        // event() is abstract
+    } else {
+        method post(when, void *data) {
+            inline $_post(when, data);
+        }
+        method posted(void *data) -> (bool truth) {
+            inline $_posted(data) -> (truth);
+        }
+        method remove(void *data) {
+            inline $_remove(data);
+        }
+        if ($timebase == "seconds") {
+            method next(void *data) -> (double when) {
+                inline $_next(data) -> (when);
+            }
+        } else if ($timebase == "cycles" || $timebase == "steps") {
+            method next(void *data) -> (cycles_t when) {
+                inline $_next(data) -> (when);
+            }
+        }
+        method event(void *param) default {
+            log info: "Event %s triggered", $name;
+        }
+    }
+
+    method _post(when, void *data) {
         if ($timebase == "stacked") {
             VT_stacked_post($dev.obj, &$this.callback, data);
         } else if (SIM_object_clock($dev.obj) == NULL) {
@@ -1867,7 +1936,7 @@ template event {
         }
     }
 
-    method remove(void *data) {
+    method _remove(void *data) nothrow {
         if ($timebase == "steps")
             SIM_event_cancel_step($dev.obj, $evclass, $dev.obj,
                                   DML_pointer_eq, data);
@@ -1896,29 +1965,31 @@ template event {
 
     method extern callback(void *param) {
         if (defined $repeat)
-            inline $post($repeat, param);
+            inline $_post($repeat, param);
         try
-            inline $event(param);
+            if ($_dml12_compat_simple_event) {
+                inline $event();
+            } else if ($_dml12_compat_uint64_event) {
+                inline $event(cast(param, uintptr_t));
+            } else {
+                inline $event(param);
+            }
         catch
             log error: "Error in %s event", $qname;
     }
 
-    method event(void *param) default {
-        log info: "Event %s triggered", $name;
-    }
-
     if ($timebase == "steps") {
-        method next(void *data) -> (pc_step_t when) {
+        method _next(void *data) -> (pc_step_t when) nothrow {
             when = SIM_event_find_next_step($dev.obj, $evclass,
                                             $dev.obj, DML_pointer_eq, data);
         }
     } else if ($timebase == "cycles") {
-        method next(void *data) -> (cycles_t when) {
+        method _next(void *data) -> (cycles_t when) nothrow {
             when = SIM_event_find_next_cycle($dev.obj, $evclass,
                                              $dev.obj, DML_pointer_eq, data);
         }
     } else if ($timebase == "seconds") {
-        method next(void *data) -> (double when) {
+        method _next(void *data) -> (double when) nothrow {
             when = SIM_event_find_next_time($dev.obj, $evclass,
                                             $dev.obj, DML_pointer_eq, data);
         }
@@ -1927,10 +1998,10 @@ template event {
         error "bad value for parameter 'timebase'";
     }
 
-    method posted(void *data) -> (bool truth) {
+    method _posted(void *data) -> (bool truth) nothrow {
         if ($timebase == "steps") {
             local pc_step_t when;
-            inline $next(data) -> (when);
+            inline $_next(data) -> (when);
             truth = (when >= 0);
         } else if ($timebase == "cycles" || $timebase == "seconds") {
             local cycles_t when
@@ -1945,9 +2016,7 @@ template event {
         if (!defined $repeat) {
             error "parameter 'repeat' is undefined";
         } else {
-            local typeof($repeat) next;
-            inline $next(NULL) -> (next);
-            if (next == 0.0)
+            if ($_next(NULL) == 0.0)
                 inline $post($repeat, NULL);
         }
     }

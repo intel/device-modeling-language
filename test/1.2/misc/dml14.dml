@@ -430,6 +430,46 @@ method memop_test() {
     assert SIM_get_mem_op_value_le(&memop) == 13;
 }
 
+event simple_time_ev is (simple_time_event) {
+    method event() {
+        if (this.posted()) {
+            local double next = this.next();
+            this.remove();
+            this.post(next);
+        }
+    }
+}
+
+event simple_cycle_ev is (simple_cycle_event) {
+    method event() {
+        if (this.posted()) {
+            local cycles_t next = this.next();
+            this.remove();
+            this.post(next);
+        }
+    }
+}
+
+event uint64_time_ev is (uint64_time_event) {
+    method event(uint64 data) {
+        if (this.posted(data)) {
+            local double next = this.next(data);
+            this.remove(data);
+            this.post(next, data);
+        }
+    }
+}
+
+event uint64_cycle_ev is (uint64_cycle_event) {
+    method event(uint64 data) {
+        if (this.posted(data)) {
+            local cycles_t next = this.next(data);
+            this.remove(data);
+            this.post(next, data);
+        }
+    }
+}
+
 event time_ev is (custom_time_event) {
     method set_event_info(attr_value_t v) -> (void *) {
         return NULL;

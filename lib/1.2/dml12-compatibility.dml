@@ -395,8 +395,28 @@ template sreset is soft_reset {
     }
 }
 
-// only the 'custom' event types are compatible with DML 1.2, because DML 1.2
-// hardcodes a 'void *data' argument to post()
+template _simple_event {
+    param _dml12_compat_simple_event = true;
+    method get_event_info(void *param) -> (attr_value_t) {
+        return default(param);
+    }
+    method set_event_info(attr_value_t info) -> (void *) {
+        return default(info);
+    }
+}
+template _uint64_event {
+    param _dml12_compat_uint64_event = true;
+    method get_event_info(void *param) -> (attr_value_t) {
+        return SIM_make_attr_uint64(cast(param, uintptr_t));
+    }
+    method set_event_info(attr_value_t info) -> (void *) {
+        return cast(SIM_attr_integer(info), void *);
+    }
+}
+template simple_cycle_event is _simple_event { param timebase = "cycles"; }
+template simple_time_event is _simple_event { param timebase = "seconds"; }
+template uint64_cycle_event is _uint64_event { param timebase = "cycles"; }
+template uint64_time_event is _uint64_event { param timebase = "seconds"; }
 template custom_cycle_event { param timebase = "cycles"; }
 template custom_time_event { param timebase = "seconds"; }
 
