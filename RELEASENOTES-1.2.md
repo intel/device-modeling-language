@@ -82,3 +82,5 @@
 - `release 6 6321`
 - `release 7 7033`
 - `release 6 6324`
+- `note 6` Fixed a regression where e.g. `cast(0x400000000, uint64)` would not
+  be considered a constant value (fixes SIMINT-1675).

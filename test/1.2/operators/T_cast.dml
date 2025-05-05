@@ -6,6 +6,10 @@ dml 1.2;
 device test;
 import "testing.dml";
 
+/// DMLC-FLAG --simics-api=6
+// SIMICS-23124
+constant g = cast(0x400000000, uint64);
+
 method test() -> (bool ok) {
     ok = true;
     local int a = cast(1000, int8);
@@ -16,5 +20,6 @@ method test() -> (bool ok) {
     local void *f = cast($dev, void *);
     log info: "%d %d %d %d %s %p", a, b, c, d, e ? "true" : "false", f;
 
-    ok = a == -24 && b == 127 && c == -128 && d == 255 && e && f == $dev.obj;
+    ok = a == -24 && b == 127 && c == -128 && d == 255 && e && f == $dev.obj
+      && g >> 32 == 4;
 }

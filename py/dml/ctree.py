@@ -4855,6 +4855,12 @@ def mkCast(site, expr, new_type):
             and not old_type.is_endian):
             # 1.2 integer expressions often lie about their actual type,
             # and require a "redundant" cast! Why yes, this IS horrid!
+            if expr.constant:
+                # urgh, SIMICS-23124
+                return IntegerConstant_dml12(
+                    site,
+                    truncate_int_bits(expr.value, real.signed, real.bits),
+                    real)
             return Cast(site, expr, new_type)
         return mkRValue(expr)
     if isinstance(real, (TStruct, TExternStruct, TVector, TTraitList)):
