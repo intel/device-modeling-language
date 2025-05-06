@@ -232,3 +232,6 @@
   non-constant expressions (fixes SIMICS-13113).
 - `release 6 6363`
 - `release 7 7064`
+- `note 6` Added the `stringify_list` provisional feature, which extends
+  `stringify` to support compile-time lists. This is primarily meant to provide
+  a means of expressing lists within documentation strings.
