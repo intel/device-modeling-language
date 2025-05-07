@@ -391,7 +391,15 @@ connect c2 is half_dead {
 param some_string = stringify(1001);
 param some_other_string = stringify((b.r6.offset));
 
-event ev is custom_cycle_event {
+event simple_ev is simple_cycle_event {
+    method event() {}
+}
+
+event simple_ev2 is simple_time_event {
+    method event() {}
+}
+
+event custom_ev is custom_cycle_event {
     method get_event_info(void *data) -> (attr_value_t) {
         return SIM_make_attr_nil();
     }
@@ -455,4 +463,11 @@ method init() {
             c.signal.signal_raise();
         }
     }
+
+    simple_ev.post(1);
+    local bool posted;
+    posted = simple_ev.posted();
+    local uint64 next;
+    next = simple_ev.next();
+    simple_ev.remove();
 }

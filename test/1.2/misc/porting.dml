@@ -368,7 +368,17 @@ connect c2 is half_dead {
 parameter some_string = #1001;
 parameter some_other_string = #($b.r6.offset);
 
-event ev {
+event simple_ev {
+    parameter timebase = "cycles";
+    method event(void *data) {}
+}
+
+event simple_ev2 {
+    parameter timebase = "seconds";
+    method event(data) {}
+}
+
+event custom_ev {
     parameter timebase = "cycles";
     method get_event_info(void *data) -> (attr_value_t attr) {
         attr = SIM_make_attr_nil();
@@ -428,4 +438,11 @@ method init() {
             $c.signal.signal_raise();
         }
     }
+
+    inline $simple_ev.post(1, NULL);
+    local bool posted;
+    call $simple_ev.posted(NULL) -> (posted);
+    local uint64 next;
+    call $simple_ev.next(NULL) -> (next);
+    $simple_ev.remove(NULL);
 }
