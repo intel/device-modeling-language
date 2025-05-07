@@ -654,10 +654,20 @@ class PATTRIBUTE(Transformation):
     def apply(self, f):
         offs = self.offset(f)
         (template, allocate_type_param, type_param) = self.params
-        if os.path.normcase(self.loc) in self.uint64_event_sites:
-            template = template.replace('custom_', 'uint64_')
-        instantiate_template(f, offs, template)
-        self.remove_param_decl(f, allocate_type_param)
+        if template:
+            if os.path.normcase(self.loc) in self.uint64_event_sites:
+                template = template.replace('custom_', 'uint64_')
+            instantiate_template(f, offs, template)
+        if allocate_type_param:
+            if template is None:
+                # Add `.val` manually if removing allocate_type param
+                # without adding `is <type>_attr`.
+                alloc_type_offs = self.offset(f, allocate_type_param)
+                alloc_type_str = f.read_line(alloc_type_offs)
+                m = re.search('"(.*)"', alloc_type_str)
+                if m is not None:
+                    f.edit(alloc_type_offs, 0, f'session {m.group(1)} val;\n')
+            self.remove_param_decl(f, allocate_type_param)
         if type_param:
             self.remove_param_decl(f, type_param)
 

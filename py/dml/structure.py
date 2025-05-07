@@ -2205,7 +2205,15 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                     type_site = None
                 # integer attributes of all sizes are converted to
                 # the corresponding 64-bit type
-                if atype.startswith('uint'):
+                expected_type = {'double': 'f', 'bool': 'b'}.get(atype, 'i')
+                if param_str(obj, 'type') not in {expected_type,
+                                                  f'{expected_type}|n'}:
+                    # allocate_type doesn't match attribute type, could e.g.
+                    # be enum saved as string. Trust that the getter/setter
+                    # works in this case, but remove the allocate_type
+                    # (SIMICS-23126).
+                    report(PATTRIBUTE(obj.site, None, param.site, None))
+                elif atype.startswith('uint'):
                     report(PATTRIBUTE(obj.site, 'uint64_attr', param.site,
                                       type_site))
                 elif atype.startswith('int'):
