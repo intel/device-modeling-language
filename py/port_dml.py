@@ -654,7 +654,7 @@ class PATTRIBUTE(Transformation):
     def apply(self, f):
         offs = self.offset(f)
         (template, allocate_type_param, type_param) = self.params
-        if self.loc in self.uint64_event_sites:
+        if os.path.normcase(self.loc) in self.uint64_event_sites:
             template = template.replace('custom_', 'uint64_')
         instantiate_template(f, offs, template)
         self.remove_param_decl(f, allocate_type_param)
