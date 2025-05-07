@@ -296,6 +296,17 @@ attribute ad {
     parameter allocate_type = "double"; // hello
 }
 
+attribute enum_attr {
+    parameter allocate_type = "uint64";
+    parameter type = "s";
+    method get() -> (attr_value_t v) {
+        v = SIM_make_attr_string($this == 0 ? "zero" : "nonzero");
+    }
+    method set(attr_value_t v) {
+        $this = SIM_attr_string(v)[0] == 'z' ? 0 : 1;
+    }
+}
+
 // PORT-DML-WARNING WUNUSED
 if (false) {
     attribute ab { parameter allocate_type = "bool"; }
