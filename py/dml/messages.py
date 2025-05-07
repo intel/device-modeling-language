@@ -2509,8 +2509,14 @@ class PATTRIBUTE(PortingMessage):
 class PEVENT(PortingMessage):
     """Event objects no longer have the `timebase` parameter;
     instead you must choose a standard template to instantiate. The
-    conversion script will pick `custom_time_event` or
-    `custom_cycle_event`.
+    conversion script will pick `custom_time_event`,
+    `custom_cycle_event`, `simple_time_event`, or `simple_cycle_event`.
+    """
+
+class PEVENT_NO_ARG(PortingMessage):
+    """When `PEVENT` converts an event to `simple_time_event` or
+    `simple_cycle_event`, the `data` function argument to methods
+    `post`, `posted`, `next` and `remove` are removed.
     """
 
 class POVERRIDE(PortingMessage):

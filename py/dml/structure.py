@@ -2242,9 +2242,15 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             param_site = obj.get_component('timebase').site
             if param_site.filename().endswith('dml-builtins.dml'):
                 param_site = None
-            tpl = ('custom_time_event' if timebase == 'seconds'
-                   else 'custom_cycle_event')
-            report(PEVENT(obj.site, tpl, param_site, None))
+            suffix = ('_time_event' if timebase == 'seconds'
+                      else '_cycle_event')
+            if method_is_std(obj, 'get_event_info'):
+                prefix = 'simple'
+                report(PCHANGE_INARGS(obj.get_component('event').site,
+                                      'method event()'))
+            else:
+                prefix = 'custom'
+            report(PEVENT(obj.site, f'{prefix}{suffix}', param_site, None))
 
     return obj
 

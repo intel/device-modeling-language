@@ -653,6 +653,18 @@ class PATTRIBUTE(Transformation):
         if type_param:
             self.remove_param_decl(f, type_param)
 
+class PEVENT_NO_ARG(Transformation):
+    # after PINVOKE
+    phase = 1
+    def apply(self, f):
+        start_offs = self.offset(f)
+        line = f.read_line_up_to(start_offs)
+        start_offs += len(line.rstrip().rstrip(',')) - len(line)
+        (end_site,) = self.params
+        end_offs = self.offset(f, end_site)
+        end_offs -= 1
+        f.edit(start_offs, end_offs - start_offs, '')
+
 class POVERRIDE(Transformation):
     class EPOVERRIDE(PortingFailure): tag = 'EPOVERRIDE'
     def apply(self, f):
@@ -997,6 +1009,7 @@ tags = {
     'PMISS_PATTERN': PMISS_PATTERN,
     'PATTRIBUTE': PATTRIBUTE,
     'PEVENT': PATTRIBUTE,
+    'PEVENT_NO_ARG': PEVENT_NO_ARG,
     'POVERRIDE': POVERRIDE,
     'POVERRIDE_IMPORT': POVERRIDE_IMPORT,
     'PBEFAFT': PBEFAFT,

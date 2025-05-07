@@ -1407,6 +1407,7 @@ all_tests.append(PortingConvert(
         'PMISS_PATTERN',
         'PATTRIBUTE',
         'PEVENT',
+        'PEVENT_NO_ARG',
         'POVERRIDE',
         'PBEFAFT',
         'PABSTRACT_TEMPLATE',

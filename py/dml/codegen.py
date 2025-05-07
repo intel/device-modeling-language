@@ -3530,6 +3530,15 @@ def intercepted_method(meth_node):
         return getattr(io_memory, intercepted_in_bank[meth_node.name])
     return False
 
+def report_pevent_data_arg(meth_node, site, inargs):
+    if (meth_node.parent.objtype == 'event'
+        and meth_node.site.dml_version() == (1, 2)
+        and meth_node.name in {'post', 'posted', 'next', 'remove'}):
+        from . import structure
+        if structure.method_is_std(meth_node.parent, 'get_event_info'):
+            report(PEVENT_NO_ARG(dmlparse.start_site(inargs[-1].site),
+                                   dmlparse.end_site(site)))
+
 def codegen_inline(site, meth_node, indices, inargs, outargs,
                    inhibit_copyin = False):
     assert isinstance(meth_node, objects.DMLObject)
@@ -3542,6 +3551,9 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
 
     if meth_node.throws and not Failure.fail_stack[-1].allowed:
         raise EBADFAIL(site)
+
+    if (site.dml_version() == (1, 2) and logging.show_porting):
+        report_pevent_data_arg(meth_node, site, inargs)
 
     meth_node.refcount += 1        # regard method as used
 
@@ -3618,7 +3630,7 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
                                 parmtype if parmtype else arg.ctype(),
                                 meth_node.name)
                     for (arg, var, (parmname, parmtype)) in zip(
-                            outargs, outvars, meth_node.outp)] 
+                            outargs, outvars, meth_node.outp)]
             exit_handler = GotoExit_dml12()
             with exit_handler:
                 code = [codegen_statement(meth_node.astcode,
@@ -4014,6 +4026,9 @@ def codegen_call(site, meth_node, indices, inargs, outargs):
         return mkNull(site)
     require_fully_typed(site, meth_node)
     func = method_instance(meth_node)
+
+    if (site.dml_version() == (1, 2) and logging.show_porting):
+        report_pevent_data_arg(meth_node, site, inargs)
 
     if compat.dml12_misc in dml.globals.enabled_compat:
         # For backward compatibility. See bug 21367.
