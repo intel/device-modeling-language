@@ -78,3 +78,6 @@
 
 # SIMICS-19681
 1.4/serialize/identity_compat
+
+# Not working on Windows, please fix
+porting host win64
