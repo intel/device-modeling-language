@@ -319,6 +319,17 @@ attribute ad is double_attr {
 // hello
 }
 
+attribute enum_attr {
+    session uint64 val;
+    param type = "s";
+    method get() -> (attr_value_t) {
+        return SIM_make_attr_string(this.val == 0 ? "zero" : "nonzero");
+    }
+    method set(attr_value_t v) throws {
+        this.val = SIM_attr_string(v)[0] == 'z' ? 0 : 1;
+    }
+}
+
 // PORT-DML-WARNING WUNUSED
 #if (false) {
     attribute ab { param allocate_type = "bool"; }
