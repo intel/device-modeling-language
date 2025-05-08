@@ -232,3 +232,7 @@
   non-constant expressions (fixes SIMICS-13113).
 - `release 6 6363`
 - `release 7 7064`
+- `note 6` The `port-dml-module` script has been extended to support converting
+  multiple modules at once. Doing so also improves how conditional code within
+  common files is converted. The script also has a new flag `--compat`, which
+  mirrors `port-dml --compat`, further improving how common code is converted.
