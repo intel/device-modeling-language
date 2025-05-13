@@ -86,4 +86,5 @@
   be considered a constant value (fixes SIMINT-1675).
 - `note 6` Added support for the templates `simple_cycle_event`, `simple_time_event`, `uint64_cycle_event` and `uint64_time_event` in the forward compatibility layer provided by `dml12-compatibility.dml`.
 - `note 6` Added porting rules to automatically convert `event` objects in DML 1.2 into `simple_cycle_event` or `simple_time_event` when applicable.
+- `release 7 7084`
 - `release 6 6392`
