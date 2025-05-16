@@ -85,6 +85,36 @@
 - `note 6` Fixed a regression where e.g. `cast(0x400000000, uint64)` would not
   be considered a constant value (fixes SIMINT-1675).
 - `note 6` Added support for the templates `simple_cycle_event`, `simple_time_event`, `uint64_cycle_event` and `uint64_time_event` in the forward compatibility layer provided by `dml12-compatibility.dml`.
+  With this change, DML 1.4 code for events will normally work out of the box also from DML 1.2 devices.
+
+  If you have previously worked around the 1.2/1.4 discrepancy with code like `#if (dml_1_2) { template simple_time_event { ... } }`, then this change will give name clashes and you may need to remove all such workarounds from your code.
+  It seems fairly common that this change causes compile errors for event code that is branched on `#if (dml_1_2)`, where branches differ only on method signatures.
+  In such cases, it is usually safe to remove the `#if` and only keep the 1.4 branch unmodified. For instance:
+  ```
+  #if (dml_1_2) {
+      post(t, NULL);
+  } #else {
+      post(t);
+  }
+  ```
+  can be collapsed into `post(t);`, and likewise:
+  ```
+  #if (dml_1_2) {
+      method event(void *null_data) {
+          do_stuff();
+      }
+  } #else {
+      method event() {
+          do_stuff();
+      }
+  }
+  ```
+  can be collapsed into:
+  ```
+  method event() {
+      do_stuff();
+  }
+  ```
 - `note 6` Added porting rules to automatically convert `event` objects in DML 1.2 into `simple_cycle_event` or `simple_time_event` when applicable.
 - `release 7 7084`
 - `release 6 6392`
