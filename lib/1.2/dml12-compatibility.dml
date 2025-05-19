@@ -395,7 +395,7 @@ template sreset is soft_reset {
     }
 }
 
-template _simple_event {
+template _simple_event is event {
     param _dml12_compat_simple_event = true;
     method get_event_info(void *param) -> (attr_value_t) {
         return default(param);
@@ -404,7 +404,7 @@ template _simple_event {
         return default(info);
     }
 }
-template _uint64_event {
+template _uint64_event is event {
     param _dml12_compat_uint64_event = true;
     method get_event_info(void *param) -> (attr_value_t) {
         return SIM_make_attr_uint64(cast(param, uintptr_t));
@@ -413,10 +413,15 @@ template _uint64_event {
         return cast(SIM_attr_integer(info), void *);
     }
 }
-template simple_cycle_event is _simple_event { param timebase = "cycles"; }
-template simple_time_event is _simple_event { param timebase = "seconds"; }
-template uint64_cycle_event is _uint64_event { param timebase = "cycles"; }
-template uint64_time_event is _uint64_event { param timebase = "seconds"; }
+// Note: Stupidly declared default to avoid some errors in code that
+// redundantly defines the timebase param. Such timebase param declarations are
+// ignored by 1.4 and should ideally be banned; the `default` was added only to
+// avoid some migration problems in existing shared code when these templates
+// were introduced.
+template simple_cycle_event is _simple_event { param timebase default "cycles"; }
+template simple_time_event is _simple_event { param timebase default "seconds"; }
+template uint64_cycle_event is _uint64_event { param timebase default "cycles"; }
+template uint64_time_event is _uint64_event { param timebase default "seconds"; }
 template custom_cycle_event { param timebase = "cycles"; }
 template custom_time_event { param timebase = "seconds"; }
 
