@@ -98,6 +98,7 @@ static inline uint64 DML_shlu(uint64 a, uint64 b)
 PRINTF_FORMAT(1, 2) UNUSED static void
 _signal_critical_error(const char *restrict format, ...) {
     va_list va;
+    /* coverity[uninit_use_in_call : FALSE] */
     va_start(va, format);
     char msg[512];
     vsnprintf(msg, 512, format, va);
@@ -2248,6 +2249,7 @@ __qname(dml_qname_cache_t *cache, const char *fmt, ...)
         s = cache->bufs[cache->i];
         cache->i = (cache->i + 1) % 4;
 
+        /* coverity[uninit_use_in_call : FALSE] */
         va_start(va, fmt);
         vsnprintf(s, 256, fmt, va);
         va_end(va);
