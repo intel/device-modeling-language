@@ -1238,7 +1238,7 @@ template bank_obj is (bank, name) {
 
    The template defines the following methods:
 */
-template map_target is (connect, _qname) {
+template map_target is (connect, _qname, destroy) {
     session map_target_t *map_target;
 
     interface ram { param required = false; }
@@ -1270,6 +1270,11 @@ template map_target is (connect, _qname) {
         SIM_free_map_target(this.map_target);
         default(obj);
         this.map_target = obj ? SIM_new_map_target(obj, NULL, NULL) : NULL;
+    }
+
+    method destroy() default {
+        SIM_free_map_target(this.map_target);
+        this.map_target = NULL;
     }
 
     /**
