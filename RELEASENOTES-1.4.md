@@ -450,3 +450,5 @@
   The device object always instantiates this template.
 - `release 6 6464`
 - `release 7 7160`
+- `note 6` The `map_target` template from `utility.dml` now frees the internally
+ created map target upon device deletion.

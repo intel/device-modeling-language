@@ -1272,6 +1272,13 @@ template map_target is (connect, _qname) {
         this.map_target = obj ? SIM_new_map_target(obj, NULL, NULL) : NULL;
     }
 
+    group _internal_destructor is destroy {
+        method destroy() {
+            SIM_free_map_target(parent.map_target);
+            parent.map_target = NULL;
+        }
+    }
+
     /**
        * `read(uint64 addr, uint64 size) -> (uint64) throws`
 
