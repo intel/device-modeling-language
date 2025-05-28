@@ -86,6 +86,20 @@ if
 else
 { }
 
+extern typedef struct { void (*f)(conf_object_t *); } foo_interface_t;
+
+implement foo
+/// ERROR ESYNTAX
+    [
+        i < 3] {}
+
+connect c {
+  interface foo
+  /// ERROR ESYNTAX
+    [
+        i < 3];
+}
+
 method init() {
     local int a;
     local int b;

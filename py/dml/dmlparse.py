@@ -545,7 +545,11 @@ def object3(t):
               | maybe_extension GROUP     objident array_list maybe_istemplate object_spec
               | maybe_extension PORT      objident array_list maybe_istemplate object_spec
               | maybe_extension IMPLEMENT objident array_list maybe_istemplate object_spec'''
-    t[0] = ast.object_(site(t), t[3], t[2], t[4], t[1], t[5] + t[6])
+    array_spec = t[4]
+    if array_spec and t[2] in {'interface', 'implement'}:
+        report(ESYNTAX(site(t, 4), '[', f'{t[2]} array not allowed'))
+        array_spec = []
+    t[0] = ast.object_(site(t), t[3], t[2], array_spec, t[1], t[5] + t[6])
 
 @prod_dml14
 def object_subdevice(t):
