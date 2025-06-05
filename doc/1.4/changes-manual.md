@@ -404,3 +404,7 @@ by `--strict-dml12`, and must be adjusted manually:
   The first message is logged on level 2 by `silent_unimpl`,
   and level 1 by all the other templates, while subsequent messages
   are logged on level 3 in all templates.
+
+* Registers that instantiate the `constant` template should use the `init_val`
+  parameter to declare their reset value, changed from the `value` parameter in
+  DML 1.2.
