@@ -359,3 +359,5 @@
 - `note 6` Improved the log messages that are output by default for partial register accesses (fixes [#356](https://github.com/intel/device-modeling-language/issues/356)).
 - `release 6 6385`
 - `release 7 7080`
+- `note 6` The `map_target` template from `utility.dml` now frees the internally
+ created map target when the object instantiating the template is deleted.
