@@ -663,7 +663,10 @@ template device {
 
     method _init() { _rec_init(); }
     method _post_init() { _rec_post_init(); }
-    method _destroy() { _rec_destroy(); }
+    method _destroy() {
+        _rec_destroy();
+        _DML_free_qname_cache();
+    }
     method init() default {}
     method post_init() default {}
     method destroy() default {}
@@ -3735,6 +3738,7 @@ template init_val is init {
 
 extern const char *_DML_get_qname(_identity_t, const _id_info_t *,
                                   dml_qname_cache_t *, const char *);
+extern void _DML_free_qname_cache(dml_qname_cache_t *);
 template _qname {
     shared method _qname() -> (const char *) {
         local _qname ref = this;
