@@ -2286,6 +2286,15 @@ _DML_get_qname(_identity_t id, const _id_info_t *id_infos,
     return qname;
 }
 
+void
+_DML_free_qname_cache(qname_cache_t *cache)
+{
+        for (int i = 0; i < 4; i++) {
+                MM_FREE(cache->bufs[i]);
+                cache->bufs[i] = NULL;
+        }
+}
+
 static inline int
 DML_pointer_eq(lang_void *data, lang_void *match_data)
 { return data == match_data; }
