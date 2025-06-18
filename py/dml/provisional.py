@@ -41,15 +41,25 @@ class explicit_param_decls(ProvisionalFeature):
     The following new forms are introduced to mark the intent of
     declaring a new parameter:
 
-    * For typed parameters, `param NAME: TYPE = value;` and `param
-      NAME: TYPE default value;` are essentially shorthands for `param
-      NAME: TYPE;` followed by `param NAME = value;` or `param NAME
-      default value;`.
+    * For typed parameters, `param NAME: TYPE = value;` is essentially a shorthand for
 
-    * For untyped parameters, `param NAME := value;` and `param
-      :default value;` are essentially shorthands for `param NAME;`
-      followed by `param NAME = value;` or `param NAME default
-      value;`.
+          param NAME: TYPE;
+          param NAME = value;
+
+      and similarly, `param NAME: TYPE default value;` is essentially a shorthand for
+
+          param NAME: TYPE;
+          param NAME default value;
+
+    * For untyped parameters, `param NAME := value;` is essentially a shorthand for
+
+          param NAME;
+          param NAME = value;
+
+      and similarly `param :default value;` is essentially a shorthand for
+
+          param NAME;
+          param NAME default value;
 
     If one of these forms is used for overriding an existing
     parameter, then DMLC will signal an error, because the declaration
