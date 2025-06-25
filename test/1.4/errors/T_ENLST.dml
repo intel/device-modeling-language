@@ -1,0 +1,23 @@
+/*
+  © 2025 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+provisional simics_util_vect;
+
+device test;
+
+import "internal.dml";
+
+method init() {
+    local uint8 arr[3];
+    /// ERROR ENLST
+    foreach x in (arr) {
+    }
+    local int vect v;
+    // this was allowed in DML 1.2
+    /// ERROR ENLST
+    foreach i in (v) {
+    }
+}

@@ -1,0 +1,44 @@
+/*
+  © 2025 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+provisional simics_util_vect;
+
+device test;
+
+import "internal.dml";
+
+// Test the basic operations of vect types
+method init() {
+    local int vect v;
+    VINIT(v);
+    VADD(v, 3);
+    assert VLEN(v) == 1;
+    assert VELEMSIZE(v) == sizeoftype(int);
+    VRESIZE(v, 2);
+    VRESIZE_FREE(v, 1);
+    VADD(v, 4);
+    VDELETE_ORDER(v, 0);
+    assert v[0] == 4;
+    VREMOVE(v, 0);
+    VADD(v, 5);
+    VINSERT(v, 0, 6);
+    VSETLAST(v, 7);
+    assert v[1] == 7;
+    v[1] = 8;
+    assert v[1] == 8;
+    VGROW(v, 2);
+    assert VLEN(v) == 4;
+    VSHRINK(v, 2);
+    VTRUNCATE(v, 1);
+    assert VLEN(v) == 1;
+    assert cast(VVEC(v), int *)[0] == 6;
+    local int vect v2;
+    VCOPY(v2, v);
+    VCLEAR(v2);
+    assert VLEN(v2) == 0;
+    VFREE(v);
+    VFREE(v2);
+}
