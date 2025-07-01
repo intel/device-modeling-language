@@ -2256,9 +2256,9 @@ __qname(dml_qname_cache_t *cache, const char *fmt, ...)
         return (const char *)s;
 }
 
-UNUSED static const char *
-_DML_get_qname(_identity_t id, const _id_info_t *id_infos,
-               dml_qname_cache_t *cache, const char *dev_name) {
+UNUSED static char *
+_DML_get_qname_alloc(_identity_t id, const _id_info_t *id_infos,
+                     const char *dev_name) {
     _id_info_t info = id_infos[id.id - 1];
 
     const char *logname = info.logname;
@@ -2266,11 +2266,11 @@ _DML_get_qname(_identity_t id, const _id_info_t *id_infos,
     // In order to distinguish the device object from any other, its id_info
     // logname is always "dev", but we want its name when it comes to qname.
     if (strcmp(logname, "dev") == 0) {
-        return dev_name;
+        return MM_STRDUP(dev_name);
     }
 
     if (info.dimensions == 0) {
-        return logname;
+        return MM_STRDUP(logname);
     }
 
     uint32 indices[info.dimensions];
@@ -2280,7 +2280,13 @@ _DML_get_qname(_identity_t id, const _id_info_t *id_infos,
         index /= info.dimsizes[i];
     }
 
-    char *temp_qname = _DML_format_indices(logname, indices, info.dimensions);
+    return _DML_format_indices(logname, indices, info.dimensions);
+}
+
+UNUSED static const char *
+_DML_get_qname(_identity_t id, const _id_info_t *id_infos,
+               dml_qname_cache_t *cache, const char *dev_name) {
+    char *temp_qname = _DML_get_qname_alloc(id, id_infos, dev_name);
     const char *qname = __qname(cache, "%s", temp_qname);
     MM_FREE(temp_qname);
     return qname;
