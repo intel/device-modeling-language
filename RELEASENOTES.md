@@ -243,4 +243,5 @@
 - `note 6` The rarely used `_warning` statement has been deprecated, through
   the introduction of a new compatibility feature `warning_statement`.
   Warning statements will be illegal when Simics API 8 or newer is used.
+- `release 7 7095`
 - `release 6 6405`
