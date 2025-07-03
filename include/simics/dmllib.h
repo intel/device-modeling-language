@@ -2256,23 +2256,37 @@ __qname(dml_qname_cache_t *cache, const char *fmt, ...)
         return (const char *)s;
 }
 
-UNUSED static char *
-_DML_get_qname_alloc(_identity_t id, const _id_info_t *id_infos,
-                     const char *dev_name) {
+UNUSED static const char *
+__static_qname(_identity_t id, const _id_info_t *id_infos,
+               const char *dev_name)
+{
     _id_info_t info = id_infos[id.id - 1];
-
     const char *logname = info.logname;
 
     // In order to distinguish the device object from any other, its id_info
     // logname is always "dev", but we want its name when it comes to qname.
     if (strcmp(logname, "dev") == 0) {
-        return MM_STRDUP(dev_name);
+        return dev_name;
     }
 
+    // avoid the qname cache if we can
     if (info.dimensions == 0) {
-        return MM_STRDUP(logname);
+        return logname;
     }
 
+    return NULL;
+}
+
+UNUSED static char *
+_DML_get_qname_alloc(_identity_t id, const _id_info_t *id_infos,
+                     const char *dev_name)
+{
+    const char *simple = __static_qname(id, id_infos, dev_name);
+    if (simple != NULL) {
+            return MM_STRDUP(simple);
+    }
+
+    _id_info_t info = id_infos[id.id - 1];
     uint32 indices[info.dimensions];
     uint32 index = id.encoded_index;
     for (int32 i = info.dimensions - 1; i >= 0; --i) {
@@ -2280,12 +2294,17 @@ _DML_get_qname_alloc(_identity_t id, const _id_info_t *id_infos,
         index /= info.dimsizes[i];
     }
 
-    return _DML_format_indices(logname, indices, info.dimensions);
+    return _DML_format_indices(info.logname, indices, info.dimensions);
 }
 
 UNUSED static const char *
 _DML_get_qname(_identity_t id, const _id_info_t *id_infos,
-               dml_qname_cache_t *cache, const char *dev_name) {
+               dml_qname_cache_t *cache, const char *dev_name)
+{
+    const char *simple = __static_qname(id, id_infos, dev_name);
+    if (simple != NULL) {
+            return simple;
+    }
     char *temp_qname = _DML_get_qname_alloc(id, id_infos, dev_name);
     const char *qname = __qname(cache, "%s", temp_qname);
     MM_FREE(temp_qname);
