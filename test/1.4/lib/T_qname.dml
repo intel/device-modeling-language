@@ -8,6 +8,8 @@ device test;
 
 group test;
 
+group arr[i < 10];
+
 method init() {
     // _qname() is built on the identity de/serialization machinery,
     // which takes care to distinguish between the device object
@@ -16,4 +18,31 @@ method init() {
     // string it retrieves from the identity de/serialization machinery.
     assert strcmp(dev._qname(), "test") == 0;
     assert strcmp(test._qname(), "test") == 0;
+
+    // qname depends on a weird circular caching mechanism which gives
+    // incorrect names if you have too many (currently >4) indexed qnames in
+    // flux simultaneously. A couple of hacks are applied to reduce the risk
+    // that this happens. This test checks the edges of when it breaks and when
+    // it doesn't.
+    local const char *s[5];
+    for (local int i = 0; i < s.len; i++) {
+        s[i] = arr[i].qname;
+    }
+    local strbuf_t sb = sb_newf(
+        "%s %s %s %s %s",
+        s[0], s[1], s[2], s[3], s[4]);
+    // circular buffer overflow, arr[4] overwrites arr[0]
+    assert strcmp(sb_str(&sb), "arr[4] arr[1] arr[2] arr[3] arr[4]") == 0;
+
+    // some usages of qname don't affect the cache:
+    // constant indexed
+    local const char *_ = arr[4].qname;
+    // unindexed
+    _ = test._qname();
+    // non-constant indexed qname in a log statement causes log string rewrite
+    local int i = 5;
+    log info: "%s", arr[i].qname;
+    sb_fmt(&sb, "%s %s %s %s %s", s[0], s[1], s[2], s[3], s[4]);
+    // arr[1] is unaffected by the above qname expressions
+    assert strcmp(sb_str(&sb), "arr[4] arr[1] arr[2] arr[3] arr[4]") == 0;
 }
