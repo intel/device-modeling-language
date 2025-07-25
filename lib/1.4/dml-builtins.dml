@@ -1657,7 +1657,7 @@ template bank_transaction is implement {
 }
 
 method _mask(uint64 size) -> (uint64) {
-    return size == 8 ? -1 : (1 << (size * 8)) - 1;
+    return size >= 8 ? -1 : (1 << (size * 8)) - 1;
 }
 
 // TODO(enilsson): preferably, we'd be able to remove the need for
