@@ -3733,6 +3733,8 @@ class TraitObjectCast(Expression):
                 + '(_traitref_t) {_object_vtables[__id.id], __id};})')
 
 def mkTraitUpcast(site, sub, parent):
+    if isinstance(sub, NonValue):
+        raise sub.exc()
     typ = safe_realtype(sub.ctype())
     assert dml.globals.object_trait
     if isinstance(typ, TTrait):
