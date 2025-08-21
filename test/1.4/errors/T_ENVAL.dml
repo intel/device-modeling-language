@@ -46,6 +46,9 @@ method init() {
     b.r1;
     /// ERROR ENVAL
     b.r2.f;
+
+    /// ERROR ENVAL
+    cast([], t);
 }
 
 // dev is not a value in 1.4.  Need to capture this with a rather unnatural
