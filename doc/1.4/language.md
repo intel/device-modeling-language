@@ -345,7 +345,7 @@ referenced.
 
 Parameters cannot be dynamically updated at run-time; however, a parameter
 can be declared to allow it being overridden by later definitions -
-see [Parameter Declarations](#parameter-declarations).
+see [Parameters detailed](#parameters-detailed).
 
 Within DML's built-in modules and standard library, parameters are used to
 describe static properties of objects, such as names, sizes, and offsets. Many
@@ -1221,14 +1221,122 @@ template get_qname {
 }
 ```
 
-### Typed Parameters
-A *typed parameter declaration* is a parameter declaration form that may only
-appear within templates:
+## Parameters detailed
 
-<pre>
-param <em>name</em> : <em>type</em>;
-</pre>
+Parameters may be typed or untyped.
+Typed parameter declarations may only appear in template definitions.
 
+Parameters are declared using one of the forms
+
+```
+param name;
+param name: type
+```
+
+and assigned using the `=` operator. Parameters may also be given default values using the form `param name default expr`.
+For example:
+
+```
+param offset = 8;
+param byte_order default "little-endian";
+```
+
+A default value is overridden by an assignment (`=`).
+There can be at most one assignment for each parameter.
+Typically, a default value for a parameter is specified in a template, and the programmer may then choose to override it where the template is used.
+See [Resolution of overrides](#resolution-of-overrides) for the resolution order when there are multiple definitions of the same parameter.
+
+A parameter that is declared without an assignment or a default value must eventually be assigned elsewhere, or the model will not compile.
+This pattern is sometimes useful in templates, as in:
+
+```
+template constant is register {
+    param value;
+    method get() -> (uint64) {
+        return value;
+    }
+}
+```
+
+so that wherever the template `constant` is used, the programmer
+is also forced to define the parameter `value`. E.g.:
+
+```
+register r0 size 2 @ 0x0000 is (constant) {
+    param value = 0xffff;
+}
+```
+
+> [!IMPORTANT]
+> When writing templates, always declare parameters that are referenced.
+> Enabling the provisional feature `explicit_param_decls` enforces this.
+>
+> Leaving out the parameter declaration from the template
+> definition can have unwanted effects if the programmer forgets to
+> specify its value where the template is used. At best, it will only
+> cause a more obscure error message, such as "unknown identifier"; at
+> worst, the scoping rules will select an unrelated definition of the same
+> parameter name.
+
+### `explicit_param_decls` provisional feature
+
+There is a shorthand syntax for combined declaration and definition of a parameter, currently enabled by the [`explicit_param_decls` provisional feature](provisional-auto.html#explicit_param_decls):
+
+```
+param NAME: TYPE = value;
+param NAME: TYPE default value;
+param NAME := value;
+param :default value;
+```
+
+`explicit_param_decls` enforces that parameters are declared before they are assigned, or that the combined syntax is used.
+This distinguishes between the intent to declare a new parameter, and the intent to override an existing parameter.
+This distinction allows DML to capture misspelled parameter overrides as compile errors.
+
+DMLC signals an error if the combined declaration and definition syntax is used to override an existing parameter.
+This guards against unintentional reuse of a parameter name. An example:
+
+```
+// Included file not using explicit_param_decls
+template foo_capability {
+    param foo_offset; // parameter which must be assigned by the device instantiating the template
+    param has_foo_feature default false; // overridable parameter with a default value
+    param id default 1; // overridable parameter with a generic name
+}
+```
+
+```
+// Device model file including the above
+provisional explicit_param_decls;
+
+template extended_foo_capability is foo_capability {
+    param has_bar_feature: bool default false;
+
+    // unintentional reuse of parameter name:
+    param id := 5; // error: the parameter 'id' has already been declared
+}
+
+bank foo_config {
+    is extended_foo_capability;
+
+    // correct assignment to template parameter:
+    param foo_offset = 0x10;
+
+    // misspelled parameter override:
+    param has_foo_featur = true;  // error: parameter 'has_foo_featur' not declared previously.
+}
+```
+
+It is recommended to enable `explicit_param_decls` in new DML source files and to use the new combined syntax when applicable to reduce the risk of bugs caused by misspelled parameters.
+
+In some rare cases, you may need to declare a parameter without
+knowing if it's an override or a new parameter. In this case, one
+can accompany a `param NAME = value;` or `param NAME default
+value;` declaration with a `param NAME;` declaration in the same
+scope/rank. This marks that the parameter assignment may be either
+an override or a new parameter, and no error will be printed.
+
+### Typed Parameters detailed
 A typed parameter declaration adds a member to the template type with the same
 name as the specified parameter, and with the specified type. That member is
 associated with the specified parameter, in the sense that the definition of the
@@ -1237,7 +1345,7 @@ parameter is used as the value of the template type member.
 A typed parameter declaration places a number of requirements on the
 named parameter:
 * The named parameter must be defined (through a regular [parameter
-  declaration](#parameter-declarations)). This can be done either within the
+  declaration](#parameters-detailed)). This can be done either within the
   template itself, within sub-templates, or within individual objects
   instantiating the template.
 * The parameter definition must be a valid expression of the specified type.
@@ -1281,72 +1389,22 @@ bank regs {
 }
 ```
 
-## Parameter Declarations
+### Special parameters in the DML standard library
 
-A parameter declaration has the general form "<code>param <em>name</em>
-<em>specification</em>;</code>", where *`specification`* is
-either "<code>= <em>expr</em></code>" or "<code>default <em>expr</em></code>".
-For example:
+You may see the following special form in some standard library files:
 
-```
-param offset = 8;
-param byte_order default "little-endian";
-```
+<pre>
+param <em>name</em> auto;
+</pre>
 
-A default value is overridden by an assignment (`=`). There can
-be at most one assignment for each parameter.
-Typically, a default value for a parameter is specified in a
-template, and the programmer may then choose to override it where the
-template is used.
-
-The *`specification`* part is in fact optional; if omitted, it means that the
-parameter is declared to exist (and *must* be given a value, or the model will
-not compile). This is sometimes useful in templates, as in:
+for example,
 
 ```
-template constant is register {
-    param value;
-    method get() -> (uint64) {
-        return value;
-    }
-}
+param parent auto;
 ```
 
-so that wherever the template `constant` is used, the programmer
-is also forced to define the parameter `value`. E.g.:
-
-```
-register r0 size 2 @ 0x0000 is (constant) {
-    param value = 0xffff;
-}
-```
-
-Note that simply leaving out the parameter declaration from the template
-definition can have unwanted effects if the programmer forgets to
-specify its value where the template is used. At best, it will only
-cause a more obscure error message, such as "unknown identifier"; at
-worst, the scoping rules will select an unrelated definition of the same
-parameter name.
-
-Also note that a parameter declaration without definition is redundant if a
-[typed parameter declaration](#typed-parameters) for that parameter already
-exists, as that already enforces that the parameter must be defined.
-
-> [!NOTE]
-> You may see the following special form in some standard library files:
->
-> <pre>
-> param <em>name</em> auto;
-> </pre>
->
-> for example,
->
-> ```
-> param parent auto;
-> ```
->
-> This is used to explicitly declare the built-in automatic parameters,
-> and should never be used outside the libraries.
+This is used to explicitly declare the built-in automatic parameters,
+and should never be used outside the libraries.
 
 ## Data types
 

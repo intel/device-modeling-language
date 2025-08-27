@@ -34,7 +34,8 @@ def feature(cls: type[ProvisionalFeature]):
 
 @feature
 class explicit_param_decls(ProvisionalFeature):
-    '''This feature extends the DML syntax for parameter definitions to
+    '''<a id="explicit_param_decls"/>
+    This feature extends the DML syntax for parameter definitions to
     distinguish between an intent to declare a new parameter, and an intent to
     override an existing parameter (including when providing a definition
     for an abstract parameter). This distinction allows DML to capture
