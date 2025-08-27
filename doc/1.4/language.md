@@ -1332,6 +1332,14 @@ Also note that a parameter declaration without definition is redundant if a
 [typed parameter declaration](#typed-parameters) for that parameter already
 exists, as that already enforces that the parameter must be defined.
 
+> [!NOTE]
+> The provisional feature *explicit_param_decls* enforces that parameters must be declared before they are used.
+> This allows distinguishing between the intent to declare a new parameter, and the intent to override an existing parameter.
+> This distinction allows DML to capture misspelled parameter overrides as compile errors.
+>
+> The provisional feature also introduces a new syntax for combined declaration and definition: `:=`.
+> For more information see [Provisional language features](provisional-auto.html#dt:explicit_param_decls).
+
 <div class="note">
 
 **Note:** You may see the following special form in some standard library files:
