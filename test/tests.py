@@ -745,10 +745,9 @@ class CTestCase(DMLFileTestCase):
         sc.close()
 
         self.pr("Running Simics")
-        args = [join(simics_base_path(), "bin", "simics" + bat_sfx),
+        args = [join(testparams.project_path(), "bin", "simics" + bat_sfx),
                 "--batch-mode", "--quiet", "--no-copyright", "--no-settings",
                 "--dump-core", "--werror",
-                "--project", testparams.project_path(),
                 self.scriptname]
         env = os.environ.copy()
         env.update(self.extraenv)
