@@ -449,17 +449,14 @@ side-effects within `destroy()` such as logging will not be visible upon
 program exit unless deletion is explicitly performed beforehand &mdash; hence
 why `destroy` should *only* be used to ensure resources get cleaned up.
 
-<div class="note">
-
-**Note:** the `destroy` template can't be instantiated for
-`event` objects. This is because `event` objects, through the
-`custom_time_event` or `custom_cycle_event` template, may already require
-defining a method named `destroy` whose purpose is different from the one
-required by the `destroy` template. To work around this limitation, you may
-declare a `group` within the `event` object that instantiates the `destroy`
-template instead.
-
-</div>
+> [!NOTE]
+> the `destroy` template can't be instantiated for
+> `event` objects. This is because `event` objects, through the
+> `custom_time_event` or `custom_cycle_event` template, may already require
+> defining a method named `destroy` whose purpose is different from the one
+> required by the `destroy` template. To work around this limitation, you may
+> declare a `group` within the `event` object that instantiates the `destroy`
+> template instead.
 */
 template destroy {
     param _each_destroy : sequence(destroy);
@@ -1463,19 +1460,16 @@ a private helper object.
 The `init_as_subobj` template accepts one parameter,
 `classname`. This defines the class of the automatically created object.
 
-<div class="note">
-
-**Note:** The subobject class defined by the `classname` parameter is looked up
-using `SIM_get_class` while the module of the device class is being
-loaded.
-This may cause problems if the subobject class is defined within the
-same module as the device class:
-if the device class is defined before the subobject class, then the subobject
-class will not yet be defined, and the `SIM_get_class` call will fail.
-This problem can be resolved by moving the subobject class to
-a separate module.
-
-</div>
+> [!NOTE]
+> The subobject class defined by the `classname` parameter is looked up
+> using `SIM_get_class` while the module of the device class is being
+> loaded.
+> This may cause problems if the subobject class is defined within the
+> same module as the device class:
+> if the device class is defined before the subobject class, then the subobject
+> class will not yet be defined, and the `SIM_get_class` call will fail.
+> This problem can be resolved by moving the subobject class to
+> a separate module.
 
 The template also overrides the `configuration` parameter to
 `"none"` by default, which makes the connect invisible to the end-user.

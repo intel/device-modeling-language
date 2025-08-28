@@ -63,15 +63,14 @@ applied. The `port-dml` will detect this and emit a warning.
 You can choose to either port the code manually, or perform an analysis of
 an additional device that does use the code, and append that to the tagfile.
 
-<div class="note">
-
-**Note:** The `port-dml` script might fail because of a bug in the
-script. When this kind of bug is encountered, the script will normally
-print a traceback and point out a line in the tag file that it failed
-to apply; you can get further in your conversion by manually removing
-this line and re-running the script. After the script has succeeded,
-you can look up the failed tags in the [list of porting
-tags](changes-auto.html) and apply the change manually.
+> [!NOTE]
+> The `port-dml` script might fail because of a bug in the
+> script. When this kind of bug is encountered, the script will normally
+> print a traceback and point out a line in the tag file that it failed
+> to apply; you can get further in your conversion by manually removing
+> this line and re-running the script. After the script has succeeded,
+> you can look up the failed tags in the [list of porting
+> tags](changes-auto.html) and apply the change manually.
 
 </div>
 
