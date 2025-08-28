@@ -569,13 +569,10 @@ inside the method must be enclosed in a `try` block. A `throw`
 statement counts as throwing, as does a `call` or `inline`
 statement, unless the method it invokes is declared `nothrow`.
 
-<div class="note">
-
-**Note:** In DML 1.4, `nothrow` is the default, and methods that
-*can* throw an exception must be explicitly declare that with
-a `throws` annotation.
-
-</div>
+> [!NOTE]
+> In DML 1.4, `nothrow` is the default, and methods that
+> *can* throw an exception must be explicitly declare that with
+> a `throws` annotation.
 
 ### Default Methods
 

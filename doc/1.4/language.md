@@ -1332,23 +1332,21 @@ Also note that a parameter declaration without definition is redundant if a
 [typed parameter declaration](#typed-parameters) for that parameter already
 exists, as that already enforces that the parameter must be defined.
 
-<div class="note">
-
-**Note:** You may see the following special form in some standard library files:
-
-<pre>
-param <em>name</em> auto;
-</pre>
-
-for example,
-
-```
-param parent auto;
-```
-
-This is used to explicitly declare the built-in automatic parameters,
-and should never be used outside the libraries.
-</div>
+> [!NOTE]
+> You may see the following special form in some standard library files:
+>
+> <pre>
+> param <em>name</em> auto;
+> </pre>
+>
+> for example,
+>
+> ```
+> param parent auto;
+> ```
+>
+> This is used to explicitly declare the built-in automatic parameters,
+> and should never be used outside the libraries.
 
 ## Data types
 
@@ -1712,16 +1710,13 @@ handled:
 * A method can only be overridden by another method if it is declared
   `default`.
 
-<div class="note">
-
-**Note:** An overridable built-in method is defined by a template
-named as the object type. So, if you want to write a template that
-overrides the `read` method of a register, and want to make
-your implementation overridable, then your template must explicitly
-instantiate the `register` template using a statement `is
-register;`.
-
-</div>
+> [!NOTE]
+> An overridable built-in method is defined by a template
+> named as the object type. So, if you want to write a template that
+> overrides the `read` method of a register, and want to make
+> your implementation overridable, then your template must explicitly
+> instantiate the `register` template using a statement `is
+> register;`.
 
 ### Calling Methods
 
@@ -1911,12 +1906,9 @@ session struct_t s = { .y = { .i = 2, ... }, ... }
 Also unlike C, designator lists are not supported, and designated initializers
 for arrays are not supported.
 
-<div class="note">
-
-**Note:** Previously `session` variables were known as `data`
-variables.
-
-</div>
+> [!NOTE]
+> Previously `session` variables were known as `data`
+> variables.
 
 ## Saved variables
 
@@ -1970,14 +1962,11 @@ restricted to primitive data types, or structs or arrays containing
 only data types that could be saved. Such types are called
 [*serializable*](#serializable-types).
 
-<div class="note">
-
-**Note:** Saved variables are primarily intended for making checkpointable
-state easier. For configuration, `attribute` objects should
-be used instead. Additional data types for saved declarations are planned to
-be supported.
-
-</div>
+> [!NOTE]
+> Saved variables are primarily intended for making checkpointable
+> state easier. For configuration, `attribute` objects should
+> be used instead. Additional data types for saved declarations are planned to
+> be supported.
 
 ## Hook Declarations
 <pre>
@@ -2070,31 +2059,30 @@ arguments or return values. In fact, hook references are even
 Two hook references of the same hook reference type can be compared for
 equality, and are considered equal when they both reference the same hook.
 
-<div class="note">
-<b>Note:</b> Hooks have a notable shortcoming in their lack of configurability;
-for example, there is no way to configure a hook to log an error when a message
-is sent through the hook and there is no computation suspended on the hook to
-act upon the message. Proper hook configurability is planned to be added by the
-time or together with coroutines being introduced to DML. Until then, the
-suggested approach is to create wrappers around usages of <tt>send_now()</tt>.
-Hook reference types can be leveraged to cut down on the needed number of such
-wrappers, for example:
-<pre>
-method send_now_checked_no_data(hook() h) {
-    local uint64 resumed = h.send_now();
-    if (resumed == 0) {
-        log error: "Unhandled message to hook";
-    }
-}
-
-method send_now_checked_int(hook(int) h, int x) {
-    local uint64 resumed = h.send_now(x);
-    if (resumed == 0) {
-        log error: "Unhandled message to hook";
-    }
-}
-</pre>
-</div>
+> [!NOTE]
+> Hooks have a notable shortcoming in their lack of configurability;
+> for example, there is no way to configure a hook to log an error when a message
+> is sent through the hook and there is no computation suspended on the hook to
+> act upon the message. Proper hook configurability is planned to be added by the
+> time or together with coroutines being introduced to DML. Until then, the
+> suggested approach is to create wrappers around usages of <tt>send_now()</tt>.
+> Hook reference types can be leveraged to cut down on the needed number of such
+> wrappers, for example:
+> <pre>
+> method send_now_checked_no_data(hook() h) {
+>     local uint64 resumed = h.send_now();
+>     if (resumed == 0) {
+>         log error: "Unhandled message to hook";
+>     }
+> }
+>
+> method send_now_checked_int(hook(int) h, int x) {
+>     local uint64 resumed = h.send_now(x);
+>     if (resumed == 0) {
+>         log error: "Unhandled message to hook";
+>     }
+> }
+> </pre>
 
 ## Object Declarations
 
@@ -3504,13 +3492,10 @@ cancel all suspended method calls associated with an object through that
 object's `cancel_after()` method, as provided by the [`object`
 template](dml-builtins.html#object).
 
-<div class="note">
-
-**Note:** We plan to extend the `after` statement to allow for users to
-explicitly state what objects the suspended method call is to be associated
-with.
-
-</div>
+> [!NOTE]
+> We plan to extend the `after` statement to allow for users to
+> explicitly state what objects the suspended method call is to be associated
+> with.
 
 #### After Delay Statements
 <pre>
@@ -3913,13 +3898,10 @@ the selected case.
 DML currently only supports `#select` iteration on [compile-time list
 constants](#list-expressions).
 
-<div class="note">
-
-**Note:** The `select` statement has been temporarily removed from DML 1.4 due
-to semantic issues, and only the `#select` form may currently be used.
-The `select` statement will be reintroduced in the near future.
-
-</div>
+> [!NOTE]
+> The `select` statement has been temporarily removed from DML 1.4 due
+> to semantic issues, and only the `#select` form may currently be used.
+> The `select` statement will be reintroduced in the near future.
 
 ### #if and #else Statements
 <a id="if-else-statements"/>
