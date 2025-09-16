@@ -551,7 +551,7 @@ def object_method_noinparams(t):
     body = t[6]
     t[0] = ast.method(site(t), name,
                       (inp, outp, throws, [], body),
-                      t[5], t[2], lex_end_site(t, -1))
+                      t[5], t[2], False, lex_end_site(t, -1))
 
 
 @prod_dml12
@@ -578,7 +578,7 @@ def object_method(t):
     body = t[10]
     t[0] = ast.method(site(t), name,
                       (inp, outp, throws, [], body),
-                      t[9], t[2], lex_end_site(t, -1))
+                      t[9], t[2], False, lex_end_site(t, -1))
 
 
 def method_qualifiers_check(site, qualifiers, inp, outp, throws, default):
@@ -603,22 +603,47 @@ def method_qualifiers_check(site, qualifiers, inp, outp, throws, default):
                            "startup methods may not be declared 'default'"))
     return (inp, outp)
 
+@prod_dml14
+def maybe_colon_yes(t):
+    '''maybe_colon : COLON'''
+    if not site(t).provisional_enabled(provisional.explicit_method_decls):
+        report(ESYNTAX(site(t), ':', "expected '=' or 'default'"))
+        t[0] = False
+    else:
+        t[0] = True
+
+@prod
+def maybe_colon_no(t):
+    '''maybe_colon : '''
+    t[0] = False
 
 @prod_dml14
 def object_method(t):
-    '''method : method_qualifiers METHOD objident method_params_typed maybe_default compound_statement'''
+    '''method : method_qualifiers METHOD objident method_params_typed maybe_colon maybe_default compound_statement'''
     name = t[3]
     (inp, outp, throws) = t[4]
-    body = t[6]
+    body = t[7]
     (inp, outp) = method_qualifiers_check(site(t), t[1], inp, outp, throws,
-                                          t[5])
+                                          t[6])
     t[0] = ast.method(site(t), name,
                       (inp, outp, throws, t[1], body),
-                      t[5], False, lex_end_site(t, -1))
+                      t[6], False, t[5], lex_end_site(t, -1))
+
+@prod_dml14
+def object_method_abstract(t):
+    '''method : method_qualifiers METHOD objident method_params_typed SEMI'''
+    name = t[3]
+    (inp, outp, throws) = t[4]
+    body = None
+    (inp, outp) = method_qualifiers_check(site(t), t[1], inp, outp, throws,
+                                          False)
+    t[0] = ast.method(site(t), name,
+                      (inp, outp, throws, t[1], body),
+                      True, False, None, site(t, 5))
 
 @prod_dml14
 def object_inline_method(t):
-    '''method : INLINE METHOD objident method_params_maybe_untyped maybe_default compound_statement'''
+    '''method : INLINE METHOD objident method_params_maybe_untyped maybe_colon maybe_default compound_statement'''
     name = t[3]
     (inp, outp, throws) = t[4]
     if all(typ for (_, asite, name, typ) in inp):
@@ -626,10 +651,10 @@ def object_inline_method(t):
         # We forbid it as a way to strongly discourage unneeded use of inline.
         report(ESYNTAX(site(t, 2), 'inline',
                        'only use inline if there are untyped arguments'))
-    body = t[6]
+    body = t[7]
     t[0] = ast.method(site(t), name,
                       (inp, outp, throws, [], body),
-                      t[5], False, lex_end_site(t, -1))
+                      t[6], False, t[5], lex_end_site(t, -1))
 
 
 @prod_dml12
@@ -730,12 +755,13 @@ def template_statement_obj(t):
 @prod_dml14
 def template_statement_shared_method(t):
     '''template_stmt : SHARED method_qualifiers METHOD shared_method'''
-    (name, (inp, outp, throws), overridable, body, rbrace_site) = t[4]
+    (name, (inp, outp, throws), overridable, explicit_decl, body,
+     rbrace_site) = t[4]
     default = overridable and body is not None
     (inp, outp) = method_qualifiers_check(site(t), t[2], inp, outp, throws,
                                           default)
     t[0] = [ast.sharedmethod(site(t), name, inp, outp, throws, t[2],
-                             overridable, body, rbrace_site)]
+                             overridable, explicit_decl, body, rbrace_site)]
 
 @prod_dml14
 def template_statement_shared_hook(t):
@@ -765,23 +791,24 @@ def method_qualifiers(t):
 @prod_dml12
 def trait_method(t):
     '''trait_method : METHOD shared_method'''
-    (name, (inp, outp, throws), overridable, body, rbrace_site) = t[2]
+    (name, (inp, outp, throws), overridable, explicit_decl, body,
+     rbrace_site) = t[2]
     t[0] = ast.sharedmethod(site(t), name, inp, outp, throws, [], overridable,
-                            body, rbrace_site)
+                            explicit_decl, body, rbrace_site)
 
 @prod
 def shared_method_abstract(t):
     '''shared_method : ident method_params_typed SEMI'''
-    t[0] = (t[1], t[2], True, None, site(t, 3))
+    t[0] = (t[1], t[2], True, False, None, site(t, 3))
 @prod
 def shared_method_default(t):
-    '''shared_method : ident method_params_typed DEFAULT compound_statement'''
-    t[0] = (t[1], t[2], True, t[4], lex_end_site(t, -1))
+    '''shared_method : ident method_params_typed maybe_colon DEFAULT compound_statement'''
+    t[0] = (t[1], t[2], True, t[3], t[5], lex_end_site(t, -1))
 
 @prod
 def shared_method_final(t):
-    '''shared_method : ident method_params_typed compound_statement'''
-    t[0] = (t[1], t[2], False, t[3], lex_end_site(t, -1))
+    '''shared_method : ident method_params_typed maybe_colon compound_statement'''
+    t[0] = (t[1], t[2], False, t[3], t[4], lex_end_site(t, -1))
 
 @prod_dml12
 def trait_param(t):

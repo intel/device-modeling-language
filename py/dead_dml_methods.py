@@ -91,14 +91,14 @@ def traverse_ast(ast):
         if any(stmt.kind == 'error' for stmt in body.args[0]):
             # poisoned method, apparently meant to be dead
             ignored = True
-        yield (ast.site.lineno, ast.args[4].lineno, ast.args[0], ignored)
+        yield (ast.site.lineno, ast.args[5].lineno, ast.args[0], ignored)
     elif ast.kind == 'sharedmethod':
-        body = ast.args[6]
+        body = ast.args[7]
         if body is None:
             # abstract method, no code generated
             return
         assert body.kind == 'compound'
-        yield (ast.site.lineno, ast.args[7].lineno, ast.args[0], False)
+        yield (ast.site.lineno, ast.args[8].lineno, ast.args[0], False)
     elif ast.kind in {'toplevel_if', 'hashif'}:
         (_, t, f) = ast.args
         for block in [t, f]:
