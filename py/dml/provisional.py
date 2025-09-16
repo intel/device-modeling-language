@@ -84,6 +84,60 @@ class explicit_param_decls(ProvisionalFeature):
     short = "Require := syntax for defining new params"
     stable = True
 
+@feature
+class explicit_method_decls(ProvisionalFeature):
+    '''
+    This feature extends the DML syntax for methods to distinguish between an
+    intent to declare a new method, and an intent to override an existing
+    method/provide a definition for an abstract method.
+    This distinction allows DML to capture misspelled parameter overrides as
+    compile errors.
+
+    This provisional feature introduces new syntax for the following purposes:
+    * Abstract method declarations
+      ```
+      method m(...) [-> (...)] [throws];
+      ```
+
+      This declaration establishes a requirement that a method of that name and
+      signature is defined in the same object as the abstract method
+      declaration. This is similar to the existing abstract `shared` method
+      declaration, but unlike abstract `shared` methods have no restrictions
+      or semantic implications beyond that (except for the fact that it
+      declares the method to exist.) In other words, it's semantically
+      analagous to untyped abstract parameter declarations (`param p;`).
+
+    * Simultaneously declaring and defining a new method
+      ```
+      method m(...) [-> (...)] [throws] :{ ... }
+      method m(...) [-> (...)] [throws] :default { ... }
+      ```
+
+      DMLC rejects a declaration of this form if the method has already been
+      declared, because this form signifies that the declaration was not
+      intended as an override.
+
+    `explicit_metod_decls` also changes the meaning of the traditional form
+    of method definitions (e.g. `method m() {}` or `method m() default {}`)
+    such that DMLC will reject them if the method has not been declared
+    previously (either abstractly or with an overridable definition.)
+
+    In some rare cases, you may need to declare a method without
+    knowing if it's an override or a new declaration. In this case, one
+    can accompany an overriding definition (e.g. `method m() {}`
+    or `method() default {}`) with an abstract method declaration (e.g.
+    `method m();`) in the same scope/rank. This marks that the method
+    definition may either be for a previously declared method or a new method
+    entirely, and no error will be printed.
+
+    Enabling the `explicit_method_decls` feature in a file only affects
+    the method definitions specified in that file; in other words, it will not
+    require other files to use the `:{` syntax in order to declare novel
+    methods.
+    '''
+    short = "Require :{ ... } syntax for defining new methods"
+    stable = False
+
 
 @feature
 class simics_util_vect(ProvisionalFeature):
