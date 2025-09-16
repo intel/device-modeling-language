@@ -5,47 +5,47 @@
 
 dml 1.4;
 
-/// ERROR ENOVERRIDE
+/// ERROR ENOVERRIDEPARAM
 provisional explicit_param_decls;
 
 device test;
 
-/// ERROR ENOVERRIDE
+/// ERROR ENOVERRIDEPARAM
 param p0 = 3;
 
 param p1a;
 // no error
 param p1a = 3;
 
-/// ERROR EOVERRIDE
+/// ERROR EOVERRIDEPARAM
 param p1b;
-/// ERROR EOVERRIDE
+/// ERROR EOVERRIDEPARAM
 param p1b := 3;
 
 param p2a;
 // no error
 param p2a default 3;
-/// ERROR EOVERRIDE
+/// ERROR EOVERRIDEPARAM
 param p2b :default 3;
-/// ERROR EOVERRIDE
+/// ERROR EOVERRIDEPARAM
 param p2b;
 
 template t {
     param p3a :default 3;
     param p3b :default 3;
     param p4a :default 4;
-    /// ERROR EOVERRIDE
+    /// ERROR EOVERRIDEPARAM
     param p4b :default 4;
-    /// ERROR ENOVERRIDE
+    /// ERROR ENOVERRIDEPARAM
     param p5 default 5;
     param p6a: int;
-    /// ERROR EOVERRIDE
+    /// ERROR EOVERRIDEPARAM
     param p6b: int;
     param p7a;
-    /// ERROR EOVERRIDE
+    /// ERROR EOVERRIDEPARAM
     param p7b;
     param p8a: int default 6;
-    /// ERROR EOVERRIDE
+    /// ERROR EOVERRIDEPARAM
     param p8b: int default 6;
     param p9: int = 7;
     param p10 := 10;
@@ -53,19 +53,19 @@ template t {
 
 group g is t {
     param p3a = 33;
-    /// ERROR EOVERRIDE
+    /// ERROR EOVERRIDEPARAM
     param p3b := 33;
     param p4a default 44;
-    /// ERROR EOVERRIDE
+    /// ERROR EOVERRIDEPARAM
     param p4b :default 44;
     param p6a = 66;
-    /// ERROR EOVERRIDE
+    /// ERROR EOVERRIDEPARAM
     param p6b := 66;
     param p7a = 77;
-    /// ERROR EOVERRIDE
+    /// ERROR EOVERRIDEPARAM
     param p7b := 77;
     param p8a default 88;
-    /// ERROR EOVERRIDE
+    /// ERROR EOVERRIDEPARAM
     param p8b :default 88;
     // no error
     param p10;
