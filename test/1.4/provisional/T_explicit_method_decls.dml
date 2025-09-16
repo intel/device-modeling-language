@@ -1,0 +1,44 @@
+/*
+  © 2025 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+provisional explicit_method_decls;
+
+device test;
+
+/// COMPILE-ONLY
+
+template t {
+    method m1() :{}
+    method m2() :default {}
+    method m3();
+
+    shared method sm1() :{}
+    shared method sm2() :default {}
+    shared method sm3();
+}
+
+template u {
+    method m1();
+    method m2() :default {}
+    method m3();
+}
+
+template v is (t, u) {
+    method m2() {}
+    method m3() default {}
+    shared method sm2() {}
+    shared method sm3() default {}
+}
+
+group g is v {
+    method m1();
+    method m2();
+    method m3();
+
+    method m3() {}
+    method sm3() {}
+}
