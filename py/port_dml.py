@@ -1028,10 +1028,9 @@ class PWUNUSED(Transformation):
                 msg = 'template %r never instantiated' % (name,)
             else:
                 assert False
-            sys.stderr.write('%s:%d: warning WUNUSED: %s during build.'
-                             % (dest, line, msg)
-                             + ' Only partial porting possible\n')
-            sys.stderr.write('%s: original location\n' % (loc,))
+            print(f'{dest}:{line}: warning WUNUSED: {msg} during build. Only partial porting possible',
+                  file=sys.stderr)
+            print(f'{loc}: original location', file=sys.stderr)
 
 tags = {
     'PSHA1': PSHA1,
@@ -1152,19 +1151,18 @@ def main(argv):
             t = tags[tag](loc, ast.literal_eval(params))
             transformations.setdefault(t.phase, []).append((t, lineno, line))
         except:
-            sys.stderr.write("Unexpected error on this porting tag:\n")
-            sys.stderr.write(line)
-            sys.stderr.write("%s:%d: found here\n" % (tagfilename, lineno))
+            print("Unexpected error on this porting tag:", file=sys.stderr)
+            print(line, end='', file=sys.stderr)
+            print(f"{tagfilename}:{lineno}: found here", file=sys.stderr)
             raise
 
     if not transformations:
-        sys.stderr.write('%s:0: error: no tags found matching file %r' % (
-            tagfilename, args.src))
+        print(f'{tagfilename}:0: error: no tags found matching file {args.src}', file=sys.stderr)
         exit(1)
 
     if args.compat and is_device_file(args.src):
-        sys.stderr.write('%s:0: warning: file contains device statement,'
-                         % (args.src,) + ' ignoring --compat flag\n')
+        print(f'{args.src}:0: warning: file contains device statement, ignoring --compat flag',
+              file=sys.stderr)
         args.compat = False
     src = SourceFile(args.src, args.compat)
     errors = 0
@@ -1174,14 +1172,14 @@ def main(argv):
                 t.apply(src)
             except PortingFailure as e:
                 (loc, _) = line.split(' porting ', 2)
-                sys.stderr.write("%s error%s: %s\n" % (
-                    loc, '' if e.tag is None else ' ' + e.tag, e))
-                sys.stderr.write("%s:%d: found here\n" % (tagfilename, lineno))
+                print(f"""{loc} error{'' if e.tag is None else ' ' + e.tag}: {e}""",
+                      file=sys.stderr)
+                print(f"{tagfilename}:{lineno}: found here", file=sys.stderr)
                 errors += 1
             except:
-                sys.stderr.write("Unexpected error on this porting tag:\n")
-                sys.stderr.write(line)
-                sys.stderr.write("%s:%d: found here\n" % (tagfilename, lineno))
+                print("Unexpected error on this porting tag:", file=sys.stderr)
+                print(line, end='', file=sys.stderr)
+                print(f"{tagfilename}:{lineno}: found here", file=sys.stderr)
                 traceback.print_exc()
                 errors += 1
 
@@ -1191,9 +1189,9 @@ def main(argv):
         src.commit(f)
     if errors:
         total = sum(map(len, transformations.values()))
-        sys.stderr.write(f'''\
-*** Failed to apply {errors} out of {total} porting tags; partial result saved to {args.dest}. Consider applying the failed tags manually.
-''')
+        print(f'''\
+*** Failed to apply {errors} out of {total} porting tags; partial result saved to {args.dest}. Consider applying the failed tags manually.''',
+              file=sys.stderr)
         exit(2)
 
 if __name__ == '__main__':
