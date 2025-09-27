@@ -4,7 +4,7 @@
 import stest
 import dev_util
 import simics
-from simics import confclass
+from simics import *
 
 class signal_stub:
     cls = confclass('signal-stub')
@@ -19,7 +19,7 @@ destroyed_map = {}
 def destroyed(name):
     destroyed_map[name] = destroyed_map.get(name, 0) + 1
 
-obj = simics.SIM_create_object('test', 'obj', queue=cpu, post_inc_attr=None)
+obj = SIM_create_object('test', 'obj', queue=cpu, post_inc_attr=None)
 # objects_finalized will execute immediate afters posted in init, post_init,
 # and attribute configuration
 stest.expect_equal(obj.count, 3)
@@ -78,7 +78,7 @@ SIM_process_pending_work()
 # late and has to rollback object creation
 conf.sim.warnings_as_errors = True
 with stest.expect_exception_mgr(SimExc_General):
-    simics.SIM_add_configuration(
+    SIM_add_configuration(
         [pre_conf_object('obj1', 'test', queue=cpu, post_never_called=None),
          pre_conf_object('obj2', 'test', queue=cpu, error_on_post_init=True)],
     None)
