@@ -5,21 +5,29 @@ import abc
 from . import logging
 from . import messages
 
+
 class ProvisionalFeature(abc.ABC):
     def tag(self) -> str:
         return self.__class__.__name__
 
-    @abc.abstractproperty
-    def __doc__(self): pass
+    @property
+    @abc.abstractmethod
+    def __doc__(self):
+        pass
 
-    @abc.abstractproperty
-    def short(self) -> str: pass
+    @property
+    @abc.abstractmethod
+    def short(self) -> str:
+        pass
 
-    @abc.abstractproperty
-    def stable(self) -> str: pass
+    @property
+    @abc.abstractmethod
+    def stable(self) -> bool:
+        pass
 
     # Whether the feature is included in 1.2 documentation
     dml12 = False
+
 
 # tag -> feature
 features: dict[str, ProvisionalFeature] = {}
@@ -34,7 +42,8 @@ def feature(cls: type[ProvisionalFeature]):
 
 @feature
 class explicit_param_decls(ProvisionalFeature):
-    '''<a id="explicit_param_decls"/>
+    """<a id="explicit_param_decls"/>
+
     This feature extends the DML syntax for parameter definitions to
     distinguish between an intent to declare a new parameter, and an intent to
     override an existing parameter (including when providing a definition
@@ -80,14 +89,21 @@ class explicit_param_decls(ProvisionalFeature):
 
     Enabling the `explicit_param_decls` feature in a file only affects
     the parameter definitions specified in that file.
-    '''
-    short = "Require := syntax for defining new params"
-    stable = True
+    """
+
+    @property
+    def short(self) -> str:
+        return "Require := syntax for defining new params"
+
+    @property
+    def stable(self) -> bool:
+        return True
 
 
 @feature
 class simics_util_vect(ProvisionalFeature):
-    '''<a id="simics_util_vect"/>
+    """<a id="simics_util_vect"/>
+
     This feature enables the `vect` type, based on the
     `VECT` macro from the Simics C API (`simics/util/vect.h`).
 
@@ -130,18 +146,28 @@ class simics_util_vect(ProvisionalFeature):
     When the `simics_util_vect` feature is disabled, usage of `vect` is an
     error unless the [`experimental_vect` compatibility
     feature](deprecations-auto.html#experimental_vect) is enabled.
-    '''
-    short = "Allow vect syntax based on the VECT macro"
-    stable = True
+    """
+
+    @property
+    def short(self) -> str:
+        return "Allow vect syntax based on the VECT macro"
+
+    @property
+    def stable(self) -> bool:
+        return True
+
     dml12 = True
 
+
 def parse_provisional(
-        provs: list[("Site", str)]) -> dict[ProvisionalFeature, "Site"]:
+    provs: list[tuple[logging.Site, str]],
+) -> dict[ProvisionalFeature, logging.Site]:
     ret = {}
-    for (site, name) in provs:
+    for site, name in provs:
         if name in features:
             ret[features[name]] = site
         else:
-            logging.report(messages.ENOPROV(
-                site, name, ', '.join(sorted(features))))
+            logging.report(
+                messages.ENOPROV(site, name, ", ".join(sorted(features)))
+            )
     return ret
