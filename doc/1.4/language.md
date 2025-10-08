@@ -931,8 +931,9 @@ machine objects, by letting users create FSMs by declaring group objects
 instantiating that template. FSM states can also be represented through a
 template instantiated by groups.
 
-The following demonstrates a simple example of how such an abstraction may be
-implemented:
+#### Finite State Machines using groups
+
+The following demonstrates a simple example of how a finite state machine may be implemented using templates and group objects:
 
 ```
 // Template for finite state machines
