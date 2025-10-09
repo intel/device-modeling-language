@@ -98,6 +98,8 @@ with tarfile.open(outfile, "w:gz") as tgz:
 
     head = [copyright,
             f'This is the reference manual of DML 1.4, as of Simics {version}, '
-            'converted to GitHub markdown.']
+            'converted to GitHub markdown. The manual is also available on'
+            ' [the Simics documentation site]'
+            '(https://intel.github.io/simics/docs/dml-1.4-reference-manual/index.html).']
     add_to_tar(tgz, 'DML-1.4-Reference-Manual.md',
                '\n'.join(head + frontpage_links))
