@@ -3451,12 +3451,40 @@ are instantiated, as long as all conflicting implementations are overridable,
 and one of the following is true:
 * The implementations can be combined together by calling each one of them, as
   long as that can be done without risking e.g. side-effects being duplicated.
+* The implementations in all but (optionally) one of the involved templates call
+  to a "base" method that would serve the same purpose as `default`, but whose
+  definition may be *overridden* such that the conflicting implementations can
+  be resolved by overriding these base methods and leveraging template-qualified
+  method implementation calls in order to define the chain of how each
+  implementation gets called.
+
+  This requires that the names of the base methods are unique to each template
+  involved, and also some thought as to how the implementations in the chain
+  should be ordered.
+
+  If the implementations in some templates call `default` instead of an
+  overridable base method, consider modifying those templates (if possible) to
+  each use a base method instead &mdash; a template-qualified
+  method implementation call can be used as the default implementation of each
+  base method in order to make it act like `default` in the typical case where
+  no conflicting templates are in play.
 * The implementations can be combined by choosing one particular template's
   implementation to invoke (typically the one most complex), and then adding
   code around that implementation call in order to replicate the behaviour of
   the implementations of the other templates. Ideally, the other templates would
   provide methods that may be leveraged so that their behaviour may be
   replicated without the need for excessive boilerplate.
+
+These cases are ordered by difficulty to resolve in ascending order. In
+practice, most conflicts between unrelated templates can be resolved by
+modifying the templates such that the second case may apply.
+
+> [!NOTE]
+> The examples given below apply regardless of whether the method
+> implementations in the original templates are `shared` or not. However, the
+> implementations in the template defined to resolve the conflicts may need to
+> be non-`shared` if some of the implementations involved are not `shared`;
+> see the final paragraph of this subsection.
 
 The following is an example of the first case:
 ```
@@ -3465,7 +3493,7 @@ template alter_write is write {
         default(alter_write(written));
     }
 
-    method alter_write(uint64 curr, uint64 written) -> (uint64);
+    shared method alter_write(uint64 curr, uint64 written) -> (uint64);
 }
 
 template gated_write is alter_write {
@@ -3498,6 +3526,57 @@ in each (gated_write, write_1_clears) { is gated_write_1_clears; }
 ```
 
 The following is an example of the second case:
+```
+template gated_write is write {
+    method write_allowed() -> (bool) default {
+        return true;
+    }
+
+    method write(uint64 val) default {
+        if (write_allowed()) {
+            base_write_of_gated_write(val); // instead of calling default()
+        }
+    }
+
+    method base_write_of_gated_write(uint64 val) default {
+        // If no conflicting template is in play such as to override this
+        // base method, then its behavior is as though the write implementation
+        // called default() instead
+        this.templates.write.write(val);
+    }
+}
+
+template write_1_clears is (write, get) {
+    method write(uint64 val) default {
+        default(get() & ~val);
+    }
+}
+
+template gated_write_1_clears is (gated_write, write_1_clears) {
+    method write(uint64 val) default {
+        // This makes gated_write the first link in the call chain...
+        this.templates.gated_write.write(val);
+    }
+
+    // And by overriding gated_write's base method, we make write_1_clears
+    // the second (and final) link in the chain
+    //
+    // If even more conflicting templates could be in play, then one could
+    // consider converting write_1_clears to also leverage a base method
+    // instead of calling default and extend the call chain; on the other
+    // hand, the way write_1_clears manipulates the written value may violate
+    // the expectations of implementations later on in the chain, so it might
+    // make most sense to always place write_1_clears as the final link, and
+    // have all other templates leverage base methods instead.
+    method base_write_of_gated_write(uint64 val) default {
+        this.templates.write_1_clears.write(val);
+    }
+}
+
+in each (gated_write, write_1_clears) { is gated_write_1_clears; }
+```
+
+The following is an example of the third case:
 ```
 template very_complex_register is register {
     method write_register(uint64 written, uint64 enabled_bytes,
