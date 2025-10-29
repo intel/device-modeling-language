@@ -30,6 +30,27 @@ template CC is AA {
     }
 }
 
+template t1 {
+    shared method m();
+}
+
+template t2 is t1 {
+    shared method m() default {}
+}
+
+template t3 is t1 {
+    shared method m() default {}
+}
+
+template t4 is t3 {
+    method m() default {}
+}
+
+// Used to ICE (SIMICS-23289)
+group g is (t2, t4) {
+    method m() default {}
+}
+
 port x is (BB, CC) {
     method b() {
         default();

@@ -1464,9 +1464,7 @@ def process_method_implementations(obj, name, implementations,
             default = InvalidDefault(traits.NoDefaultSymbol(impl.site))
         elif len(defaults) == 1:
             if defaults[0].shared:
-                [trait] = shared_impl_traits
-                default = DefaultTraitMethod(
-                    trait.method_impls[name], obj)
+                default = DefaultTraitMethod(defaults[0].trait_method, obj)
             else:
                 default = DefaultMethodObj(
                     impl_to_method[defaults[0]])
