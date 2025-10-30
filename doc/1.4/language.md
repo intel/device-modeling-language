@@ -3395,127 +3395,89 @@ the implementations are provided by hierarchically unrelated templates such that
 `default` can't be used (see [Resolution of
 overrides](#resolution-of-overrides).) In particular, this typically allows for
 ergonomically resolving conflicts introduced when multiple orthogonal templates
-are instantiated, as long as all conflicting implementations are overridable,
-and one of the following is true:
-* The implementations can be combined together by calling each one of them, as
-  long as that can be done without risking e.g. side-effects being duplicated.
-* The implementations in all but (optionally) one of the involved templates call
-  to a "base" method that would serve the same purpose as `default`, but whose
-  definition may be *overridden* such that the conflicting implementations can
-  be resolved by overriding these base methods and leveraging template-qualified
-  method implementation calls in order to define the chain of how each
-  implementation gets called.
+are instantiated, as long as all conflicting implementations are overridable.
 
-  This requires that the names of the base methods are unique to each template
-  involved, and also some thought as to how the implementations in the chain
-  should be ordered.
-
-  If the implementations in some templates call `default` instead of an
-  overridable base method, consider modifying those templates (if possible) to
-  each use a base method instead &mdash; a template-qualified
-  method implementation call can be used as the default implementation of each
-  base method in order to make it act like `default` in the typical case where
-  no conflicting templates are in play.
-* The implementations can be combined by choosing one particular template's
-  implementation to invoke (typically the one most complex), and then adding
-  code around that implementation call in order to replicate the behaviour of
-  the implementations of the other templates. Ideally, the other templates would
-  provide methods that may be leveraged so that their behaviour may be
-  replicated without the need for excessive boilerplate.
-
-These cases are ordered by difficulty to resolve in ascending order. In
-practice, most conflicts between unrelated templates can be resolved by
-modifying the templates such that the second case may apply.
-
-> [!NOTE]
-> The examples given below apply regardless of whether the method
-> implementations in the original templates are `shared` or not. However, the
-> implementations in the template defined to resolve the conflicts may need to
-> be non-`shared` if some of the implementations involved are not `shared`;
-> see the final paragraph of this subsection.
-
-The following is an example of the first case:
-```
-template alter_write is write {
-    method write(uint64 written) {
-        default(alter_write(written));
-    }
-
-    shared method alter_write(uint64 curr, uint64 written) -> (uint64);
-}
-
-template gated_write is alter_write {
-    method write_allowed() -> (bool) default {
-        return true;
-    }
-
-    method alter_write(uint64 curr, uint64 written) -> (uint64) default {
-        return write_allowed() ? written : curr;
-    }
-}
-
-template write_1_clears is alter_write {
-    method alter_write(uint64 curr, uint64 written) -> (uint64) default {
-        return curr & ~written;
-    }
-}
-
-template gated_write_1_clears is (gated_write, write_1_clears) {
-    method alter_write(uint64 curr, uint64 written) default {
-        local uint64 new = this.templates.write_1_clears.alter_write(
-            curr, written);
-        return this.templates.gated_write.alter_write(curr, new);
-    }
-}
-
-// Resolve the conflict introduced whenever the two orthogonal templates are
-// instantiated by also instantiating gated_write_1_clears when that happens
-in each (gated_write, write_1_clears) { is gated_write_1_clears; }
-```
-
-The following is an example of the second case:
+The following example demonstrates the most common kind of conflict that
+hierarchically unrelated templates may introduce, and how template-qualified
+method implementation calls may be leveraged to resolve it. Consider the
+following templates:
 ```
 template gated_write is write {
-    method write_allowed() -> (bool) default {
+    method write_allowed(uint64 val) -> (bool) default {
         return true;
     }
 
     method write(uint64 val) default {
-        if (write_allowed()) {
-            base_write_of_gated_write(val); // instead of calling default()
+        if (write_allowed(val)) {
+            default(val);
         }
-    }
-
-    method base_write_of_gated_write(uint64 val) default {
-        // If no conflicting template is in play such as to override this
-        // base method, then its behavior is as though the write implementation
-        // called default() instead
-        this.templates.write.write(val);
     }
 }
 
-template write_1_clears is (write, get) {
+template write_1_clears is write {
     method write(uint64 val) default {
         default(get() & ~val);
     }
 }
+```
+
+If one would like to instantiate both templates for a particular `field`,
+attempting to do so would cause DMLC to reject the model, as the choice of
+`write` implementation then becomes ambiguous.
+The typical solution to implementation conflicts between templates &mdash;
+making one template inherit from the other &mdash; is not appropriate in this
+situation, as the operation of each template is orthogonal to the other,
+and they may be used individually in other contexts.
+
+Instead, what one may do is to modify one or both templates to offer an
+overridable "base" method that is called instead of `default` within the
+template's implementation of `write`. This additional flexibility enables a way
+to situationally resolve the conflict: if both templates are in play, override
+the base method of one template to call the `write` implementation of the
+other. This effectively defines the chain in which the conflicting
+implementations are to be called from one another, combining their behaviour.
+
+The default implementations of the base methods can be to invoke the `write`
+implementation of their parent template, which makes calling them the same as
+calling `default`. This captures the regular case where no conflicting templates
+are in play.
+
+The below shows this approach being applied to the example above, modifying
+`gated_write` to offer a base method, and leveraging a new template and an
+`in each` declaration to automatically resolve the conflict wherever it would
+occur in the model.
+```
+template gated_write is write {
+    method write_allowed(uint64 val) -> (bool) default {
+        return true;
+    }
+
+    method write(uint64 val) default {
+        if (write_allowed(val)) {
+            base_write_of_gated_write(val); // instead of default()
+        }
+    }
+
+    method base_write_of_gated_write(uint64 val) default {
+        // This is the implementation that default() would have resolved to
+        this.templates.write.write(val);
+    }
+}
+
+template write_1_clears is (write, get) { // unchanged
+    ...
+}
 
 template gated_write_1_clears is (gated_write, write_1_clears) {
+    // Resolve the conflict by providing an unambiguously most specific
+    // write implementation
     method write(uint64 val) default {
         // This makes gated_write the first link in the call chain...
         this.templates.gated_write.write(val);
     }
 
-    // And by overriding gated_write's base method, we make write_1_clears
+    // ... and by overriding gated_write's base method, we make write_1_clears
     // the second (and final) link in the chain
-    //
-    // If even more conflicting templates could be in play, then one could
-    // consider converting write_1_clears to also leverage a base method
-    // instead of calling default and extend the call chain; on the other
-    // hand, the way write_1_clears manipulates the written value may violate
-    // the expectations of implementations later on in the chain, so it might
-    // make most sense to always place write_1_clears as the final link, and
-    // have all other templates leverage base methods instead.
     method base_write_of_gated_write(uint64 val) default {
         this.templates.write_1_clears.write(val);
     }
@@ -3523,67 +3485,41 @@ template gated_write_1_clears is (gated_write, write_1_clears) {
 
 in each (gated_write, write_1_clears) { is gated_write_1_clears; }
 ```
+> [!NOTE]
+> The example given above applies regardless of whether the method
+> implementations in the original templates are `shared` or not. However, the
+> implementations in the template defined to resolve the conflicts might need to
+> be non-`shared` if some of the implementations involved are not `shared`;
+> see the final paragraph of this subsection.
 
-The following is an example of the third case:
-```
-template very_complex_register is register {
-    method write_register(uint64 written, uint64 enabled_bytes,
-                          void *aux) default {
-        ... // An extremely complicated implementation
-    }
-}
+This approach can be applied to resolve conflicts across more than two
+conflicting templates; however, this scales poorly if used to support arbitrary
+combinations of many conflicting templates. It should instead be applied only
+for the specific conflicts that become observed and can't easily be resolved
+through other means.
 
-template gated_register is register {
-    method write_allowed() -> (bool) default {
-        return true;
-    }
+Note that the order of implementations in the call chain might matter. If, in
+the example above, `write_1_clears` were instead modified to offer a base method
+and been made the first link in the chain, then what it would have passed down
+as the written value to `gated_write` would not have been the original value
+&mdash; but rather, the register's current value with bits cleared, which might
+violate the expectations of `gated_write`'s implementation.
 
-    method on_write_attempted_when_not_allowed() default {
-        log spec_viol: "%s was written to when not allowed", qname;
-    }
-
-    method write_register(uint64 written, uint64 enabled_bytes,
-                          void *aux) default {
-        if (write_allowed()) {
-            default(written, enabled_bytes, aux);
-        } else {
-            on_write_attempted_when_not_allowed();
-        }
-    }
-}
-
-template very_complex_gated_register is (very_complex_register,
-                                         gated_register) {
-    // No sensible way to combine the two implementations by calling both.
-    // Even if there were, calling both implementations would cause each field
-    // of the register to be written to multiple times, potentially duplicating
-    // side-effects, which is undesirable.
-    // Instead, very_complex_register is chosen as the base implementation
-    // called, and the behaviour of gated_register is replicated around that
-    // call.
-    method write_register(uint64 written, uint64 enabled_bytes,
-                          void *aux) default {
-        if (write_allowed()) {
-            this.templates.very_complex_register.write_register(
-                written, enabled_bytes, aux);
-        } else {
-            on_write_attempted_when_not_allowed();
-        }
-    }
-}
-
-in each (gated_register, very_complex_register) {
-    is very_complex_gated_register;
-}
-```
+The approach given above is not the only way in which template-qualified method
+implementation calls may be utilized to resolve conflicts, only the most
+commonly applicable one. In fact, the most simple approach, if viable, is to
+have the implementation introduced to resolve the conflict simply call each
+conflicting implementation in turn, if that doesn't cause side-effects to be
+duplicated in an undesirable way. It may even be viable to call only one
+particular implementation, if it makes sense to prefer it ahead of every other.
 
 A template-qualified method implementation call is resolved by using
 the method implementation provided to the object by the named template.
-If no such implementation is provided (whether it be because the template does
-not specify one, or specifies one which is not provided to the object due to its
+If no such implementation exists (whether it be because the template does not
+specify one, or specifies one which is not provided to the object due to its
 definition being eliminated by an [`#if`](#conditional-objects)), then the
 ancestor templates of the named template are recursively searched for the
-highest-rank (most specific) implementation provided by them. If the ancestor
+highest-ranking (most specific) implementation provided by them. If the ancestor
 templates provide multiple hierarchically unrelated implementations, then the
 choice is ambiguous and the call will be rejected by the compiler. In this case,
 the modeller must refine the template-qualified method implementation call to
@@ -3592,7 +3528,7 @@ name the ancestor template whose implementation they would like to use.
 A template-qualified method implementation call done via [a value of template
 type](#templates-as-types) functions differently compared to compile-time
 object references. In particular, `this.templates` within the bodies of `shared`
-methods functions differently. The specified template must be an ancestor
+methods functions differently. The specified template must either be an ancestor
 template of the value's template type, the <tt>object</tt> template, or the
 template type itself; furthermore, the specified template **must provide or
 inherit a `shared` implementation of the named method**. It is not sufficient
