@@ -359,3 +359,4 @@
 - `note 6` Improved the log messages that are output by default for partial register accesses (fixes [#356](https://github.com/intel/device-modeling-language/issues/356)).
 - `release 6 6385`
 - `release 7 7080`
+- `note 6` Fixed a bug where very particular hierarchies of `shared` and non-`shared` method overrides together would lead to an internal compiler error (fixes SIMICS-23289).
