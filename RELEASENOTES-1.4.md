@@ -362,3 +362,4 @@
 - `note 6` Fixed a bug where very particular hierarchies of `shared` and non-`shared` method overrides together would lead to an internal compiler error (fixes SIMICS-23289).
 - `release 7 7122`
 - `release 6 6437`
+- `release 7 7123`
