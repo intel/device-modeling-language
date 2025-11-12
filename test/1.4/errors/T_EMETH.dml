@@ -23,9 +23,27 @@ template t {
     }
     /// ERROR EMETH
     independent method indep_ret() -> (int) default { return 0; }
+
+    /// ERROR EMETH
+    method with_abstract_decls();
+
+    method with_abstract_decls(int i) default {}
+
+    shared method sm() {}
 }
 
 is t;
+
+/// ERROR EMETH
+method sm(int i);
+
+// no error
+method sm();
+
+/// ERROR EMETH
+method with_abstract_decls(bool b);
+
+method with_abstract_decls(int i) {}
 
 template u is t {}
 
@@ -62,6 +80,11 @@ group g4 is t {
 }
 
 group g5 is t {
+    /// ERROR EMETH
+    method with_abstract_decls(bool b);
+
+    method with_abstract_decls(int i) {}
+
     /// ERROR EMETH
     independent startup method indep() {
     }
