@@ -3576,9 +3576,16 @@ order for a method override to have effect.
 in most cases, it is easier to express read operations using the
 `read` template.
 
-Note that instantiating `read_field` on a register means that
-register reads behave as if the register consists of one single field; a
-read access will ignore any actual field subobjects in the register.
+Note that instantiating `read_field` on a register incurs a `read_register`
+implementation such that reads behave as if the register consists of one single
+field; a read access will ignore any actual field subobjects in the register.
+
+This `read_register` implementation is provided by the automatically
+instantiated `read_register_from_read_field` template, which you may need
+to reference in order to override the implementation &mdash; for example in
+order to resolve implementation conflicts (through the use of
+[Template-Qualified Method Implementation
+Calls](language.html#template-qualified-method-implementation-calls).
 */
 template read_field {
     shared method read_field(uint64 enabled_bits, void *aux) -> (uint64);
@@ -3601,36 +3608,46 @@ override to have effect.  `write_field` is the interface used for
 access by registers; in most cases, it is easier to express write
 operations using the `write` template.
 
-Note that instantiating `write_field` on a register means that
-register writes behave as if the register consists of one single
-field; a write access will ignore any actual field subobjects in the
-register.  This is often useful in read-only registers, as it allows
-reads to propagate to fields, while a violating write can be handled
-centrally for the whole register.
+Note that instantiating `write_field` on a register incurs a `write_register`
+implementation such that register writes behave as if the register consists
+of one single field; a write access will ignore any actual field subobjects in
+the register. This is often useful in read-only registers, as it allows reads
+to propagate to fields, while a violating write can be handled centrally for
+the whole register.
+
+This `write_register` implementation is provided through the automatically
+instantiated `write_register_from_write_field` template, which you may
+need to reference in order to override the implementation &mdash; for example
+in order to resolve implementation conflicts (through the use of
+[Template-Qualified Method Implementation
+Calls](language.html#template-qualified-method-implementation-calls).
 */
 template write_field {
     shared method write_field(uint64 val, uint64 enabled_bits, void *aux);
 }
 
-template _reg_read_as_field is (register, read_register, read_field) {
+
+template read_register_from_read_field is (register, read_field) {
     shared method read_register(uint64 enabled_bytes, void *aux)
-        -> (uint64) {
+        -> (uint64) default {
         return enabled_bytes == 0 ? 0
             : this.read_field(enabled_bytes, aux) & enabled_bytes;
     }
 }
 
-in each (read_field, register) { is _reg_read_as_field; }
+in each (read_field, register) { is read_register_from_read_field; }
 
-template _reg_write_as_field is (register, write_register, write_field) {
-    shared method write_register(uint64 val, uint64 enabled_bytes, void *aux) {
+template write_register_from_write_field is (register, write_field) {
+    shared method write_register(uint64 val, uint64 enabled_bytes, void *aux)
+        default {
         if (enabled_bytes != 0) {
             this.write_field(val & enabled_bytes, enabled_bytes, aux);
         }
     }
 }
 
-in each (write_field, register) { is _reg_write_as_field; }
+in each (write_field, register) { is write_register_from_write_field; }
+
 
 template _bitsize {
     // Must be a multiple of 8 for registers, but not for fields.
@@ -3653,12 +3670,14 @@ The `read` template is *not* implemented by fields or registers by
 default, and must be explicitly instantiated in order for a method
 override to have effect.
 
-Note that instantiating `read` on a register means that register reads
-behave as if the register consists of one single field; a read access
-will ignore any actual field subobjects in the register.
+Note that instantiating `read` on a register incurs a `read_register`
+implementation such that register reads behave as if the register consists of
+one single field; a read access will ignore any actual field subobjects in the
+register. For more information, see [`read_field`](#read_field).
 */
 template read is (read_field, _get) {
-    shared method read_field(uint64 enabled_bits, void *aux) -> (uint64) {
+    shared method read_field(uint64 enabled_bits, void *aux) -> (uint64)
+        default {
         return enabled_bits == 0 ? 0 : this.read() & enabled_bits;
     }
     // convenience method for simple whole-field access
@@ -3684,12 +3703,14 @@ The `write` template is *not* implemented by fields or registers by
 default, and must be explicitly instantiated in order for a method
 override to have effect.
 
-Note that instantiating `write` on a register means that register
-writes behave as if the register consists of one single field; a write
-access will ignore any actual field subobjects in the register.
+Note that instantiating `write` on a register incurs a `write_register`
+implementation such that register writes behave as if the register consists of
+one single field; a write access will ignore any actual field subobjects in
+the register. For more information, see [`write_field`](#write_field).
 */
 template write is (write_field, _get, _set) {
-    shared method write_field(uint64 val, uint64 enabled_bits, void *aux) {
+    shared method write_field(uint64 val, uint64 enabled_bits, void *aux)
+        default {
         if (enabled_bits != 0) {
             local uint64 patched = this.get() & ~enabled_bits;
             this.write(patched | (val & enabled_bits));
