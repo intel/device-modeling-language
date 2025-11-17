@@ -1,0 +1,40 @@
+/*
+  © 2025 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+/// ERROR EMULTIOBJDECL
+provisional explicit_object_extensions;
+
+device test;
+
+/// ERROR EEXTENSION
+in group ext;
+
+/// ERROR EMULTIOBJDECL
+group decl;
+/// ERROR EMULTIOBJDECL
+group decl;
+
+template t {
+    /// ERROR EMULTIOBJDECL
+    group child_1;
+    // no error
+    group child_2;
+}
+
+group g is t {
+    /// ERROR EMULTIOBJDECL
+    group child_1;
+    // no error
+    in group child_2;
+}
+
+in each t {
+    /// ERROR EMULTIOBJDECL
+    group child_1;
+    // no error
+    in group child_2;
+}
