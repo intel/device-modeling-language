@@ -2788,18 +2788,6 @@ _in_range(physical_address_t instr_offset,
         return false;
 }
 
-struct bank_access {
-        conf_object_t *bank;
-        bool *inquiry;
-        physical_address_t *offset;
-        physical_address_t size;
-
-        uint64 *value;
-        bool *success;
-        bool *suppress;
-        conf_object_t *initiator;
-};
-
 static void
 _inquire(bank_access_t *handle)
 {
