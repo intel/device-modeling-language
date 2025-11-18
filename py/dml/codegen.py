@@ -1487,17 +1487,20 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
                 raise ELAYOUT(site, "extern layout not permitted,"
                               + " use 'struct { }' instead")
             endian, fields = info
-            members = {}
-            for (_, msite, name, type_ast) in fields:
+            member_decls = []
+            for (_, msite, ident, type_ast) in fields:
                 (member_struct_defs, member_type) = eval_type(
                     type_ast, msite, location, scope, False)
                 if isinstance(member_type, TFunction):
                     raise EFUNSTRUCT(msite)
-                members[name] = (msite, member_type)
+                member_decls.append((
+                    msite,
+                    ident.args[0] if ident.kind == 'variable' else None,
+                    member_type))
                 struct_defs.extend(member_struct_defs)
-            if not members:
+            if not member_decls:
                 raise EEMPTYSTRUCT(site)
-            etype = TLayout(endian, members, label=typename)
+            etype = TLayout(endian, member_decls, label=typename)
             struct_defs.append((site, etype))
         elif tag == 'bitfields':
             width, fields = info
@@ -1737,9 +1740,9 @@ def check_designated_initializers(site, etype, init_asts, allow_partial):
     shallow_real_etype = safe_realtype_shallow(etype)
     duplicates = set()
     bad_fields = set()
-    remaining = set(shallow_real_etype.members)
+    remaining = set(shallow_real_etype.named_members)
     for (field, init) in init_asts:
-        if field not in shallow_real_etype.members:
+        if field not in shallow_real_etype.named_members:
             bad_fields.add(field)
         elif field not in remaining:
             duplicates.add(field)
@@ -1900,14 +1903,14 @@ def eval_initializer(site, etype, astinit, location, scope, static):
             init = tuple(do_eval(etype.base, e) for e in init_asts)
             return CompoundInitializer(site, init)
         elif isinstance(etype, TStruct):
-            if len(etype.members) != len(init_asts):
+            members = list(etype.members_qualified)
+            if len(members) != len(init_asts):
                 raise EDATAINIT(site, 'mismatched number of fields')
             init = tuple(do_eval(mt, e)
-                         for ((_, mt), e) in zip(etype.members_qualified,
-                                                 init_asts))
+                         for ((mn, mt), e) in zip(members, init_asts))
             return CompoundInitializer(site, init)
         elif isinstance(etype, TExternStruct):
-            if len(etype.members) != len(init_asts):
+            if len(etype.named_members) != len(init_asts):
                 raise EDATAINIT(site, 'mismatched number of fields')
             init = {mn: do_eval(mt, e)
                     for ((mn, mt), e) in zip(etype.members_qualified,

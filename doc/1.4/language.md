@@ -90,6 +90,7 @@ declaration special semantics. Currently, these contexts are:
 see that section for more information.
 * Index parameters for object arrays. See the documentation for the
   [`object` template](dml-builtins.html#object) for more information.
+* As the name of one or more members of a [layout type](#layouts).
 
 </dd><dt>
 
@@ -1537,6 +1538,7 @@ typedef struct { <em>member declarations</em> } <em>name</em>;
 
 Layouts
 </dt><dd>
+<a id="layouts"/>
 
 A layout is similar to a struct in many ways.  The important
 difference is that there is a well-defined mapping between a layout
@@ -1571,6 +1573,24 @@ integer members (and arrays of similar) are translated
 to endian integers (or arrays of such) of similar size,
 with endianness matching the layout. Layout and endian integer
 members are accessed normally.
+
+The *discard identifer* `_` may be used as the name of any number of members
+within a layout, making these *anonymous*. Anonymous layout members cannot be
+referenced within DML code, but will still influence the underlying memory
+representation of the layout in the same way as regular members.
+This is useful to represent reserved or padding bytes, or bytes that the device
+otherwise doesn't study or manipulate.
+
+Note that when a compound initializer is given for a variable of layout type,
+an initializer must still be given for each anonymous member:
+```
+local layout "little-endian" { uint32 x; uint32 _; uint32 y} = {1,0,2};
+```
+... unless designated initializers are used, in which case anonymous members
+can (and must) be omitted:
+```
+local layout "little-endian" { uint32 x; uint32 _; uint32 y} = {.x = 1, .y = 2};
+```
 </dd><dt>
 
 Bitfields
@@ -3231,27 +3251,27 @@ local (bool a, int i) = m();
 In the absence of explicit initializer expressions, a default
 "all zero" initializer will be applied to each declared object.
 
-"\_" may be used as an identifier for local variables, as well as other
-method-local bindings such as the method parameters, the bound identifier
-in `foreach`/`#foreach`/`#select` statements, and message component parameters
-of [hook-bound after statements](#hook-bound-after-statements). Any method-local
-binding named "\_" *will not be added to scope.* This is useful for when
-a method parameter is unused, or if you perform a method call where only a
-subset of returned values are of interest:
+The *discard identifier* `_` may be used as an identifier for local variables,
+as well as other method-local bindings such as the method parameters, the bound
+identifier in `foreach`/`#foreach`/`#select` statements, and message component
+parameters of [hook-bound after statements](#hook-bound-after-statements).
+Any method-local binding named "`_`" *will not be added to scope*. This is
+useful for when a method parameter is unused, or if you perform a method call
+where only a subset of returned values are of interest:
 ```
 local (bool a, int _) = m();
 // No conflicts since "_" is not added to scope
 local (bool a, int _, float _) = returns_three_vals();
 ```
 
-An alternative to this pattern is to leverage the
-[discard reference](#discard-reference)
+An alternative to this pattern is to leverage the [discard
+reference](#discard-reference):
 ```
 local bool a;
 (a, _, _) = returns_three_vals();
 ```
 ... which does not require you to specify the types of the discarded values,
-may require multiple lines.
+but may result in more lines of code.
 
 ### Session Statements
 <pre>

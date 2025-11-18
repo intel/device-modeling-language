@@ -26,7 +26,7 @@ class TestClone(unittest.TestCase):
                     TVector(typ0),
                     TTrait(object()),
                     TStruct({"name": TInt(32, False)}),
-                    TLayout("big-endian", {}),
+                    TLayout("big-endian", []),
                     TDevice("a")):
             typ_clone = typ.clone()
             self.assertTrue(

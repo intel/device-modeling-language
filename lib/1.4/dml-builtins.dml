@@ -512,18 +512,18 @@ which cannot be overridden:
   `register regs[i < 4][j < 11];` defines two index parameters, `i` and `j`.
   In this case, the `indices` parameter is `[i, j]`.
 
-  "\_" is also allowed as the name of one or more index parameters. If
-  used, then it *won't* result in corresponding parameter definitions for those
-  indices; in other words, if an index variable is named "\_", then it can't be
-  accessed by that name (however, the `indices` parameter is unaffected and
-  could be used instead.) It's also allowed to have an object array
-  specification name an index parameter "\_" even if some other object array
-  specification uses a different name (which *will* be given a corresponding
-  parameter definition.) This is useful if a specific object array
-  specification doesn't need to make use of some particular indices; or if the
-  specification needs to support that the naming of the index variable may vary
-  depending on what other specifications of the same object array are present
-  in the device model.
+  The discard identifier `_` is also allowed as the name of one or more index
+  parameters. If used, then it *won't* result in corresponding parameter
+  definitions for those indices; in other words, if an index variable is named
+  "`_`", then it can't be accessed by that name (however, the `indices`
+  parameter is unaffected and could be used instead.) It's also allowed to have
+  an object array specification name an index parameter "`_`" even if some
+  other object array specification uses a different name (which *will* be given
+  a corresponding parameter definition.) This is useful if a specific object
+  array specification doesn't need to make use of some particular indices; or
+  if the specification needs to support that the naming of the index variable
+  may vary depending on what other specifications of the same object array are
+  present in the device model.
 
 The `object` template provides the non-overridable method `cancel_after()`,
 which cancels all pending events posted using `after` which are associated with
