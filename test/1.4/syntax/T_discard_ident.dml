@@ -1,0 +1,80 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+device test;
+
+typedef struct {
+    int x;
+} new_int_t;
+
+session int count;
+method inc() -> (new_int_t) {
+    return {++count};
+}
+
+method m1(int _) -> (int) {
+    // to verify _ is not added to scope
+    _ = inc();
+    return 1;
+}
+
+template t {
+    shared method m3(int _, bool _) {
+        _ = inc();
+    }
+}
+
+is t;
+
+method m2(int _, bool _) -> (int, bool) {
+    _ = inc();
+    return (1, true);
+}
+
+method callback() {
+    ++count;
+}
+
+hook(int, bool) h;
+
+method init() {
+    assert count == 0;
+    local int _ = m1(2);
+    assert count == 1;
+    local (int _, bool _) = m2(2, true);
+    assert count == 2;
+    m3(2, true);
+    assert count == 3;
+
+    after h -> (_, _): callback();
+    assert count == 3;
+    h.send_now(2, true);
+    assert count == 4;
+
+    #foreach _ in ([1]) {
+        _ = inc();
+    }
+    assert count == 5;
+
+    #select _ in ([1]) where (true) {
+        _ = inc();
+    } #else assert false;
+    assert count == 6;
+
+    foreach _ in (each bank in (dev)) {
+        _ = inc();
+    }
+    assert count == 7;
+    for (local uint32 i = 0; i < g.len; ++i) {
+        for (local uint32 j = 0; i < g[0].len; ++i) {
+            assert g[i][j].indices[0] == i;
+            assert g[i][j].indices[1] == j;
+        }
+    }
+}
+
+bank b;
+
+group g[_ < 2][_ < 3];

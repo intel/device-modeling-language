@@ -1,0 +1,26 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// ERROR ENAMECOLL T_ESYNTAX_underscore.dml
+
+/// ERROR ESYNTAX
+group _ {
+    /// ERROR ESYNTAX
+    session int _ = 4;
+    /// ERROR ESYNTAX
+    saved int _ = 4;
+}
+
+/// ERROR ESYNTAX
+typedef int _;
+
+/// ERROR ESYNTAX
+extern typedef struct {} _;
+
+/// ERROR ESYNTAX
+extern int _;

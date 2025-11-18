@@ -249,8 +249,8 @@ def generate_structfile(device, filename, outprefix):
                     "%s(%s)" % (name,
                                 ", ".join((["conf_object_t *_obj"]
                                            * (not func.independent))
-                                          + [t.declaration(n)
-                                             for (n, t) in (
+                                          + [decl
+                                             for (_, _, decl) in (
                                                 func.cparams
                                                 if func.independent
                                                 else func.cparams[1:])]))))
@@ -718,7 +718,7 @@ def wrap_method(meth, wrapper_name, indices=()):
     is a port object
     """
 
-    inparams = [t.declaration(p) for p, t in meth.inp]
+    inparams = [p.declaration() for p in meth.inp]
     if not meth.outp:
         retvar = None
         rettype = TVoid()
@@ -749,7 +749,7 @@ def wrap_method(meth, wrapper_name, indices=()):
                                                  None, None, None)).toc()
 
         with LogFailure(meth.site, meth, indices):
-            inargs = [mkLit(meth.site, v, t) for v, t in meth.inp]
+            inargs = [mkLit(meth.site, p.c_ident, p.typ) for p in meth.inp]
             outargs = [mkLit(meth.site, v, t) for v, t in meth.outp]
             codegen_call(meth.site, meth,
                          indices,
@@ -804,10 +804,10 @@ def generate_implement_method(device, ifacestruct, meth, indices):
             # currently impossible to implement a varargs interface
             # method in DML
             raise EMETH(meth.site, None, 'interface method is variadic')
-        for ((mp, mt), it) in zip(meth.inp, iface_input_types):
-            if not safe_realtype_unconst(mt).eq(safe_realtype_unconst(it)):
+        for (mp, it) in zip(meth.inp, iface_input_types):
+            if not safe_realtype_unconst(mp.typ).eq(safe_realtype_unconst(it)):
                 raise EARGT(meth.site, 'implement', meth.name,
-                            mt, mp, it, 'method')
+                            mp.typ, mp.logref, it, 'method')
         if iface_num_outputs and dml.globals.dml_version != (1, 2):
             [(_, mt)] = meth.outp
             if not safe_realtype_unconst(mt).eq(
@@ -1355,7 +1355,7 @@ def generate_events(device):
 def generate_reg_callback(meth, name):
     dev_t = crep.structtype(dml.globals.device)
     out('static bool\n')
-    params = [t.declaration(p) for p, t in meth.inp] + [
+    params = [p.declaration() for p in meth.inp] + [
         TPtr(t).declaration(p) for p, t in meth.outp]
     out('%s(void *_obj, const uint16 *indices, ' % (name,)
         + ', '.join(params) + ')\n')
@@ -1363,7 +1363,7 @@ def generate_reg_callback(meth, name):
     out('%s *_dev = _obj;\n' % dev_t)
     fail = ReturnFailure(meth.site)
     with fail, crep.DeviceInstanceContext():
-        inargs = [mkLit(meth.site, n, t) for n, t in meth.inp]
+        inargs = [mkLit(meth.site, p.c_ident, p.typ) for p in meth.inp]
         outargs = [mkLit(meth.site, "*" + n, t) for n, t in meth.outp]
         code = [codegen_call(
                 meth.site, meth,
@@ -2027,48 +2027,50 @@ def generate_init(device, initcode, outprefix):
 def generate_static_trampoline(func):
     # static trampolines never need to be generated for independent methods
     assert not func.independent
-    params = [("_obj", TPtr(TNamed("conf_object_t")))] + func.cparams[1:]
-    params_string = ('void' if not params
-                     else ", ".join(t.declaration(n) for (n, t) in params))
+
+    params_string = ''.join(", " + decl for (_, _, decl) in func.cparams[1:])
     start_function_definition(func.rettype.declaration(
-        "%s(%s)" % ("_trampoline" + func.get_cname(), params_string)))
+        "%s(conf_object_t *_obj%s)" % ("_trampoline" + func.get_cname(),
+                                       params_string)))
     out("{\n", postindent=1)
     out('ASSERT(_obj);\n')
     out('ASSERT(SIM_object_class(_obj) == _dev_class);\n')
-    (name, typ) = func.cparams[0]
-    out("%s = (%s)_obj;\n" % (typ.declaration(name), typ.declaration("")))
+    (name, typ, decl) = func.cparams[0]
+    out("%s = (%s)_obj;\n" % (decl, typ.declaration("")))
     out("%s%s(%s);\n" % ("" if func.rettype.void
                          else func.rettype.declaration("result") + " = ",
                          func.get_cname(),
-                         ", ".join(n for (n, t) in func.cparams)))
+                         ", ".join(n for (n, _, _) in func.cparams)))
     output_dml_state_change(name)
     if not func.rettype.void:
         out("return result;\n")
     out("}\n", preindent=-1)
 
 def generate_extern_trampoline(exported_name, func):
-    params = (func.cparams if func.independent else
-              [("_obj", TPtr(TNamed("conf_object_t")))] + func.cparams[1:])
-    params_string = ('void' if not params
-                     else ", ".join(t.declaration(n) for (n, t) in params))
+    cparams = list(func.cparams)
+    if not func.independent:
+        cparams[0] = (
+            '_obj', TPtr(TNamed("conf_object_t")),
+            TPtr(TNamed("conf_object_t")).declaration('_obj'))
+    params_string = ('void' if not cparams else ", ".join(
+                     decl for (_, _, decl) in cparams))
     out("extern %s\n" % (func.rettype.declaration(
                          "%s(%s)" % (exported_name, params_string))))
     out("{\n", postindent=1)
     out("%s%s(%s);\n" % ("return " * (not func.rettype.void),
                          "_trampoline" * (not func.independent)
                          + func.get_cname(),
-                         ", ".join(n for (n, t) in params)))
+                         ", ".join(n for (n, _, _) in cparams)))
     out("}\n", preindent=-1)
 
 def generate_extern_trampoline_dml12(exported_name, func):
     out("static UNUSED %s\n" % (func.rettype.declaration(
-        "%s(%s)" % (exported_name,
-                    ", ".join(t.declaration(n)
-                              for (n, t) in func.cparams)))))
+        "%s(%s)" % (exported_name,", ".join(
+            decl for (_, _, decl) in func.cparams)))))
     out("{\n", postindent=1)
     out("%s%s(%s);\n" % ("" if func.rettype.void else "return ",
                          func.get_cname(),
-                         ", ".join(n for (n, t) in func.cparams)))
+                         ", ".join(n for (n, _, _) in func.cparams)))
     out("}\n", preindent=-1)
 
 def generate_each_in_table(trait, instances):
@@ -2202,7 +2204,7 @@ def generate_adjustor_thunk(traitname, name, inp, outp, throws, independent,
     assert vtable_trait is def_path[-1]
     implicit_inargs = vtable_trait.implicit_args()
     preargs = crep.maybe_dev_arg(independent) + implicit_inargs
-    inargs = c_inargs(inp, outp, throws)
+    inargs = [(p.c_ident, p.typ) for p in inp] + c_extra_inargs(outp, throws)
     out('(%s)\n{\n' % (", ".join(t.declaration(n) for (n, t) in (preargs
                                                                  + inargs))),
         postindent=1)
@@ -2745,11 +2747,12 @@ def resolve_trait_param_values(node):
 
 def generate_trait_trampoline(method, vtable_trait):
     implicit_inargs = vtable_trait.implicit_args()
-    explicit_inargs = c_inargs(list(method.inp), method.outp, method.throws)
-    inparams = ", ".join(
-        t.declaration(n)
-        for (n, t) in (crep.maybe_dev_arg(method.independent) + implicit_inargs
-                       + explicit_inargs))
+    extra_inargs = c_extra_inargs(method.outp, method.throws)
+    inparams = ", ".join([t.declaration(n)
+                          for (n, t) in (crep.maybe_dev_arg(method.independent)
+                                         + implicit_inargs)]
+                         + [p.declaration() for p in method.inp]
+                         + [t.declaration(n) for (n, t) in extra_inargs])
     rettype = c_rettype(method.outp, method.throws)
 
     # guaranteed to exist; created by ObjTraits.mark_referenced
@@ -2770,7 +2773,8 @@ def generate_trait_trampoline(method, vtable_trait):
                 reduce(operator.mul, obj.dimsizes[dim + 1:], 1),
                 obj.dimsizes[dim]), TInt(32, False))
             for dim in range(obj.dimensions)]
-        args = [mkLit(site, n, t) for (n, t) in explicit_inargs]
+        args = ([mkLit(site, p.c_ident, p.typ) for p in method.inp]
+                + [mkLit(site, n, t) for (n, t) in extra_inargs])
         call_expr = mkcall_method(site, func, indices)(args)
     if not rettype.void:
         out('return ')
@@ -3374,9 +3378,10 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
         generated_funcs.add(func)
         code = codegen_method_func(func)
 
-        specializations = [(n, 'undefined' if undefined(v) else v.value)
-                           for (n, v) in func.inp
-                           if isinstance(v, Expression)]
+        specializations = [(p.ident,
+                            'undefined' if undefined(p.expr) else p.expr.value)
+                           for p in func.inp
+                           if p.ident is not None and p.expr is not None]
 
         if gather_size_statistics:
             ctx = StrOutput(lineno=output.current().lineno,

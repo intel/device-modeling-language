@@ -58,7 +58,7 @@ method test -> (bool ok) {
         && ((fn()!=0 && false) || true)
         && fn() == 5;
     // ... but dead subexpressions are eliminated early
-    false && undefined;
-    true || undefined;
-    true ? true : undefined;
+    ok = ok && !(false && undefined);
+    ok = ok && (true || undefined);
+    ok = ok && (true ? true : undefined);
 }

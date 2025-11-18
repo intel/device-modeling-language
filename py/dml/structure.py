@@ -727,7 +727,7 @@ def typecheck_method_override(m1, m2, location):
         raise EMETH(m1.site, m2.site, "different number of input parameters")
     if len(outp1) != len(outp2):
         raise EMETH(m1.site, m2.site, "different number of output parameters")
-    for (a1, a2) in zip(inp1, inp2):
+    for (idx, (a1, a2)) in enumerate(zip(inp1, inp2)):
         ((n1, t1), (n2, t2)) = (a1.args, a2.args)
         if (t1 is None) != (t2 is None):
             if dml.globals.dml_version == (1, 2):
@@ -741,7 +741,10 @@ def typecheck_method_override(m1, m2, location):
                         # parameter
                         pass
                     else:
-                        report(PINARGTYPE(a1.site, type2.declaration(n1)))
+                        # Not that we really EXPECT the discard identifier here
+                        ident = n1.args[0] if n1.kind == 'variable' else '_'
+
+                        report(PINARGTYPE(a1.site, type2.declaration(ident)))
             else:
                 raise EMETH(m1.site, m2.site, "different inline args")
         if (t1 and t2
@@ -757,8 +760,10 @@ def typecheck_method_override(m1, m2, location):
                   if compat.lenient_typechecking in dml.globals.enabled_compat
                   else type1.eq(type2))
             if not ok:
+                ref = f"'{n1.args[0]}'" if n1.kind == 'variable' else (idx + 1)
+
                 raise EMETH(a1.site, a2.site,
-                            f"mismatching types in input argument {n1}")
+                            f"mismatching types in input argument {ref}")
 
     for (i, (a1, a2)) in enumerate(zip(outp1, outp2)):
         if a1.site.dml_version() != (1, 2) and a2.site.dml_version() != (1, 2):
@@ -849,7 +854,10 @@ def merge_subobj_defs(def1, def2, parent):
         parent_scope = Location(parent, static_indices(parent))
 
         for ((idxvar1, len1), (idxvar2, len2)) in zip(arrayinfo, arrayinfo2):
-            if idxvar1 != idxvar2:
+            if idxvar1.kind == 'discard':
+                idxvar1 = idxvar2
+            elif (idxvar2.kind != 'discard'
+                  and idxvar1.args[0] != idxvar2.args[0]):
                 raise EAINCOMP(site1, site2, name,
                                "mismatching index variables")
 
@@ -1012,10 +1020,10 @@ def mkobj(ident, objtype, arrayinfo, obj_specs, parent, each_stmts):
     # rank, so that's a relevant site to pick.
     site = obj_specs[0].site
 
-    (index_vars, arraylen_asts) = list(zip(*arrayinfo)) or ((), ())
+    (index_var_asts, arraylen_asts) = list(zip(*arrayinfo)) or ((), ())
 
     obj = create_object(site, ident, objtype, parent,
-                        arraylen_asts, index_vars)
+                        arraylen_asts, index_var_asts)
     num_elems = functools.reduce(operator.mul, obj.dimsizes, 1)
     if num_elems >= 1 << 31:
         raise EASZLARGE(site, num_elems)
@@ -1023,15 +1031,16 @@ def mkobj(ident, objtype, arrayinfo, obj_specs, parent, each_stmts):
     with ErrorContext(obj):
         (obj_specs, used_templates) = add_templates(obj_specs, each_stmts)
         obj.templates = used_templates
-        index_sites = [ast.site for ast in arraylen_asts]
-        obj_params = create_parameters(obj, obj_specs, index_vars, index_sites)
+        obj_params = create_parameters(obj, obj_specs, index_var_asts)
         return mkobj2(obj, obj_specs, obj_params, each_stmts)
 
 def create_object(site, ident, objtype, parent,
-                  arraylen_asts, index_vars):
+                  arraylen_asts, index_var_asts):
     array_lens = tuple(
         eval_arraylen(len_ast, Location(parent, static_indices(parent)))
         for len_ast in arraylen_asts)
+    index_vars = tuple(var.args[0] if var.kind == 'variable' else None
+                       for var in index_var_asts)
 
     if objtype == 'device':
         assert not arraylen_asts
@@ -1068,7 +1077,7 @@ def create_object(site, ident, objtype, parent,
 
     raise ICE(site, "unknown object type %s" % (objtype,))
 
-def make_autoparams(obj, index_vars, index_var_sites):
+def make_autoparams(obj, index_var_asts):
     site = obj.site
 
     autoparams = {}
@@ -1083,14 +1092,16 @@ def make_autoparams(obj, index_vars, index_var_sites):
 
     index_params = ()
     # Handle array information
-    for (dim, (index_var, var_site)) in enumerate(
-            zip(index_vars, index_var_sites)):
-        idx_param = IndexParamExpr(var_site, obj.parent.dimensions + dim,
-                                   index_var)
-        index_params += (idx_param,)
-        # This will refer to the index coupled with the idxvar,
-        # innermost overrides
-        autoparams[index_var] = idx_param
+    for (dim, index_var) in enumerate(index_var_asts):
+        index_param = IndexParamExpr(index_var.site,
+                                     obj.parent.dimensions + dim,
+                                     index_var.args[0]
+                                     if index_var.kind == 'variable' else None)
+        index_params += (index_param,)
+        if index_var.kind == 'variable':
+            # This will refer to the index coupled with the idxvar,
+            # innermost overrides
+            autoparams[index_var.args[0]] = index_param
 
     # Assign auto parameters related to array info
     # In 1.4; The 'indices' auto-param is a list containing local indices
@@ -1100,16 +1111,19 @@ def make_autoparams(obj, index_vars, index_var_sites):
     #         The 'indexvar' auto-param is the name of index variable that the
     #         local index is stored in if in a simple array, undefined otherwise
     if dml.globals.dml_version == (1, 2):
-        if len(index_vars) == 1:
-            [index_var] = index_vars
+        if len(index_var_asts) == 1:
+            ([index_var_ast], [index_param]) = (index_var_asts, index_params)
+            # TODO or maybe 'i'?
+            index_var = (index_var_ast.args[0]
+                         if index_var_ast.kind == 'variable' else '')
             # TODO: Add this documentation to dml.docu
             # If in a multi-dimensional array, this will be set to undefined
             # So in 1.2 you can verify if you are in a multi-dimensional
             # array by checking if this is defined
             autoparams['indexvar'] = SimpleParamExpr(
                 mkStringConstant(site, index_var))
-            autoparams['index'] = autoparams[index_var]
-        elif index_vars:
+            autoparams['index'] = index_param
+        elif index_var_asts:
             autoparams['indexvar'] = SimpleParamExpr(mkUndefined(site))
             autoparams['index'] = IndexListParamExpr(site, index_params)
         else:
@@ -1196,14 +1210,17 @@ def make_autoparams(obj, index_vars, index_var_sites):
 
     return autoparams
 
-def implicit_params(obj, index_vars):
+def implicit_params(obj, index_var_asts):
     # Find index_vars collisions here
-    sorted_ivars = sorted(index_vars)
-    for v1, v2 in zip(sorted_ivars, sorted_ivars[1:]):
+    sorted_ivars = sorted(((var.site, var.args[0])
+                           for var in index_var_asts
+                           if var.kind == 'variable'),
+                          key=lambda t: t[1])
+    for (s1, v1), (s2, v2) in zip(sorted_ivars, sorted_ivars[1:]):
         if v1 == v2:
-            report(ENAMECOLL(obj.site, obj.site, v1))
-    params = [ast.param(obj.site, var, ast.auto(obj.site), False, None)
-              for var in index_vars]
+            report(ENAMECOLL(s2, s1, v1))
+    params = [ast.param(var.site, var.args[0], ast.auto(var.site), False, None)
+              for var in index_var_asts if var.kind == 'variable']
 
     if (dml.globals.dml_version == (1, 2)
         and obj.objtype == 'field'
@@ -1215,7 +1232,7 @@ def implicit_params(obj, index_vars):
             ast.param(obj.site, 'lsb', None, False, ast.int(site, 0))])
     return params
 
-def create_parameters(obj, obj_specs, index_vars, index_sites):
+def create_parameters(obj, obj_specs, index_var_asts):
     '''Merge parameter ASTs and convert to Parameter objects'''
 
     # "automatic" parameters are declared 'parameter xyz auto;' in
@@ -1227,14 +1244,14 @@ def create_parameters(obj, obj_specs, index_vars, index_sites):
                                          '<implicit parameter block>'))
     # map parameter name -> list of (Rank, ast.param object)
     parameters = {param.args[0]: [(implicit_rank, param)]
-                  for param in implicit_params(obj, index_vars)}
+                  for param in implicit_params(obj, index_var_asts)}
     for obj_spec in obj_specs:
         for s in obj_spec.params:
             assert s.kind == 'param'
             (name, _, _, _) = s.args
             parameters.setdefault(name, []).append((obj_spec.rank, s))
 
-    autoparams = make_autoparams(obj, index_vars, index_sites)
+    autoparams = make_autoparams(obj, index_var_asts)
     for name in autoparams:
         assert name in parameters, name
     return [mkparam(obj, autoparams,
@@ -1378,6 +1395,9 @@ def report_pbefaft(obj, method_asts):
                         # find name of 'value' arg
                         (_, _, _, value_cdecl) = bef_inp
                         (value_arg, _) = value_cdecl.args
+                        assert value_arg.kind == 'variable'
+                        (value_arg,) = value_arg.args
+
                         method_decl = method_decl.replace('value', value_arg)
                         default_call = default_call.replace('value', value_arg)
                     report(PBEFAFT(bef.site, dmlparse.start_site(bef_body.site),
@@ -1707,7 +1727,9 @@ def mkobj2(obj, obj_specs, params, each_stmts):
     for (_, _, arrayinfo, specs) in subobj_defs.values():
         for (i, (idx, dimsize_ast)) in enumerate(arrayinfo):
             if dimsize_ast is None:
-                report(EAUNKDIMSIZE(specs[0].site, i, idx))
+                idxref = (f" (with index variable '{idx.args[0]}')"
+                          if idx.kind == 'variable' else "")
+                report(EAUNKDIMSIZE(specs[0].site, i, idxref))
                 arrayinfo[i] = (idx, ast.int(specs[0].site, 1))
 
     explicit_traits = Set(t for (_, t) in obj_traits)
@@ -1931,8 +1953,8 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                 (tsite, tinp, toutp, tthrows, tindep, tstartup, tmemod) \
                     = vtable_trait.vtable_methods[member]
                 if not override.fully_typed:
-                    for (n, t) in override.inp:
-                        if not t:
+                    for p in override.inp:
+                        if p.inlined:
                             raise EMETH(
                                 override.site, tsite,
                                 'input argument declared without a type')
@@ -2048,7 +2070,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                         # implicitly added above. Needed when importing 1.4
                         # code from 1.2 with --no-compat=dml12_misc
                         dml.globals.dml_version != (1, 2)
-                        or p.site.dml_version == (1, 2)
+                        or p.site.dml_version() == (1, 2)
                         or p.site != sym.site):
                     report(ENAMECOLL(p.site, sym.site, p.name))
 
@@ -2907,7 +2929,8 @@ def port_builtin_method_overrides(name, site, inp_ast, parent_obj):
         for (old_idx, new_type) in args:
             if isinstance(old_idx, int):
                 old_arg = inp_ast[old_idx]
-                (n, _) = old_arg.args
+                ((kind, _, n), _) = old_arg.args
+                assert kind == 'variable'
             else:
                 n = old_idx
             new_inp.append(new_type + n)
@@ -3090,7 +3113,9 @@ def mkmethod(site, rbrace_site, location, parent_obj, name, inp_ast,
              outp_ast, throws, independent, startup, memoized, body, default,
              default_level, template):
     # check for duplicate parameter names
-    named_args = inp_ast
+    named_args = [ast.cdecl(s, ident.args[0], typ)
+                  for (_, s, ident, typ) in inp_ast
+                  if ident.kind == 'variable']
     if body.site.dml_version() == (1, 2):
         named_args = named_args + outp_ast
     argnames = set()
@@ -3117,7 +3142,7 @@ def mkmethod(site, rbrace_site, location, parent_obj, name, inp_ast,
     inp = eval_method_inp(inp_ast, location, global_scope)
     outp = eval_method_outp(outp_ast, location, global_scope)
 
-    for (n, t) in inp + outp:
+    for t in [p.typ for p in inp] + [t for (_, t) in outp]:
         if t:
             check_named_types(t)
             t = realtype(t)

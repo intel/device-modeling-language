@@ -51,7 +51,7 @@ __all__ = (
     'IgnoreFailure',
 
     'c_rettype',
-    'c_inargs',
+    'c_extra_inargs',
     'method_instance',
     'require_fully_typed',
     'codegen_method_func',
@@ -595,7 +595,7 @@ class AfterDelayIntoMethodInfo(AfterDelayInfo):
     def __init__(self, method, uniq):
         self.method = method
         super().__init__(method, method.dimsizes, uniq)
-        self._args_type = (TStruct(dict(method.inp),
+        self._args_type = (TStruct({p.c_ident: p.typ for p in method.inp},
                                    label=f'_simple_event_{self.uniq}_args')
                            if method.inp else None)
 
@@ -615,8 +615,8 @@ class AfterDelayIntoMethodInfo(AfterDelayInfo):
         site = self.method.site
         indices = tuple(mkLit(site, f'{indices_lit}[{i}]', TInt(32, False))
                         for i in range(self.method.dimensions))
-        args = tuple(mkLit(site, f'{args_lit}->{pname}', ptype)
-                     for (pname, ptype) in self.method.inp)
+        args = tuple(mkLit(site, f'{args_lit}->{p.c_ident}', p.typ)
+                     for p in self.method.inp)
         with LogFailure(site, self.method, indices), \
              crep.DeviceInstanceContext():
             code = codegen_call(site, self.method, indices, args, ())
@@ -671,8 +671,8 @@ class AfterOnHookIntoMethodInfo(AfterOnHookInfo):
         super().__init__(method.dimsizes, method.parent, typeseq_info, method,
                          param_to_msg_comp, method.inp, bool(self.method.inp))
         self._args_type = (
-            TStruct({name: typ
-                    for (i, (name, typ)) in enumerate(method.inp)
+            TStruct({p.c_ident: p.typ
+                    for (i, p) in enumerate(method.inp)
                      if i not in param_to_msg_comp},
                     label=f'_after_on_hook_{self.uniq}_args')
             if len(self.method.inp) > len(param_to_msg_comp) else None)
@@ -684,9 +684,10 @@ class AfterOnHookIntoMethodInfo(AfterOnHookInfo):
         args = tuple(
             mkLit(site,
                   f'{msg_lit}->comp{self.param_to_msg_comp[i]}'
-                  if i in self.param_to_msg_comp else f'{args_lit}->{pname}',
-                  ptype)
-            for (i, (pname, ptype)) in enumerate(self.method.inp))
+                  if i in self.param_to_msg_comp
+                  else f'{args_lit}->{p.c_ident}',
+                  p.typ)
+            for (i, p) in enumerate(self.method.inp))
         with LogFailure(site, self.method, indices), \
              crep.DeviceInstanceContext():
             code = codegen_call(site, self.method, indices, args, ())
@@ -694,10 +695,10 @@ class AfterOnHookIntoMethodInfo(AfterOnHookInfo):
         code.toc()
 
     def generate_args_serializer(self, site, args_expr, out_expr):
-        sources = tuple((ctree.mkSubRef(site, args_expr, name, "."),
-                         safe_realtype(typ))
+        sources = tuple((ctree.mkSubRef(site, args_expr, p.c_ident, "."),
+                         safe_realtype(p.typ))
                         if i not in self.param_to_msg_comp else None
-                        for (i, (name, typ)) in enumerate(self.method.inp))
+                        for (i, p) in enumerate(self.method.inp))
         serialize.serialize_sources_to_list(site, sources, out_expr)
 
     def generate_args_deserializer(self, site, val_expr, out_expr, error_out):
@@ -707,10 +708,10 @@ class AfterOnHookIntoMethodInfo(AfterOnHookInfo):
             tmp_out_decl.toc()
         else:
             tmp_out_ref = None
-        targets = tuple((ctree.mkSubRef(site, tmp_out_ref, name, "."),
-                         safe_realtype(typ))
+        targets = tuple((ctree.mkSubRef(site, tmp_out_ref, p.c_ident, "."),
+                         safe_realtype(p.typ))
                         if i not in self.param_to_msg_comp else None
-                        for (i, (name, typ)) in enumerate(self.method.inp))
+                        for (i, p) in enumerate(self.method.inp))
 
         def error_out_at_index(_i, exc, msg):
             return error_out(exc, msg)
@@ -856,7 +857,7 @@ class ImmediateAfterIntoMethodInfo(ImmediateAfterInfo):
     def __init__(self, method, uniq):
         self.method = method
         super().__init__(method, method.dimsizes, uniq)
-        self._args_type = (TStruct(dict(method.inp),
+        self._args_type = (TStruct({p.c_ident: p.typ for p in method.inp},
                                    label=f'_immediate_after_{self.uniq}_args')
                            if method.inp else None)
 
@@ -872,8 +873,8 @@ class ImmediateAfterIntoMethodInfo(ImmediateAfterInfo):
         site = self.method.site
         indices = tuple(mkLit(site, f'{indices_lit}[{i}]', TInt(32, False))
                         for i in range(self.method.dimensions))
-        args = tuple(mkLit(site, f'{args_lit}->{pname}', ptype)
-                     for (pname, ptype) in self.method.inp)
+        args = tuple(mkLit(site, f'{args_lit}->{p.c_ident}', p.typ)
+                     for p in self.method.inp)
         with LogFailure(site, self.method, indices), \
              crep.DeviceInstanceContext():
             code = codegen_call(site, self.method, indices, args, ())
@@ -967,7 +968,7 @@ def declarations(scope):
         if sym.stmt:
             continue
         decl = sym_declaration(sym)
-        if decl:
+        if not decl.is_empty:
             decls.append(decl)
 
     return decls
@@ -1589,12 +1590,7 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
                 raise EANONSTRUCT(site, "function return type")
 
             arg_struct_defs = []
-            inarg_asts = asttype[1]
-            if inarg_asts and inarg_asts[-1] == '...':
-                varargs = True
-                inarg_asts = inarg_asts[:-1]
-            else:
-                varargs = False
+            (inarg_asts, varargs) = asttype[1]
             inargs = []
             for (_, tsite, name, type_ast) in inarg_asts:
                 (arg_struct_defs, argt) = eval_type(
@@ -1636,17 +1632,80 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
 
     return (struct_defs, etype)
 
+class MethodInParam:
+    def __init__(self, site, ident, typ, expr=None):
+        assert ident is not None
+        self.site = site
+        self.ident = ident
+        self.typ = typ
+        self.expr = expr
+
+    @property
+    def inlined(self):
+        return self.typ is None or self.expr is not None
+
+    @property
+    def c_ident(self):
+        return self.ident
+
+    @property
+    def logref(self):
+        return f"'{self.ident}'"
+
+    def declaration(self):
+        assert self.typ is not None
+        return self.typ.declaration(self.c_ident)
+
+    def with_expr(self, expr):
+        assert (self.typ is None
+                or compat.dml12_inline in dml.globals.enabled_compat)
+        return MethodInParam(self.site, self.ident, self.typ, expr)
+
+    def with_type(self, typ):
+        return MethodInParam(self.site, self.ident, typ)
+
+class DiscardedInParam(MethodInParam):
+    ident = None
+    def __init__(self, site, idx, typ, expr=None):
+        self.site = site
+        self.idx = idx
+        self.typ = typ
+        self.expr = expr
+        assert typ is None or expr is None
+
+    @property
+    def c_ident(self):
+        return f'_anon_param_{self.idx}'
+
+    @property
+    def logref(self):
+        return f'{self.idx + 1} (anonymous)'
+
+    def declaration(self):
+        return super().declaration() + ' UNUSED'
+
+    def with_expr(self, expr):
+        assert self.typ is None
+        return DiscardedInParam(self.site, self.idx, None, expr)
+
+    def with_type(self, typ):
+        return DiscardedInParam(self.site, self.ident, typ)
+
 def eval_method_inp(inp_asts, location, scope):
     '''evaluate the inarg ASTs of a method declaration'''
     inp = []
-    for (_, tsite, argname, type_ast) in inp_asts:
+    for (idx, (_, tsite, ident, type_ast)) in enumerate(inp_asts):
         if type_ast:
             (struct_defs, t) = eval_type(type_ast, tsite, location, scope)
             for (site, _) in struct_defs:
                 report(EANONSTRUCT(site, "method argument"))
         else:
             t = None
-        inp.append((argname, t))
+        if ident.kind != 'discard':
+            p = MethodInParam(ident.site, ident.args[0], t)
+        else:
+            p = DiscardedInParam(ident.site, idx, t)
+        inp.append(p)
     return inp
 
 def eval_method_outp(outp_asts, location, scope):
@@ -1784,7 +1843,7 @@ def eval_initializer(site, etype, astinit, location, scope, static):
     """Deconstruct an AST for an initializer, and return a
        corresponding initializer object. Report EDATAINIT errors upon
        invalid initializers.
-       
+
        Initializers are required to be constant for data objects and
        static variables. Local variables can be initialized with
        non-constant expressions. However, initializers for local
@@ -1982,8 +2041,10 @@ def stmt_local(stmt, location, scope):
     stmts = []
 
     def convert_decl(decl_ast):
-        (name, asttype) = decl_ast.args
-        if (dml.globals.dml_version == (1, 2)
+        (ident_ast, asttype) = decl_ast.args
+        name = ident_ast.args[0] if ident_ast.kind == 'variable' else None
+        if (name is not None
+            and dml.globals.dml_version == (1, 2)
             and compat.dml12_misc not in dml.globals.enabled_compat):
             check_varname(stmt.site, name)
         (struct_decls, etype) = eval_type(asttype, stmt.site, location, scope)
@@ -1992,8 +2053,9 @@ def stmt_local(stmt, location, scope):
         rt = safe_realtype_shallow(etype)
         if isinstance(rt, TArray) and not rt.size.constant and deep_const(rt):
             raise EVLACONST(stmt.site)
-        check_shadowing(scope, name, stmt.site)
-        return (name, etype)
+        if name is not None:
+            check_shadowing(scope, name, stmt.site)
+        return (ident_ast.site, name, etype)
 
     decls = list(map(convert_decl, decls))
 
@@ -2005,52 +2067,75 @@ def stmt_local(stmt, location, scope):
         syms_to_add = []
         tgt_syms = []
         late_declared_syms = []
+        tgts = []
 
-        for (name, typ) in decls:
+        for (ident_site, name, typ) in decls:
+            if name is None:
+                tgts.append(mkDiscardRef(ident_site,
+                                         safe_realtype_unconst(typ)))
+                continue
+
             sym = mk_sym(name, typ)
             tgt_typ = safe_realtype_shallow(typ)
             if shallow_const(tgt_typ):
                 nonconst_typ = safe_realtype_unconst(tgt_typ)
                 tgt_sym = mk_sym('_tmp_' + name, nonconst_typ, True)
-                sym.init = ExpressionInitializer(mkLocalVariable(stmt.site,
+                sym.init = ExpressionInitializer(mkLocalVariable(ident_site,
                                                                  tgt_sym))
                 late_declared_syms.append(sym)
             else:
                 tgt_sym = sym
             syms_to_add.append(sym)
             tgt_syms.append(tgt_sym)
+            tgts.append(mkLocalVariable(ident_site, tgt_sym))
 
-        tgts = [mkLocalVariable(stmt.site, sym) for sym in tgt_syms]
-        method_invocation = try_codegen_invocation(stmt.site,
-                                                   inits,
-                                                   tgts, location, scope)
+        method_invocation = try_codegen_invocation(stmt.site, inits, tgts,
+                                                   location, scope)
         if method_invocation is not None and stmt.site.dml_version != (1, 2):
             for sym in syms_to_add:
                 scope.add(sym)
             stmts.extend(sym_declaration(sym) for sym in tgt_syms)
             stmts.append(method_invocation)
-            stmts.extend(sym_declaration(sym)
-                         for sym in late_declared_syms)
+            stmts.extend(sym_declaration(sym) for sym in late_declared_syms)
         else:
-            if len(tgts) != 1:
-                report(ERETLVALS(stmt.site, 1, len(tgts)))
+            if len(decls) != 1:
+                report(ERETLVALS(stmt.site, 1, len(decls)))
             else:
-                sym = syms_to_add[0]
-                sym.init = eval_initializer(
-                    inits[0].site, sym.type, inits[0], location, scope, False)
-                scope.add(sym)
-                stmts.append(sym_declaration(sym))
+                (_, _, typ) = decls[0]
+                init = eval_initializer(
+                        inits[0].site, typ, inits[0], location, scope, False)
+
+                if syms_to_add:
+                    sym = syms_to_add[0]
+                    sym.init = init
+                    scope.add(sym)
+                    stmts.append(sym_declaration(sym))
+                else:
+                    # Discard identifier in play
+                    stmts.append(mkExpressionStatement(
+                        stmt.site, init.as_expr(typ), explicit_discard=True))
     else:
         # Initializer evaluation and variable declarations are done in separate
         # passes in order to prevent the newly declared variables from being in
         # scope when the initializers are evaluated
         inits = [get_initializer(stmt.site, typ, init, location, scope)
-                 for ((_, typ), init) in zip(decls, inits)]
-        for ((name, typ), init) in zip(decls, inits):
-            sym = scope.add_variable(
-                name, type = typ, site = stmt.site, init = init, stmt = True,
-                make_unique=not dml.globals.debuggable)
-            stmts.append(sym_declaration(sym))
+                 if name is not None or init is not None else None
+                 for ((_, name, typ), init) in zip(decls, inits)]
+        for ((ident_site, name, typ), init) in zip(decls, inits):
+            if name is not None:
+                sym = scope.add_variable(
+                    name, type = typ, site = ident_site, init = init,
+                    stmt = True, make_unique=not dml.globals.debuggable)
+                stmts.append(sym_declaration(sym))
+            elif init is None:
+                # Corresponds to e.g. 'local int _;'
+                # This would be pointless except for the niche case of
+                # forcing an error if a type is invalid
+                check_named_types(typ)
+                stmts.append(mkNoop(ident_site))
+            else:
+                stmts.append(mkExpressionStatement(
+                        init.site, init.as_expr(typ), explicit_discard=True))
 
     return stmts
 
@@ -2394,7 +2479,7 @@ def stmt_assign(stmt, location, scope):
 
         lscope = Symtab(scope)
         sym = lscope.add_variable(
-            'tmp', type=init_typ, site=init.site, init=init,
+            '_tmp', type=init_typ, site=init.site, init=init,
             stmt=True)
         init_expr = mkLocalVariable(init.site, sym)
         stmts = [sym_declaration(sym)]
@@ -2434,7 +2519,7 @@ def stmt_assign(stmt, location, scope):
             else:
                 init = eval_initializer(site, tgt.ctype(), src_ast, location,
                                         scope, False)
-                name = 'tmp%d' % (i,)
+                name = '_tmp%d' % (i,)
                 sym = lscope.add_variable(
                         name, type=tgt.ctype(), site=tgt.site, init=init,
                         stmt=True)
@@ -2840,11 +2925,13 @@ def stmt_after(stmt, location, scope):
         require_fully_typed(site, method)
         func = method_instance(method)
         inp = func.inp
+        inp_types = [p.typ for p in inp]
         kind = 'method'
     elif isinstance(methodref, HookSendNowRef):
         indices = ()
         send_now_hookref = methodref.hookref_expr
-        msg_types = safe_realtype_shallow(send_now_hookref.ctype()).msg_types
+        inp_types = msg_types = safe_realtype_shallow(
+            send_now_hookref.ctype()).msg_types
         inp = [(f'comp{i}', typ) for (i, typ) in enumerate(msg_types)]
         kind = 'send_now'
     else:
@@ -2854,15 +2941,15 @@ def stmt_after(stmt, location, scope):
 
     # After-call is only possible for methods with serializable parameters
     unserializable = []
-    for (pname, ptype) in inp:
+    for (i, typ) in enumerate(inp_types):
         try:
-            serialize.mark_for_serialization(site, ptype)
+            serialize.mark_for_serialization(site, typ)
         except ESERIALIZE:
-            unserializable.append((pname, ptype))
+            unserializable.append(i)
 
     if kind == 'method':
         if len(unserializable) > 0:
-            raise EAFTER(site, None, method, unserializable)
+            raise EAFTER(site, None, method, [inp[i] for i in unserializable])
         else:
             mark_method_referenced(func)
             after_info = get_after_delay(method)
@@ -2871,10 +2958,9 @@ def stmt_after(stmt, location, scope):
         assert kind == 'send_now'
         if len(unserializable) > 0:
             raise EAFTERSENDNOW(site, None, methodref.hookref_expr,
-                                unserializable)
+                                [(i, inp_types[i]) for i in unserializable])
         else:
-            typeseq_info = get_type_sequence_info(
-                (typ for (_, typ) in inp), create_new=True)
+            typeseq_info = get_type_sequence_info(inp_types, create_new=True)
             after_info = get_after_delay(typeseq_info)
             args_init = AfterIntoSendNowArgsInit(inargs,
                                                  methodref.hookref_expr)
@@ -2940,11 +3026,13 @@ def stmt_afteronhook(stmt, location, scope):
         require_fully_typed(site, method)
         func = method_instance(method)
         inp = func.inp
+        inp_types = [p.typ for p in inp]
         kind = 'method'
     elif isinstance(methodref, HookSendNowRef):
         indices = ()
         send_now_hookref = methodref.hookref_expr
-        msg_types = safe_realtype_shallow(send_now_hookref.ctype()).msg_types
+        inp_types = msg_types = safe_realtype_shallow(
+            send_now_hookref.ctype()).msg_types
         inp = [(f'comp{i}', typ) for (i, typ) in enumerate(msg_types)]
         kind = 'send_now'
     else:
@@ -2956,7 +3044,11 @@ def stmt_afteronhook(stmt, location, scope):
             len(msg_comp_param_asts))
 
     msg_comp_params = {}
-    for (idx, (mcp_site, mcp_name)) in enumerate(msg_comp_param_asts):
+    for (idx, p) in enumerate(msg_comp_param_asts):
+        if p.kind == 'discard':
+            continue
+        (_, mcp_site, mcp_name) = p
+
         if mcp_name in msg_comp_params:
             raise EDVAR(mcp_site, msg_comp_params[mcp_name][1],
                         mcp_name)
@@ -2994,16 +3086,17 @@ def stmt_afteronhook(stmt, location, scope):
                        if i not in arg_index_to_msg_comp_param]
 
     unserializable = []
-    for (idx, (pname, ptype)) in enumerate(inp):
+    for (idx, typ) in enumerate(inp_types):
         if idx not in arg_index_to_msg_comp_param:
             try:
-                serialize.mark_for_serialization(site, ptype)
+                serialize.mark_for_serialization(site, typ)
             except ESERIALIZE:
-                unserializable.append((pname, ptype))
+                unserializable.append(idx)
 
     if kind == 'method':
         if len(unserializable) > 0:
-            raise EAFTER(site, hookref_expr, method, unserializable)
+            raise EAFTER(site, hookref_expr, method,
+                         [inp[i] for i in unserializable])
         else:
             mark_method_referenced(func)
             aoh_key = method
@@ -3012,10 +3105,9 @@ def stmt_afteronhook(stmt, location, scope):
         assert kind == 'send_now'
         if len(unserializable) > 0:
             raise EAFTERSENDNOW(site, hookref_expr, methodref.hookref_expr,
-                                unserializable)
+                                [(i, inp_types[i]) for i in unserializable])
         else:
-            aoh_key = get_type_sequence_info(
-                (typ for (_, typ) in inp), create_new=True)
+            aoh_key = get_type_sequence_info(inp_types, create_new=True)
             args_init = AfterIntoSendNowArgsInit(filtered_inargs,
                                                  methodref.hookref_expr)
 
@@ -3093,7 +3185,8 @@ def stmt_immediateafter(stmt, location, scope):
 
 @statement_dispatcher
 def stmt_select(stmt, location, scope):
-    [itername, lst, cond_ast, stmt_ast, else_ast] = stmt.args
+    [iter_ident, lst, cond_ast, stmt_ast, else_ast] = stmt.args
+    itername = iter_ident.args[0] if iter_ident.kind == 'variable' else None
     # dbg('SELNODE %r, %r, %r' % (location.node, location.indices, lst))
     lst = codegen_expression_maybe_nonvalue(lst, location, scope)
     # dbg('SELECT %s in %r' % (itername, lst))
@@ -3106,7 +3199,8 @@ def stmt_select(stmt, location, scope):
             clauses = []
             for it in l:
                 condscope = Symtab(scope)
-                condscope.add(ExpressionSymbol(itername, it, stmt.site))
+                if itername is not None:
+                    condscope.add(ExpressionSymbol(itername, it, stmt.site))
                 cond = as_bool(codegen_expression(
                     cond_ast, location, condscope))
                 if cond.constant and not cond.value:
@@ -3128,7 +3222,8 @@ def stmt_select(stmt, location, scope):
             return [if_chain]
         raise lst.exc()
     elif (compat.dml12_misc in dml.globals.enabled_compat
-          and isinstance(lst.ctype(), TVector)):
+          and isinstance(lst.ctype(), TVector)
+          and itername is not None):
         itervar = lookup_var(stmt.site, scope, itername)
         if not itervar:
             raise EIDENT(stmt.site, itername)
@@ -3142,9 +3237,10 @@ def foreach_each_in(site, itername, trait, each_in,
                     body_ast, location, scope):
     inner_scope = Symtab(scope)
     trait_type = TTrait(trait)
-    inner_scope.add_variable(
-        itername, type=trait_type, site=site,
-        init=ForeachSequence.itervar_initializer(site, trait))
+    if itername is not None:
+        inner_scope.add_variable(
+            itername, type=trait_type, site=site,
+            init=ForeachSequence.itervar_initializer(site, trait))
     context = ForeachSequenceLoopContext()
     with context:
         inner_body = mkCompound(site, declarations(inner_scope)
@@ -3189,7 +3285,8 @@ def stmt_foreach_dml12(stmt, location, scope):
 
 @statement_dispatcher
 def stmt_foreach(stmt, location, scope):
-    [itername, lst, statement] = stmt.args
+    [iter_ident, lst, statement] = stmt.args
+    itername = iter_ident.args[0] if iter_ident.kind == 'variable' else None
     lst = codegen_expression(lst, location, scope)
     list_type = safe_realtype(lst.ctype())
     if isinstance(list_type, TTraitList):
@@ -3203,7 +3300,8 @@ def stmt_foreach(stmt, location, scope):
 
 @statement_dispatcher
 def stmt_hashforeach(stmt, location, scope):
-    [itername, lst, statement] = stmt.args
+    [iter_ident, lst, statement] = stmt.args
+    itername = iter_ident.args[0] if iter_ident.kind == 'variable' else None
     lst = codegen_expression_maybe_nonvalue(lst, location, scope)
     if isinstance(lst, NonValue):
         if not isinstance(lst, AbstractList):
@@ -3225,8 +3323,9 @@ def foreach_constant_list(site, itername, lst, statement, location, scope):
                                    TInt(32, True))
                              for dim in range(len(items.dimsizes)))
             loopscope = Symtab(scope)
-            loopscope.add(ExpressionSymbol(
-                itername, items.expr(loopvars), site))
+            if itername is not None:
+                loopscope.add(ExpressionSymbol(
+                    itername, items.expr(loopvars), site))
             stmt = codegen_statement(statement, location, loopscope)
 
             if stmt.is_empty:
@@ -3406,11 +3505,11 @@ def common_inline(site, method, indices, inargs, outargs):
             # create a specialized method instance based on parameter
             # types, and call that
             intypes = tuple(
-                arg if ((ptype is None
+                arg if ((p.typ is None
                          or compat.dml12_inline in dml.globals.enabled_compat)
                         and (arg.constant or undefined(arg)))
-                else methfunc_param(ptype, arg)
-                for ((pname, ptype), arg) in zip(method.inp, inargs))
+                else methfunc_param(p.typ, arg)
+                for (p, arg) in zip(method.inp, inargs))
             outtypes = tuple(methfunc_param(ptype, arg)
                              for ((pname, ptype), arg)
                              in zip(method.outp, outargs))
@@ -3418,8 +3517,7 @@ def common_inline(site, method, indices, inargs, outargs):
         mark_method_referenced(func)
 
         # Filter out inlined arguments
-        used_args = [i for (i, (n, t)) in enumerate(func.inp)
-                     if isinstance(t, DMLType)]
+        used_args = [i for (i, p) in enumerate(func.inp) if not p.inlined]
         inargs = [inargs[i] for i in used_args]
         inp = [func.inp[i] for i in used_args]
 
@@ -3593,7 +3691,8 @@ def report_pevent_data_arg(meth_node, site, inargs):
                 inargs[-1].site, dmlparse.end_site(inargs[-1].site),
                 meth_node.parent.site))
             event_meth_node = meth_node.parent.get_component('event')
-            (argname, _) = event_meth_node.inp[0]
+            argname = event_meth_node.inp[0].ident
+            assert argname is not None
             report(PCHANGE_INARGS(event_meth_node.site,
                                   f'method event(uint64 {argname})'))
             for methname in ['get_event_info', 'set_event_info']:
@@ -3632,42 +3731,46 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
             # call is safe.
             return codegen_call(site, meth_node, indices,
                                 inargs, outargs)
-        for (arg, (parmname, parmtype), argno) in zip(inargs, meth_node.inp,
-                                                      list(range(len(inargs)))):
+        pre = []
+        for (arg, p, argno) in zip(inargs, meth_node.inp,
+                                   list(range(len(inargs)))):
             # Create an alias
-            if parmtype:
+            if not p.inlined:
                 if undefined(arg):
                     raise arg.exc()
                 argtype  = arg.ctype()
                 if not argtype:
                     raise ICE(arg.site, "unknown expression type")
-                parmt = safe_realtype(parmtype)
+                parmt = safe_realtype(p.typ)
                 argt = safe_realtype(argtype)
                 (ok, trunc, constviol) = parmt.canstore(argt)
                 if not ok:
                     raise EARGT(site, 'inline', meth_node.name,
-                                arg.ctype(), parmname, parmtype, 'input')
+                                arg.ctype(), p.logref, p.typ, 'input')
 
                 if constviol:
-                    raise ECONSTP(site, parmname, "method call")
+                    raise ECONSTP(site, p.logref, "method call")
                 arg = coerce_if_eint(arg)
 
-            if inhibit_copyin or undefined(arg):
-                param_scope.add(ExpressionSymbol(parmname, arg, arg.site))
+            if p.ident is None:
+                pre.append(mkExpressionStatement(arg.site, arg,
+                                                 explicit_discard=True))
+            elif inhibit_copyin or undefined(arg):
+                param_scope.add(ExpressionSymbol(p.ident, arg, arg.site))
             elif arg.constant and (
-                    parmtype is None
+                    p.inlined
                     or compat.dml12_inline in dml.globals.enabled_compat):
                 # Constants must be passed directly to
                 # provide constant folding.  Other values are stored in a
                 # local variable to improve type checking and variable
                 # scoping.
-                inlined_arg = mkInlinedParam(site, arg, parmname,
-                                             parmtype or arg.ctype())
+                inlined_arg = mkInlinedParam(site, arg, p.ident,
+                                             p.typ or arg.ctype())
                 param_scope.add(ExpressionSymbol(
-                    parmname, inlined_arg, site))
+                    p.ident, inlined_arg, site))
             else:
-                param_scope.add_variable(parmname,
-                                         type = parmtype or arg.ctype(),
+                param_scope.add_variable(p.ident,
+                                         type = p.typ or arg.ctype(),
                                          site = arg.site,
                                          init = ExpressionInitializer(arg))
                 arg.decref()
@@ -3709,13 +3812,13 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
             exit_handler = GotoExit_dml14(outargs)
             with exit_handler:
                 code = codegen_statements(subs, location, param_scope)
-            decls = declarations(param_scope)
+            pre.extend(declarations(param_scope))
             post = ([mkLabel(site, exit_handler.label)]
                     if exit_handler.used else [])
-            body = mkCompound(site, decls + code, rbrace_site)
+            body = mkCompound(site, pre + code, rbrace_site)
             if meth_node.outp and body.control_flow().fallthrough:
                 report(ENORET(meth_node.astcode.site))
-            return mkInlinedMethod(site, meth_node, decls, code, post)
+            return mkInlinedMethod(site, meth_node, pre, code, post)
 
 def c_rettype(outp, throws):
     if throws:
@@ -3726,17 +3829,16 @@ def c_rettype(outp, throws):
     else:
         return TVoid()
 
-def c_inargs(inp, outp, throws):
-    '''Return the signature of the C function representing a DML method,
-    on the form (outtype, [arg1, ...]), where each arg is a pair
-    (name, type). inp includes any implicit arguments
-    (device struct pointer, indices, etc)'''
+def c_extra_inargs(outp, throws):
+    '''Return required additional input parameters for a C function
+    given output parameters and throws, through the form
+    [arg1, ...]) where each arg is a pair (name, type).'''
     if throws:
-        return inp + [(n, TPtr(t)) for (n, t) in outp]
+        return [(n, TPtr(t)) for (n, t) in outp]
     elif outp:
-        return inp + [(n, TPtr(t)) for (n, t) in outp[1:]]
+        return [(n, TPtr(t)) for (n, t) in outp[1:]]
     else:
-        return list(inp)
+        return []
 
 # TODO is startup a necessary member?
 class MethodFunc(object):
@@ -3753,13 +3855,10 @@ class MethodFunc(object):
                  'memoized', 'cparams', 'rettype', 'suffix')
 
     def __init__(self, method, inp, outp, throws, independent, startup,
-                 memoized, cparams, suffix):
-        '''(inp, outp, throws) describe the method's signature; cparams
-        describe the generated C function parameters corresponding to
-        inp. If some method parameters are constant propagated, then
-        the corresponding method parameter is on the form (name,
-        value), instead of (name, type), and the corresponding C
-        function parameter is omitted.'''
+                 memoized, suffix):
+        '''(inp, outp, throws) describe the method's signature.
+        If some method parameters are constant propagated, then
+        the corresponding C function parameters will be omitted.'''
 
         self.method = method
 
@@ -3773,22 +3872,25 @@ class MethodFunc(object):
 
         # rettype is the return type of the C function
         self.rettype = c_rettype(outp, throws)
-        self.cparams = c_inargs(
-            implicit_params(method) + list(cparams), outp, throws)
+        self.cparams = ([(n, t, t.declaration(n))
+                         for (n, t) in implicit_params(method)]
+                        + [(p.c_ident, p.typ, p.declaration())
+                           for p in inp if not p.inlined]
+                        + [(n, t, t.declaration(n))
+                           for (n, t) in c_extra_inargs(outp, throws)])
 
     @property
     def prototype(self):
         return self.rettype.declaration(
-            "%s(%s)" % (self.get_cname(),
-                        ", ".join([t.declaration(n)
-                                   for (n, t) in self.cparams])))
+            "%s(%s)" % (self.get_cname(), ", ".join(
+                decl for (_, _, decl) in self.cparams)))
 
     def cfunc_expr(self, site):
         return mkLit(site, self.get_cname(), self.cfunc_type)
 
     @property
     def cfunc_type(self):
-        return TFunction([t for (_, t) in self.cparams], self.rettype)
+        return TFunction([t for (_, t, _) in self.cparams], self.rettype)
 
     def get_name(self):
         '''textual description of method, used in comment'''
@@ -3824,16 +3926,15 @@ def untyped_method_instance(method, signature):
         return method.funcs[canon_signature]
 
     (intypes, outtypes) = signature
-    inp = [(arg, stype)
-           for stype, (arg, etype) in zip(intypes, method.inp)]
+    inp = [(p.with_expr
+            if isinstance(stype, Expression) else p.with_type)(stype)
+           for stype, p in zip(intypes, method.inp)]
     assert all(isinstance(t, DMLType) for t in outtypes)
     outp = [(arg, stype)
             for stype, (arg, etype) in zip(outtypes, method.outp)]
 
-    cparams = [(n, t) for (n, t) in inp if isinstance(t, DMLType)]
-
     func = MethodFunc(method, inp, outp, method.throws, method.independent,
-                      method.startup, method.memoized, cparams,
+                      method.startup, method.memoized,
                       "__"+str(len(method.funcs)))
 
     method.funcs[canon_signature] = func
@@ -3846,8 +3947,7 @@ def method_instance(method):
         return method.funcs[None]
 
     func = MethodFunc(method, method.inp, method.outp, method.throws,
-                      method.independent, method.startup, method.memoized,
-                      method.inp, "")
+                      method.independent, method.startup, method.memoized, "")
 
     method.funcs[None] = func
     return func
@@ -3858,7 +3958,8 @@ def codegen_method_func(func):
     method = func.method
 
     indices = tuple(mkLit(method.site, '_idx%d' % i, TInt(32, False),
-                          str=dollar(method.site) + "%s" % (idxvar,))
+                          str=(dollar(method.site)
+                               + ("_" if idxvar is None else "")))
                     for (i, idxvar) in enumerate(method.parent.idxvars()))
     intercepted = intercepted_method(method)
     if intercepted:
@@ -3866,20 +3967,23 @@ def codegen_method_func(func):
         with crep.DeviceInstanceContext():
             return intercepted(
                 method.parent, indices,
-                [mkLit(method.site, n, t) for (n, t) in func.inp],
+                [mkLit(method.site, p.c_ident, p.typ) for p in func.inp],
                 [mkLit(method.site, "*%s" % n, t) for (n, t) in func.outp],
                 SimpleSite(method.site.loc()))
     inline_scope = MethodParamScope(global_scope)
-    for (name, e) in func.inp:
-        if dml.globals.dml_version == (1, 2) and (
-                compat.dml12_misc not in dml.globals.enabled_compat):
-            check_varname(method.site, name)
-        if isinstance(e, Expression):
+    for p in func.inp:
+        e = p.expr
+        if (p.ident is not None
+            and dml.globals.dml_version == (1, 2)
+            and compat.dml12_misc not in dml.globals.enabled_compat):
+            check_varname(p.site, p.ident)
+        if e and p.ident is not None:
             inlined_arg = (
-                mkInlinedParam(method.site, e, name, e.ctype())
+                mkInlinedParam(p.site, e, p.ident, e.ctype())
                 if defined(e) else e)
-            inline_scope.add(ExpressionSymbol(name, inlined_arg, method.site))
-    inp = [(n, t) for (n, t) in func.inp if isinstance(t, DMLType)]
+            inline_scope.add(ExpressionSymbol(
+                p.ident, inlined_arg, p.site))
+    inp = [p for p in func.inp if not p.inlined]
 
     with ErrorContext(method):
         location = Location(method, indices)
@@ -3928,8 +4032,10 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
                    default, location, fnscope, rbrace_site):
     with (crep.DeviceInstanceContext() if not independent
           else contextlib.nullcontext()):
-        for (arg, etype) in inp:
-            fnscope.add_variable(arg, type=etype, site=site, make_unique=False)
+        for p in inp:
+            if p.ident is not None:
+                fnscope.add_variable(p.ident, type=p.typ, site=site,
+                                     make_unique=False)
         initializers = [get_initializer(site, parmtype, None, None, None)
                         for (_, parmtype) in outp]
 
@@ -4052,12 +4158,12 @@ def methfunc_param(ptype, arg):
 
 def require_fully_typed(site, meth_node):
     if not meth_node.fully_typed:
-        for (parmname, parmtype) in meth_node.inp:
-            if not parmtype:
-                raise ENARGT(meth_node.site, parmname, 'input', site)
+        for p in meth_node.inp:
+            if p.inlined:
+                raise ENARGT(meth_node.site, p.logref, 'input', site)
         for (parmname, parmtype) in meth_node.outp:
             if not parmtype:
-                raise ENARGT(meth_node.site, parmname, 'output', site)
+                raise ENARGT(meth_node.site, f"'{parmname}'", 'output', site)
         raise ICE(site, "no missing parameter type")
 
 def codegen_call_expr(site, meth_node, indices, inits, location, scope):
