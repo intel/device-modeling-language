@@ -3,7 +3,6 @@
 
 __all__ = ['generate']
 
-import codecs
 import dml.globals
 from itertools import product
 from collections import OrderedDict
@@ -17,7 +16,7 @@ from .logging import *
 
 class XMLWriter(object):
     def __init__(self, filename):
-        self._f = codecs.open(filename, "w", "utf-8")
+        self._f = open(filename, "w", encoding="utf-8")
         self.indent = 0
 
     def __enter__(self):
