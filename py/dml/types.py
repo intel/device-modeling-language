@@ -96,7 +96,7 @@ def check_named_types(t):
             raise ETYPE(t.declaration_site, t)
     elif isinstance(t, StructType):
         t.resolve()
-        for (mn, mt) in t.members.items():
+        for (mn, mt) in t.members:
             check_named_types(mt)
     elif isinstance(t, (TPtr, TVector, TArray)):
         check_named_types(t.base)
@@ -229,7 +229,7 @@ def deep_const(origt):
         if isinstance(st, TArray):
             subtypes.append(st.base)
         elif isinstance(st, StructType):
-            subtypes.extend(st.members.values())
+            subtypes.extend(t for (_, t) in st.members)
         # TODO This should be added once the types of bitfields member are
         # respected by subreferences to them (SIMICS-18394 and SIMICS-8857).
         # elif st.is_int and st.is_bitfields:
@@ -539,6 +539,10 @@ class IntegerType(DMLType):
     is_int = True
     is_arith = True
     is_endian = False
+
+    @property
+    def named_members(self):
+        return self.members
 
     @property
     def is_bitfields(self):
@@ -1134,18 +1138,22 @@ class TTraitList(DMLType):
 
 class StructType(DMLType):
     '''common superclass for DML-defined structs and extern structs'''
-    __slots__ = ('members',)
-    def __init__(self, members, const):
+    __slots__ = ('named_members',)
+    def __init__(self, named_members, const):
         super(StructType, self).__init__(const)
-        self.members = members
+        self.named_members = named_members
+
+    @property
+    def members(self):
+        yield from self.named_members.items()
 
     @property
     def members_qualified(self):
         return ((name, conv_const(self.const, typ))
-                for (name, typ) in self.members.items())
+                for (name, typ) in self.members)
 
     def get_member_qualified(self, member):
-        t = self.members.get(member)
+        t = self.named_members.get(member)
         return t if t is None else conv_const(self.const, t)
 
 class TExternStruct(StructType):
@@ -1155,8 +1163,8 @@ class TExternStruct(StructType):
     __slots__ = ('typename', 'id')
     count = 0
 
-    def __init__(self, members, id, typename=None, const=False):
-        super(TExternStruct, self).__init__(members, const)
+    def __init__(self, named_members, id, typename=None, const=False):
+        super(TExternStruct, self).__init__(named_members, const)
         # unique object (wrt ==) representing this type in type comparisons
         # integer for anonymous structs, string for named types
         self.id = id
@@ -1165,7 +1173,7 @@ class TExternStruct(StructType):
 
     def __repr__(self):
         return 'TExternStruct(%r,%r,%r,%r)' % (
-            self.members, self.id, self.typename, self.const)
+            self.named_members, self.id, self.typename, self.const)
 
     @staticmethod
     def unique_id():
@@ -1193,7 +1201,8 @@ class TExternStruct(StructType):
         return hash((TExternStruct, self.const, self.id))
 
     def clone(self):
-        return TExternStruct(self.members, self.id, self.typename, self.const)
+        return TExternStruct(self.named_members,
+                             self.id, self.typename, self.const)
 
 def add_late_global_struct_defs(decls):
     TStruct.late_global_struct_defs.extend((site, t.resolve())
@@ -1216,7 +1225,8 @@ class TStruct(StructType):
         super().__init__(members, const)
 
     def __repr__(self):
-        return 'TStruct(%r,%r,%r)' % (self.members, self.label, self.const)
+        return 'TStruct(%r,%r,%r)' % (self.named_members, self.label,
+                                      self.const)
 
     def key(self):
         if self.anonymous:
@@ -1233,12 +1243,19 @@ class TStruct(StructType):
                                    self.const_str,
                                    var)
 
+
+    @staticmethod
+    def anon_member_cident(i):
+        return f'_anon_member_{i}'
+
     def print_struct_definition(self):
         output.site_linemark(self.declaration_site)
         out("struct %s {\n" % (cident(self.label),), postindent = 1)
-        for (n, t) in self.members.items():
+        for (i, (n, t)) in enumerate(self.members):
             output.site_linemark(t.declaration_site)
-            t.print_declaration(n)
+            t.print_declaration(n
+                                if n is not None else
+                                TStruct.anon_member_cident(i))
         output.site_linemark(self.declaration_site)
         out("};\n", preindent = -1)
 
@@ -1249,10 +1266,10 @@ class TStruct(StructType):
         return hash((TStruct, self.const, self.label))
 
     def clone(self):
-        return TStruct(self.members, self.label, self.const)
+        return TStruct(self.named_members, self.label, self.const)
 
 class TLayout(TStruct):
-    __slots__= ('endian', 'member_decls', 'size')
+    __slots__= ('endian', 'member_decls', 'size', 'discarded')
 
     def __init__(self, endian, member_decls, label=None, const=False):
         # Intentionally wait with setting member types until
@@ -1261,6 +1278,7 @@ class TLayout(TStruct):
         self.member_decls = member_decls
         self.endian = endian
         self.size = None
+        self.discarded = None
 
     def __repr__(self):
         return 'TLayout(%r, %r, %r, %r)' % (self.endian, self.member_decls,
@@ -1274,15 +1292,26 @@ class TLayout(TStruct):
     def describe(self):
         return 'layout'
 
+    @property
+    def members(self):
+        self.resolve()
+        for (i, member) in enumerate(self.named_members.items()):
+            if i in self.discarded:
+                yield from ((None, t) for t in self.discarded[i])
+            yield member
+        if len(self.named_members) in self.discarded:
+            yield from ((None, t)
+                        for t in self.discarded[len(self.named_members)])
+
     def resolve(self):
         #dbg('resolve %r' % self)
-        if self.members != None:
+        if self.named_members is not None:
             return self
 
         # Checks if t is a valid layout member type
         # returning a sometimes patched type representing t
         # and the real, resolved, type of t used for verifying sizeof
-        def check_layout_member_type(site, t, name):
+        def check_layout_member_type(site, t, memberref):
             rt = t
             # We cannot use non-shallow instead of this loop because we need
             # to keep track of when we move through arrays
@@ -1295,7 +1324,8 @@ class TLayout(TStruct):
                 return t, rt
             if rt.is_int:
                 if (rt.bits % 8) != 0:
-                    raise ELAYOUT(site, "size of %s is not a whole byte" % name)
+                    raise ELAYOUT(site,
+                                  f"size of {memberref} is not a whole byte")
             if (isinstance(rt, TInt)
                 or (dml.globals.compat_dml12_int(site)
                     and isinstance(rt, TSize))):
@@ -1309,18 +1339,28 @@ class TLayout(TStruct):
                 # the original declaration when necessary, and one array
                 # that is the fully resolved type
                 new_base, real_base = check_layout_member_type(
-                    site, rt.base, name)
+                    site, rt.base, memberref)
                 return (TArray(new_base, rt.size, rt.const),
                         TArray(real_base, rt.size, rt.const),)
             raise ELAYOUT(site, "illegal layout member type: %s" % t)
 
         self.size = 0
-        self.members = {}
-        for (m, (site, t)) in self.member_decls.items():
+        self.named_members = {}
+        self.discarded = {}
+        curr_discarded = []
+        for (i, (site, m, t)) in enumerate(self.member_decls):
             try:
+                memberref = m or f"member {i + 1} (anonymous)"
                 # t = the member type, rt = real, resolved, underlying type
-                t, rt = check_layout_member_type(site, t, m)
-                self.members[m] = t
+                t, rt = check_layout_member_type(site, t, memberref)
+                if m is not None:
+                    if curr_discarded:
+                        self.discarded[
+                            len(self.named_members)] = curr_discarded
+                        curr_discarded = []
+                    self.named_members[m] = t
+                else:
+                    curr_discarded.append(t)
 
                 size = rt.sizeof()
                 if size is None:
@@ -1331,6 +1371,9 @@ class TLayout(TStruct):
             except DMLError as e:
                 report(e)
 
+        if curr_discarded:
+            self.discarded[len(self.named_members)] = curr_discarded
+
         return self
 
     def sizeof(self):
@@ -1339,8 +1382,9 @@ class TLayout(TStruct):
     def clone(self):
         cloned = TLayout(self.endian, self.member_decls, self.label,
                          self.const)
-        if self.members is not None:
-            cloned.members = self.members
+        if self.named_members is not None:
+            cloned.named_members = self.named_members
+            cloned.discarded = self.discarded
             cloned.size = self.size
         return cloned
 

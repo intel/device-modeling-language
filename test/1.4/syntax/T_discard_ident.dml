@@ -9,6 +9,17 @@ typedef struct {
     int x;
 } new_int_t;
 
+typedef layout "little-endian" {
+    uint32 _;
+    uint32 x;
+    layout "little-endian" {
+        int48 _;
+    } _;
+    int16 _;
+    int16 y;
+    uint24 _;
+} layout_t;
+
 session int count;
 method inc() -> (new_int_t) {
     return {++count};
@@ -73,6 +84,13 @@ method init() {
             assert g[i][j].indices[1] == j;
         }
     }
+
+    // no error
+    local layout_t l = { .x = 4, .y = 17 };
+    l = { 0, 4, {0}, 0, 17, 0 };
+    assert sizeoftype(layout_t) == 21;
+    assert cast(&l.x, char *) - cast(&l, char *) == 4;
+    assert cast(&l.y, char *) - cast(&l, char *) == 16;
 }
 
 bank b;

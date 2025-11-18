@@ -1483,7 +1483,13 @@ def typeof(t):
 def check_struct_namecoll(member_decls):
     sites_by_name = {}
     for decl in member_decls:
-        (name, _) = decl.args
+        if decl.kind == 'cdecl':
+            (name, _) = decl.args
+        else:
+            (ident, _) = decl.args
+            if ident.kind == 'discard':
+                continue
+            (name,) = ident.args
         if name in sites_by_name:
             report(ENAMECOLL(decl.site, sites_by_name[name], name))
         else:
@@ -1513,14 +1519,21 @@ def layout_decl(t):
         field_names = set()
         fields = []
         for cdecl in t[4]:
-            (name, typ) = cdecl.args
-            if name in field_names:
-                while (name in field_names
-                       or any(name == d.args[0] for d in t[4])):
-                    name = '_' + name
-                cdecl = ast.cdecl(cdecl.site, name, typ)
+            (ident, typ) = cdecl.args
+            if ident.kind == 'variable':
+                (name,) = ident.args
+                if name in field_names:
+                    while (name in field_names
+                           or any(name == d.args[0].args[0]
+                                  for d in t[4]
+                                  if d.args[0].kind == 'variable')):
+                        name = '_' + name
+                    cdecl = ast.cdecl_maybe_discarded(
+                        cdecl.site,
+                        ast.variable(ident.site, name),
+                        typ)
+                field_names.add(name)
             fields.append(cdecl)
-            field_names.add(name)
     else:
         fields = t[4]
         check_struct_namecoll(fields)
@@ -1537,7 +1550,7 @@ def layout(t):
 
 @prod
 def layout_decls(t):
-    'layout_decls : layout_decls named_cdecl SEMI'
+    'layout_decls : layout_decls named_cdecl_maybe_discarded SEMI'
     t[0] = t[1] + (t[2],)
 
 @prod
@@ -2760,10 +2773,11 @@ def objident_discard(t):
 def discard_error(site):
     report(ESYNTAX(site,
                    "_",
-                   "'_' can only be used as an expression or as an unused "
-                   + "identifier for an index variable of an object array or "
-                   + "a method-local binding (e.g. local variable or method "
-                   + "parameter)"))
+                   "can't use the name '_' (the discard identifier) in this "
+                   + "context. See the description of 'Identifiers' within "
+                   + "the Lexical Structure section of the DML 1.4 Reference "
+                   + "Manual for an overview of when '_' may be used as a "
+                   + "name."))
 
 @prod
 def ident_or_discard_ident(t):
