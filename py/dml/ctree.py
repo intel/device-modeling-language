@@ -675,15 +675,15 @@ def mkDelete(site, expr):
 
 class ExpressionStatement(Statement):
     @auto_init
-    def __init__(self, site, expr): pass
+    def __init__(self, site, expr, explicit_discard): pass
     def toc_stmt(self):
         self.linemark()
-        out(self.expr.discard()+';\n')
+        out(self.expr.discard(explicit=self.explicit_discard)+';\n')
 
-def mkExpressionStatement(site, expr):
-    if isinstance(expr, Constant):
+def mkExpressionStatement(site, expr, explicit_discard=False):
+    if expr.constant and explicit_discard:
         return mkNoop(site)
-    return ExpressionStatement(site, expr)
+    return ExpressionStatement(site, expr, explicit_discard)
 
 def toc_constsafe_pointer_assignment(site, source, target, typ):
     target_val = mkDereference(site,
@@ -926,7 +926,8 @@ class For(Statement):
         if all(isinstance(post, ExpressionStatement) for post in self.posts):
             # common case: all post statements are expressions, so
             # traditional for loop can be produced
-            out(', '.join(post.expr.discard() for post in self.posts))
+            out(', '.join(post.expr.discard(explicit=post.explicit_discard)
+                          for post in self.posts))
         else:
             # general case: arbitrary statements in post code;
             # encapsulate in a statement expression
@@ -3518,11 +3519,10 @@ mkFloatConstant = FloatConstant
 
 class AddressOfMethod(Constant):
     def ctype(self):
-        params = (self.value.cparams if self.value.independent else
-                  [("_obj", TPtr(TNamed("conf_object_t")))]
-                  + self.value.cparams[1:])
-        return TPtr(TFunction([typ for (_, typ) in params],
-                              self.value.rettype))
+        types = [t for (_, t, _) in self.value.cparams]
+        if not self.value.independent:
+            types[0] = TPtr(TNamed("conf_object_t"))
+        return TPtr(TFunction(types, self.value.rettype))
 
     def read(self):
         prefix = '_trampoline' * (not self.value.independent)
@@ -5520,7 +5520,7 @@ def sym_declaration(sym):
         # dbg('ignoring %r (init = %r)' % (sym.value, sym.init))
         if sym.init:
             sym.init.decref()
-        return None
+        return mkNoop(sym.site)
 
     # This will prevent warnings from the C compiler
     # HACK: Always True to not rely on the broken symbol usage tracking

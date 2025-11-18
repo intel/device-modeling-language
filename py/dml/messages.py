@@ -53,9 +53,9 @@ class EAFTER(DMLError):
             self.method.site,
             "method declaration"
             + ''.join(
-                f"\nmethod parameter '{pname}' is of unserializable type: "
-                + f"{ptype}"
-                for (pname, ptype) in self.unserializable or []))
+                f"\nmethod parameter {p.logref} is of unserializable type: "
+                + f"{p.typ}"
+                for p in self.unserializable or []))
 
 class EAFTERSENDNOW(DMLError):
     """
@@ -74,7 +74,7 @@ class EAFTERSENDNOW(DMLError):
         clarification = ("not provided through a message component parameter "
                          "of the 'after' " * (target_hook is not None))
         unserializable_msg = (''.join(
-                f"\nmessage component {idx} is of unserializable type: "
+                f"\nmessage component {idx + 1} is of unserializable type: "
                 + f"{ptype}"
                 for (idx, ptype) in unserializable))
 
@@ -935,8 +935,7 @@ class EAUNKDIMSIZE(DMLError):
     The size of an array dimension of an object array must be defined at least
     once across all declarations of that object array.
     """
-    fmt = ("the size of dimension %d (with index variable '%s') is never "
-           + "defined")
+    fmt = ("the size of dimension %d%s is never defined")
 
 class ENCONST(DMLError):
     """
@@ -1013,11 +1012,11 @@ class EARGT(DMLError):
     The data type of the argument value given for the mentioned method
     parameter differs from the method definition.
     """
-    fmt = ("wrong type in %s parameter '%s' when %s '%s'\n"
+    fmt = ("wrong type in %s parameter %s when %s '%s'\n"
            "got:      '%s'\n"
            "expected: '%s'")
     def __init__(self, site, invocation_type, method_name,
-                 got_type, pname, ptype, direction):
+                 got_type, pref, ptype, direction):
         if invocation_type == 'call':
             invok = "calling"
         elif invocation_type == 'inline':
@@ -1025,7 +1024,7 @@ class EARGT(DMLError):
         elif invocation_type == 'implement':
             invok = "implementing"
         DMLError.__init__(self, site,
-                          direction, pname, invok, method_name,
+                          direction, pref, invok, method_name,
                           got_type, ptype)
 
 class ENARGT(DMLError):
@@ -1033,9 +1032,9 @@ class ENARGT(DMLError):
     Methods that are called must have data type declarations for all
     their parameters. (Methods that are only inlined do not need this.)
     """
-    fmt = "no type for %s parameter '%s'"
-    def __init__(self, site, pname, direction, callsite = None):
-        DMLError.__init__(self, site, direction, pname)
+    fmt = "no type for %s parameter %s"
+    def __init__(self, site, pref, direction, callsite = None):
+        DMLError.__init__(self, site, direction, pref)
         self.callsite = callsite
     def log(self):
         DMLError.log(self)
@@ -1050,8 +1049,8 @@ class EPTYPE(DMLError):
     fmt = ("wrong type for parameter %s in %s call\n"
            "got:      %s\n"
            "expected: %s")
-    def __init__(self, site, arg, ptype, argname, kind):
-        DMLError.__init__(self, site, argname, kind, arg.ctype(), ptype)
+    def __init__(self, site, arg, ptype, pref, kind):
+        DMLError.__init__(self, site, pref, kind, arg.ctype(), ptype)
 
 class ENAMECOLL(DMLError):
     """

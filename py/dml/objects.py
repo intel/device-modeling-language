@@ -268,7 +268,8 @@ class CompositeObject(DMLObject):
         if self.isindexed():
             suff = "".join('[%s]' % i for i in
                            indices[-self.local_dimensions():])
-            suff += "".join(f'[{dollar(self.site)}{idxvar}]'
+            suff += "".join(f'[{dollar(self.site)}'
+                            + f'{"_" if idxvar is None else idxvar}]'
                             for idxvar in self._idxvars[len(indices):])
             indices = indices[:-self.local_dimensions()]
         else:
@@ -283,8 +284,8 @@ class CompositeObject(DMLObject):
         if self.isindexed():
             suff = "".join('[%s]' % i for i in
                            indices[-self.local_dimensions():])
-            suff += "".join('[$%s]' % idxvar for idxvar in
-                            self._idxvars[len(indices):])
+            suff += "".join('[$%s]' % ('_' if idxvar is None else idxvar,)
+                            for idxvar in self._idxvars[len(indices):])
             indices = indices[:-self.local_dimensions()]
         else:
             suff = ''
@@ -295,7 +296,8 @@ class CompositeObject(DMLObject):
         if self.isindexed():
             suff = "".join('[%s]' % i for i in
                            indices[-self.local_dimensions():])
-            suff += "".join(f'[{dollar(self.site)}{idxvar} < {arrlen}]'
+            suff += "".join(f'[{dollar(self.site)}'
+                            + f'{"_" if idxvar is None else idxvar} < {arrlen}]'
                             for (idxvar, arrlen) in
                             itertools.islice(
                                 zip(self._idxvars, self._arraylens),
@@ -590,7 +592,8 @@ class Method(DMLObject):
         self.memoized = memoized
         self.astcode = astcode
         # A flag indicating whether all parameters have types
-        self.fully_typed = all(t for p, t in self.inp + self.outp)
+        self.fully_typed = (all(not p.inlined for p in self.inp)
+                            and all(t for _, t in self.outp))
         # MethodDefault instance
         self.default_method = default_method
         self.rbrace_site = rbrace_site

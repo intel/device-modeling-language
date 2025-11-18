@@ -374,3 +374,23 @@
   _ = throwing_method();
   (_, x, _) = method_with_multiple_return_values();
   ```
+- `note 6` '`_`' can no longer be used as the name for arbitrary declarations.
+  Instead, it is now only permitted in particular contexts, and in these
+  contexts, '`_`' will affect the declaration in a way suitable for when the
+  declaration is _unused_. These contexts are:
+    - Method-local bindings (e.g. variables and input parameters.)
+
+      When a method-local binding is given the name '`_`', it will not be added
+      to scope. This is useful for e.g. unused method parameters.
+    - Index variables for object arrays
+
+      When '`_`' is specified as an index variable, a parameter will not be
+      created for it, meaning it cannot conflict with any other definition, and
+      it cannot be referenced in the code in order to get the value of the index
+      in question. It also isn't considered to conflict with any other
+      definition that gives the index variable a different name. This is useful
+      when defining an object array specification which does not depend on the
+      index.
+
+  Note that as a consequence of these semantics, any reference to '`_`' in code
+  will _always_ resolve to the discard reference.

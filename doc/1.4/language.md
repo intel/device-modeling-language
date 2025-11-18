@@ -78,9 +78,18 @@ Identifiers
 
 Identifiers in DML are defined as in C; an identifier may begin
 with a letter or underscore, followed by any number of letters,
-numbers, or underscores. Identifiers that begin with an underscore (`_`)
-are reserved by the DML language and standard library and should not
-be used.
+numbers, or underscores.
+
+<a id="discard-identifier"/>
+Identifiers that begin with an underscore (`_`) are reserved by the DML language
+and standard library and should not be used, with the exception of the single
+underscore `_`; this is considered to be the *discard identifier*, and is only
+permitted as the name of a declaration in specific contexts, where it gives the
+declaration special semantics. Currently, these contexts are:
+* Method-local bindings, e.g. [local variables](#local-statements) &mdash;
+see that section for more information.
+* Index parameters for object arrays. See the documentation for the
+  [`object` template](dml-builtins.html#object) for more information.
 
 </dd><dt>
 
@@ -3222,6 +3231,28 @@ local (bool a, int i) = m();
 In the absence of explicit initializer expressions, a default
 "all zero" initializer will be applied to each declared object.
 
+"\_" may be used as an identifier for local variables, as well as other
+method-local bindings such as the method parameters, the bound identifier
+in `foreach`/`#foreach`/`#select` statements, and message component parameters
+of [hook-bound after statements](#hook-bound-after-statements). Any method-local
+binding named "\_" *will not be added to scope.* This is useful for when
+a method parameter is unused, or if you perform a method call where only a
+subset of returned values are of interest:
+```
+local (bool a, int _) = m();
+// No conflicts since "_" is not added to scope
+local (bool a, int _, float _) = returns_three_vals();
+```
+
+An alternative to this pattern is to leverage the
+[discard reference](#discard-reference)
+```
+local bool a;
+(a, _, _) = returns_three_vals();
+```
+... which does not require you to specify the types of the discarded values,
+may require multiple lines.
+
 ### Session Statements
 <pre>
 session <em>type</em> <em>identifier</em> [= <em>initializer</em>];
@@ -4114,10 +4145,6 @@ The discard reference *`_`* is an expression without any run-time representation
 that may be used as the target of an assignment in order to explicitly discard
 the result of an evaluated expression or return value of a method call.
 
-For backwards compatibility reasons, `_` is not a keyword, but instead behaves
-more closely as a global identifier. What this means is that declared
-identifiers (e.g. local variables) are allowed to shadow it by being named `_`.
-
 Example usage:
 ```
 // Evaluate an expression and explicitly discard its result.
@@ -4130,6 +4157,9 @@ _ = nonthrowing_single_return_method();
 _ = throwing_method();
 (_, x, _) = method_with_multiple_return_values();
 ```
+
+The discard reference is related to the [discard
+identifier](#discard-identifier), and have some use-cases in common.
 
 ### New Expressions
 

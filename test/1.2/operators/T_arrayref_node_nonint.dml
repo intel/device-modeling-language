@@ -12,6 +12,8 @@ bank b {
 }
 
 method test -> (bool b) {
-    $b.r[1].size;
+    if ($b.r[1].size != 4) {
+        error "size is nonconstant or not 4";
+    }
     b = true;
 }

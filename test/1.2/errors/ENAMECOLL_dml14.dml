@@ -1,0 +1,9 @@
+/*
+  © 2023 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+bank b {
+    register r4[_ < ...][_ < ...];
+}

@@ -49,6 +49,10 @@ method init() {
 
     /// ERROR ENVAL
     cast([], t);
+
+    // Discard identifier; not added to scope
+    local int _;
+    // ... so this resolves to the discard reference
     /// ERROR EDISCARDREF
     _;
     // no error

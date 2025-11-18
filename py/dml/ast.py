@@ -48,6 +48,7 @@ astkinds = {
     'case_dml12',
     'cast',
     'cdecl',
+    'cdecl_maybe_discarded',
     'compound',
     'conditional',
     'constant',
