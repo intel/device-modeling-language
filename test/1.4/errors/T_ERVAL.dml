@@ -6,9 +6,16 @@ dml 1.4;
 
 device test;
 
+typedef struct {
+    int bar;
+} foo_t;
+
 method init() {
     /// ERROR ERVAL
     sizeof(0);
     /// ERROR ERVAL
     local typeof(5[1:0]) i;
+
+    // no error
+    &cast(NULL, foo_t *)->bar;
 }
