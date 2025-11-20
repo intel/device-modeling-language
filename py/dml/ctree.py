@@ -4633,21 +4633,21 @@ class StructMember(Expression):
     @auto_init
     def __init__(self, site, expr, sub, type, op):
         # Write of StructMembers rely on them being C lvalues
-        assert not expr.writable or expr.c_lval
+        assert op == '->' or not expr.writable or expr.c_lval
         assert_type(site, expr, Expression)
         assert_type(site, sub, str)
 
     @property
     def writable(self):
-        return self.expr.writable
+        return self.op == '->' or self.expr.writable
 
     @property
     def addressable(self):
-        return self.expr.addressable
+        return self.op == '->' or self.expr.addressable
 
     @property
     def c_lval(self):
-        return self.expr.c_lval
+        return self.op == '->' or self.expr.c_lval
 
     def __str__(self):
         s = str(self.expr)
@@ -4662,7 +4662,8 @@ class StructMember(Expression):
 
     @property
     def is_stack_allocated(self):
-        return self.expr.is_stack_allocated
+        return (self.expr.is_pointer_to_stack_allocation if self.op == '->'
+                else self.expr.is_stack_allocated)
 
     @property
     def is_pointer_to_stack_allocation(self):

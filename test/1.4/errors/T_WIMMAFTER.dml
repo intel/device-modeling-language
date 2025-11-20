@@ -14,12 +14,12 @@ typedef struct {
 } substruct_t;
 
 typedef struct {
-    int *x;
-    int *y[2];
-    int *z[2][3];
     substruct_t sub_a;
     substruct_t sub_b[2];
     substruct_t sub_c[2][3];
+    int *x;
+    int *y[2];
+    int *z[2][3];
 } struct_t;
 
 method m(void *p) { }
@@ -70,6 +70,8 @@ method init() {
     after: m(s.sub_a.y);
     /// WARNING WIMMAFTER
     after: m(s.sub_a.z[1]);
+    /// WARNING WIMMAFTER
+    after: m(cast(&s, substruct_t *)->y);
     /// WARNING WIMMAFTER
     after: m(s.sub_b[1].y);
     /// WARNING WIMMAFTER

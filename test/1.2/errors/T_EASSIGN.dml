@@ -12,6 +12,10 @@ method m() -> (x) {}
 
 parameter p = 1;
 
+typedef struct {
+    int bar;
+} foo_t;
+
 method init {
     /// ERROR EASSIGN
     0 = 1;
@@ -72,4 +76,7 @@ method init {
 
     /// ERROR EASSIGN
     g()[1:0] = 1;
+
+    // no error
+    cast(NULL, foo_t *)->bar = 0;
 }
