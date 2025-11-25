@@ -4265,7 +4265,7 @@ mechanism for a specific template, e.g. to implement custom reset patterns.
 For example, the following can be used to reset all registers in the bank
 `regs`:
 ```
-foreach obj in (each hard_reset_t in (regs)) {
+foreach obj in (each hard_reset in (regs)) {
     obj.hard_reset();
 }
 ```
