@@ -406,3 +406,4 @@
 - `note 6` The method implementations that may be incurred by instantiating the
   `read_field`, `write_field`, `read`, or `write` templates have all been made
   overridable. See the documentation of these templates for more details.
+- `release 6 6444`
