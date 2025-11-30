@@ -1,0 +1,37 @@
+/*
+  © 2025 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+provisional explicit_object_extensions;
+
+device test;
+
+import "explicit_object_extensions_disabled.dml";
+
+template t {
+    group g1 {
+        group child;
+    }
+    in group g2 {
+        group child;
+    }
+}
+
+template u {
+    in group g1 {
+        in group child {
+            session int dummy;
+        }
+    }
+    group g2 {
+        in group child {
+            session int dummy;
+        }
+    }
+}
+
+group common_1;
+in group common_2;
