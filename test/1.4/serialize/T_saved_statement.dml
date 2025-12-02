@@ -68,3 +68,4 @@ inline method test_context(inline unused) {
     regular_context();
     after 0.1 s: regular_context();
 }
+
