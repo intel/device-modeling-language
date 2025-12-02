@@ -63,3 +63,4 @@ method test() -> (ok) {
 
     ok = true;
 }
+
