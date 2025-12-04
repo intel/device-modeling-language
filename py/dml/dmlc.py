@@ -12,7 +12,7 @@ from . import structure, logging, messages, ctree, ast, expr_util, toplevel
 from . import serialize
 from . import dmlparse
 from . import output
-from . import breaking_changes as compat
+from . import breaking_changes
 
 import dml.c_backend
 import dml.info_backend
@@ -282,29 +282,28 @@ class WarnHelpAction(HelpAction):
         for tag in by_ignored[True]:
             print(f'    {tag}')
 
-class CompatHelpAction(HelpAction):
+class BreakingChangeHelpAction(HelpAction):
     def print_help(self):
         print('''\
-Tags accepted by --no-compat. Each of these represents a deprecated
-compatibility feature that will be unavailable in all API versions
-newer than a particular version.  The --no-compat=TAG flag disables a
-feature also when an older API version is used. This allows migration
+Tags accepted by --breaking-change. Each of these represents a breaking
+change that will be enabled in all API versions
+newer than a particular version. The --breaking-change=TAG flag enables
+a change also when an older API version is used. This allows migration
 to a new API version in smaller steps, and can also allow disabling
 features that are scheduled for removal in a future API version.''')
         by_version = {}
-        for feature in compat.features.values():
-            if (feature.last_api_version.str in api_versions()
-                or (feature.last_api_version
-                    > compat.apis[default_api_version()])):
-                by_version.setdefault(feature.last_api_version, []).append(
-                    feature)
-        longest_name = max(len(name) for name in compat.features)
-        for (api, features) in sorted(by_version.items()):
-            print(f'  Features available with --simics-api={api.str}'
-                  ' or older:')
-            for feature in sorted(features, key=lambda f: f.tag()):
-                print(f'    {feature.tag().ljust(longest_name)} '
-                      + feature.short)
+        for bc in breaking_changes.changes.values():
+            if (bc.required_after.str in api_versions()
+                or (bc.required_after
+                    > breaking_changes.apis[default_api_version()])):
+                by_version.setdefault(bc.required_after, []).append(bc)
+        longest_name = max(len(name) for name in breaking_changes.changes)
+        for (api, changes) in sorted(by_version.items()):
+            print(f'  Breaking changes enabled by --simics-api={api.ordinal + 1}'
+                  ' or newer:')
+            for bc in sorted(changes, key=lambda f: f.tag()):
+                print(f'    {bc.tag().ljust(longest_name)} '
+                      + bc.short)
 
 def main(argv):
     # DML files must be utf8, but are generally opened without specifying
@@ -410,10 +409,10 @@ def main(argv):
                       help='Turn all warnings into errors')
 
     parser.add_argument('--strict-dml12', action='store_true',
-                        help='Alias for --no-compat=dml12_inline'
+                        help='Alias for --breaking-change=dml12-disable-inline-constants'
                         ',dml12_not,dml12_goto,dml12_misc,dml12_int')
     parser.add_argument('--strict-int', action='store_true',
-                        help='Alias for --no-compat=dml12_int')
+                        help='Alias for --breaking-change=dml12-remove-int-quirks')
 
     # <dt>-\-coverity</dt>
     # <dd> Adds Synopsys® Coverity® analysis annotations to suppress common
@@ -457,14 +456,18 @@ def main(argv):
     # </dl>
     # </add>
 
-    # <dt>-\-no-compat=<i>TAG</i></dt>
-    # <dd>Disable a compatibility feature</dd>
     parser.add_argument(
         '--no-compat', action='append', default=[],
-        help='Disable a compatibility feature')
+        help=argparse.SUPPRESS)
+
+    # <dt>-\-breaking-change=<i>TAG</i></dt>
+    # <dd>Enable a breaking change</dd>
+    parser.add_argument(
+        '--breaking-change', action='append', default=[],
+        help='Enable a breaking change')
 
     parser.add_argument(
-        '--help-no-compat', action=CompatHelpAction,
+        '--help-breaking-change', action=BreakingChangeHelpAction,
         help='List the available tags for --no-compat')
 
     # </dl>
@@ -524,12 +527,12 @@ def main(argv):
         else:
             defs[name] = value
 
-    api = dml.globals.api_version = compat.apis.get(options.simics_api)
+    api = dml.globals.api_version = breaking_changes.apis.get(options.simics_api)
     if api is None:
         parser.error(f"dmlc: the version '{options.simics_api}'"
                      " is not a valid API version")
 
-    if options.full_module and api != compat.api_4_8:
+    if options.full_module and api != breaking_changes.api_4_8:
         parser.error("dmlc: the -m option is only valid together with --api=4.8"
                      " or older")
 
@@ -568,34 +571,49 @@ def main(argv):
               + "The DMLC developers WILL NOT respect their use. "
               + "NEVER enable this flag for any kind of production code!!!***")
 
-    features = {tag: feature
-                for (tag, feature) in compat.features.items()
-                if feature.last_api_version >= dml.globals.api_version}
-
-    for flag in options.no_compat:
-        for tag in flag.split(','):
-            if tag in compat.features:
-                if tag in features:
-                    del features[tag]
-            else:
-                parser.error(f'invalid tag {tag} for --no-compat.'
-                             ' Try --help-no-compat.')
-
     if options.strict_int:
-        tag = compat.dml12_int.tag()
-        if tag in features:
-            del features[tag]
+        options.breaking_change.append('dml12-modern-int')
 
     if options.strict_dml12:
-        for feature in [compat.dml12_inline, compat.dml12_not,
-                        compat.dml12_goto, compat.dml12_misc,
-                        compat.dml12_int]:
-            tag = feature.tag()
-            if tag in features:
-                del features[tag]
-    dml.globals.enabled_compat = set(features.values())
+        options.breaking_change.extend([
+            'dml12-disable-inline-constants',
+            'dml12-not-typecheck',
+            'dml12-remove-misc-quirks',
+            'dml12-remove-goto',
+            'dml12-modern-int'])
 
-    if compat.suppress_WLOGMIXUP in dml.globals.enabled_compat:
+    if options.no_compat:
+        if options.breaking_change:
+            parser.error("cannot pass both --no-compat and --breaking-change")
+        for flag in options.no_compat:
+            for tag in flag.split(','):
+                if tag in breaking_changes.compat_features:
+                    options.breaking_change.append(
+                        breaking_changes.compat_features[tag].tag())
+                else:
+                    parser.error(f'invalid tag {tag} for --no-compat.')
+
+    changes = {tag: bc
+               for (tag, bc) in breaking_changes.changes.items()
+               if dml.globals.api_version > bc.required_after}
+    if options.breaking_change:
+        for flag in options.breaking_change:
+            for tag in flag.split(','):
+                bc = breaking_changes.changes.get(tag)
+                if bc is None:
+                    parser.error(f'invalid tag {tag} for --no-compat.')
+                else:
+                    changes[tag] = bc
+
+    breaking_changes.BreakingChange.enabled_breaking_changes = set(
+        changes.values())
+    # temp hack to make existing code continue to work
+    dml.globals.enabled_compat = {
+        tag for (tag, bc) in breaking_changes.compat_features.items()
+        if not bc.enabled
+    }
+
+    if not breaking_changes.enable_WLOGMIXUP.enabled:
         ignore_warning('WLOGMIXUP')
 
     for w in options.disabled_warnings:
