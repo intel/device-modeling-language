@@ -3,7 +3,7 @@
 
 # Global variables
 
-from . import breaking_changes as compat
+from . import breaking_changes
 
 # name -> Template instance. An object declaration in a file are
 # represented implicitly as a template, named @filename.dml.
@@ -57,10 +57,10 @@ type_sequence_infos = {}
 
 enabled_compat = set()
 
-# 1.4 style integer operations in 1.2
+# 1.4 style integer semantics is used in 1.2 if False is returned
 def compat_dml12_int(site):
     # if site is None, guess DML 1.4
-    return (compat.dml12_int in enabled_compat
+    return (not breaking_changes.dml12_modern_int.enabled
             and site and site.dml_version() == (1, 2))
 
 debuggable = False

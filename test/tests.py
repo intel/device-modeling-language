@@ -1069,7 +1069,7 @@ class DebuggableCheck(BaseTestCase):
 
 all_tests.append(DebuggableCheck('debuggable-check'))
 
-@subtest('--help-no-compat')
+@subtest('--help-breaking-change')
 @subtest('--help-warn')
 @subtest('--help')
 class HelpTest(BaseTestCase):

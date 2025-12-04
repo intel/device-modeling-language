@@ -2196,7 +2196,8 @@ class WPCAST(DMLWarning):
         DMLWarning.__init__(self, site, old, new, suggestion)
 
 class WLOGMIXUP(DMLWarning):
-    """
+    """<a id="WLOGMIXUP"/>
+
     A specified log level of a `log` looks as though you meant to specify the
     log groups instead, and/or vice versa. For example:
     ```
