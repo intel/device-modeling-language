@@ -1,0 +1,22 @@
+/*
+  © 2025 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+// 1.2 because some compat features are auto-disabled in DML 1.4
+dml 1.2;
+
+device test;
+
+/// COMPILE-ONLY
+/// API-VERSION 5
+/// DMLC-FLAG --no-compat=dml12_not,dml12_misc
+
+import "no_compat.dml";
+
+parameter enabled_5a = false;
+parameter enabled_5b = true;
+parameter enabled_6a = true;
+parameter enabled_6b = true;
+parameter enabled_7a = true;
+parameter enabled_7b = true;
