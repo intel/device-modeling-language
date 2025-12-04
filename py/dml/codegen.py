@@ -12,7 +12,8 @@ import os
 import math
 
 from . import objects, crep, ctree, ast, int_register, logging, serialize
-from . import dmlparse, output, compat
+from . import dmlparse, output
+from . import breaking_changes as compat
 from .logging import *
 from .expr import *
 from .ctree import *

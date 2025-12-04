@@ -6,7 +6,7 @@ from pathlib import Path
 [path_to_dml, header, outfile] = sys.argv[1:]
 sys.path.append(path_to_dml)
 
-from dml import compat
+from dml import breaking_changes as compat
 from dml.env import api_versions, default_api_version
 
 by_version = {}

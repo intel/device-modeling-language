@@ -13,7 +13,8 @@ import json
 from pathlib import Path
 
 from . import objects, logging, crep, output, ctree, serialize, structure
-from . import traits, compat
+from . import traits
+from . import breaking_changes as compat
 import dml.globals
 from .structure import get_attr_name, port_class_ident, need_port_proxy_attrs
 from .logging import *

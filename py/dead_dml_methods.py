@@ -114,7 +114,7 @@ def method_locations(path):
     from dml.toplevel import parse_file, determine_version
     from dml import logging, messages
     import dml.globals
-    from dml import compat
+    from dml import breaking_changes as compat
     # needed to parse 1.2/utility.dml
     dml.globals.enabled_compat.add(compat.warning_statement)
     for warning in messages.warnings:
