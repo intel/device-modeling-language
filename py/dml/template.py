@@ -6,7 +6,7 @@
 import os
 import functools
 from . import ast, logging
-from . import compat
+from . import breaking_changes as compat
 from .logging import *
 from .messages import *
 from .set import Set

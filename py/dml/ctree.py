@@ -21,7 +21,7 @@ from .expr_util import *
 from .set import Set
 from .slotsmeta import auto_init
 from . import dmlparse, output
-from . import compat
+from . import breaking_changes as compat
 import dml.globals
 # set from codegen.py
 codegen_call_expr = None

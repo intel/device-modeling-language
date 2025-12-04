@@ -15,7 +15,7 @@ import pickle
 from ply import lex, yacc
 
 from . import objects, logging, codegen, ctree, ast
-from . import compat
+from . import breaking_changes as compat
 from . import symtab
 from .messages import *
 from .logging import *
