@@ -245,3 +245,7 @@
   Warning statements will be illegal when Simics API 8 or newer is used.
 - `release 7 7095`
 - `release 6 6405`
+- `note 6` Added a new flag `--breaking-change` which replaces the
+  `--no-compat` flag. This flag is easier to understand, and aligns better with
+  terminology used by Simics. Existing `--no-compat` flags continue to work
+  like before.
