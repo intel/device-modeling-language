@@ -8,7 +8,8 @@ import functools
 import contextlib
 import abc
 import os
-from . import objects, logging, crep, codegen, toplevel, topsort, compat
+from . import objects, logging, crep, codegen, toplevel, topsort
+from . import breaking_changes as compat
 from .logging import *
 from .codegen import *
 from .symtab import *

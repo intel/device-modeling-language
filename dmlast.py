@@ -9,7 +9,7 @@ def create_dmlasts(dmlc_path, dmlast_path, dml_path, depfile):
     from dml.toplevel import produce_dmlast
     from dml.logging import ignore_warning
     import dml.globals
-    from dml import compat
+    from dml import breaking_changes as compat
 
     ignore_warning('WEXPERIMENTAL')
     dml.globals.enabled_compat.add(compat.warning_statement)
@@ -35,4 +35,3 @@ if __name__ == '__main__':
     [dmlc_path, dmlast_path, dml_path, depfile] = map(Path, sys.argv[1:])
     create_dmlasts(dmlc_path.resolve(), dmlast_path.resolve(),
                    dml_path.resolve(), depfile)
-

@@ -3,7 +3,7 @@
 
 # Global variables
 
-from . import compat
+from . import breaking_changes as compat
 
 # name -> Template instance. An object declaration in a file are
 # represented implicitly as a template, named @filename.dml.

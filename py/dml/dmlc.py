@@ -12,7 +12,7 @@ from . import structure, logging, messages, ctree, ast, expr_util, toplevel
 from . import serialize
 from . import dmlparse
 from . import output
-from . import compat
+from . import breaking_changes as compat
 
 import dml.c_backend
 import dml.info_backend

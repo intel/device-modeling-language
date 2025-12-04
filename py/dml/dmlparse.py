@@ -13,7 +13,7 @@ import dml.globals
 from . import dmllex12
 from . import dmllex14
 from . import provisional
-from . import compat
+from . import breaking_changes as compat
 
 assert lex.__version__ == yacc.__version__ == "3.4"
 

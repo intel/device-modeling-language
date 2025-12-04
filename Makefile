@@ -10,10 +10,10 @@ LIBDIR := $(SIMICS_PROJECT)/$(HOST_TYPE)/bin
 
 PYFILES := dml/__init__.py			\
 	  dml/ast.py				\
+	  dml/breaking_changes.py		\
 	  dml/c_backend.py			\
 	  dml/g_backend.py			\
 	  dml/codegen.py			\
-          dml/compat.py				\
           dml/crep.py				\
           dml/ctree.py				\
           dml/template.py			\

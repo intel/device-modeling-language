@@ -32,7 +32,7 @@ from .template import Rank, RankDesc, ObjectSpec, InstantiatedTemplateSpec
 from .reginfo import explode_registers
 from . import dmlparse
 from .set import Set
-from . import compat
+from . import breaking_changes as compat
 from .slotsmeta import auto_init
 from . import provisional
 
