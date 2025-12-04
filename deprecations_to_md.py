@@ -6,32 +6,33 @@ from pathlib import Path
 [path_to_dml, header, outfile] = sys.argv[1:]
 sys.path.append(path_to_dml)
 
-from dml import breaking_changes as compat
+from dml import breaking_changes
 from dml.env import api_versions, default_api_version
 
 by_version = {}
-for feature in compat.features.values():
-    if (feature.last_api_version.str in api_versions()
-        # don't document features that are unconditionally disabled in
+for bc in breaking_changes.changes.values():
+    if (bc.required_after.str in api_versions()
+        # don't document breaking changes that are unconditionally disabled in
         # this Simics version
-        or feature.last_api_version > compat.apis[default_api_version()]):
-        by_version.setdefault(feature.last_api_version, []).append(feature)
+        or bc.required_after > breaking_changes.apis[default_api_version()]):
+        by_version.setdefault(bc.required_after, []).append(bc)
 
 with open(outfile, 'w') as f:
     f.write(Path(header).read_text())
-    for (ver, features) in sorted(by_version.items()):
+    for (ver, bcs) in sorted(by_version.items()):
         f.write(fr"""
-### Features available up to and including -\-simics-api={ver.str}
-These features correspond to functionality removed when compiling using
-Simics API {ver.ordinal + 1} or newer. With older Simics API versions, these
-features can be disabled individually by passing <tt>-\-no-compat=<em>TAG</em></tt>
+### Changes for migrating from -\-simics-api={ver.str}
+These changes are enabled automatically when compiling using
+Simics API {ver.ordinal + 1} or newer. With older Simics API versions, the
+changes can be enabled individually by passing
+<code>-\-breaking-change=<em>TAG</em></code>
 to the `dmlc` compiler.
 """)
         f.write("<dl>\n")
-        for feature in sorted(features, key=lambda f: f.tag()):
-            assert feature.__doc__
-            f.write(f"  <dt>{feature.tag()}</dt>\n")
+        for bc in sorted(bcs, key=lambda f: f.tag()):
+            assert bc.__doc__
+            f.write(f"  <dt>{bc.tag()}</dt>\n")
             doc = '\n'.join(line[4:] if line.startswith('    ') else line
-                            for line in feature.__doc__.strip().splitlines())
+                            for line in bc.__doc__.strip().splitlines())
             f.write(f"  <dd>\n\n{doc}\n</dd>\n")
         f.write("</dl>\n")

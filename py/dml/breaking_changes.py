@@ -1,4 +1,4 @@
-# © 2024 Intel Corporation
+# © 2025 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
 import abc
@@ -24,9 +24,17 @@ apis = {api.str: api
         for api in [api_4_8, api_5, api_6, api_7]}
 
 
-class CompatFeature(abc.ABC):
+class BreakingChange(abc.ABC):
+    enabled_breaking_changes = None
+
     def tag(self) -> str:
-        return self.__class__.__name__
+        return self.__class__.__name__.replace('_', '-')
+
+    @property
+    def enabled(self):
+        # `None` happens in unit tests; assume everything is enabled
+        return (True if BreakingChange.enabled_breaking_changes is None
+                else self in BreakingChange.enabled_breaking_changes)
 
     @abc.abstractproperty
     def __doc__(self): pass
@@ -34,41 +42,44 @@ class CompatFeature(abc.ABC):
     @abc.abstractproperty
     def short(self) -> str: pass
 
-    @abc.abstractproperty
-    def last_api_version(self) -> API: pass
+    @property
+    @abc.abstractmethod
+    def required_after(self) -> API: pass
+
+# tag -> change
+changes: dict[str, BreakingChange] = {}
 
 
-# tag -> feature
-features: dict[str, CompatFeature] = {}
-
-
-def feature(cls: type[CompatFeature]):
-    assert issubclass(cls, CompatFeature)
+def change(cls: type[BreakingChange]):
+    assert issubclass(cls, BreakingChange)
     singleton = cls()
-    features[singleton.tag()] = singleton
+    changes[singleton.tag()] = singleton
     return singleton
 
 
-@feature
-class broken_unused_types(CompatFeature):
-    '''This compatibility feature prevents DML from
-    reporting errors on unused `extern`-declared types:
+@change
+class forbid_broken_unused_types(BreakingChange):
+    '''
+    Up to Simics 7, a bug prevented DMLC from reporting certain
+    errors on unused unused `extern`-declared types. For example,
+    the following would compile without errors:
     ```
     extern typedef struct {
         undefined_type_t member;
     } never_used_t;
     ```
-    Up to Simics 7, a bug prevented DMLC from reporting an error; this
-    feature exists to preserve that behaviour.
+    This change causes DMLC to report an error on such code.
     '''
-    short = "Allow (and ignore) errors in unused types"
-    last_api_version = api_7
+    short = "Report errors in unused types"
+    required_after = api_7
 
 
-@feature
-class broken_conditional_is(CompatFeature):
-    '''This compatibility feature prevents DML from
-    reporting errors when instantiating a template within an `#if` block:
+@change
+class forbid_broken_conditional_is(BreakingChange):
+    '''
+    Up to Simics 7, a bug prevented DMLC from reporting an error
+    when instantiating a nonexistent template within an `#if` block.
+    For example, the following would compile without errors:
     ```
     #if (true) {
         group g {
@@ -78,289 +89,327 @@ class broken_conditional_is(CompatFeature):
         }
     }
     ```
-    Up to Simics 7, a bug prevented DMLC from reporting an error; this
-    feature exists to preserve that behaviour.
+    This change causes DMLC to report an error on such code.
     '''
-    short = ("Allow (and ignore) instantiating nonexistent templates within "
-             + "'#if' blocks")
-    last_api_version = api_7
+    short = ("Report errors when instantiating a nonexistent template within "
+             + "a '#if' block")
+    required_after = api_7
 
 
-@feature
-class port_proxy_ifaces(CompatFeature):
+@change
+class remove_port_proxy_ifaces(BreakingChange):
     '''Version 5 and earlier of Simics relied on interface ports (as
     registered by the `SIM_register_port_interface` API function) for
     exposing the interfaces of ports and banks. In newer versions of
     Simics, interfaces are instead exposed on separate configuration
-    objects.  When this feature is enabled, old-style interface ports
-    are created as proxies to the interfaces on the respective port
-    objects. Such proxies are not created for all banks and ports;
-    e.g., banks inside groups were not allowed in Simics 5, so such
-    banks do not need proxies for backward compatibility.
+    objects.
+
+    When this change is enabled, ports and banks will only expose
+    interfaces through the dedicated port object. When this change is not
+    yet enabled, ports and banks are also redundantly exposed through
+    an old-style interface port for compatibility.
+
+    When enabling this change, you can expect that initialization of connection
+    attributes of other objects have to be updated. For instance, if your
+    device has a port named `p`, then
+    ```
+    other_dev.target = [your_dev, "p"]
+    ```
+    will give an error, and can be changed into:
+    ```
+    other_dev.target = your_dev.port.p
+    ```
+
+    > [!NOTE]
+    > Interface ports are only ever created for constructs that were permitted
+    > in Simics 5. For instance, interfaces in banks inside groups
+    > will not get an interface port even when this change is not enabled.
     '''
     short = "Generate proxy port interfaces for banks and ports"
-    last_api_version = api_7
+    required_after = api_7
 
-
-@feature
-class port_proxy_attrs(CompatFeature):
+@change
+class remove_port_proxy_attrs(BreakingChange):
     r'''In Simics 5, configuration attributes for `connect`,
     `attribute` and `register` objects inside banks and ports were
     registered on the device object, named like
-    <code><em>bankname</em>\_<em>attrname</em></code>. Such proxy
-    attributes are only created When this feature is enabled.
-    Proxy attributes are not created for all banks and ports, in the
-    same manner as documented in the `port_proxy_ifaces` feature.
+    <code><em>bankname</em>\_<em>attrname</em></code>.
+
+    When this change is enabled, attributes are only registered on
+    the bank or port object itself. When the change is not yet enabled,
+    ports and banks are also redundantly exposed through a proxy
+    attribute on the device object.
+
+    When enabling this change, you can expect that some code that accesses
+    some attributes directly will have to be updated. For instance, if your device has
+    a bank `regs` with a register `R`, then
+    ```
+    your_dev.regs_R = 4711
+    ```
+    will give an error, and can be changed into:
+    ```
+    your_dev.bank.regs.R = 4711
+    ```
+
+    > [!NOTE]
+    > Proxy attributes are only ever created for constructs that were permitted
+    > in Simics 5. For instance, attributes under banks inside groups
+    > will not get a proxy attribute even when this change is not enabled.
     '''
-    short = ("Generate top-level proxy attributes for attributes in banks and "
+    short = ("Remove top-level proxy attributes for attributes in banks and "
              + "ports")
-    last_api_version = api_7
+    required_after = api_7
 
 
-@feature
-class function_in_extern_struct(CompatFeature):
+@change
+class forbid_function_in_extern_struct(BreakingChange):
     '''
-    This compatibility feature enables a traditionally allowed syntax for
-    function pointer members of `extern typedef struct` declarations, where
-    the `*` is omitted in the pointer type. When disabling this feature,
-    any declarations on this form:
+    Up to Simics 7, a bug allowed omitting the `*` in function pointer
+    members of `extern typedef struct` declarations. For example, the
+    following would compile without errors:
     ```
     extern typedef struct {
         void m(conf_object_t *);
     } my_interface_t;
     ```
-    need to be changed to the standard C form:
+    This change causes DMLC to report an error on such code. To fix it,
+    use the standard C form:
     ```
     extern typedef struct {
         void (*m)(conf_object_t *);
     } my_interface_t;
     ```
     '''
-    short = 'Allow non-pointer function members in extern structs'
-    last_api_version = api_7
+    short = 'Report errors on non-pointer function members in extern structs'
+    required_after = api_7
 
 
-@feature
-class optional_version_statement(CompatFeature):
-    '''When this compatibility feature is enabled, the version
-    specification statement (`dml 1.4;`) statement at the start of
-    each file is optional (but the compiler warns if it is
-    omitted). Also, `dml 1.3;` is permitted as a deprecated alias for
-    `dml 1.4;`, with a warning.'''
-    short = "Make the DML version statement optional"
-    last_api_version = api_7
-
-
-@feature
-class io_memory(CompatFeature):
-    '''The `transaction` interface was introduced in 6, and will
-    eventually replace the `io_memory` interface. When this feature is
-    enabled, the top-level parameter `use_io_memory` defaults to
-    `true`, causing `bank` objects to implement `io_memory` instead of
-    `transaction` by default.'''
-    short = 'Use the io_memory interface by default in banks'
-    last_api_version = api_6
-
-
-@feature
-class port_obj_param(CompatFeature):
-    '''This compatibility feature changes the value of the `obj`
-    parameter in `bank` and `port` objects: Before Simics 6 there were
-    no dedicated port objects, so this parameter did not exist and if
-    you wrote `obj` inside a bank, this would resolve to
-    `dev.obj`. This feature preserves this legacy behaviour by making
-    the `obj` parameter of banks and ports resolves to `dev.obj`
-    rather than the port object.
+@change
+class require_version_statement(BreakingChange):
     '''
-    short = "Make 'obj' of ports and banks resolve to 'dev.obj'"
-    last_api_version = api_5
+    Up to Simics 7, the version specification statement (`dml 1.4;`) at
+    the start of each file was optional, and `dml 1.3;` was permitted as
+    a deprecated alias for `dml 1.4;`. When this change is enabled, the
+    version statement becomes mandatory, and `dml 1.3;` is no longer
+    accepted.
+    '''
+    short = 'Require a DML version statement at the start of each file'
+    required_after = api_7
 
 
-@feature
-class shared_logs_on_device(CompatFeature):
-    '''This compatibility feature changes the semantics of log statements
-    inside shared methods so that they always log on the device object, instead
-    of the nearest enclosing configuration object like with non-shared methods.
-    This behaviour was a bug present since the very introduction of shared
-    methods, which has lead to plenty of script code having become reliant
-    on it, especially in regards to how banks log. This feature preserves the
-    bugged behaviour.'''
-    short = "Make logs inside shared methods always log on the device object"
-    last_api_version = api_6
+@change
+class transaction_by_default(BreakingChange):
+    '''
+    Up to Simics 6, the top-level parameter `use_io_memory` defaulted to
+    `true`, causing `bank` objects to implement `io_memory` instead of
+    `transaction` by default. When this change is enabled, banks will
+    implement `transaction` by default, and `use_io_memory` must be set
+    explicitly to `true` if the old behavior is desired.
+    '''
+    short = 'Use the transaction interface by default in banks'
+    required_after = api_6
 
 
-@feature
-class suppress_WLOGMIXUP(CompatFeature):
-    '''This compatibility feature makes it so the warning `WLOGMIXUP` is
-    suppressed by default. `WLOGMIXUP` warns about usages of a common faulty
-    pattern which results in broken log statements &mdash; for more
-    information, see the documentation of `WLOGMIXUP` in the
-    [Messages](messages.html) section.
+@change
+class port_obj_param(BreakingChange):
+    '''
+    Up to Simics 5, there were no dedicated port objects and no `obj`
+    parameter in banks or ports, so the expression `obj` inside a `bank`
+    resolved to `dev.obj`; to preserve this behaviour the `obj` parameter
+    in banks and ports initially resolved to `dev.obj`.  When this change is
+    enabled, the `obj` parameter of banks and ports instead resolves to the
+    configuration object of the port object itself. Code that relied on the
+    old behavior must be updated accordingly.
+    '''
+    short = "Make 'obj' of ports and banks resolve to the port object"
+    required_after = api_5
 
-    `WLOGMIXUP` is suppressed by default below Simics API version 7 in order
-    to avoid overwhelming users with warnings.'''
-    short = "Suppress the warning 'WLOGMIXUP' by default"
-    last_api_version = api_6
 
-@feature
-class legacy_attributes(CompatFeature):
-    '''This compatibility feature makes DMLC register all attributes using the
-    legacy `SIM_register_typed_attribute` API function instead of the modern
-    `SIM_register_attribute` family of API functions.
+@change
+class shared_logs_locally(BreakingChange):
+    '''
+    Up to Simics 6, log statements inside shared methods always logged on
+    the device object instead of the nearest enclosing configuration object.
+    This was a bug that many scripts relied on. When this change is enabled,
+    logs inside shared methods behave consistently with non-shared methods
+    and log on the nearest enclosing configuration object.
+    '''
+    short = "Make logs inside shared methods log on the enclosing object"
+    required_after = api_6
 
-    Disabling this feature will make the dictionary attribute type ("D" in type
-    strings) to become unsupported, and any usage of it rejected by Simics.
-    Thus, when migrating away from this feature, any attribute of the model
-    that leverages dictionary values should be changed to leverage a different
-    representation. In general, any dictionary can instead be represented by a
-    list of two-element lists, e.g. <code>[[<em>X</em>,<em>Y</em>]*]</code>,
-    where _X_ describes the type of keys, and _Y_ describes the type of
-    values.'''
-    short = ("Use legacy attribute registration, which supports use of the "
-             + "dictionary type ('D')")
-    last_api_version = api_7
 
-@feature
-class lenient_typechecking(CompatFeature):
-    '''This compatibility feature makes DMLC's type checking very inexact and
-    lenient in multiple respects when compared to GCC's type checking of the
-    generated C.
-    This discrepency mostly affects method overrides or uses of `extern`:d C
-    macros, because in those scenarios DMLC can become wholly responsible for
-    proper type checking.
+@change
+class enable_WLOGMIXUP(BreakingChange):
+    '''
+    Up to Simics 6, the warning [`WLOGMIXUP`](messages.html#WLOGMIXUP)
+    was suppressed by default to avoid overwhelming users, as the
+    faulty pattern it reports was common.  When this change is
+    enabled, `WLOGMIXUP` is reported by default. Code using the faulty
+    pattern should be fixed before enabling this change.
+    '''
+    short = "Enable the warning 'WLOGMIXUP' by default"
+    required_after = api_6
 
-    While migrating away from this feature, the most common type errors that
-    its disablement introduces are due to discrepencies between pointer
+
+@change
+class modern_attributes(BreakingChange):
+    '''Up to Simics 7, attributes were registered using the legacy
+    `SIM_register_typed_attribute` API, which supported the dictionary
+    type ("D" in type strings). When this change is enabled,
+    attributes are registered using the modern
+    `SIM_register_attribute` family, and the dictionary type becomes
+    unsupported. Models using dictionary attributes must migrate to
+    another representation, such as a list of two-element lists. E.g.,
+    a dict from integers to strings can be represented as an attribute
+    of type `[[is]*]` instead of `D`. The outer list is created using
+    `SIM_alloc_attr_list` instead of `SIM_alloc_attr_dict`, and items
+    are added using `SIM_set_attr_list_item(&outer, i,
+    SIM_make_attr_list(2, key, value))` rather than
+    `SIM_attr_dict_set_item(&outer, i, key, value)`.
+    '''
+    short = "Use modern attribute registration (dictionary type unsupported)"
+    required_after = api_7
+
+
+@change
+class strict_typechecking(BreakingChange):
+    '''
+    Up to Simics 7, DMLC's type checking was very lenient compared to GCC,
+    especially for method overrides and uses of `extern` macros. When this
+    change is enabled, type checking becomes more strict.
+
+    The most common type of errors triggered by enabling this change are
+    due to discrepencies between pointer
     types. In particular, implicitly discarding `const`-qualification of a
     pointer's base type will never be tolerated, and `void` pointers are only
     considered equivalent with any other pointer type in the same contexts as
     C.
 
-    Novel type errors from uses of `extern`:d macros can often be resolved by
+    Novel type errors from uses of C macros exposed to DML through `extern`
+    declarations can often be resolved by
     changing the signature of the `extern` declaration to more accurately
     reflect the macro's effective type.
     '''
-    short = "Make type checking inexact and lenient"
-    last_api_version = api_7
+    short = "Enforce strict type checking similar to C"
+    required_after = api_7
 
-@feature
-class no_method_index_asserts(CompatFeature):
-    '''This compatibility feature makes it so that methods defined under
-    object arrays don't implicitly assert that the indices used to reference
-    the object array when calling the method are in bounds.
 
-    Migrating away from this compatibility feature should be a priority. If
-    its disablement makes the simulation crash due to an assertion failing,
+@change
+class range_check_method_indices(BreakingChange):
+    '''
+    Up to Simics 7, methods defined under object arrays did not validate that
+    indices used when calling the method were within bounds. When this change is
+    enabled, indices are implicitly range checked. If enabling this change causes
+    crashes,
     then that **definitely signifies a bug in your model; a bug that would
     very likely result in memory corruption if the assertion were not to
-    be made.**'''
-    short = ("Disable assertions made by methods of object arrays that the "
-             + "the object array indices are valid. Migrate away from this "
-             + "ASAP!")
-    last_api_version = api_7
-
-@feature
-class meaningless_log_levels(CompatFeature):
-    '''The log level that may be specified for logs of kind "warning", "error"
-    or "critical" typically must be 1, and any subsequent log level must
-    typically be 5. This compatibility feature makes it so either log level may
-    be any integer between 1 and 4 for these log kinds. The primary log level
-    is always treated as 1, and any other value than 1 for the subsequent log
-    level will be treated as 5 (that is, the log will only happen once)'''
-    short = ("Allow other log levels than '1' and '1 then 5' for log kinds "
-             + "'warning', 'error', and 'critical'")
-    last_api_version = api_7
-
-@feature
-class dml12_inline(CompatFeature):
-    '''When using `inline` to inline a method in a DML 1.2 device,
-    constant arguments passed in typed parameters are inlined as
-    constants when this feature is enabled. This can improve
-    compilation time in some cases, but has some unintuitive semantic
-    implications.
+    be made.**
     '''
-    short = ("Make inline method calls in DML 1.2 inline every constant "
-             + "argument, even when typed")
-    last_api_version = api_6
+    short = ("Assert object array indices in method calls. Migrate away from"
+             " this ASAP!")
+    required_after = api_7
 
 
-# separate class only because last_api_version differs
-@feature
-class dml12_not(CompatFeature):
-    '''DML 1.2-specific: the operand of the `!` operator is not
-    type-checked; in particular, negation expressions on the form
-    `!$reg`, where `reg` is a register, are permitted'''
-    short = "Allow ! operator on register references in DML 1.2"
-    last_api_version = api_5
+@change
+class restrict_log_levels(BreakingChange):
+    '''
+    Up to Simics 7, log levels for "warning", "error", and "critical" logs
+    could be any integer between 1 and 5, even though it is only meaningful
+    to provide 1 as the primary level and 5 as the subsequent level.
+    When this change is enabled, the primary log level must be 1,
+    and if the subsequent level is provided it must be 5;
+    any other values will be rejected.
+    '''
+    short = "Restrict log levels for warning/error/critical logs to 1 and 5"
+    required_after = api_7
 
 
-@feature
-class dml12_misc(CompatFeature):
-    '''This compatibility feature preserves a number of minor language quirks
-    that were originally in DML 1.2, but were cleaned up in
-    DML 1.4. When this feature is enabled, DML 1.2 will permit the following:
+@change
+class dml12_disable_inline_constants(BreakingChange):
+    '''
+    When using `inline` in DML 1.2, constant arguments passed in
+    typed parameters were inlined as constants, which had some
+    unintuitive semantic implications. In DML 1.4, constants are only
+    inlined in parameters declared using `inline` as quasi-type.  When
+    this change is enabled, DML 1.2 only inlines constants in untyped
+    method parameters, causing its behaviour to closer resemble DML 1.4.
+    '''
+    short = "Do not inline constant arguments in DML 1.2 inline methods"
+    required_after = api_6
+
+
+@change
+class dml12_not_typecheck(BreakingChange):
+    '''
+    The operand of the `!` operator in DML 1.2 was not
+    type-checked, allowing expressions like `!$reg` where `reg` is a register.
+    In DML 1.4, the operand of `!` is type-checked, and such
+    expressions are rejected. When this change is enabled, the DML 1.4 behaviour
+    applies also in DML 1.2.
+    '''
+    short = "Type-check the operand of '!' in DML 1.2"
+    required_after = api_5
+
+
+@change
+class dml12_remove_misc_quirks(BreakingChange):
+    '''
+    DML 1.2 had several quirks that inadvertedly caused it to
+    permit some strange patterns. In DML 1.4 this was cleaned up and
+    some patterns were disallowed. When this change is enabled, the
+    DML 1.4 behaviour applies also in DML 1.2.
+
+    Examples of forbidden patterns include:
 
     * `sizeof(typename)` (see `WSIZEOFTYPE`)
-
-    * the `typeof` operator on an expression that isn't an lvalue
-
+    * `typeof` on non-lvalue expressions
     * `select` statements over `vect` types
-
-    * Passing a string literal in a (non-`const`) `char *` method argument
-
+    * Passing a string literal to `char *` arguments (now requires `const char *`)
     * Using the character `-` in the `c_name` parameter of `interface` objects
-
-    * Using the `c_name` parameter to override interface type in
-      `implement` objects
-
-    * `loggroup` identifiers are accessible under the same name in
-      generated C code
-
-    * Applying the `&` operator on something that isn't an lvalue
-      (typically gives broken C code)
-
-    * `extern` statements that do not specify a type (`extern foo;`)
-
+    * Overriding interface type via the `c_name` parameter in `implement` objects
+    * `loggroup` identifiers accessible under same name in generated C
+    * Applying `&` to non-lvalues
+    * `extern` statements without type (`extern foo;`)
     * Anonymous banks (`bank { ... }`)
-
-    * Unused templates may instantiate non-existing templates
-
-    * The same symbol may be used both for a top-level object (`$`
-      scope) and a top-level symbol (non-`$` scope, e.g. `extern`,
-      `constant` or `loggroup`)
-
+    * Unused templates instantiating non-existing templates
+    * Using the same symbol for both top-level object (`$` scope) and
+      top-level symbol (non-`$` scope, e.g. `extern`, `constant` or `loggroup`)
     '''
-    short = "Enable various legacy DML 1.2 quirks"
-    last_api_version = api_6
+    short = "Disallow legacy DML 1.2 quirks"
+    required_after = api_6
 
 
-@feature
-class dml12_goto(CompatFeature):
-    '''The `goto` statement is deprecated; this compatibility feature
-    preserves it. Most `goto` based control structures can be reworked by
-    changing the `goto` into a `throw`, and its label into a `catch`
-    block; since this is sometimes nontrivial, it can be useful to disable
-    the `goto` statement separately.
+@change
+class dml12_remove_goto(BreakingChange):
     '''
-    short = "Enable the goto statement in DML 1.2"
-    last_api_version = api_6
+    Up to Simics 6, the `goto` statement was allowed in DML 1.2.
+    The statement is not allowed in DML 1.4. When this
+    change is enabled, `goto` is disallowed also in DML 1.2.
+    Most `goto`-based control
+    structures can be rewritten using `throw` and `catch` blocks.
+    '''
+    short = "Disallow the goto statement in DML 1.2"
+    required_after = api_6
 
 
-@feature
-class dml12_int(CompatFeature):
-    '''This compatibility feature affects many semantic details of
-    integer arithmetic. When this feature is enabled, DMLC translates
-    most integer operations directly into C, without compensating for
-    DML-specifics, like the support for odd-sized
-    <tt>uint<i>NN</i></tt> types; this can sometimes have unexpected
-    consequences. The most immediate effect of disabling this feature
+@change
+class dml12_modern_int(BreakingChange):
+    '''
+    Up to Simics 6, DML 1.2 used legacy integer semantics, translating most
+    operations directly into C without compensating for DML-specifics like
+    the support for odd-sized <tt>uint<i>NN</i></tt> types. This can
+    sometimes have unexpected consequences.
+    When this change is enabled, modern DML 1.4 integer semantics is used.
+
+    The most immediate effect of enabling this change
     is that DMLC will report errors on statements like `assert 0;` and
     `while (1) { ... }`, which need to change into `assert false;` and
     `while (true) { ... }`, respectively. Other effects include:
 
-    * Integers of non-standard sizes are represented as a native C
+    * With legacy integer semantics, integers of non-standard sizes
+      are represented as a native C
       type, e.g. `uint5` is represented as `uint8`, allowing it to
-      store numbers too large to fit in 5 bits. With modern DML
+      store numbers too large to fit in 5 bits. With modern integer
       semantics, arithmetic is done on 64-bit integers and bits are
       truncated if casting or storing in a smaller type.
 
@@ -370,50 +419,75 @@ class dml12_int(CompatFeature):
       to use the `uint1` type. It can be a good idea to grep for
       `[^a-z_]int1[^0-9]` and review if `uint1` is a better choice.
 
-    * Some operations have undefined behaviour in C, which is
-      inherited by traditional DML 1.2. In modern DML this is
-      well-defined, e.g., an unconditional critical error on negative
-      shift or division by zero, and truncation on too large shift
-      operands or signed shift overflow.
+    * With legacy semantics, some operations that have undefined behaviour
+      in C effectively counts as undefined behaviour in DML as well,
+      whereas modern semantics have well-defined semantics for
+      all operations. For instance, negative
+      shift or division by zero is handled with an unconditional critical
+      error, and too large shift operands or signed shift overflow is handled
+      by truncation.
 
-    * Comparison operators `<`, `<=`, `==`, `>=`, `>` inherit C
-      semantics in traditional DML, whereas in modern DML they are
-      compared as integers. This sometimes makes a difference when
-      comparing signed and unsigned numbers; in particular, `-1 !=
-      0xffffffffffffffff` consistently in modern DML, whereas with
-      compatibility semantics, they are consiered different only if
+    * With legacy integer semantics, comparison operators `<`, `<=`, `==`,
+      `>=`, `>` inherit C semantics, whereas with modern integer semantics
+      they are compared mathematically as integers. This sometimes makes a
+      difference when comparing signed and unsigned numbers; in particular, `-1 !=
+      0xffffffffffffffff` consistently with modern semantics, whereas with
+      legacy semantics, they are consiered different only if
       both are constant.
-
-    The `dml12_int` feature only applies to DML 1.2 files; if a DML
-    1.4 file is imported from a DML 1.2 file, then modern DML
-    semantics is still used for operations in that file.
     '''
-    short = "Use legacy integer semantics in DML 1.2"
-    last_api_version = api_6
+    short = "Apply modern integer semantics in DML 1.2"
+    required_after = api_6
 
 
-@feature
-class experimental_vect(CompatFeature):
-    '''<a id="experimental_vect"/> This compat feature
-    controls how DMLC reacts to uses of the `vect` syntax in files
-    where the [`simics_util_vect` provisional feature](provisional-auto.html#simics_util_vect)
-    is not enabled.
+@change
+class vect_needs_provisional(BreakingChange):
+    '''<a id="vect_needs_provisional"/>
 
-    When the `experimental_vect` compatibility feature is
-    enabled, such uses are permitted, and give a `WEXPERIMENTAL`
-    warning in DML 1.4 (but no warning in DML 1.2). When
-    `experimental_vect` is disabled, DMLC forbids the `vect`
-    syntax.
-
+    Up to Simics 7, the `vect` syntax was permitted without enabling the
+    [`simics_util_vect` provisional feature](provisional-auto.html#simics_util_vect),
+    issuing only a warning in DML 1.4.
+    When this change is enabled, the `vect` syntax is forbidden unless the
+    provisional feature is explicitly enabled.
     '''
-    short = "Permit vect syntax without 'provisional simics_util_vect'"
-    last_api_version = api_7
+    short = "Disallow vect syntax without 'provisional simics_util_vect'"
+    required_after = api_7
 
 
-@feature
-class warning_statement(CompatFeature):
-    '''This compatibility feature enables the `_warning` statement.
-    This turned out to not be very useful, so in Simics API 8 and
-    newer the feature is no longer allowed.'''
-    short = "Allow the `_warning` statement"
-    last_api_version = api_7
+@change
+class forbid_warning_statement(BreakingChange):
+    '''
+    Up to Simics 7, the `_warning` statement was allowed, though rarely useful.
+    When this change is enabled, `_warning` statements are disallowed.
+    '''
+    short = "Disallow the `_warning` statement"
+    required_after = api_7
+
+
+
+compat_features = {
+    'broken_unused_types': forbid_broken_unused_types,
+    'broken_conditional_is': forbid_broken_conditional_is,
+    'port_proxy_ifaces': remove_port_proxy_ifaces,
+    'port_proxy_attrs': remove_port_proxy_attrs,
+    'function_in_extern_struct': forbid_function_in_extern_struct,
+    'optional_version_statement': require_version_statement,
+    'io_memory': transaction_by_default,
+    'port_obj_param': port_obj_param,
+    'shared_logs_on_device': shared_logs_locally,
+    'suppress_WLOGMIXUP': enable_WLOGMIXUP,
+    'legacy_attributes': modern_attributes,
+    'lenient_typechecking': strict_typechecking,
+    'no_method_index_asserts': range_check_method_indices,
+    'meaningless_log_levels': restrict_log_levels,
+    'dml12_inline': dml12_disable_inline_constants,
+    'dml12_not': dml12_not_typecheck,
+    'dml12_misc': dml12_remove_misc_quirks,
+    'dml12_goto': dml12_remove_goto,
+    'dml12_int': dml12_modern_int,
+    'experimental_vect': vect_needs_provisional,
+    'warning_statement': forbid_warning_statement,
+}
+
+# temporary hack to keep existing dml.globals.enabled_compat based checks working
+for name in compat_features:
+    globals()[name] = name

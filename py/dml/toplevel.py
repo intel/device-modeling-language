@@ -371,6 +371,10 @@ def parse_main_file(inputfilename, explicit_import_path):
         for feature in [compat.dml12_inline, compat.dml12_not,
                         compat.dml12_misc]:
             dml.globals.enabled_compat.discard(feature)
+        compat.BreakingChange.enabled_breaking_changes.update([
+            compat.dml12_disable_inline_constants,
+            compat.dml12_not_typecheck,
+            compat.dml12_remove_misc_quirks])
 
     implicit_imports = [
         ast.import_(site, "dml-builtins.dml")]
