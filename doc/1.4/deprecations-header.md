@@ -63,7 +63,7 @@ be used for a model. When building with the standard Simics build system, this
 is controlled by the `SIMICS_API_VERSION` variable in `make`, or the
 `SIMICS_API`/`MODULE_SIMICS_API` variable in `CMake`.
 
-DMLC also provides the <code>--no-compat=_tag_</code> flag, which disables the
+DMLC also provides the <code>-\-no-compat=_tag_</code> flag, which disables the
 feature represented by _`tag`_. The available tags are listed in the next
 section. The tag also controls the name of a global boolean parameter that the
 DML program may use to check whether the feature is available. The parameter's

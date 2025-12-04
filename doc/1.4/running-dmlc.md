@@ -67,7 +67,7 @@ The following are the available command line options to
 
 <dl><dt>
 
--h, --help
+-h, -\-help
 </dt><dd>
 
 Print usage help.
@@ -89,7 +89,7 @@ string, a boolean, an integer, or a floating point
 constant. The parameter will appear in the top-level scope.
 </dd><dt>
 
---dep
+-\-dep
 </dt><dd>
 
 Output makefile rules describing dependencies.
@@ -110,7 +110,7 @@ This generates a DML debug file leveraged by debug-simics, and
 causes generated C code to follow the DML code more closely.
 </dd><dt>
 
---coverity
+-\-coverity
 </dt><dd>
 
 Adds Synopsys® Coverity® analysis annotations to suppress common false positives
@@ -124,59 +124,59 @@ unexpected behavior. Because of this, it's recommended that `--coverity` is
 only used when needed.
 </dd><dt>
 
---warn=*tag*
+-\-warn=*tag*
 </dt><dd>
 
 Enable selected warnings. The tags can be found using
 the `-T` option.
 </dd><dt>
 
---nowarn=*tag*
+-\-nowarn=*tag*
 </dt><dd>
 
 Suppress selected warnings. The tags can be found using
 the `-T` option.
 </dd><dt>
 
---werror
+-\-werror
 </dt><dd>
 
 Turn all warnings into errors.
 </dd><dt>
 
---strict
+-\-strict
 </dt><dd>
 
 Report errors for some constructs that will be forbidden in
 future versions of the DML language
 </dd><dt>
 
---noline
+-\-noline
 </dt><dd>
 
 Suppress line directives for the C preprocessor so
 that the C code can be debugged.
 </dd><dt>
 
---info
+-\-info
 </dt><dd>
 
 Enable the output of an XML file describing register layout.
 </dd><dt>
 
---version
+-\-version
 </dt><dd>
 
 Print version information.
 </dd><dt>
 
---simics-api=*version*
+-\-simics-api=*version*
 </dt><dd>
 
 Use Simics API version *version*.
 </dd><dt>
 
---max-errors=*N*
+-\-max-errors=*N*
 </dt><dd>
 
 Limit the number of error messages to *N*.

@@ -318,7 +318,7 @@ def main(argv):
     # <file>dmlc</file>:
     # <dl>
 
-    # <dt>-h, --help</dt>
+    # <dt>-h, -\-help</dt>
     # <dd>Print usage help.</dd>
 
     # <dt>-I <i>path</i></dt>
@@ -341,22 +341,22 @@ def main(argv):
         default=[],
         help='set compile time constant NAME to VALUE')
 
-    # <dt>--dep</dt>
+    # <dt>-\-dep</dt>
     # <dd>Output makefile rules describing dependencies.</dd>
     parser.add_argument(
         '--dep', action='store',
         help='generate makefile dependencies')
 
-    # <dt>--no-dep-phony</dt>
-    # <dd>With --dep, avoid addition of a phony target for each dependency
+    # <dt>-\-no-dep-phony</dt>
+    # <dd>With -\-dep, avoid addition of a phony target for each dependency
     # other than the main file.</dd>
     parser.add_argument(
         '--no-dep-phony', action='store_true',
         help='With --dep, avoid addition of a phony target for each'
         + ' dependency other than the main file.')
 
-    # <dt>--dep-target</dt>
-    # <dd>With --dep, change the target of the rule emitted by dependency
+    # <dt>-\-dep-target</dt>
+    # <dd>With -\-dep, change the target of the rule emitted by dependency
     # generation. Specify multiple times to have multiple targets.</dd>
     parser.add_argument(
         '--dep-target', action='append', metavar='TARGET', default=[],
@@ -366,7 +366,7 @@ def main(argv):
 
     # <dt>-T</dt>
     # <dd>Show tags on warning messages. The tags can be used with
-    # the <tt>--nowarn</tt> and <tt>--warn</tt> options.</dd>
+    # the <tt>-\-nowarn</tt> and <tt>-\-warn</tt> options.</dd>
     parser.add_argument(
         '-T', dest='include_tag', action='store_true',
         help='show tags on warning messages')
@@ -384,7 +384,7 @@ def main(argv):
         '-g', dest='debuggable', action='store_true',
         help='generate artifacts and C code that allow for easier debugging')
 
-    # <dt>--warn=<i>tag</i></dt>
+    # <dt>-\-warn=<i>tag</i></dt>
     # <dd>Enable selected warnings. The tags can be found using
     # the <tt>-T</tt> option.</dd>
     parser.add_argument(
@@ -393,7 +393,7 @@ def main(argv):
         default=[],
         help='enable warning TAG')
 
-    # <dt>--nowarn=<i>tag</i></dt>
+    # <dt>-\-nowarn=<i>tag</i></dt>
     # <dd>Suppress selected warnings. The tags can be found using
     # the <tt>-T</tt> option.</dd>
     parser.add_argument(
@@ -404,7 +404,7 @@ def main(argv):
 
     parser.add_argument('--help-warn', action=WarnHelpAction,
                         help='List warning tags available for --warn/--nowarn')
-    # <dt>--werror</dt>
+    # <dt>-\-werror</dt>
     # <dd>Turn all warnings into errors.</dd>
     parser.add_argument('--werror', action='store_true',
                       help='Turn all warnings into errors')
@@ -415,7 +415,7 @@ def main(argv):
     parser.add_argument('--strict-int', action='store_true',
                         help='Alias for --no-compat=dml12_int')
 
-    # <dt>--coverity</dt>
+    # <dt>-\-coverity</dt>
     # <dd> Adds Synopsys® Coverity® analysis annotations to suppress common
     # false positives in generated C code created from DML 1.4 device models.
     # </dd>
@@ -424,20 +424,20 @@ def main(argv):
         help=('Adds Synopsys® Coverity® analysis annotations to suppress '
                 + 'common false positives in generated C code created from '
                 + 'DML 1.4 device models.'))
-    # <dt>--noline</dt>
+    # <dt>-\-noline</dt>
     # <dd>Suppress line directives for the C preprocessor so
     # that the C code can be debugged.</dd>
     parser.add_argument(
         '--noline', action='store_true',
         help='suppress line directives in generated C code')
 
-    # <dt>--info</dt>
+    # <dt>-\-info</dt>
     # <dd>Enable the output of an XML file describing register layout.</dd>
     parser.add_argument(
         '--info', action='store_true',
         help='generate XML file describing register layout')
 
-    # <dt>--simics-api=<i>version</i></dt>
+    # <dt>-\-simics-api=<i>version</i></dt>
     # <dd>Use Simics API version <i>version</i>.</dd>
     parser.add_argument(
         '--simics-api', action='store',
@@ -446,7 +446,7 @@ def main(argv):
         help=('specify Simics API version (default %s)'
               % default_api_version()))
 
-    # <dt>--max-errors=<i>N</i></dt>
+    # <dt>-\-max-errors=<i>N</i></dt>
     # <dd>Limit the number of error messages to <i>N</i>.</dd>
     parser.add_argument(
         '--max-errors', action='store',
@@ -457,7 +457,7 @@ def main(argv):
     # </dl>
     # </add>
 
-    # <dt>--no-compat=<i>TAG</i></dt>
+    # <dt>-\-no-compat=<i>TAG</i></dt>
     # <dd>Disable a compatibility feature</dd>
     parser.add_argument(
         '--no-compat', action='append', default=[],
