@@ -1,0 +1,21 @@
+/*
+  © 2025 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+device test;
+
+/// COMPILE-ONLY
+/// API-VERSION 7
+/// DMLC-FLAG --no-compat=broken_conditional_is,broken_unused_types,no_method_index_asserts,warning_statement,lenient_typechecking,port_proxy_ifaces
+
+import "no_compat.dml";
+
+param enabled_5a = false;
+param enabled_5b = false;
+param enabled_6a = false;
+param enabled_6b = false;
+param enabled_7a = false;
+param enabled_7b = true;
