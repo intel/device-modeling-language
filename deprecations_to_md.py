@@ -20,11 +20,11 @@ for feature in compat.features.values():
 with open(outfile, 'w') as f:
     f.write(Path(header).read_text())
     for (ver, features) in sorted(by_version.items()):
-        f.write(rf"""
-### Features available up to and including -\-simics-api={ver.str}
+        f.write(f"""
+### Features available up to and including -\\-simics-api={ver.str}
 These features correspond to functionality removed when compiling using
 Simics API {ver.ordinal + 1} or newer. With older Simics API versions, these
-features can be disabled individually by passing <tt>-\-no-compat=<em>TAG</em></tt>
+features can be disabled individually by passing <tt>-\\-no-compat=<em>TAG</em></tt>
 to the `dmlc` compiler.
 """)
         f.write("<dl>\n")
