@@ -705,7 +705,7 @@ template device {
     param be_bitorder             default _be_bitorder;
     param log_group                 = undefined;
 
-    param use_io_memory             default _compat_io_memory;
+    param use_io_memory             default !_breaking_change_transaction_by_default;
     // this was available in DML 1.2; defensively reserved in 1.4
     param banks                     = undefined;
     // this carried semantics in DML 1.2; deprecated in 1.4
@@ -1596,7 +1596,8 @@ template port is object {
     param _is_simics_object = true;
     // limitations for ports are not recognized
     param limitations = undefined;
-    param obj = dev._compat_port_obj_param #? dev.obj #: _port_obj();
+    param obj = dev._breaking_change_port_obj_param
+        #? _port_obj() #: dev.obj;
 
     #if (parent.objtype == "group"
          #? parent._simics_namespace_clash #: false) {
@@ -1945,7 +1946,8 @@ template bank is (object, shown_desc) {
     // compatibility: referencing 'obj' in a bank method must evaluate to
     // dev.obj in code that can compile on both 5 and 6
     // TODO: we should probably make obj an immutable session variable
-    param obj = dev._compat_port_obj_param #? dev.obj #: _bank_obj();
+    param obj = dev._breaking_change_port_obj_param
+        #? _bank_obj() #: dev.obj;
     param partial : bool;
     param overlapping : bool;
     param _le_byte_order : bool;

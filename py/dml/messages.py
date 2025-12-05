@@ -2222,7 +2222,7 @@ class WLOGMIXUP(DMLWarning):
     ```
 
     This warning is only enabled by default with Simics API version 7 or above
-    (due to the compatibility feature `suppress_WLOGMIXUP`.)
+    (due to the breaking change `enable_WLOGMIXUP`.)
     """
     fmt = ("log statement with likely misspecified log level(s) and log "
            + "groups: %s")

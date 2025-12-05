@@ -36,8 +36,8 @@ class BreakingChange(abc.ABC):
     @property
     def enabled(self):
         # `None` happens in unit tests; assume everything is enabled
-        return (True if BreakingChange.enabled_breaking_changes is None
-                else self in BreakingChange.enabled_breaking_changes)
+        return (BreakingChange.enabled_breaking_changes is None
+                or self in BreakingChange.enabled_breaking_changes)
 
     @abc.abstractproperty
     def __doc__(self): pass
