@@ -32,7 +32,7 @@ from .template import Rank, RankDesc, ObjectSpec, InstantiatedTemplateSpec
 from .reginfo import explode_registers
 from . import dmlparse
 from .set import Set
-from . import breaking_changes as compat
+from . import breaking_changes
 from .slotsmeta import auto_init
 from . import provisional
 
@@ -85,7 +85,7 @@ def mkglobals(stmts):
 
     for name in by_name:
         clash = by_name[name]
-        if len(clash) > 1 and compat.dml12_misc in dml.globals.enabled_compat:
+        if len(clash) > 1 and not breaking_changes.dml12_remove_misc_quirks.enabled:
             # DML 1.2 permits multiple redundant 'extern foo;'
             # declarations; drop these
             for stmt in redundant_externs(clash):
@@ -178,7 +178,7 @@ def mkglobals(stmts):
                 if typ is None:
                     # guaranteed by grammar
                     assert dml.globals.dml_version == (1, 2)
-                    if (compat.dml12_misc not in dml.globals.enabled_compat
+                    if (breaking_changes.dml12_remove_misc_quirks.enabled
                         and not site.filename().endswith('simics-api.dml')):
                         report(EEXTERN(stmt.site))
                     typ = TUnknown()
@@ -247,7 +247,7 @@ def mkglobals(stmts):
     global_anonymous_structs.clear()
     global_anonymous_structs.update(anonymous_structs)
 
-    if compat.broken_unused_types not in dml.globals.enabled_compat:
+    if breaking_changes.forbid_broken_unused_types.enabled:
         for t in typedefs.values():
             try:
                 check_named_types(t)
@@ -532,12 +532,12 @@ def add_templates(obj_specs, each_stmts):
         i += 1
         if (tpl.name in dml.globals.missing_templates
             and (
-                # SIMICS-22403: dml12_misc makes DML *less* strict,
-                # which is a bug, and we use a compat feature to
+                # SIMICS-22403: dml12_remove_misc_quirks makes DML *less* strict,
+                # which is a bug, and we use a breaking change to
                 # gradually fix that bug. We also preserve the
                 # stricter checking in 1.2, because that doesn't hurt.
-                compat.broken_conditional_is not in dml.globals.enabled_compat
-                or compat.dml12_misc in dml.globals.enabled_compat)):
+                breaking_changes.forbid_broken_conditional_is.enabled
+                or not breaking_changes.dml12_remove_misc_quirks.enabled)):
             report(ENTMPL(site, tpl.name))
             continue
         if tpl in used_templates:
@@ -757,7 +757,7 @@ def typecheck_method_override(m1, m2, location):
             type2 = safe_realtype_unconst(type2)
 
             ok = (type1.eq_fuzzy(type2)
-                  if compat.lenient_typechecking in dml.globals.enabled_compat
+                  if not breaking_changes.strict_typechecking.enabled
                   else type1.eq(type2))
             if not ok:
                 ref = f"'{n1.args[0]}'" if n1.kind == 'variable' else (idx + 1)
@@ -773,7 +773,7 @@ def typecheck_method_override(m1, m2, location):
             type1 = safe_realtype_unconst(type1)
             type2 = safe_realtype_unconst(type2)
             ok = (type1.eq_fuzzy(type2)
-                  if compat.lenient_typechecking in dml.globals.enabled_compat
+                  if not breaking_changes.strict_typechecking.enabled
                   else type1.eq(type2))
             if not ok:
                 msg = "mismatching types in return value"
@@ -1047,7 +1047,7 @@ def create_object(site, ident, objtype, parent,
         return objects.Device(ident, site)
     elif objtype == 'bank':
         if (ident is None
-            and compat.dml12_misc not in dml.globals.enabled_compat):
+            and breaking_changes.dml12_remove_misc_quirks.enabled):
             report(ESYNTAX(site, 'bank', 'anonymous banks are not allowed'))
         return objects.Bank(ident, site, parent, array_lens, index_vars)
     elif objtype == 'group':
@@ -1143,7 +1143,7 @@ def make_autoparams(obj, index_var_asts):
                 mkBoolConstant(site, site.bitorder() == 'be'))
         autoparams['simics_api_version'] = SimpleParamExpr(
             mkStringConstant(site, dml.globals.api_version.str))
-        for change in compat.changes.values():
+        for change in breaking_changes.changes.values():
             autoparams[f'_breaking_change_{change.ident()}'] = SimpleParamExpr(
                 mkBoolConstant(site, change.enabled))
         dml.globals.device = obj
@@ -2040,7 +2040,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                         param.get_expr(zero_index * param.dimensions)
                 except DMLError as e:
                     if (dml.globals.dml_version == (1, 2)
-                        and dml.globals.api_version <= compat.api_5
+                        and dml.globals.api_version <= breaking_changes.api_5
                         and isinstance(e, EREF)):
                         # We forgive some errors in unused parameters, to
                         # avoid the annoyance caused by hard errors from code
@@ -2060,7 +2060,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                     else:
                         report(e)
         if (dml.globals.dml_version != (1, 2)
-            or compat.dml12_misc not in dml.globals.enabled_compat):
+            or breaking_changes.dml12_remove_misc_quirks.enabled):
             # TODO: this should be handled cleaner in the case of pure
             # 1.4 code
             for p in obj.get_components():
@@ -2068,7 +2068,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                 if sym and (
                         # hacky workaround for the ExpressionSymbol
                         # implicitly added above. Needed when importing 1.4
-                        # code from 1.2 with --no-compat=dml12_misc
+                        # code from 1.2 with --breaking-change=dml12_remove_misc_quirks
                         dml.globals.dml_version != (1, 2)
                         or p.site.dml_version() == (1, 2)
                         or p.site != sym.site):
@@ -2778,7 +2778,7 @@ def need_port_proxy_attrs(port):
     return (port.objtype in {'port', 'bank'}
             and port.dimensions <= 1
             and port.parent is dml.globals.device
-            and compat.port_proxy_attrs in dml.globals.enabled_compat)
+            and not breaking_changes.remove_port_proxy_attrs.enabled)
 
 class ConfAttrParentObjectProxyInfoParamExpr(objects.ParamExpr):
     '''The _parent_obj_proxy_info parameter of a attribute, register, or

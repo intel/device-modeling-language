@@ -21,7 +21,7 @@ from .expr_util import *
 from .set import Set
 from .slotsmeta import auto_init
 from . import dmlparse, output
-from . import breaking_changes as compat
+from . import breaking_changes
 import dml.globals
 # set from codegen.py
 codegen_call_expr = None
@@ -2641,7 +2641,7 @@ class AddressOf(UnaryOp):
                     TFunction([TPtr(TNamed('conf_object_t')),
                                TPtr(TVoid())],
                               TVoid())))
-        if (compat.dml12_misc not in dml.globals.enabled_compat
+        if (breaking_changes.dml12_remove_misc_quirks.enabled
             and not rh.addressable):
             raise ERVAL(rh.site, '&')
         return AddressOf(site, rh)
@@ -2697,7 +2697,7 @@ class Not(UnaryOp):
 
     @staticmethod
     def make_simple(site, rh):
-        if compat.dml12_misc not in dml.globals.enabled_compat:
+        if breaking_changes.dml12_remove_misc_quirks.enabled:
             rh = as_bool(rh)
         if rh.constant:
             return mkBoolConstant(site, not rh.value)
@@ -4018,7 +4018,7 @@ def lookup_component(site, base, indices, name, only_local):
             indices = indices[:-base.local_dimensions()]
         return lookup_component(site, base.parent, indices, name, False)
 
-    if (compat.dml12_misc in dml.globals.enabled_compat
+    if (not breaking_changes.dml12_remove_misc_quirks.enabled
         and not base.parent):
         # Last resort is to look for components in anonymous banks
         for bank in base.get_components('bank'):
@@ -4916,7 +4916,7 @@ def mkCast(site, expr, new_type):
         else:
             return mkTraitUpcast(site, expr, real.trait)
 
-    if (compat.dml12_misc in dml.globals.enabled_compat
+    if (not breaking_changes.dml12_remove_misc_quirks.enabled
         and isinstance(expr, InterfaceMethodRef)):
         # Workaround for SIMICS-9868
         return mkLit(site, "%s->%s" % (
