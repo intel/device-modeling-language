@@ -1143,9 +1143,9 @@ def make_autoparams(obj, index_var_asts):
                 mkBoolConstant(site, site.bitorder() == 'be'))
         autoparams['simics_api_version'] = SimpleParamExpr(
             mkStringConstant(site, dml.globals.api_version.str))
-        for tag in compat.compat_features:
-            autoparams[f'_compat_{tag}'] = SimpleParamExpr(
-                mkBoolConstant(site, tag in dml.globals.enabled_compat))
+        for change in compat.changes.values():
+            autoparams[f'_breaking_change_{change.ident()}'] = SimpleParamExpr(
+                mkBoolConstant(site, change.enabled))
         dml.globals.device = obj
 
     elif obj.objtype == 'bank':
