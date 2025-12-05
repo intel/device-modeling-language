@@ -10,7 +10,7 @@ from .types import *
 from .logging import *
 from .expr_util import *
 from .messages import *
-from . import breaking_changes as compat
+from . import breaking_changes
 
 __all__ = (
     'cname',
@@ -74,8 +74,7 @@ def cname(node):
     elif node.objtype == 'interface':
         # this is weird... kept for compatibility
         name = param_str(node, 'c_name').replace('-', '_')
-        if name != node.name and (
-                compat.dml12_misc not in dml.globals.enabled_compat):
+        if name != node.name and breaking_changes.dml12_remove_misc_quirks.enabled:
             report(WDEPRECATED(param_expr_site(node, 'c_name'),
                                'parameter c_name'))
         return name
@@ -178,7 +177,7 @@ def node_storage_type_dml12(node, site):
         else:
             return None
     elif node.objtype == 'implement':
-        if compat.dml12_misc in dml.globals.enabled_compat:
+        if not breaking_changes.dml12_remove_misc_quirks.enabled:
             typename = param_str(node, 'c_type')
             t = TNamed(typename)
             t.declaration_site = node.site
@@ -228,7 +227,7 @@ def conf_object(site, node, indices):
                            cref_portobj(node, indices[:node.dimensions]))
 
 def cloggroup(name):
-    if compat.dml12_misc in dml.globals.enabled_compat:
+    if not breaking_changes.dml12_remove_misc_quirks.enabled:
         return name
     else:
         return '_dml_loggroup_' + name

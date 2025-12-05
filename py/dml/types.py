@@ -58,7 +58,7 @@ from .env import is_windows
 from .output import out
 from .messages import *
 from .logging import *
-from . import breaking_changes as compat
+from . import breaking_changes
 from . import output
 import dml .globals
 import abc
@@ -620,7 +620,7 @@ class IntegerType(DMLType):
         if type(self) is not type(other):
             return False
         if (dml.globals.dml_version == (1, 2)
-            and compat.dml12_int in dml.globals.enabled_compat):
+            and not breaking_changes.dml12_modern_int.enabled):
             # Ignore signedness
             return self.bits == other.bits
         else:
@@ -696,7 +696,7 @@ class TInt(IntegerType):
         other = realtype(other)
         if other.is_int:
             trunc = (other.bits > self.bits)
-            if (compat.dml12_misc in dml.globals.enabled_compat
+            if (not breaking_changes.dml12_remove_misc_quirks.enabled
                 and isinstance(other, TBool)):
                 return (False, False, constviol)
             return (True, trunc, constviol)
@@ -998,23 +998,23 @@ class TPtr(DMLType):
                          and shallow_const(other.base))
             if self.base.void or other.base.void:
                 ok = True
-                if compat.lenient_typechecking in dml.globals.enabled_compat:
+                if not breaking_changes.strict_typechecking.enabled:
                     constviol = False
             else:
                 unconst_self_base = safe_realtype_unconst(self.base)
                 unconst_other_base = safe_realtype_unconst(other.base)
 
                 ok = (unconst_self_base.eq_fuzzy
-                      if (compat.dml12_int in dml.globals.enabled_compat
+                      if (not breaking_changes.dml12_modern_int.enabled
                           and unconst_self_base.is_int
                           and unconst_other_base.is_int)
                       else unconst_self_base.eq)(unconst_other_base)
 
         elif isinstance(other, TFunction):
-            ok = (compat.lenient_typechecking in dml.globals.enabled_compat
+            ok = (not breaking_changes.strict_typechecking.enabled
                   or safe_realtype_unconst(self.base).eq(other))
         # TODO gate this behind dml.globals.dml_version == (1, 2) or
-        # dml12_misc?
+        # remove_misc_quirks?
         if self.base.void and isinstance(other, TDevice):
             ok = True
         #dbg('TPtr.canstore %r %r => %r' % (self, other, ok))
@@ -1534,9 +1534,9 @@ def parse_type(typename):
         return TBool()
     elif typename == 'void':
         return TVoid()
-    elif typename == 'integer_t' and dml.globals.api_version < compat.api_7:
+    elif typename == 'integer_t' and dml.globals.api_version < breaking_changes.api_7:
         return TInt(64, True)
-    elif typename == 'uinteger_t' and dml.globals.api_version < compat.api_7:
+    elif typename == 'uinteger_t' and dml.globals.api_version < breaking_changes.api_7:
         return TInt(64, False)
     else:
         return TNamed(typename)

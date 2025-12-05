@@ -13,7 +13,7 @@ import math
 
 from . import objects, crep, ctree, ast, int_register, logging, serialize
 from . import dmlparse, output
-from . import breaking_changes as compat
+from . import breaking_changes
 from .logging import *
 from .expr import *
 from .ctree import *
@@ -1101,7 +1101,7 @@ def subast_has_dollar(expr_ast):
 @expression_dispatcher
 def expr_unop(tree, location, scope):
     [op, rh_ast] = tree.args
-    if (compat.dml12_misc in dml.globals.enabled_compat
+    if (not breaking_changes.dml12_remove_misc_quirks.enabled
         and op == 'sizeof' and rh_ast.kind == 'variable_dml12'):
         var = rh_ast.args[0]
         if var in typedefs and scope.lookup(var) is None:
@@ -1142,7 +1142,7 @@ def expr_unop(tree, location, scope):
                     return ctree.AddressOfMethod(tree.site, func)
         raise rh.exc()
     if   op == '!':
-        if compat.dml12_not in dml.globals.enabled_compat:
+        if not breaking_changes.dml12_not_typecheck.enabled:
             t = rh.ctype()
             if isinstance(safe_realtype(t), TInt) and subast_has_dollar(rh_ast):
                 # A previous bug caused DMLC to permit expressions on
@@ -1164,7 +1164,7 @@ def expr_unop(tree, location, scope):
     elif op == 'post++':  return mkPostInc(tree.site, rh)
     elif op == 'post--':  return mkPostDec(tree.site, rh)
     elif op == 'sizeof':
-        if (compat.dml12_misc not in dml.globals.enabled_compat
+        if (breaking_changes.dml12_remove_misc_quirks.enabled
             and not rh.addressable):
             raise ERVAL(rh.site, 'sizeof')
         return codegen_sizeof(tree.site, rh)
@@ -1464,8 +1464,8 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
                 (member_struct_defs, member_type) = eval_type(
                     type_ast, msite, location, scope, extern)
                 if isinstance(member_type, TFunction):
-                    if (compat.function_in_extern_struct
-                        in dml.globals.enabled_compat
+                    if (not (breaking_changes
+                             .forbid_function_in_extern_struct.enabled)
                         and extern):
                         member_type = TPtr(member_type)
                     else:
@@ -1535,7 +1535,7 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
                 else:
                     raise expr.exc()
             elif (not expr.addressable
-                  and compat.dml12_misc not in dml.globals.enabled_compat):
+                  and breaking_changes.dml12_remove_misc_quirks.enabled):
                 raise ERVAL(expr.site, 'typeof')
             else:
                 etype = expr.ctype().clone()
@@ -1662,7 +1662,7 @@ class MethodInParam:
 
     def with_expr(self, expr):
         assert (self.typ is None
-                or compat.dml12_inline in dml.globals.enabled_compat)
+                or not breaking_changes.dml12_disable_inline_constants.enabled)
         return MethodInParam(self.site, self.ident, self.typ, expr)
 
     def with_type(self, typ):
@@ -2049,7 +2049,7 @@ def stmt_local(stmt, location, scope):
         name = ident_ast.args[0] if ident_ast.kind == 'variable' else None
         if (name is not None
             and dml.globals.dml_version == (1, 2)
-            and compat.dml12_misc not in dml.globals.enabled_compat):
+            and breaking_changes.dml12_remove_misc_quirks.enabled):
             check_varname(stmt.site, name)
         (struct_decls, etype) = eval_type(asttype, stmt.site, location, scope)
         stmts.extend(mkStructDefinition(site, t) for (site, t) in struct_decls)
@@ -2679,7 +2679,7 @@ def stmt_assert(stmt, location, scope):
 @statement_dispatcher
 def stmt_goto(stmt, location, scope):
     [label] = stmt.args
-    if compat.dml12_goto not in dml.globals.enabled_compat:
+    if breaking_changes.dml12_remove_goto.enabled:
         report(ESYNTAX(stmt.site, 'goto', 'goto statement not allowed'))
     return [mkGoto(stmt.site, label)]
 
@@ -2773,11 +2773,11 @@ def stmt_log(stmt, location, scope):
                        and (not level.constant or level.value != 1))
 
     # This correction must be done independently of
-    # compat.meaningless_log_levels, otherwise existing usages of
+    # breaking_changes.dml_meaningless_log_levels, otherwise existing usages of
     # e.g. log error, 2: "..." will become noops
     if bad_error_level:
         adjusted_level = mkIntegerLiteral(site, 1)
-    if compat.meaningless_log_levels not in dml.globals.enabled_compat:
+    if breaking_changes.restrict_log_levels.enabled:
         if bad_error_level:
             report(ELLEV(level.site, "1"))
     elif level.constant and not (1 <= level.value <= 4):
@@ -2793,9 +2793,9 @@ def stmt_log(stmt, location, scope):
         logobj = log_object(site, location.node, location.indices)
     else:
         identity = TraitObjIdentity(site, lookup_var(site, scope, "this"))
-        logobj = (log_object(site, dml.globals.device, ())
-                  if compat.shared_logs_on_device in dml.globals.enabled_compat
-                  else PortObjectFromObjIdentity(site, identity))
+        logobj = (PortObjectFromObjIdentity(site, identity)
+                  if breaking_changes.shared_logs_locally.enabled
+                  else log_object(site, dml.globals.device, ()))
 
     log_wrapper = lambda stmt: stmt
 
@@ -2806,8 +2806,7 @@ def stmt_log(stmt, location, scope):
             later_level.value == level.value):
             report(WREDUNDANTLEVEL(site))
         if (error_logkind
-            and (compat.meaningless_log_levels
-                 not in dml.globals.enabled_compat)):
+            and breaking_changes.restrict_log_levels.enabled):
             if not later_level.constant or later_level.value not in {1, 5}:
                 report(ELLEV(later_level.site, "a 1 or 5 constant"))
                 adjusted_later_level = mkIntegerLiteral(site, 1)
@@ -3225,7 +3224,7 @@ def stmt_select(stmt, location, scope):
                 if_chain = mkIf(cond.site, cond, stmt, if_chain)
             return [if_chain]
         raise lst.exc()
-    elif (compat.dml12_misc in dml.globals.enabled_compat
+    elif (not breaking_changes.dml12_remove_misc_quirks.enabled
           and isinstance(lst.ctype(), TVector)
           and itername is not None):
         itervar = lookup_var(stmt.site, scope, itername)
@@ -3501,7 +3500,7 @@ def common_inline(site, method, indices, inargs, outargs):
 
     if dml.globals.debuggable:
         if method.fully_typed and (
-                compat.dml12_inline not in dml.globals.enabled_compat
+                breaking_changes.dml12_disable_inline_constants.enabled
                 or all(not arg.constant for arg in inargs)):
             # call method instead of inlining it
             func = method_instance(method)
@@ -3509,9 +3508,12 @@ def common_inline(site, method, indices, inargs, outargs):
             # create a specialized method instance based on parameter
             # types, and call that
             intypes = tuple(
-                arg if ((p.typ is None
-                         or compat.dml12_inline in dml.globals.enabled_compat)
-                        and (arg.constant or undefined(arg)))
+                arg if (
+                    (p.typ is None
+                     or not (
+                         breaking_changes
+                         .dml12_disable_inline_constants.enabled))
+                    and (arg.constant or undefined(arg)))
                 else methfunc_param(p.typ, arg)
                 for (p, arg) in zip(method.inp, inargs))
             outtypes = tuple(methfunc_param(ptype, arg)
@@ -3763,7 +3765,8 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
                 param_scope.add(ExpressionSymbol(p.ident, arg, arg.site))
             elif arg.constant and (
                     p.inlined
-                    or compat.dml12_inline in dml.globals.enabled_compat):
+                    or not (breaking_changes
+                            .dml12_disable_inline_constants.enabled)):
                 # Constants must be passed directly to
                 # provide constant folding.  Other values are stored in a
                 # local variable to improve type checking and variable
@@ -3979,7 +3982,7 @@ def codegen_method_func(func):
         e = p.expr
         if (p.ident is not None
             and dml.globals.dml_version == (1, 2)
-            and compat.dml12_misc not in dml.globals.enabled_compat):
+            and breaking_changes.dml12_remove_misc_quirks.enabled):
             check_varname(p.site, p.ident)
         if e and p.ident is not None:
             inlined_arg = (
@@ -4104,8 +4107,7 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
             with fail_handler, exit_handler:
                 body = ([mkIndicesAssert(site, location.node,
                                          location.indices)]
-                        if ((compat.no_method_index_asserts
-                             not in dml.globals.enabled_compat)
+                        if (breaking_changes.range_check_method_indices.enabled
                             and location.method() and location.node.dimsizes)
                         else [])
                 body.extend(prelude())
@@ -4201,7 +4203,7 @@ def codegen_call(site, meth_node, indices, inargs, outargs):
     if (site.dml_version() == (1, 2) and logging.show_porting):
         report_pevent_data_arg(meth_node, site, inargs)
 
-    if compat.dml12_misc in dml.globals.enabled_compat:
+    if not breaking_changes.dml12_remove_misc_quirks.enabled:
         # For backward compatibility. See bug 21367.
         inargs = [mkCast(site, arg, TPtr(TNamed('char')))
                   if isinstance(arg, StringConstant) else arg

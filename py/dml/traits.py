@@ -9,7 +9,7 @@ import contextlib
 import abc
 import os
 from . import objects, logging, crep, codegen, toplevel, topsort
-from . import breaking_changes as compat
+from . import breaking_changes
 from .logging import *
 from .codegen import *
 from .symtab import *
@@ -408,7 +408,7 @@ def typecheck_method_override(left, right):
         t0 = safe_realtype_unconst(p0.typ)
         t1 = safe_realtype_unconst(p1.typ)
         ok = (t0.eq_fuzzy(t1)
-              if compat.lenient_typechecking in dml.globals.enabled_compat
+              if not breaking_changes.strict_typechecking.enabled
               else t0.eq(t1))
         if not ok:
             raise EMETH(site0, site1,
@@ -417,7 +417,7 @@ def typecheck_method_override(left, right):
         t0 = safe_realtype_unconst(t0)
         t1 = safe_realtype_unconst(t1)
         ok = (t0.eq_fuzzy(t1)
-              if compat.lenient_typechecking in dml.globals.enabled_compat
+              if not breaking_changes.strict_typechecking.enabled
               else t0.eq(t1))
         if not ok:
             raise EMETH(site0, site1,

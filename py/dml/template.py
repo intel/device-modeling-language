@@ -6,7 +6,7 @@
 import os
 import functools
 from . import ast, logging
-from . import breaking_changes as compat
+from . import breaking_changes
 from .logging import *
 from .messages import *
 from .set import Set
@@ -379,7 +379,7 @@ def process_templates(template_decls):
             for missing in all_missing:
                 site = references[missing].site
                 if (missing not in uncond_refs
-                    or compat.dml12_misc in dml.globals.enabled_compat):
+                    or not breaking_changes.dml12_remove_misc_quirks.enabled):
                     # delay error until template instantiation
                     dml.globals.missing_templates.add(missing)
                 else:

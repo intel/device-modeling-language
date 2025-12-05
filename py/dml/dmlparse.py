@@ -13,7 +13,7 @@ import dml.globals
 from . import dmllex12
 from . import dmllex14
 from . import provisional
-from . import breaking_changes as compat
+from . import breaking_changes
 
 assert lex.__version__ == yacc.__version__ == "3.4"
 
@@ -1374,7 +1374,7 @@ def cdecl2_ptr(t):
 def cdecl2_vect(t):
     'cdecl2 : VECT cdecl2'
     if provisional.simics_util_vect not in t.parser.file_info.provisional:
-        if compat.experimental_vect in dml.globals.enabled_compat:
+        if not breaking_changes.vect_needs_provisional.enabled:
             vsite = site(t)
             if vsite.dml_version() != (1, 2):
                 # defensively suppress warning in 1.2, for
@@ -2583,7 +2583,7 @@ def warning_statement(t):
 @prod
 def warning_stmt(t):
     'warning_stmt : _WARNING bracketed_string_literal SEMI'
-    if compat.warning_statement not in dml.globals.enabled_compat:
+    if breaking_changes.forbid_warning_statement.enabled:
         raise ESYNTAX(site(t), '_warning', 'deprecated _warning statement')
     report(WEXPERIMENTAL(site(t), "_warning statement"))
     t[0] = ast.warning(site(t), t[2])
