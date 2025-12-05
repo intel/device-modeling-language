@@ -28,6 +28,9 @@ class BreakingChange(abc.ABC):
     def tag(self) -> str:
         return 'dml-' + self.__class__.__name__.replace('_', '-')
 
+    def ident(self) -> str:
+        return self.tag().replace('-', '_')
+
     @abc.abstractproperty
     def __doc__(self): pass
 
