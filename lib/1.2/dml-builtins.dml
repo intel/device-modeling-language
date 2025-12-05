@@ -209,27 +209,65 @@ template device {
 
     parameter simics_api_version auto;
 
-    parameter _compat_broken_unused_types auto;
-    parameter _compat_broken_conditional_is auto;
-    parameter _compat_port_proxy_ifaces auto;
-    parameter _compat_port_proxy_attrs auto;
-    parameter _compat_optional_version_statement auto;
-    parameter _compat_function_in_extern_struct auto;
-    parameter _compat_port_obj_param auto;
-    parameter _compat_io_memory auto;
-    parameter _compat_shared_logs_on_device auto;
-    parameter _compat_suppress_WLOGMIXUP auto;
-    parameter _compat_legacy_attributes auto;
-    parameter _compat_lenient_typechecking auto;
-    parameter _compat_no_method_index_asserts auto;
-    parameter _compat_meaningless_log_levels auto;
-    parameter _compat_dml12_inline auto;
-    parameter _compat_dml12_not auto;
-    parameter _compat_dml12_goto auto;
-    parameter _compat_dml12_misc auto;
-    parameter _compat_dml12_int auto;
-    parameter _compat_experimental_vect auto;
-    parameter _compat_warning_statement auto;
+    parameter _compat_broken_unused_types
+        = !$_breaking_change_forbid_broken_unused_types;
+    parameter _compat_broken_conditional_is
+        = !$_breaking_change_forbid_broken_conditional_is;
+    parameter _compat_port_proxy_ifaces
+        = !$_breaking_change_remove_port_proxy_ifaces;
+    parameter _compat_port_proxy_attrs
+        = !$_breaking_change_remove_port_proxy_attrs;
+    parameter _compat_function_in_extern_struct
+        = !$_breaking_change_forbid_function_in_extern_struct;
+    parameter _compat_optional_version_statement
+        = !$_breaking_change_require_version_statement;
+    parameter _compat_io_memory = !$_breaking_change_transaction_by_default;
+    parameter _compat_port_obj_param
+        = !$_breaking_change_port_obj_param;
+    parameter _compat_shared_logs_on_device
+        = !$_breaking_change_shared_logs_locally;
+    parameter _compat_suppress_WLOGMIXUP
+        = !$_breaking_change_enable_WLOGMIXUP;
+    parameter _compat_legacy_attributes
+        = !$_breaking_change_modern_attributes;
+    parameter _compat_lenient_typechecking
+        = !$_breaking_change_strict_typechecking;
+    parameter _compat_no_method_index_asserts
+        = !$_breaking_change_range_check_method_indices;
+    parameter _compat_meaningless_log_levels
+        = !$_breaking_change_restrict_log_levels;
+    parameter _compat_dml12_inline
+        = !$_breaking_change_dml12_disable_inline_constants;
+    parameter _compat_dml12_not = !$_breaking_change_dml12_not_typecheck;
+    parameter _compat_dml12_misc = !$_breaking_change_dml12_remove_misc_quirks;
+    parameter _compat_dml12_goto = !$_breaking_change_dml12_remove_goto;
+    parameter _compat_dml12_int = !$_breaking_change_dml12_modern_int;
+    parameter _compat_experimental_vect
+        = !$_breaking_change_vect_needs_provisional;
+    parameter _compat_warning_statement
+        = !$_breaking_change_forbid_warning_statement;
+
+    parameter _breaking_change_forbid_broken_unused_types auto;
+    parameter _breaking_change_forbid_broken_conditional_is auto;
+    parameter _breaking_change_remove_port_proxy_ifaces auto;
+    parameter _breaking_change_remove_port_proxy_attrs auto;
+    parameter _breaking_change_forbid_function_in_extern_struct auto;
+    parameter _breaking_change_require_version_statement auto;
+    parameter _breaking_change_transaction_by_default auto;
+    parameter _breaking_change_port_obj_param auto;
+    parameter _breaking_change_shared_logs_locally auto;
+    parameter _breaking_change_enable_WLOGMIXUP auto;
+    parameter _breaking_change_modern_attributes auto;
+    parameter _breaking_change_strict_typechecking auto;
+    parameter _breaking_change_range_check_method_indices auto;
+    parameter _breaking_change_restrict_log_levels auto;
+    parameter _breaking_change_dml12_disable_inline_constants auto;
+    parameter _breaking_change_dml12_not_typecheck auto;
+    parameter _breaking_change_dml12_remove_misc_quirks auto;
+    parameter _breaking_change_dml12_remove_goto auto;
+    parameter _breaking_change_dml12_modern_int auto;
+    parameter _breaking_change_vect_needs_provisional auto;
+    parameter _breaking_change_forbid_warning_statement auto;
 
     // automatic parameters
     parameter obj                       auto;

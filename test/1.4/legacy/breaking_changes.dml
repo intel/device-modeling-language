@@ -1,0 +1,43 @@
+/*
+  © 2025 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+// Test that params for breaking changes work, and that API versions affect
+// them correctly
+
+param enabled_5;
+param enabled_6;
+param enabled_7;
+
+#if (_breaking_change_port_obj_param != enabled_5
+     || _breaking_change_dml12_not_typecheck != enabled_5) {
+    error;
+}
+
+#if (_breaking_change_transaction_by_default != enabled_6
+     || _breaking_change_shared_logs_locally != enabled_6
+     || _breaking_change_enable_WLOGMIXUP != enabled_6
+     || _breaking_change_dml12_disable_inline_constants != enabled_6
+     || _breaking_change_dml12_remove_misc_quirks != enabled_6
+     || _breaking_change_dml12_remove_goto != enabled_6
+     || _breaking_change_dml12_modern_int != enabled_6) {
+    error;
+}
+
+#if (_breaking_change_forbid_broken_unused_types != enabled_7
+     || _breaking_change_forbid_broken_conditional_is != enabled_7
+     || _breaking_change_remove_port_proxy_ifaces != enabled_7
+     || _breaking_change_remove_port_proxy_attrs != enabled_7
+     || _breaking_change_forbid_function_in_extern_struct != enabled_7
+     || _breaking_change_require_version_statement != enabled_7
+     || _breaking_change_modern_attributes != enabled_7
+     || _breaking_change_strict_typechecking != enabled_7
+     || _breaking_change_range_check_method_indices != enabled_7
+     || _breaking_change_restrict_log_levels != enabled_7
+     || _breaking_change_vect_needs_provisional != enabled_7
+     || _breaking_change_forbid_warning_statement != enabled_7) {
+    error;
+}

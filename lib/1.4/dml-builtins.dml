@@ -635,27 +635,64 @@ template device {
 
     param simics_api_version auto;
 
-    param _compat_broken_unused_types auto;
-    param _compat_broken_conditional_is auto;
-    param _compat_port_proxy_ifaces auto;
-    param _compat_port_proxy_attrs auto;
-    param _compat_function_in_extern_struct auto;
-    param _compat_optional_version_statement auto;
-    param _compat_port_obj_param auto;
-    param _compat_io_memory auto;
-    param _compat_shared_logs_on_device auto;
-    param _compat_suppress_WLOGMIXUP auto;
-    param _compat_legacy_attributes auto;
-    param _compat_lenient_typechecking auto;
-    param _compat_no_method_index_asserts auto;
-    param _compat_meaningless_log_levels auto;
-    param _compat_dml12_inline auto;
-    param _compat_dml12_not auto;
-    param _compat_dml12_goto auto;
-    param _compat_dml12_misc auto;
-    param _compat_dml12_int auto;
-    param _compat_experimental_vect auto;
-    param _compat_warning_statement auto;
+    // legacy aliases
+    param _compat_broken_unused_types
+        = !_breaking_change_forbid_broken_unused_types;
+    param _compat_broken_conditional_is
+        = !_breaking_change_forbid_broken_conditional_is;
+    param _compat_port_proxy_ifaces
+        = !_breaking_change_remove_port_proxy_ifaces;
+    param _compat_port_proxy_attrs
+        = !_breaking_change_remove_port_proxy_attrs;
+    param _compat_function_in_extern_struct
+        = !_breaking_change_forbid_function_in_extern_struct;
+    param _compat_optional_version_statement
+        = !_breaking_change_require_version_statement;
+    param _compat_io_memory = !_breaking_change_transaction_by_default;
+    param _compat_port_obj_param = !_breaking_change_port_obj_param;
+    param _compat_shared_logs_on_device
+        = !_breaking_change_shared_logs_locally;
+    param _compat_suppress_WLOGMIXUP = !_breaking_change_enable_WLOGMIXUP;
+    param _compat_legacy_attributes
+        = !_breaking_change_modern_attributes;
+    param _compat_lenient_typechecking
+        = !_breaking_change_strict_typechecking;
+    param _compat_no_method_index_asserts
+        = !_breaking_change_range_check_method_indices;
+    param _compat_meaningless_log_levels
+        = !_breaking_change_restrict_log_levels;
+    param _compat_dml12_inline
+        = !_breaking_change_dml12_disable_inline_constants;
+    param _compat_dml12_not = !_breaking_change_dml12_not_typecheck;
+    param _compat_dml12_misc = !_breaking_change_dml12_remove_misc_quirks;
+    param _compat_dml12_goto = !_breaking_change_dml12_remove_goto;
+    param _compat_dml12_int = !_breaking_change_dml12_modern_int;
+    param _compat_experimental_vect
+        = !_breaking_change_vect_needs_provisional;
+    param _compat_warning_statement
+        = !_breaking_change_forbid_warning_statement;
+
+    param _breaking_change_forbid_broken_unused_types auto;
+    param _breaking_change_forbid_broken_conditional_is auto;
+    param _breaking_change_remove_port_proxy_ifaces auto;
+    param _breaking_change_remove_port_proxy_attrs auto;
+    param _breaking_change_forbid_function_in_extern_struct auto;
+    param _breaking_change_require_version_statement auto;
+    param _breaking_change_transaction_by_default auto;
+    param _breaking_change_port_obj_param auto;
+    param _breaking_change_shared_logs_locally auto;
+    param _breaking_change_enable_WLOGMIXUP auto;
+    param _breaking_change_modern_attributes auto;
+    param _breaking_change_strict_typechecking auto;
+    param _breaking_change_range_check_method_indices auto;
+    param _breaking_change_restrict_log_levels auto;
+    param _breaking_change_dml12_disable_inline_constants auto;
+    param _breaking_change_dml12_not_typecheck auto;
+    param _breaking_change_dml12_remove_misc_quirks auto;
+    param _breaking_change_dml12_remove_goto auto;
+    param _breaking_change_dml12_modern_int auto;
+    param _breaking_change_vect_needs_provisional auto;
+    param _breaking_change_forbid_warning_statement auto;
 
     // automatic parameters
     param obj                       auto;
