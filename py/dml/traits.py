@@ -532,7 +532,7 @@ class MethodHandle(object):
 
     @property
     def signature(self):
-        '''To be used with e.g. typecheck_method_override'''
+        '''Used to simplify calls to typecheck_method_override'''
         return (self.site, self.inp, self.outp, self.throws, self.independent,
                 self.startup, self.memoized)
 
@@ -583,8 +583,8 @@ def sort_method_declarations(declarations):
     # Rank -> [non-abstract MethodHandle or None, abstract MethodHandle:s]
     rank_to_method = {}
     for impl in declarations:
-        [existing_impl, existing_abstracts] = existing = \
-            rank_to_method.setdefault(impl.rank, [None, []])
+        [existing_impl, existing_abstracts] = existing = (
+            rank_to_method.setdefault(impl.rank, [None, []]))
         if impl.abstract:
             existing_abstracts.append(impl)
         elif existing_impl is not None:
@@ -642,7 +642,7 @@ def sort_method_declarations(declarations):
                                         'default ' * impl.overridable))
             elif not existing:
                 report(ENOVERRIDEMETH(impl.site, impl.name,
-                                      'default '*impl.overridable))
+                                      'default ' * impl.overridable))
 
         calc_highest_impls(r)
 
