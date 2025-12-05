@@ -1,0 +1,19 @@
+/*
+  © 2025 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+// 1.2 because some breaking changes are auto-enabled in DML 1.4
+dml 1.2;
+
+device test;
+
+/// COMPILE-ONLY
+/// API-VERSION 5
+/// DMLC-FLAG --breaking-change=port-obj-param,dml12-not-typecheck
+
+import "breaking_changes.dml";
+
+parameter enabled_5 = true;
+parameter enabled_6 = false;
+parameter enabled_7 = false;

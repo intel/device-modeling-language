@@ -1,0 +1,18 @@
+/*
+  © 2025 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+device test;
+
+/// COMPILE-ONLY
+/// API-VERSION 6
+/// DMLC-FLAG --breaking-change=transaction-by-default,shared-logs-locally,enable-WLOGMIXUP,dml12-disable-inline-constants,dml12-remove-misc-quirks,dml12-remove-goto,dml12-modern-int
+
+import "breaking_changes.dml";
+
+param enabled_5 = true;
+param enabled_6 = true;
+param enabled_7 = false;
