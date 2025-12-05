@@ -607,7 +607,7 @@ def method_qualifiers_check(site, qualifiers, inp, outp, throws, default):
 def maybe_colon_yes(t):
     '''maybe_colon : COLON'''
     if not site(t).provisional_enabled(provisional.explicit_method_decls):
-        report(ESYNTAX(site(t), ':', "expected '=' or 'default'"))
+        report(ESYNTAX(site(t), ':', "expected '{' or 'default'"))
         t[0] = False
     else:
         t[0] = True
