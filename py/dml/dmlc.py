@@ -582,14 +582,38 @@ def main(argv):
             'dml12-remove-goto',
             'dml12-modern-int'])
 
+    compat_features = {
+        'broken_unused_types': breaking_changes.forbid_broken_unused_types,
+        'broken_conditional_is': breaking_changes.forbid_broken_conditional_is,
+        'port_proxy_ifaces': breaking_changes.remove_port_proxy_ifaces,
+        'port_proxy_attrs': breaking_changes.remove_port_proxy_attrs,
+        'function_in_extern_struct':
+        breaking_changes.forbid_function_in_extern_struct,
+        'optional_version_statement':
+        breaking_changes.require_version_statement,
+        'io_memory': breaking_changes.transaction_by_default,
+        'port_obj_param': breaking_changes.port_obj_param,
+        'shared_logs_on_device': breaking_changes.shared_logs_locally,
+        'suppress_WLOGMIXUP': breaking_changes.enable_WLOGMIXUP,
+        'legacy_attributes': breaking_changes.modern_attributes,
+        'lenient_typechecking': breaking_changes.strict_typechecking,
+        'no_method_index_asserts': breaking_changes.range_check_method_indices,
+        'meaningless_log_levels': breaking_changes.restrict_log_levels,
+        'dml12_inline': breaking_changes.dml12_disable_inline_constants,
+        'dml12_not': breaking_changes.dml12_not_typecheck,
+        'dml12_misc': breaking_changes.dml12_remove_misc_quirks,
+        'dml12_goto': breaking_changes.dml12_remove_goto,
+        'dml12_int': breaking_changes.dml12_modern_int,
+        'experimental_vect': breaking_changes.vect_needs_provisional,
+        'warning_statement': breaking_changes.forbid_warning_statement,
+    }
     if options.no_compat:
         if options.breaking_change:
             parser.error("cannot pass both --no-compat and --breaking-change")
         for flag in options.no_compat:
             for tag in flag.split(','):
-                if tag in breaking_changes.compat_features:
-                    options.breaking_change.append(
-                        breaking_changes.compat_features[tag].tag())
+                if tag in compat_features:
+                    options.breaking_change.append(compat_features[tag].tag())
                 else:
                     parser.error(f'invalid tag {tag} for --no-compat.')
 
@@ -607,11 +631,6 @@ def main(argv):
 
     breaking_changes.BreakingChange.enabled_breaking_changes = set(
         changes.values())
-    # temp hack to make existing code continue to work
-    dml.globals.enabled_compat = {
-        tag for (tag, bc) in breaking_changes.compat_features.items()
-        if not bc.enabled
-    }
 
     if not breaking_changes.enable_WLOGMIXUP.enabled:
         ignore_warning('WLOGMIXUP')

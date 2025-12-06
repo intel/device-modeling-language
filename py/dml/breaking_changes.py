@@ -464,33 +464,3 @@ class forbid_warning_statement(BreakingChange):
     '''
     short = "Disallow the `_warning` statement"
     required_after = api_7
-
-
-
-compat_features = {
-    'broken_unused_types': forbid_broken_unused_types,
-    'broken_conditional_is': forbid_broken_conditional_is,
-    'port_proxy_ifaces': remove_port_proxy_ifaces,
-    'port_proxy_attrs': remove_port_proxy_attrs,
-    'function_in_extern_struct': forbid_function_in_extern_struct,
-    'optional_version_statement': require_version_statement,
-    'io_memory': transaction_by_default,
-    'port_obj_param': port_obj_param,
-    'shared_logs_on_device': shared_logs_locally,
-    'suppress_WLOGMIXUP': enable_WLOGMIXUP,
-    'legacy_attributes': modern_attributes,
-    'lenient_typechecking': strict_typechecking,
-    'no_method_index_asserts': range_check_method_indices,
-    'meaningless_log_levels': restrict_log_levels,
-    'dml12_inline': dml12_disable_inline_constants,
-    'dml12_not': dml12_not_typecheck,
-    'dml12_misc': dml12_remove_misc_quirks,
-    'dml12_goto': dml12_remove_goto,
-    'dml12_int': dml12_modern_int,
-    'experimental_vect': vect_needs_provisional,
-    'warning_statement': forbid_warning_statement,
-}
-
-# temporary hack to keep existing dml.globals.enabled_compat based checks working
-for name in compat_features:
-    globals()[name] = name
