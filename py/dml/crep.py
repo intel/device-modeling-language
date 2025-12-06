@@ -10,7 +10,7 @@ from .types import *
 from .logging import *
 from .expr_util import *
 from .messages import *
-from . import compat
+from . import breaking_changes as compat
 
 __all__ = (
     'cname',

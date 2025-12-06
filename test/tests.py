@@ -1090,6 +1090,33 @@ if get_simics_major() == "6":
         ["1.2", "errors", "WREF"],
         join(testdir, "1.2", "errors", "WREF.dml"),
         api_version="5"))
+    all_tests.append(CTestCase(
+        ["1.4", "legacy", "no_compat_5a"],
+        join(testdir, "1.4", "legacy", "no_compat_5a.dml"),
+        api_version="5"))
+    all_tests.append(CTestCase(
+        ["1.4", "legacy", "no_compat_5b"],
+        join(testdir, "1.4", "legacy", "no_compat_5b.dml"),
+        api_version="5"))
+
+all_tests.append(CTestCase(
+    ["1.4", "legacy", "no_compat_6a"],
+    join(testdir, "1.4", "legacy", "no_compat_6a.dml"),
+    api_version="6"))
+all_tests.append(CTestCase(
+    ["1.4", "legacy", "no_compat_6b"],
+    join(testdir, "1.4", "legacy", "no_compat_6b.dml"),
+    api_version="6"))
+if get_simics_major() != "6":
+    # API=7 not possible in 6
+    all_tests.append(CTestCase(
+        ["1.4", "legacy", "no_compat_7a"],
+        join(testdir, "1.4", "legacy", "no_compat_7a.dml"),
+        api_version="7"))
+    all_tests.append(CTestCase(
+        ["1.4", "legacy", "no_compat_7b"],
+        join(testdir, "1.4", "legacy", "no_compat_7b.dml"),
+        api_version="7"))
 
 if get_simics_major() == "7":
     all_tests.append(CTestCase(
@@ -1110,7 +1137,7 @@ class DebuggableCheck(BaseTestCase):
 
 all_tests.append(DebuggableCheck('debuggable-check'))
 
-@subtest('--help-no-compat')
+@subtest('--help-breaking-change')
 @subtest('--help-warn')
 @subtest('--help')
 class HelpTest(BaseTestCase):

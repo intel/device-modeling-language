@@ -15,7 +15,7 @@ import pickle
 from ply import lex, yacc
 
 from . import objects, logging, codegen, ctree, ast
-from . import compat
+from . import breaking_changes as compat
 from . import symtab
 from .messages import *
 from .logging import *
@@ -371,6 +371,10 @@ def parse_main_file(inputfilename, explicit_import_path):
         for feature in [compat.dml12_inline, compat.dml12_not,
                         compat.dml12_misc]:
             dml.globals.enabled_compat.discard(feature)
+        dml.globals.enabled_breaking.update([
+            compat.disable_inline_constants,
+            compat.not_typecheck,
+            compat.remove_misc_quirks])
 
     implicit_imports = [
         ast.import_(site, "dml-builtins.dml")]

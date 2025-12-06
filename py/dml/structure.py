@@ -32,7 +32,7 @@ from .template import Rank, RankDesc, ObjectSpec, InstantiatedTemplateSpec
 from .reginfo import explode_registers
 from . import dmlparse
 from .set import Set
-from . import compat
+from . import breaking_changes as compat
 from .slotsmeta import auto_init
 from . import provisional
 
@@ -1143,9 +1143,9 @@ def make_autoparams(obj, index_var_asts):
                 mkBoolConstant(site, site.bitorder() == 'be'))
         autoparams['simics_api_version'] = SimpleParamExpr(
             mkStringConstant(site, dml.globals.api_version.str))
-        for (tag, feature) in compat.features.items():
-            autoparams[f'_compat_{tag}'] = SimpleParamExpr(
-                mkBoolConstant(site, feature in dml.globals.enabled_compat))
+        for change in compat.changes.values():
+            autoparams[f'_breaking_change_{change.ident()}'] = SimpleParamExpr(
+                mkBoolConstant(site, change in dml.globals.enabled_breaking))
         dml.globals.device = obj
 
     elif obj.objtype == 'bank':

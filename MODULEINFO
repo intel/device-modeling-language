@@ -31,10 +31,10 @@ Make: dmlc
     $(HOST)/bin/dml/python/__main__.py
     $(HOST)/bin/dml/python/dml/__init__.py
     $(HOST)/bin/dml/python/dml/ast.py
+    $(HOST)/bin/dml/python/dml/breaking_changes.py
     $(HOST)/bin/dml/python/dml/c_backend.py
     $(HOST)/bin/dml/python/dml/g_backend.py
     $(HOST)/bin/dml/python/dml/codegen.py
-    $(HOST)/bin/dml/python/dml/compat.py
     $(HOST)/bin/dml/python/dml/crep.py
     $(HOST)/bin/dml/python/dml/ctree.py
     $(HOST)/bin/dml/python/dml/dmllex.py

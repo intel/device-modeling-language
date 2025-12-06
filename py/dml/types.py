@@ -58,7 +58,7 @@ from .env import is_windows
 from .output import out
 from .messages import *
 from .logging import *
-from . import compat
+from . import breaking_changes as compat
 from . import output
 import dml .globals
 import abc
