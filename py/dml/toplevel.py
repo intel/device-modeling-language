@@ -368,9 +368,6 @@ def parse_main_file(inputfilename, explicit_import_path):
     dml.globals.dml_version = version
     version_str = fmt_version(version)
     if version != (1, 2):
-        for feature in [breaking_changes.dml12_inline, breaking_changes.dml12_not,
-                        breaking_changes.dml12_misc]:
-            dml.globals.enabled_compat.discard(feature)
         breaking_changes.BreakingChange.enabled_breaking_changes.update([
             breaking_changes.dml12_disable_inline_constants,
             breaking_changes.dml12_not_typecheck,

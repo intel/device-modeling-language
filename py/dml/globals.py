@@ -55,7 +55,6 @@ immediate_after_infos = {}
 # types.TypeSequence -> codegen.TypeSequenceInfo
 type_sequence_infos = {}
 
-enabled_compat = set()
 
 # 1.4 style integer semantics is used in 1.2 if False is returned
 def compat_dml12_int(site):
