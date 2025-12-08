@@ -1056,17 +1056,15 @@ all_tests.append(CTestCase(
          status = 2,
          dmlc_extraargs = ["--werror"]))
 
-if get_simics_major() == "6":
-    all_tests.append(CTestCase(
-        ["1.2", "errors", "WREF"],
-        join(testdir, "1.2", "errors", "WREF.dml"),
-        api_version="5"))
+all_tests.append(CTestCase(
+    ["1.2", "errors", "WREF"],
+    join(testdir, "1.2", "errors", "WREF.dml"),
+    api_version="5"))
 
-if get_simics_major() == "7":
-    all_tests.append(CTestCase(
-        ["1.4", "errors", "ETYPE_integer_t"],
-        join(testdir, "1.4", "errors", "ETYPE_integer_t.dml"),
-        api_version="7"))
+all_tests.append(CTestCase(
+    ["1.4", "errors", "ETYPE_integer_t"],
+    join(testdir, "1.4", "errors", "ETYPE_integer_t.dml"),
+    api_version="7"))
 
 class DebuggableCheck(BaseTestCase):
     __slots__ = ()
@@ -2082,9 +2080,14 @@ def api_files(dml_version, api_version):
 
     return files
 
-api_versions = sorted(os.listdir(join(project_host_path(), "bin", "dml",
-                                      "api")))
-assert api_versions
+api_versions_by_major = {
+    '6': ['4.8', '5', '6'],
+    '7': ['6', '7'],
+}
+api_versions = api_versions_by_major[get_simics_major()]
+
+assert api_versions == sorted(os.listdir(join(project_host_path(), "bin", "dml", "api")))
+
 for dmlver in ["1.2", "1.4"]:
     for apiver in api_versions:
         testname = "api-dml-%s-api-%s" % (dmlver, apiver)
@@ -2151,7 +2154,12 @@ def await_test_finish(t):
     return wait
 
 def tests(suite):
-    tests = list(filter_tests(all_tests))
+    for ver in {t.api_version for t in all_tests}:
+        assert any(ver in vers for vers in api_versions_by_major.values())
+    # Only run tests for API versions compatible with the current simics major
+    available_tests = [t for t in all_tests if t.api_version in api_versions]
+    # Some tests can be filtered out manually using environment variables
+    tests = list(filter_tests(available_tests))
     # our filtering is better than testparams, because we run a
     # filtered-out test if it's needed as a dependency of another test.
     testparams.test_patterns = None
