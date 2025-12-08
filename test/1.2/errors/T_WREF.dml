@@ -8,6 +8,7 @@ device test;
 
 /// COMPILE-ONLY
 
+/// API-VERSION 5
 // Should be EREF in 6, SIMICS-9886
 /// WARNING WREF
 parameter p = $garbage;

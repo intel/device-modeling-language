@@ -1056,16 +1056,6 @@ all_tests.append(CTestCase(
          status = 2,
          dmlc_extraargs = ["--werror"]))
 
-all_tests.append(CTestCase(
-    ["1.2", "errors", "WREF"],
-    join(testdir, "1.2", "errors", "WREF.dml"),
-    api_version="5"))
-
-all_tests.append(CTestCase(
-    ["1.4", "errors", "ETYPE_integer_t"],
-    join(testdir, "1.4", "errors", "ETYPE_integer_t.dml"),
-    api_version="7"))
-
 class DebuggableCheck(BaseTestCase):
     __slots__ = ()
     def test(self):
