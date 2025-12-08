@@ -1056,17 +1056,15 @@ all_tests.append(CTestCase(
          status = 2,
          dmlc_extraargs = ["--werror"]))
 
-if get_simics_major() == "6":
-    all_tests.append(CTestCase(
-        ["1.2", "errors", "WREF"],
-        join(testdir, "1.2", "errors", "WREF.dml"),
-        api_version="5"))
+all_tests.append(CTestCase(
+    ["1.2", "errors", "WREF"],
+    join(testdir, "1.2", "errors", "WREF.dml"),
+    api_version="5"))
 
-if get_simics_major() == "7":
-    all_tests.append(CTestCase(
-        ["1.4", "errors", "ETYPE_integer_t"],
-        join(testdir, "1.4", "errors", "ETYPE_integer_t.dml"),
-        api_version="7"))
+all_tests.append(CTestCase(
+    ["1.4", "errors", "ETYPE_integer_t"],
+    join(testdir, "1.4", "errors", "ETYPE_integer_t.dml"),
+    api_version="7"))
 
 class DebuggableCheck(BaseTestCase):
     __slots__ = ()
@@ -2151,7 +2149,11 @@ def await_test_finish(t):
     return wait
 
 def tests(suite):
-    tests = list(filter_tests(all_tests))
+    # Only run tests for API versions compatible with the current simics major
+    assert {t.api_version for t in all_tests} == {'4.8', '5', '6', '7'}
+    available_tests = [t for t in all_tests if t.api_version in api_versions]
+    # Some tests can be filtered out manually using environment variables
+    tests = list(filter_tests(available_tests))
     # our filtering is better than testparams, because we run a
     # filtered-out test if it's needed as a dependency of another test.
     testparams.test_patterns = None
