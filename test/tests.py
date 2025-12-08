@@ -11,6 +11,7 @@ import random
 import subprocess
 import difflib
 import dataclasses
+from dataclasses import dataclass
 from pathlib import Path
 from os.path import join, isdir, exists
 from typing import Optional
@@ -131,6 +132,10 @@ class DeferredOutput(object):
         self.log.append((fun, args))
 
 class BaseTestCase(object):
+    # dummy value: we filter out tests based on API version, but API
+    # versions are not applicable for all test cases.
+    api_version = default_api_version
+
     __slots__ = ('output', 'fullname', 'finished')
     def __init__(self, fullname):
         self.fullname = fullname
@@ -171,6 +176,7 @@ class DMLFileTestCase(BaseTestCase):
     '''Test case based on compiling a DML file'''
     __slots__ = (
         'filename',                     # Full path to the .dml file
+        'flags',
         'api_version',                  # API version (a string)
         'path',                      # File path as a list of segments
         'includepath',                  # Include path to use for dmlc
@@ -192,11 +198,12 @@ class DMLFileTestCase(BaseTestCase):
         BaseTestCase.__init__(self, fullname)
         # Defaults
         self.filename = filename
-        self.api_version = default_api_version
+        self.flags = self.test_flags(filename)
+        self.status = 2 if self.flags.exp_errors else 0
+        self.api_version = self.flags.api_version
         self.includepath = None
         self.dmlc_extraargs = []
         self.cc_extraargs = []
-        self.status = 0
         self.extraenv = {}
         # Override defaults
         for (k, v) in info.items():
@@ -309,7 +316,7 @@ class DMLFileTestCase(BaseTestCase):
                                      cwd=self.scratchdir, env = env)
         if status == 0:
             # NO-CC might mean that no C file was produced
-            if pypy_dmlc and not self.test_flags().no_cc:
+            if pypy_dmlc and not self.flags.no_cc:
                 return self.compare_pypy_dmlc(reaper, args, env)
             return 0
         elif status == 1:
@@ -490,25 +497,18 @@ class DMLFileTestCase(BaseTestCase):
                 self.pr(filename + ":0:")
                 self.copy_log(filename)
 
-    class TestFlags(object):
-        def __init__(self,
-                     exp_warnings=(),
-                     exp_errors=(),
-                     # list of Python regexps
-                     exp_stdout=(),
-                     cc_flags=(),
-                     dmlc_flags=(),
-                     instantiate_manually=False,
-                     compile_only=False,
-                     no_cc=False):
-            self.exp_warnings = list(exp_warnings)
-            self.exp_errors = list(exp_errors)
-            self.exp_stdout = list(exp_stdout)
-            self.cc_flags = list(cc_flags)
-            self.dmlc_flags = list(dmlc_flags)
-            self.instantiate_manually = instantiate_manually
-            self.compile_only = compile_only
-            self.no_cc = no_cc
+    @dataclass
+    class TestFlags:
+        exp_warnings: list[str] = dataclasses.field(default_factory=list)
+        exp_errors: list[str] = dataclasses.field(default_factory=list)
+        exp_stdout: list[str] = dataclasses.field(default_factory=list)
+        cc_flags: list[str] = dataclasses.field(default_factory=list)
+        dmlc_flags: list[str] = dataclasses.field(default_factory=list)
+        api_version: str = default_api_version
+        instantiate_manually: bool = False
+        compile_only: bool = False
+        no_cc: bool = False
+
     def test_flags(self, filename=None, append_to=None):
         if filename is None:
             filename = self.filename
@@ -524,7 +524,6 @@ class DMLFileTestCase(BaseTestCase):
             key = key.decode('utf-8')
             if data:
                 data = data.decode('utf-8')
-            self.pr("%s : %s" % (key, data))
             if key in ['WARNING', 'ERROR']:
                 words = data.split()
                 # An error or warning message may span multiple lines,
@@ -548,15 +547,16 @@ class DMLFileTestCase(BaseTestCase):
                     expectation = (fname, None, tag)
                 if key == 'ERROR':
                     flags.exp_errors.append(expectation)
-                    self.status = 2
                 elif key == 'WARNING':
                     flags.exp_warnings.append(expectation)
             elif key == 'SCAN-FOR-TAGS':
                 path = os.path.join(os.path.dirname(filename),
                                     data.strip())
-                flags = self.test_flags(filename=path, append_to=flags)
+                flags = self.test_flags(path, append_to=flags)
             elif key == 'DMLC-FLAG':
                 flags.dmlc_flags.append(data)
+            elif key == 'API-VERSION':
+                flags.api_version = data
             elif key == 'CC-FLAG':
                 flags.cc_flags.append(data)
             elif key == 'GREP':
@@ -756,12 +756,12 @@ class CTestCase(DMLFileTestCase):
 
     def test(self):
         "This actually runs the test, after filtering"
+        self.pr(f'flags: {self.flags}')
         if not isdir(self.scratchdir):
             os.makedirs(self.scratchdir)
-        flags = self.test_flags()
         # Run dmlc
         status = self.runlog("dmlc", self.run_dmlc, self.filename,
-                             self.dmlc_extraargs + flags.dmlc_flags)
+                             self.dmlc_extraargs + self.flags.dmlc_flags)
 
         if status != self.status:
             self.print_logs('dmlc', self.dmlc_stdout, self.dmlc_stderr)
@@ -770,11 +770,11 @@ class CTestCase(DMLFileTestCase):
 
         try:
             self.verify_dmlc_messages(self.dmlc_stderr,
-                {'error': flags.exp_errors, 'warning': flags.exp_warnings})
+                {'error': self.flags.exp_errors, 'warning': self.flags.exp_warnings})
         except TestFail:
             self.print_logs('dmlc', self.dmlc_stdout, self.dmlc_stderr)
             raise
-        if (not flags.exp_errors and not flags.exp_warnings):
+        if (not self.flags.exp_errors and not self.flags.exp_warnings):
             # this will normally give no output, but it allows
             # convenient debug printing
             self.print_logs('dmlc', self.dmlc_stdout, self.dmlc_stderr)
@@ -782,12 +782,12 @@ class CTestCase(DMLFileTestCase):
         if status != 0: # No use compiling if dmlc failed
             return
 
-        if flags.no_cc:
-            assert flags.compile_only
+        if self.flags.no_cc:
+            assert self.flags.compile_only
             return
 
         # Run the C compiler
-        status = self.runlog("CC", self.run_cc, flags.cc_flags)
+        status = self.runlog("CC", self.run_cc, self.flags.cc_flags)
 
         self.pr("Finished cc with exit status "+str(status))
         if status != 0:
@@ -810,19 +810,19 @@ class CTestCase(DMLFileTestCase):
 
         pyfile = self.pyfilename if exists(self.pyfilename) else None
 
-        if flags.compile_only:
+        if self.flags.compile_only:
             assert not pyfile
             return
 
         # Run simics
         status = self.runlog("Simics", lambda: self.run_simics(
-            pyfile, not flags.instantiate_manually))
+            pyfile, not self.flags.instantiate_manually))
         if status != 0:
             self.print_logs('simics', self.simics_stdout, self.simics_stderr)
             raise TestFail("simics status=%d" % status)
 
-        if flags.exp_stdout:
-            rxs = [(r, re.compile(r)) for r in flags.exp_stdout]
+        if self.flags.exp_stdout:
+            rxs = [(r, re.compile(r)) for r in self.flags.exp_stdout]
             found = set()
             self.pr("Grepping simics output")
             for l in open(self.simics_stdout, "r"):
@@ -941,16 +941,17 @@ def subtest(*args, **kwargs):
 # First, some special cases
 class ErrorTest(CTestCase):
     __slots__ = ('errors', 'warnings')
-    def __init__(self, path, filename, **info):
-        self.errors = []
-        self.warnings = []
+    def __init__(self, path, filename, errors, warnings, **info):
+        self.errors = errors
+        self.warnings = warnings
         CTestCase.__init__(self, path, filename, status=2, **info)
-    def test_flags(self):
+    def test_flags(self, filename):
         return self.TestFlags(exp_errors=self.errors,
                               exp_warnings=self.warnings)
 
 all_tests.append(ErrorTest(["missing"], "xyz",
                            errors=[("xyz", 0, "ENOFILE")],
+                           warnings=[],
                            includepath=()))
 # On Windows NUL is not exactly a file in the same way.
 # Path resolves into an UNC path, i.e. with extra characters.
@@ -968,7 +969,7 @@ all_tests.append(CTestCase(["minimal"], join(testdir, "minimal.dml")))
 # Test that it fails with a good error message if it can't find
 # dml-builtins.dml etc.
 all_tests.append(ErrorTest(["noinclude"], join(testdir, "minimal.dml"),
-                           errors=[("minimal.dml", 6, "EIMPORT")],
+                           errors=[("minimal.dml", 6, "EIMPORT")], warnings=[],
                            includepath=(), dmlc_extraargs=['--max-errors=1']))
 
 # Test DMLC_PROFILE
@@ -1510,7 +1511,7 @@ analysis_annotation_re = re.compile(
 class LineIterTestCase(CTestCase):
     __slots__ = ()
 
-    @dataclasses.dataclass
+    @dataclass
     class RedirectedLine:
         dml_lineno : int
         c_lineno : int
@@ -2029,8 +2030,7 @@ def walk(rootdir):
 
 for (testfile, testpath) in walk(testdir):
     all_tests.append(
-        CTestCase(testpath[1:], testfile,
-                  api_version=default_api_version))
+        CTestCase(testpath[1:], testfile))
 
 class ImportTest(CTestCase):
     __slots__ = ('files', 'extra_code', 'dml_version')
@@ -2051,12 +2051,14 @@ class ImportTest(CTestCase):
         with open(self.filename, "w") as f:
             print("dml %s;" % (self.dml_version,), file=f)
             print("device test;", file=f)
-            print("/// COMPILE-ONLY", file=f)
-            print("/// DMLC-FLAG --no-compat=broken_unused_types", file=f)
             for apifile in self.files:
                 print('import "%s";' % apifile.replace('\\', '/'), file=f)
             print(self.extra_code, file=f)
         super(ImportTest, self).test()
+    def test_flags(self, filename):
+        return self.TestFlags(
+            compile_only=True,
+            dmlc_flags=['--no-compat=broken_unused_types'])
 
 # In Simics 7, some files are broken and not distributed
 removed_in_7 = {"mil-std-1553.dml", "rapidio.dml",
