@@ -122,16 +122,7 @@ cflags_shared = ["-shared"]
 
 os.environ['DMLC_DEBUG'] = 't'
 
-latest_api_version = "6"
-
-special_versions = {}
-
-def simics_api_version(filename):
-    base = os.path.basename(filename)
-    if base in special_versions:
-        return special_versions[base]
-    else:
-        return latest_api_version
+default_api_version = "6"
 
 class DeferredOutput(object):
     def __init__(self):
@@ -201,14 +192,14 @@ class DMLFileTestCase(BaseTestCase):
         BaseTestCase.__init__(self, fullname)
         # Defaults
         self.filename = filename
-        self.api_version = latest_api_version
+        self.api_version = default_api_version
         self.includepath = None
         self.dmlc_extraargs = []
         self.cc_extraargs = []
         self.status = 0
         self.extraenv = {}
         # Override defaults
-        for k,v in info.items():
+        for (k, v) in info.items():
             setattr(self, k, v)
         if self.includepath is None:
             assert self.api_version
@@ -1187,7 +1178,7 @@ class DmlDep(DmlDepBase):
         self.expect_equal_sets(target_prereqs[dmldep_target],
                                target_prereqs[c_target])
         base_types_dml = os.path.join(
-            project_host_path(), 'bin', 'dml', 'api', latest_api_version,
+            project_host_path(), 'bin', 'dml', 'api', self.api_version,
             '1.2', 'simics', 'base-types.dml')
         if all(os.path.normpath(p) != os.path.normpath(base_types_dml)
                for p in target_prereqs[c_target]):
@@ -2039,7 +2030,7 @@ def walk(rootdir):
 for (testfile, testpath) in walk(testdir):
     all_tests.append(
         CTestCase(testpath[1:], testfile,
-                 api_version=simics_api_version(testfile)))
+                  api_version=default_api_version))
 
 class ImportTest(CTestCase):
     __slots__ = ('files', 'extra_code', 'dml_version')
@@ -2067,20 +2058,27 @@ class ImportTest(CTestCase):
             print(self.extra_code, file=f)
         super(ImportTest, self).test()
 
-pci_hotplug = "parameter pci_hotplug = true;"
-rapidio_bank = "bank regs;"
+# In Simics 7, some files are broken and not distributed
+removed_in_7 = {"mil-std-1553.dml", "rapidio.dml",
+                "rapidio-device.dml"}
+
+if get_simics_major() == '6':
+    all_tests.append(ImportTest(
+        'lib-dml-1.2-api-6-rapidio',
+        '1.2', '6', removed_in_7,
+        # needed by rapidio libs
+        "bank regs;"))
+
+# Test that lib/* can be imported
 for dmlver in ['1.2', '1.4']:
     basedir = join(project_host_path(), "bin", "dml", dmlver, "*.dml")
     lib_files = set(map(os.path.basename, glob.glob(basedir)))
-    if int(get_simics_major()) > 6:
-        lib_files -= {"mil-std-1553.dml", "rapidio.dml",
-                      "rapidio-device.dml"}
+    # problematic files covered by separate test
+    lib_files -= removed_in_7
 
     all_tests.append(ImportTest(
-        'lib-dml-%s-api-%s' % (dmlver, latest_api_version),
-        dmlver, latest_api_version, sorted(lib_files),
-        rapidio_bank if (dmlver == '1.2'
-                         and int(get_simics_major()) <= 6) else ''))
+        'lib-dml-%s-api-%s' % (dmlver, default_api_version),
+        dmlver, default_api_version, sorted(lib_files)))
 
 # header files that should not be tested with all API versions
 limited_api_testing = {
