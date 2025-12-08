@@ -327,27 +327,6 @@ class DMLFileTestCase(BaseTestCase):
         else:
             raise TestFail("reaper failed with return code %d" % (status,))
 
-    def check_for_error(self, status, exp_errors, act_errors):
-        """
-        Check that each expected error happens
-        """
-        if status == 0:
-            self.pr("Exit status was 0")
-            raise TestFail("no error triggered")
-
-        for (efile, eline, etag) in exp_errors:
-            self.pr("Looking for %s in stderr" % (etag,))
-            for (atag, alocs) in act_errors:
-                if etag == atag:
-                    if any(afile == efile and eline in [None, aline]
-                           for (afile, aline) in alocs):
-                        # Found!
-                        break
-            else:
-                raise TestFail("expected error %s in %s" % (
-                    etag,
-                    efile if eline is None else "%s:%d" % (efile, eline)))
-
     @staticmethod
     def parse_messages(stderr_lines):
         """Extract warning and error messages found in stderr_file.  Produces
