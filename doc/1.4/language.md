@@ -1798,13 +1798,40 @@ handled:
 * A method can only be overridden by another method if it is declared
   `default`.
 
+All declarations of the same method in an object must share the same signature:
+every declaration must share input parameters, return value types, agree on
+whether the method throws, and agree on the method qualifiers used except
+`shared` ([`independent`](#independent-methods),
+[`startup`](#independent-startup-methods),
+[`memoized`](#independent-startup-memoized-methods),
+[`inline`](#inline-methods)).
+
 > [!NOTE]
-> An overridable built-in method is defined by a template
-> named as the object type. So, if you want to write a template that
-> overrides the `read` method of a register, and want to make
-> your implementation overridable, then your template must explicitly
-> instantiate the `register` template using a statement `is
-> register;`.
+> Overridable built-in methods are often defined by a template named as the
+> object type. For example, if you want to write a template that overrides the
+> `read_register` method of a register, then your template must explicitly
+> instantiate the `register` template using
+> <code>template <em>name</em> is (register) { ... }</code>.
+
+### Abstract method declarations
+A method may be declared abstractly, imposing a requirement that some definition
+of that method, by some part of the device model, is provided to the object the
+abstract declaration is a member of. If that requirement is not satisfied then
+the device model will be rejected by the compiler.
+
+The following is an example of an abstract method declarations:
+```
+method m(uint32 a, bool b) -> (uint8, uint16) throws;
+```
+
+Similarly to [untyped abstract parameter declarations](#parameters-detailed), a
+non-`shared` abstract method declaration may be specified regardless of what
+other declarations of that method there are in the model, except that it is
+still subject to the requirement that every declaration of the same method must
+share the same signature. In contrast, [`shared` abstract method
+declarations](#shared-methods) may only be specified if there is no previous
+([lower or equal ranked](#resolution-of-overrides)) `shared` declaration of that
+method.
 
 ### Calling Methods
 
@@ -2829,19 +2856,21 @@ incomplete description can be found in the [section on templates](#templates).
   *dominates* the set if it has higher rank than all other
   declarations in the set.  Abstract `param` declarations (<code>param
   <em>name</em>;</code> or <code>param <em>name</em> :
-  <em>type</em>;</code>) and abstract method definitions (<code>method
+  <em>type</em>;</code>) and abstract method declarations (<code>method
   <em>name</em>(<em>args...</em>);</code>) are excluded here; they
   cannot dominate a set, and a dominating declaration in a set does
   not need to have higher declaration than any abstract `param` or
   `method` declaration in the set.
-* There may be any number of *untyped* abstract definitions of a
+* There may be any number of *untyped* abstract declarations of a
   parameter (<code>param <em>name</em>;</code>).
 * There may be at most one *typed* abstract definition of a parameter
   (<code>param <em>name</em> : <em>type</em>;</code>)
-* There may be at most one abstract shared definition of a method. Any
+* There may be any number of *non-shared* abstract declarations of a
+  method.
+* There may be at most one abstract shared declaration of a method. Any
   other *shared* definition of this method must have higher rank than
   the abstract definition, but any rank is permitted for non-shared
-  definitions. For instance:
+  declarations. For instance:
 
   ```
   template a {
@@ -2855,7 +2884,7 @@ incomplete description can be found in the [section on templates](#templates).
       shared method m();
   }
   template bb is b {
-      // Error: abstract shared definition overrides non-abstract
+      // Error: abstract shared declaration overrides non-abstract
       shared method m();
   }
   ```
