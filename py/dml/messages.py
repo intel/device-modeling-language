@@ -198,9 +198,9 @@ class EAMBDEFAULT(DMLError):
 
 class EAMETH(DMLError):
     """
-    An abstract method cannot override another method.
+    A shared abstract method cannot override another method.
     """
-    fmt = "abstract method %s overrides existing method"
+    fmt = "shared abstract method %s overrides existing method"
 
     def __init__(self, site, prev_site, name):
         DMLError.__init__(self, site, name)
@@ -246,6 +246,13 @@ class EABSTEMPLATE(DMLError):
         DMLError.log(self)
         self.print_site_message(
             self.decl_site, "abstract declaration")
+
+class EABSMETH(DMLError):
+    """
+    An (abstractly) declared method never has any definition made for it.
+    """
+    version = "1.4"
+    fmt = "declared method %s is never implemented"
 
 class EIMPORT(DMLError):
     """
@@ -1133,7 +1140,7 @@ class EAUTOPARAM(DMLError):
     library, and they may not be overridden."""
     fmt = "bad declaration of automatic parameter '%s'"
 
-class ENOVERRIDE(DMLError):
+class ENOVERRIDEPARAM(DMLError):
     """When the `explict_param_decls` provisional feature is enabled, parameter
     definitions written using `=` and `default` are only accepted if the
     parameter has already been declared.
@@ -1153,7 +1160,7 @@ class ENOVERRIDE(DMLError):
             "enabled by the explicit_param_decls provisional feature")
 
 
-class EOVERRIDE(DMLError):
+class EOVERRIDEPARAM(DMLError):
     """When the `explict_param_decls` provisional feature is enabled,
     any parameter declared via `:=` or `:default` may not already
     have been declared. This means `:=` or `:default` syntax can't be used
@@ -1269,6 +1276,42 @@ class EMETH(DMLError):
         DMLError.log(self)
         if self.othersite:
             self.print_site_message(self.othersite, "conflicting definition")
+
+class ENOVERRIDEMETH(DMLError):
+    """When the `explict_method_decls` provisional feature is enabled, method
+    definitions written using `{ ... }` and `default { ... }` are only accepted
+    if the method has already been declared.
+
+    To declare and define a new method not already declared, use the `:{ ... }`
+    or `:default { ... }` syntax.
+    """
+    fmt = ("method '%s' not declared previously."
+           " To declare and define a new method, use the ':%s{...}' syntax.")
+
+    def log(self):
+        from . import provisional
+        DMLError.log(self)
+        prov_site = self.site.provisional_enabled(
+            provisional.explicit_method_decls)
+        self.print_site_message(
+            prov_site,
+            "enabled by the explicit_method_decls provisional feature")
+
+class EOVERRIDEMETH(DMLError):
+    """When the `explict_method_decls` provisional feature is enabled,
+    any method declared via `:{ ... }` or `:default { ... }` may not already
+    have been declared. This means `:{ ... }` or `:default { ... }` syntax
+    can't be used to override existing parameter declarations (not even those
+    lacking a definition of the parameter.)
+    """
+    fmt = ("the method '%s' has already been declared "
+           + "(':%s{ ... }' syntax may not be used for method overrides)")
+    def __init__(self, site, other_site, name, token):
+        super().__init__(site, name, token)
+        self.other_site = other_site
+    def log(self):
+        DMLError.log(self)
+        self.print_site_message(self.other_site, "existing declaration")
 
 class EIMPLMEMBER(DMLError):
     """

@@ -1,0 +1,72 @@
+/*
+  © 2024 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+/// ERROR ENOVERRIDEMETH
+provisional explicit_method_decls;
+
+device test;
+
+/// ERROR ENOVERRIDEMETH
+method m0() {}
+
+method m1a();
+// no error
+method m1a() {}
+
+/// ERROR EOVERRIDEMETH
+method m1b();
+/// ERROR EOVERRIDEMETH
+method m1b() :{}
+
+method m2a();
+// no error
+method m2a() default {}
+/// ERROR EOVERRIDEMETH
+method m2b() :default {}
+/// ERROR EOVERRIDEMETH
+method m2b();
+
+template t {
+    method m3a() :default {}
+    method m3b() :default {}
+    method m4a() :default {}
+    /// ERROR EOVERRIDEMETH
+    method m4b() :default {}
+    /// ERROR ENOVERRIDEMETH
+    method m5() default {}
+    shared method m6a();
+    /// ERROR EOVERRIDEMETH
+    shared method m6b();
+    method m7a();
+    /// ERROR EOVERRIDEMETH
+    method m7b();
+    shared method m8a() :default {}
+    /// ERROR EOVERRIDEMETH
+    shared method m8b() :default {}
+    shared method m9() :{}
+    method m10() :{}
+}
+
+group g is t {
+    method m3a() {}
+    /// ERROR EOVERRIDEMETH
+    method m3b() :{}
+    method m4a() default {}
+    /// ERROR EOVERRIDEMETH
+    method m4b() :default {}
+    method m6a() {}
+    /// ERROR EOVERRIDEMETH
+    method m6b() :{}
+    method m7a() {}
+    /// ERROR EOVERRIDEMETH
+    method m7b() :{}
+    method m8a() default {}
+    /// ERROR EOVERRIDEMETH
+    method m8b() :default {}
+    // no error
+    method m10();
+}
