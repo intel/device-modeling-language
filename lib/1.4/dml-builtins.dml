@@ -1872,11 +1872,49 @@ of `unmapped_read` if the access is not fully
 mapped.
 </dd><dt>
 
-<small>unmapped\_read(uint64 offset, uint64 bits, void \*aux) throws</small>
+<small>unmapped\_read(uint64 offset, uint64 bits, void \*aux) -> (uint64) throws</small>
 </dt><dd>
 
-Like `unmapped_write` but for reads. The default
-      implementation unconditionally throws an exception.
+Like `unmapped_write` but for reads. The default implementation unconditionally
+throws an exception, which causes the read access to be rejected. However, the
+method may be overridden to instead return a value specifying the read bits
+corresponding to the unmapped bytes, which will then be composed together with
+the values read from the accessed registers.
+</dd><dt>
+
+<small>set(uint64 offset, uint64 size, uint64 value)</small>
+</dt><dd>
+A simpler variant of `write()` used exclusively for inquiry write accesses to
+the bank. Unlike `write()`, `set()` unconditionally operates over an entire
+range of bytes (hence `size` rather than `enabled_bytes`), does not have an
+`aux` parameter, and cannot throw. Any invocation of `write` is considered
+valid, even if some part of the access is not covered by mapped registers (in
+which case no action should be taken for those bytes.)
+
+The default implementation invokes `set()` of the accessed registers rather
+than `write_register()`, and instead of calling to something similar to
+`unmapped_write()`, the default implementation simply logs a low-level `info`
+message about unmapped accesses.
+</dd><dt>
+
+<small>get(uint64 offset, uint64 size) -> (uint64) throws</small>
+</dt><dd>
+A simpler variant of `read()` used exclusively for inquiry read accesses to
+the bank. Unlike `read`, `get()` unconditionally operates over an entire
+range of bytes (hence `size` rather than `enabled_bytes`) and does not have an
+`aux` parameter. Unlike `set()`, invocations to `get()` may throw, in
+particular when some part of the access is not covered by mapped registers.
+
+The default implementation invokes `get()` of the accessed registers rather
+than `read_register()`, and calls to `unmapped_get()` upon unmapped accesses
+rather than `unmapped_read()`.
+</dd></dt>
+
+<small>unmapped\_get(uint64 offset, uint64 bits) -> (uint64) throws</small>
+</dt><dd>
+
+Like `unmapped_read` but for inquiry reads. The default implementation
+unconditionally throws an exception.
 </dd></dl>
 
 The `bank` template contains the following parameters:
