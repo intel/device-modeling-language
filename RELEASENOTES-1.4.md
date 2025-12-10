@@ -408,3 +408,18 @@
   overridable. See the documentation of these templates for more details.
 - `release 7 7129`
 - `release 6 6444`
+- `note 6` Added non-`shared` abstract method declarations, e.g.
+  ```
+  method m(uint8 a) -> (int);
+  ```
+  Similarly to untyped abstract parameter declarations, an abstract method
+  declaration may be specified regardless of whether it's in the context of a
+  template definition, and regardless of what other declarations of the same
+  method exists (except that all declarations must share the same signature.)
+- `note 6` Added a provisional feature `explicit_method_decls`, which can be
+  enabled per file by a statement `provisional explicit_method_decls;`.
+  This feature adds a syntax `method m() :{ ... }`, which signifies that the method
+  is *not* intended as an override. The existing syntax `method m() { ... }``
+  is re-purposed to signify that the method *is* intended as an override,
+  Inconsistent usage will trigger compile errors. This is useful to
+  catch misspelled overrides.
