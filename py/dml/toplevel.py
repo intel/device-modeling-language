@@ -15,7 +15,7 @@ import pickle
 from ply import lex, yacc
 
 from . import objects, logging, codegen, ctree, ast
-from . import compat
+from . import breaking_changes
 from . import symtab
 from .messages import *
 from .logging import *
@@ -83,7 +83,7 @@ def determine_version(filestr, filename):
         ver_end = m.end(0)
         filestr = ' ' * ver_end + filestr[ver_end:]
     else:
-        if compat.optional_version_statement in dml.globals.enabled_compat:
+        if not breaking_changes.require_version_statement.enabled:
             report(WNOVER(SimpleSite(f"{filename}:1")))
             version = (1, 2)
             lineno = 1
@@ -93,7 +93,7 @@ def determine_version(filestr, filename):
                 SimpleSite(f"{filename}:1"), None,
                 "missing DML version statement")
 
-    if (compat.optional_version_statement in dml.globals.enabled_compat
+    if (not breaking_changes.require_version_statement.enabled
         and version == (1, 3)):
         report(WDEPRECATED(
             SimpleSite(f"{filename}:{lineno}:{column}"),
@@ -368,9 +368,10 @@ def parse_main_file(inputfilename, explicit_import_path):
     dml.globals.dml_version = version
     version_str = fmt_version(version)
     if version != (1, 2):
-        for feature in [compat.dml12_inline, compat.dml12_not,
-                        compat.dml12_misc]:
-            dml.globals.enabled_compat.discard(feature)
+        breaking_changes.BreakingChange.enabled_breaking_changes.update([
+            breaking_changes.dml12_disable_inline_constants,
+            breaking_changes.dml12_not_typecheck,
+            breaking_changes.dml12_remove_misc_quirks])
 
     implicit_imports = [
         ast.import_(site, "dml-builtins.dml")]
@@ -393,7 +394,7 @@ def parse_main_file(inputfilename, explicit_import_path):
 
     # we may want to bump last version to 8 if we want to postpone the
     # deprecation of DML 1.2
-    if version == (1, 2) and dml.globals.api_version > compat.api_7:
+    if version == (1, 2) and dml.globals.api_version > breaking_changes.api_7:
         raise ESIMAPI(site, fmt_version(version), dml.globals.api_version.str)
 
     # Map normalized, absolute path of an imported file, to list of

@@ -6,6 +6,8 @@ dml 1.4;
 
 device test;
 
+/// API-VERSION 7
+
 /// ERROR ETYPE
 extern uinteger_t undef_uval;
 /// ERROR ETYPE

@@ -2196,7 +2196,8 @@ class WPCAST(DMLWarning):
         DMLWarning.__init__(self, site, old, new, suggestion)
 
 class WLOGMIXUP(DMLWarning):
-    """
+    """<a id="WLOGMIXUP"/>
+
     A specified log level of a `log` looks as though you meant to specify the
     log groups instead, and/or vice versa. For example:
     ```
@@ -2221,7 +2222,7 @@ class WLOGMIXUP(DMLWarning):
     ```
 
     This warning is only enabled by default with Simics API version 7 or above
-    (due to the compatibility feature `suppress_WLOGMIXUP`.)
+    (due to the breaking change `enable_WLOGMIXUP`.)
     """
     fmt = ("log statement with likely misspecified log level(s) and log "
            + "groups: %s")
