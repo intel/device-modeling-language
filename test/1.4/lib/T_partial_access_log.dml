@@ -7,7 +7,7 @@ dml 1.4;
 
 device test;
 
-/// DMLC-FLAG --no-compat=shared_logs_on_device
+/// DMLC-FLAG --breaking-change=shared-logs-locally
 bank le {
     param byte_order = "little-endian";
     register r size 4 @ 4;

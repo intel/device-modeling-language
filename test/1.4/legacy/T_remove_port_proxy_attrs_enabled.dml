@@ -7,7 +7,7 @@ dml 1.4;
 device test;
 
 /// API-VERSION 6
-/// DMLC-FLAG --no-compat=port_proxy_attrs
+/// DMLC-FLAG --breaking-change=remove-port-proxy-attrs
 
 import "remove_port_proxy_attrs.dml";
 

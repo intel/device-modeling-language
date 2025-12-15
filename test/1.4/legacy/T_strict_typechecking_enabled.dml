@@ -7,6 +7,6 @@ dml 1.4;
 device test;
 
 /// COMPILE-ONLY
-/// DMLC-FLAG --no-compat=lenient_typechecking
+/// DMLC-FLAG --breaking-change=strict-typechecking
 /// SCAN-FOR-TAGS strict_typechecking.dml
 import "strict_typechecking.dml";

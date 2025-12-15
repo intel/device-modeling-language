@@ -8,7 +8,7 @@ device test;
 /// COMPILE-ONLY
 
 /// API-VERSION 6
-/// DMLC-FLAG --no-compat=suppress_WLOGMIXUP
+/// DMLC-FLAG --breaking-change=enable-WLOGMIXUP
 
 loggroup lg;
 

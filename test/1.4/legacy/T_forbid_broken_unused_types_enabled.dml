@@ -6,6 +6,6 @@ dml 1.4;
 
 device test;
 
-/// DMLC-FLAG --no-compat=broken_unused_types
+/// DMLC-FLAG --breaking-change=forbid-broken-unused-types
 /// SCAN-FOR-TAGS forbid_broken_unused_types.dml
 import "forbid_broken_unused_types.dml";

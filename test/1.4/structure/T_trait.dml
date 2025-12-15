@@ -6,7 +6,7 @@ dml 1.4;
 
 device test;
 
-/// DMLC-FLAG --no-compat=shared_logs_on_device
+/// DMLC-FLAG --breaking-change=shared-logs-locally
 
 template base {
     shared method m(int i) -> (int);

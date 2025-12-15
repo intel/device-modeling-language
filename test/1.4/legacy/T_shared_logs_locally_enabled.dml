@@ -7,7 +7,7 @@ dml 1.4;
 device test;
 
 /// API-VERSION 6
-/// DMLC-FLAG --no-compat=shared_logs_on_device
+/// DMLC-FLAG --breaking-change=shared-logs-locally
 
 template t is _qname {
     shared method hello() {
