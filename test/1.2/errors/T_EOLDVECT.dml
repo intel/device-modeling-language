@@ -8,7 +8,7 @@ device test;
 
 /// COMPILE-ONLY
 
-// vect_needs_provisional breaking change
+// disable vect_needs_provisional breaking change
 /// API-VERSION 7
 
 // No warning, even though the vect_needs_provisional is disabled.

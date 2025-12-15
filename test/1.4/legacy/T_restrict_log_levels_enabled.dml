@@ -7,7 +7,7 @@ dml 1.4;
 device test;
 
 /// COMPILE-ONLY
-/// DMLC-FLAG --no-compat=meaningless_log_levels
+/// DMLC-FLAG --breaking-change=restrict-log-levels
 /// WARNING WREDUNDANTLEVEL restrict_log_levels.dml
 /// SCAN-FOR-TAGS restrict_log_levels.dml
 import "restrict_log_levels.dml";

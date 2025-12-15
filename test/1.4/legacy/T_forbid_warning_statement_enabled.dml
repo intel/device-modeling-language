@@ -6,7 +6,7 @@ dml 1.4;
 device test;
 
 /// API-VERSION 7
-/// DMLC-FLAG --no-compat=warning_statement
+/// DMLC-FLAG --breaking-change=forbid-warning-statement
 
 method m() {
     /// ERROR ESYNTAX

@@ -6,7 +6,7 @@ dml 1.4;
 
 device test;
 
-/// DMLC-FLAG --no-compat=legacy_attributes
+/// DMLC-FLAG --breaking-change=modern-attributes
 
 import "simics/simulator/conf-object.dml";
 

@@ -6,6 +6,6 @@ dml 1.4;
 
 device test;
 
-/// DMLC-FLAG --no-compat=broken_conditional_is
+/// DMLC-FLAG --breaking-change=forbid-broken-conditional-is
 /// SCAN-FOR-TAGS forbid_broken_conditional_is.dml
 import "forbid_broken_conditional_is.dml";

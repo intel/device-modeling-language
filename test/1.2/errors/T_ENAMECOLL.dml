@@ -39,7 +39,7 @@ connect c {
     interface memory_space;
 }
 
-// No error here (error with --no-compat=dml12_misc)
+// No error here (error with --breaking-change=dml12-remove-misc-quirks)
 extern t3;
 extern int t3;
 extern t3;
@@ -103,7 +103,7 @@ bank b {
 }
 
 method init() {
-    // no error! (error with --no-compat=dml12_int)
+    // no error! (error with --breaking-change=dml12-modern-int)
     local layout "little-endian" {
         uint32 a;
         uint32 a;

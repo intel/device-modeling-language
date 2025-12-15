@@ -13,6 +13,6 @@ device test;
 
 // Error reporting tested by 1.4/legacy/experimental_vect_*.dml
 
-/// DMLC-FLAG --no-compat=experimental_vect
+/// DMLC-FLAG --breaking-change=vect-needs-provisional
 // no warning
 typedef int vect x;

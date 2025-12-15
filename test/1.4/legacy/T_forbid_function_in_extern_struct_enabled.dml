@@ -7,7 +7,7 @@ dml 1.4;
 device test;
 
 /// API-VERSION 7
-/// DMLC-FLAG --no-compat=function_in_extern_struct
+/// DMLC-FLAG --breaking-change=forbid-function-in-extern-struct
 
 /// SCAN-FOR-TAGS forbid_function_in_extern_struct.dml
 import "forbid_function_in_extern_struct.dml";

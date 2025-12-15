@@ -7,6 +7,6 @@ device test;
 
 // NOTE: this test relies on proxy attributes
 /// API-VERSION 7
-/// DMLC-FLAG --no-compat=legacy_attributes
+/// DMLC-FLAG --breaking-change=modern-attributes
 
 import "modern_attributes.dml";

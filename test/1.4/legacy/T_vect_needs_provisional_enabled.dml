@@ -8,6 +8,6 @@ dml 1.4;
 device test;
 
 /// API-VERSION 7
-/// DMLC-FLAG --no-compat=experimental_vect
+/// DMLC-FLAG --breaking-change=vect-needs-provisional
 /// ERROR EOLDVECT
 typedef int vect x;

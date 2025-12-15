@@ -2025,7 +2025,7 @@ class ImportTest(CTestCase):
     def test_flags(self, filename):
         return self.TestFlags(
             compile_only=True,
-            dmlc_flags=['--no-compat=broken_unused_types'])
+            dmlc_flags=['--breaking-change=forbid-broken-unused-types'])
 
 # In Simics 7, some files are broken and not distributed
 removed_in_7 = {"mil-std-1553.dml", "rapidio.dml",

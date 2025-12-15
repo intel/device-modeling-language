@@ -2,7 +2,7 @@
   © 2024 Intel Corporation
   SPDX-License-Identifier: MPL-2.0
 */
-/// DMLC-FLAG --no-compat=optional_version_statement
+/// DMLC-FLAG --breaking-change=require-version-statement
 /// ERROR ESYNTAX
 dml 1.3;
 

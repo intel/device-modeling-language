@@ -17,7 +17,7 @@ port p {
 }
 
 method test(bool proxies_enabled) {
-    assert _compat_port_proxy_ifaces == proxies_enabled;
+    assert _breaking_change_remove_port_proxy_ifaces == !proxies_enabled;
     assert (SIM_c_get_port_interface(dev.obj, "signal", "p") == NULL)
         == !proxies_enabled;
 }
