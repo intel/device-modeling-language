@@ -37,7 +37,7 @@ from dead_dml_methods import line_directive_re
 
 class TestFail(Exception):
     def __init__(self, reason):
-        Exception.__init__(self)
+        Exception.__init__(self, reason)
         self.reason = reason
 
 sys.path.append(join(simics_base_path(), "scripts", "build"))
