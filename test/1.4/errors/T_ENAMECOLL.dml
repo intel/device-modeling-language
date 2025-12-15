@@ -25,7 +25,7 @@ session int c2;
 /// ERROR ENAMECOLL
 connect c3;
 /// ERROR ENAMECOLL
-attribute c3;
+group c3;
 
 /// ERROR ENAMECOLL
 connect c4;
