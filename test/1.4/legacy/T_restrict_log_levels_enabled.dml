@@ -8,6 +8,6 @@ device test;
 
 /// COMPILE-ONLY
 /// DMLC-FLAG --no-compat=meaningless_log_levels
-/// WARNING WREDUNDANTLEVEL meaningless_log_levels.dml
-/// SCAN-FOR-TAGS meaningless_log_levels.dml
-import "meaningless_log_levels.dml";
+/// WARNING WREDUNDANTLEVEL restrict_log_levels.dml
+/// SCAN-FOR-TAGS restrict_log_levels.dml
+import "restrict_log_levels.dml";

@@ -6,10 +6,6 @@ dml 1.4;
 
 device test;
 
-/// API-VERSION 6
-
-import "port_proxy_ifaces.dml";
-
-method init() {
-    test(true);
-}
+/// COMPILE-ONLY
+/// API-VERSION 7
+import "strict_typechecking.dml";

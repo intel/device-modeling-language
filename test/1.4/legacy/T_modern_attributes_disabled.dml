@@ -7,7 +7,7 @@ device test;
 
 /// API-VERSION 7
 
-import "legacy_attributes.dml";
+import "modern_attributes.dml";
 
 attribute dict_attr is read_only_attr "some dict attr" {
     param type = "D";

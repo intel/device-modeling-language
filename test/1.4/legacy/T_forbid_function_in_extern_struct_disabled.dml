@@ -6,6 +6,5 @@ dml 1.4;
 
 device test;
 
-/// COMPILE-ONLY
 /// API-VERSION 7
-import "lenient_typechecking.dml";
+import "forbid_function_in_extern_struct.dml";

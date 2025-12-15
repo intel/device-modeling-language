@@ -8,7 +8,7 @@ device test;
 
 /// API-VERSION 6
 
-import "port_proxy_attrs.dml";
+import "remove_port_proxy_ifaces.dml";
 
 method init() {
     test(true);

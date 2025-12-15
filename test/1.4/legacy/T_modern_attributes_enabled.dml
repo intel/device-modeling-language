@@ -9,4 +9,4 @@ device test;
 /// API-VERSION 7
 /// DMLC-FLAG --no-compat=legacy_attributes
 
-import "legacy_attributes.dml";
+import "modern_attributes.dml";
