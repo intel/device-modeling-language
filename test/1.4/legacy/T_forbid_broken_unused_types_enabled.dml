@@ -7,5 +7,5 @@ dml 1.4;
 device test;
 
 /// DMLC-FLAG --no-compat=broken_unused_types
-/// SCAN-FOR-TAGS broken_unused_types.dml
-import "broken_unused_types.dml";
+/// SCAN-FOR-TAGS forbid_broken_unused_types.dml
+import "forbid_broken_unused_types.dml";

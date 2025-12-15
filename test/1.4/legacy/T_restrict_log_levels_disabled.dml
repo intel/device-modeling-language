@@ -7,4 +7,5 @@ dml 1.4;
 device test;
 
 /// API-VERSION 7
-import "broken_unused_types.dml";
+/// WARNING WREDUNDANTLEVEL restrict_log_levels.dml
+import "restrict_log_levels.dml";

@@ -7,5 +7,5 @@ dml 1.4;
 device test;
 
 /// DMLC-FLAG --no-compat=broken_conditional_is
-/// SCAN-FOR-TAGS broken_conditional_is.dml
-import "broken_conditional_is.dml";
+/// SCAN-FOR-TAGS forbid_broken_conditional_is.dml
+import "forbid_broken_conditional_is.dml";

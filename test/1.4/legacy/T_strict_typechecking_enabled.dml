@@ -8,5 +8,5 @@ device test;
 
 /// COMPILE-ONLY
 /// DMLC-FLAG --no-compat=lenient_typechecking
-/// SCAN-FOR-TAGS lenient_typechecking.dml
-import "lenient_typechecking.dml";
+/// SCAN-FOR-TAGS strict_typechecking.dml
+import "strict_typechecking.dml";

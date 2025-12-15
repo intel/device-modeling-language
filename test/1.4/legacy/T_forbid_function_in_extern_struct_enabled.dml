@@ -9,5 +9,5 @@ device test;
 /// API-VERSION 7
 /// DMLC-FLAG --no-compat=function_in_extern_struct
 
-/// SCAN-FOR-TAGS function_in_extern_struct.dml
-import "function_in_extern_struct.dml";
+/// SCAN-FOR-TAGS forbid_function_in_extern_struct.dml
+import "forbid_function_in_extern_struct.dml";

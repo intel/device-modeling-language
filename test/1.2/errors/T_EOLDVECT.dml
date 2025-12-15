@@ -8,12 +8,12 @@ device test;
 
 /// COMPILE-ONLY
 
-// c_vect_without_provisional compat feature enabled
+// vect_needs_provisional breaking change
 /// API-VERSION 7
 
-// No complaint, even though the c_vect provisional is not enabled.
+// No warning, even though the vect_needs_provisional is disabled.
 // This gives a warning in DML 1.4, see
-// 1.4/legacy/c_vect_without_provisional_enabled,
-// and an EOLDVECT with c_vect_without_provisional disabled,
-// see 1.4/legacy/c_vect_without_provisional_disabled.
+// 1.4/legacy/vect_needs_provisional_disabled,
+// and an EOLDVECT with vect_needs_provisional enabled,
+// see 1.4/legacy/vect_needs_provisional_enabled
 typedef int vect int_vect_t;

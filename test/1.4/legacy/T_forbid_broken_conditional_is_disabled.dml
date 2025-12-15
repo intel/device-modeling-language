@@ -7,5 +7,4 @@ dml 1.4;
 device test;
 
 /// API-VERSION 7
-/// WARNING WREDUNDANTLEVEL meaningless_log_levels.dml
-import "meaningless_log_levels.dml";
+import "forbid_broken_conditional_is.dml";
