@@ -6,7 +6,7 @@ dml 1.4;
 
 device test;
 
-/// DMLC-FLAG --simics-api=6
+/// API-VERSION 6
 
 extern uinteger_t undef_uval;
 extern integer_t undef_val;

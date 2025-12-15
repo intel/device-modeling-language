@@ -7,7 +7,7 @@ dml 1.4;
 
 device test;
 
-/// DMLC-FLAG --simics-api=7
+/// API-VERSION 7
 /// DMLC-FLAG --no-compat=experimental_vect
 /// ERROR EOLDVECT
 typedef int vect x;

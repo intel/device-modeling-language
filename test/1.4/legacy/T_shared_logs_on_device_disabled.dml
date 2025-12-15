@@ -6,7 +6,7 @@ dml 1.4;
 
 device test;
 
-/// DMLC-FLAG --simics-api=6
+/// API-VERSION 6
 /// DMLC-FLAG --no-compat=shared_logs_on_device
 
 template t is _qname {

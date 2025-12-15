@@ -6,7 +6,7 @@ dml 1.4;
 
 device test;
 
-/// DMLC-FLAG --simics-api=7
+/// API-VERSION 7
 /// DMLC-FLAG --no-compat=function_in_extern_struct
 
 /// SCAN-FOR-TAGS function_in_extern_struct.dml

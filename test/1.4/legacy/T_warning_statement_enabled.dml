@@ -6,7 +6,7 @@ dml 1.4;
 device test;
 
 /// COMPILE-ONLY
-/// DMLC-FLAG --simics-api=7
+/// API-VERSION 7
 
 method m() {
     // method is dead, so no WWRNSTMT

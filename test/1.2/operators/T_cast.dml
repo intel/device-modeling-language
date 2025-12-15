@@ -6,7 +6,7 @@ dml 1.2;
 device test;
 import "testing.dml";
 
-/// DMLC-FLAG --simics-api=6
+/// API-VERSION 6
 // SIMICS-23124
 constant g = cast(0x400000000, uint64);
 

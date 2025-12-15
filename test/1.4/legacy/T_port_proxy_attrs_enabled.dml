@@ -6,7 +6,7 @@ dml 1.4;
 
 device test;
 
-/// DMLC-FLAG --simics-api=6
+/// API-VERSION 6
 
 import "port_proxy_attrs.dml";
 
