@@ -29,3 +29,6 @@ group g4[i < ...][j < ...];
 // no error
 group g5[i < 4][j < ...];
 group g5[i < ...][j < 7];
+
+/// ERROR EAUNKDIMSIZE
+group g6[_ < ...];

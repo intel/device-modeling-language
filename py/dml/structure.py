@@ -819,45 +819,62 @@ def report_poverride(sup, inf, obj_specs):
         else:
             report(POVERRIDE_IMPORT(sup_obj.site, inf.desc.text))
 
-def merge_subobj_defs(def1, def2, parent):
-    (objtype, name, arrayinfo, obj_specs1) = def1
-    (objtype2, name2, arrayinfo2, obj_specs2) = def2
-    assert name == name2
-
-    site1 = obj_specs1[0].site
-    site2 = obj_specs2[0].site
-
-    if objtype != objtype2:
-        report(ENAMECOLL(site1, site2, name))
-        return def1
-
-    if len(arrayinfo) != len(arrayinfo2):
-        raise EAINCOMP(site1, site2, name,
-                       "mixing declarations with different number "
-                       "of array dimensions")
-
+def merge_subobj_defs(name, defs, parent):
+    specs = [spec for (_, _, spec) in defs]
+    (objtype, arrayinfo, _) = defs[0]
+    for (ot, ai, spec) in defs[1:]:
+        if ot != objtype:
+            report(ENAMECOLL(specs[0].site, spec.site, name))
+            return merge_subobj_defs(name, defs[1:], parent)
+        if len(ai) != len(arrayinfo):
+            raise EAINCOMP(specs[0].site, spec.site, name,
+                           "mixing declarations with different number "
+                           "of array dimensions")
     merged_arrayinfo = []
     if arrayinfo:
         parent_scope = Location(parent, static_indices(parent))
+        for (dim_i, dim) in enumerate(
+                zip(*(arrayinfo for (_, arrayinfo, _) in defs))):
+            (idxvar_asts, len_asts) = zip(*dim)
 
-        for ((idxvar1, len1), (idxvar2, len2)) in zip(arrayinfo, arrayinfo2):
-            if idxvar1.kind == 'discard':
-                idxvar1 = idxvar2
-            elif (idxvar2.kind != 'discard'
-                  and idxvar1.args[0] != idxvar2.args[0]):
-                raise EAINCOMP(site1, site2, name,
-                               "mismatching index variables")
-
-            if len1 is None:
-                merged_arrayinfo.append((idxvar1, len2))
-            elif len2 is not None and (eval_arraylen(len1, parent_scope)
-                                       != eval_arraylen(len2, parent_scope)):
-                raise EAINCOMP(site1, site2, name, "mismatching array sizes")
+            candidates = {}
+            for idxvar_ast in idxvar_asts:
+                if idxvar_ast.kind != 'discard':
+                    assert idxvar_ast.kind == 'variable', idxvar_ast
+                    [idxvar] = idxvar_ast.args
+                    candidates.setdefault(idxvar, []).append(idxvar_ast)
+            if len(candidates) == 0:
+                idxvar = None
             else:
-                merged_arrayinfo.append((idxvar1, len1))
+                [(idxvar, first_asts), *rest] = candidates.items()
+                for (_, conflicting_asts) in rest:
+                    for ast in conflicting_asts:
+                        report(EAINCOMP(
+                            ast.site, first_asts[0].site, name,
+                            "mismatching index variables"))
 
+            candidates = {}
+            for len_ast in len_asts:
+                if len_ast is not None:
+                    length = eval_arraylen(len_ast, parent_scope)
+                    candidates.setdefault(length, []).append(len_ast)
+            if len(candidates) == 0:
+                idxref = (f" (with index variable '{idxvar}')"
+                          if idxvar else "")
+                report(EAUNKDIMSIZE(specs[0].site, dim_i, idxref))
+                length = 1
+                lensite = specs[0].site
+            else:
+                [(length, asts), *rest] = candidates.items()
+                lensite = asts[0].site
+                for (_, asts) in rest:
+                    for ast in asts:
+                        report(EAINCOMP(ast.site, lensite, name,
+                                        "mismatching array sizes"))
 
-    return (objtype, name, merged_arrayinfo, obj_specs1 + obj_specs2)
+            merged_arrayinfo.append((idxvar, length, lensite))
+
+    return (objtype, name, merged_arrayinfo, [spec for (_, _, spec) in defs])
 
 def method_is_std(node, methname):
     """
@@ -1007,10 +1024,10 @@ def mkobj(ident, objtype, arrayinfo, obj_specs, parent, each_stmts):
     # rank, so that's a relevant site to pick.
     site = obj_specs[0].site
 
-    (index_var_asts, arraylen_asts) = list(zip(*arrayinfo)) or ((), ())
+    (index_vars, arraylens, index_sites) = list(zip(*arrayinfo)) or ((), (), ())
 
     obj = create_object(site, ident, objtype, parent,
-                        arraylen_asts, index_var_asts)
+                        arraylens, index_vars)
     num_elems = functools.reduce(operator.mul, obj.dimsizes, 1)
     if num_elems >= 1 << 31:
         raise EASZLARGE(site, num_elems)
@@ -1018,53 +1035,47 @@ def mkobj(ident, objtype, arrayinfo, obj_specs, parent, each_stmts):
     with ErrorContext(obj):
         (obj_specs, used_templates) = add_templates(obj_specs, each_stmts)
         obj.templates = used_templates
-        obj_params = create_parameters(obj, obj_specs, index_var_asts)
+        obj_params = create_parameters(obj, obj_specs, index_vars, index_sites)
         return mkobj2(obj, obj_specs, obj_params, each_stmts)
 
 def create_object(site, ident, objtype, parent,
-                  arraylen_asts, index_var_asts):
-    array_lens = tuple(
-        eval_arraylen(len_ast, Location(parent, static_indices(parent)))
-        for len_ast in arraylen_asts)
-    index_vars = tuple(var.args[0] if var.kind == 'variable' else None
-                       for var in index_var_asts)
-
+                  arraylens, index_vars):
     if objtype == 'device':
-        assert not arraylen_asts
+        assert not arraylens
         return objects.Device(ident, site)
     elif objtype == 'bank':
         if (ident is None
             and breaking_changes.dml12_remove_misc_quirks.enabled):
             report(ESYNTAX(site, 'bank', 'anonymous banks are not allowed'))
-        return objects.Bank(ident, site, parent, array_lens, index_vars)
+        return objects.Bank(ident, site, parent, arraylens, index_vars)
     elif objtype == 'group':
-        return objects.Group(ident, site, parent, array_lens, index_vars)
+        return objects.Group(ident, site, parent, arraylens, index_vars)
     elif objtype == 'register':
         return objects.Register(ident, site, parent,
-                                array_lens, index_vars)
+                                arraylens, index_vars)
     elif objtype == 'field':
-        return objects.Field(ident, site, parent, array_lens, index_vars)
+        return objects.Field(ident, site, parent, arraylens, index_vars)
     elif objtype == 'connect':
         return objects.Connection(ident, site, parent,
-                                  array_lens, index_vars)
+                                  arraylens, index_vars)
     elif objtype == 'interface':
-        assert not arraylen_asts
+        assert not arraylens
         return objects.Interface(ident, site, parent)
     elif objtype == 'attribute':
-        return objects.Attribute(ident, site, parent, array_lens, index_vars)
+        return objects.Attribute(ident, site, parent, arraylens, index_vars)
     elif objtype == 'event':
-        return objects.Event(ident, site, parent, array_lens, index_vars)
+        return objects.Event(ident, site, parent, arraylens, index_vars)
     elif objtype == 'port':
-        return objects.Port(ident, site, parent, array_lens, index_vars)
+        return objects.Port(ident, site, parent, arraylens, index_vars)
     elif objtype == 'subdevice':
-        return objects.Subdevice(ident, site, parent, array_lens, index_vars)
+        return objects.Subdevice(ident, site, parent, arraylens, index_vars)
     elif objtype == 'implement':
-        assert not arraylen_asts
+        assert not arraylens
         return objects.Implement(ident, site, parent)
 
     raise ICE(site, "unknown object type %s" % (objtype,))
 
-def make_autoparams(obj, index_var_asts):
+def make_autoparams(obj, index_vars, index_sites):
     site = obj.site
 
     autoparams = {}
@@ -1079,16 +1090,15 @@ def make_autoparams(obj, index_var_asts):
 
     index_params = ()
     # Handle array information
-    for (dim, index_var) in enumerate(index_var_asts):
-        index_param = IndexParamExpr(index_var.site,
+    for (dim, (index_var, isite)) in enumerate(zip(index_vars, index_sites)):
+        index_param = IndexParamExpr(isite,
                                      obj.parent.dimensions + dim,
-                                     index_var.args[0]
-                                     if index_var.kind == 'variable' else None)
+                                     index_var)
         index_params += (index_param,)
-        if index_var.kind == 'variable':
+        if index_var is not None:
             # This will refer to the index coupled with the idxvar,
             # innermost overrides
-            autoparams[index_var.args[0]] = index_param
+            autoparams[index_var] = index_param
 
     # Assign auto parameters related to array info
     # In 1.4; The 'indices' auto-param is a list containing local indices
@@ -1098,19 +1108,19 @@ def make_autoparams(obj, index_var_asts):
     #         The 'indexvar' auto-param is the name of index variable that the
     #         local index is stored in if in a simple array, undefined otherwise
     if dml.globals.dml_version == (1, 2):
-        if len(index_var_asts) == 1:
-            ([index_var_ast], [index_param]) = (index_var_asts, index_params)
-            # TODO or maybe 'i'?
-            index_var = (index_var_ast.args[0]
-                         if index_var_ast.kind == 'variable' else '')
+        if len(index_vars) == 1:
+            ([index_var], [index_param], [index_site]) = (
+                index_vars, index_params, index_sites)
             # TODO: Add this documentation to dml.docu
             # If in a multi-dimensional array, this will be set to undefined
             # So in 1.2 you can verify if you are in a multi-dimensional
             # array by checking if this is defined
             autoparams['indexvar'] = SimpleParamExpr(
-                mkStringConstant(site, index_var))
+                mkStringConstant(
+                    # TODO or maybe 'i'?
+                    index_site, '' if index_var is None else index_var))
             autoparams['index'] = index_param
-        elif index_var_asts:
+        elif index_vars:
             autoparams['indexvar'] = SimpleParamExpr(mkUndefined(site))
             autoparams['index'] = IndexListParamExpr(site, index_params)
         else:
@@ -1197,17 +1207,15 @@ def make_autoparams(obj, index_var_asts):
 
     return autoparams
 
-def implicit_params(obj, index_var_asts):
-    # Find index_vars collisions here
-    sorted_ivars = sorted(((var.site, var.args[0])
-                           for var in index_var_asts
-                           if var.kind == 'variable'),
-                          key=lambda t: t[1])
-    for (s1, v1), (s2, v2) in zip(sorted_ivars, sorted_ivars[1:]):
-        if v1 == v2:
-            report(ENAMECOLL(s2, s1, v1))
-    params = [ast.param(var.site, var.args[0], ast.auto(var.site), False, None)
-              for var in index_var_asts if var.kind == 'variable']
+def implicit_params(obj, index_vars, index_sites):
+    # Find index_vars collisions
+    ivar_sites = {}
+    for (var, site) in zip(index_vars, index_sites):
+        if var in ivar_sites and var is not None:
+            report(ENAMECOLL(ivar_sites[var], site, var))
+        ivar_sites[var] = site
+    params = [ast.param(site, var, ast.auto(site), False, None)
+              for (var, site) in zip(index_vars, index_sites) if var is not None]
 
     if (dml.globals.dml_version == (1, 2)
         and obj.objtype == 'field'
@@ -1219,7 +1227,7 @@ def implicit_params(obj, index_var_asts):
             ast.param(obj.site, 'lsb', None, False, ast.int(site, 0))])
     return params
 
-def create_parameters(obj, obj_specs, index_var_asts):
+def create_parameters(obj, obj_specs, index_vars, index_sites):
     '''Merge parameter ASTs and convert to Parameter objects'''
 
     # "automatic" parameters are declared 'parameter xyz auto;' in
@@ -1231,14 +1239,14 @@ def create_parameters(obj, obj_specs, index_var_asts):
                                          '<implicit parameter block>'))
     # map parameter name -> list of (Rank, ast.param object)
     parameters = {param.args[0]: [(implicit_rank, param)]
-                  for param in implicit_params(obj, index_var_asts)}
+                  for param in implicit_params(obj, index_vars, index_sites)}
     for obj_spec in obj_specs:
         for s in obj_spec.params:
             assert s.kind == 'param'
             (name, _, _, _) = s.args
             parameters.setdefault(name, []).append((obj_spec.rank, s))
 
-    autoparams = make_autoparams(obj, index_var_asts)
+    autoparams = make_autoparams(obj, index_vars, index_sites)
     for name in autoparams:
         assert name in parameters, name
     return [mkparam(obj, autoparams,
@@ -1790,8 +1798,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             else:
                 raise ICE(s.site, 'UNKNOWN %r' % (s,))
 
-    subobj_defs = {}
-
+    subobj_spec_by_ident = {}
     for (stmts, obj_spec) in composite_subobjs:
         for s in stmts:
             (objtype, ident, arrayinfo, subobj_spec) = s
@@ -1799,24 +1806,15 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             if ident is None:
                 assert (dml.globals.dml_version == (1, 2)
                         and objtype in {'bank', 'field'})
-
-            subobj_def = (objtype, ident, arrayinfo, [subobj_spec])
-            if ident in subobj_defs:
-                subobj_defs[ident] = merge_subobj_defs(subobj_defs[ident],
-                                                       subobj_def, obj)
-            elif ident in symbols:
+            subobj_spec_by_ident.setdefault(ident, []).append(
+                (objtype, arrayinfo, subobj_spec))
+    subobj_defs = {}
+    for (ident, defs) in subobj_spec_by_ident.items():
+        if ident in symbols:
+            for (_, _, subobj_spec) in defs:
                 report(ENAMECOLL(subobj_spec.site, symbols[ident], ident))
-            else:
-                symbols[ident] = subobj_spec.site
-                subobj_defs[ident] = subobj_def
-
-    for (_, _, arrayinfo, specs) in subobj_defs.values():
-        for (i, (idx, dimsize_ast)) in enumerate(arrayinfo):
-            if dimsize_ast is None:
-                idxref = (f" (with index variable '{idx.args[0]}')"
-                          if idx.kind == 'variable' else "")
-                report(EAUNKDIMSIZE(specs[0].site, i, idxref))
-                arrayinfo[i] = (idx, ast.int(specs[0].site, 1))
+        else:
+            subobj_defs[ident] = merge_subobj_defs(ident, defs, obj)
 
     explicit_traits = Set(t for (_, t) in obj_traits)
     ancestors = explicit_traits.union(
