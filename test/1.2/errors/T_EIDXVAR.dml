@@ -75,8 +75,6 @@ bank b[j in 0..1] {
     }
 
     /// ERROR EIDXVAR
-    group g[i in 0..$j];
-    /// ERROR EIDXVAR
     data int da[$j];
     /// ERROR EIDXVAR
     method m1(int x[$j]) {}

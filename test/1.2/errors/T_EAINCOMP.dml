@@ -5,24 +5,23 @@
 dml 1.2;
 device test;
 
-bank b0 {
-    parameter register_size = 4;
+group b0 {
     /// ERROR EAINCOMP
-    register r0[i in 0..1];
+    group r0[i in 0..1];
     /// ERROR EAINCOMP
-    register r0[j in 0..1];
+    group r0[j in 0..1];
 }
 
-bank b1 {
+group b1 {
     /// ERROR EAINCOMP
-    register r1[i in 0..1];
+    group r1[i in 0..1];
     /// ERROR EAINCOMP
-    register r1[i in 0..2];
+    group r1[i in 0..2];
 }
 
-bank b2 {
+group b2 {
     /// ERROR EAINCOMP
-    register r2[2];
+    group r2[2];
     /// ERROR EAINCOMP
-    register r2;
+    group r2;
 }
