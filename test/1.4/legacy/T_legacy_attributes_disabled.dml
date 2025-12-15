@@ -6,7 +6,7 @@ dml 1.4;
 device test;
 
 // NOTE: this test relies on proxy attributes
-/// DMLC-FLAG --simics-api=7
+/// API-VERSION 7
 /// DMLC-FLAG --no-compat=legacy_attributes
 
 import "legacy_attributes.dml";

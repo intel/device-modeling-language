@@ -9,7 +9,7 @@ device test;
 /// COMPILE-ONLY
 
 // c_vect_without_provisional compat feature enabled
-/// DMLC-FLAG --simics-api=7
+/// API-VERSION 7
 
 // No complaint, even though the c_vect provisional is not enabled.
 // This gives a warning in DML 1.4, see

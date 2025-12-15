@@ -2,7 +2,7 @@
   © 2024 Intel Corporation
   SPDX-License-Identifier: MPL-2.0
 */
-/// DMLC-FLAG --simics-api=7
+/// API-VERSION 7
 /// WARNING WNOVER T_optional_version_statement_enabled.dml
 
 device test;
