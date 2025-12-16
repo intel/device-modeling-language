@@ -8,7 +8,7 @@ import functools
 import contextlib
 import abc
 import os
-from . import objects, logging, crep, codegen, toplevel, topsort, compat
+from . import objects, logging, crep, codegen, toplevel, topsort
 from . import breaking_changes, provisional
 from .logging import *
 from .codegen import *
@@ -364,7 +364,7 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
                     bad_methods.add(name)
                 elif explicit_decl:
                     report(EOVERRIDEMETH(msite, orig_site, name,
-                                         'default '*overridable))
+                                         'default ' * overridable))
                     bad_methods.add(name)
                 elif name not in ancestor_vtables:
                     raise ICE(msite,
@@ -375,7 +375,7 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
 
         if (body is not None and not some_coll and not explicit_decl
             and msite.provisional_enabled(provisional.explicit_method_decls)):
-            report(ENOVERRIDEMETH(msite, name, 'default '*overridable))
+            report(ENOVERRIDEMETH(msite, name, 'default ' * overridable))
             bad_methods.add(name)
 
     for name in bad_methods:
@@ -415,8 +415,7 @@ def typecheck_method_override(left, right):
     if len(outp0) != len(outp1):
         raise EMETH(site0, site1, "different number of output arguments")
     if throws0 != throws1:
-        annotation = "no"*(dml.globals.dml_version != (1, 4)) + "throw"
-        raise EMETH(site0, site1, f"different {annotation} annotations")
+        raise EMETH(site0, site1, "different 'throws' annotations")
     for (p0, p1) in zip(inp0, inp1):
         t0 = safe_realtype_unconst(p0.typ)
         t1 = safe_realtype_unconst(p1.typ)
@@ -568,120 +567,50 @@ def calc_minimal_ancestry(ranks: frozenset["Rank"]):
 
     return minimal_ancestry
 
+def sort_method_implementations(implementations):
+    '''Given a list of (Rank, ast.method) pairs, return a pair
+    (default_map, method_order), where default_map is a dict mapping
+    ast.method to list of ast.method it overrides, and method_order is
+    a topological ordering of methods based on this graph.'''
 
-def sort_method_declarations(declarations):
-    '''Given a list of MethodHandle:s, return a tuple
-    (default_map, decl_ancestry_map, method_order, abstract_decls), where:
-    * default_map is a dict mapping each non-abstract MethodHandle
-      to the list of highest-ranking non-abstract MethodHandle:s it overrides
-    * decl_ancestry_map is a dict mapping each MethodHandle to the list of
-      highest-ranking MethodHandle:s it overrides
-    * method_order is a topological ordering of method implementations
-      based on the graph formed from default_map
-    * abstract_decls is a list of all abstract declarations of the method
-    '''
-    # Rank -> [non-abstract MethodHandle or None, abstract MethodHandle:s]
-    rank_to_method = {}
-    for impl in declarations:
-        [existing_impl, existing_abstracts] = existing = (
-            rank_to_method.setdefault(impl.rank, [None, []]))
-        if impl.abstract:
-            existing_abstracts.append(impl)
-        elif existing_impl is not None:
-            # two conflicting method definitions in the same block
-            raise ENAMECOLL(impl.site, existing_impl.site, impl.name)
-        else:
-            existing[0] = impl
-    def flattened(t):
-        (impl, abstracts) = t
-        return abstracts if impl is None else [impl] + abstracts
+    if not implementations:
+        return ({}, [])
+
+    rank_to_method = { impl.rank: impl for impl in implementations }
 
     minimal_ancestry = calc_minimal_ancestry(frozenset(rank_to_method))
-    decl_ancestry_map = {}
-    for (r, anc_ranks) in minimal_ancestry.items():
-        anc_decls = [anc_decl
-                     for anc in anc_ranks
-                     for anc_decl in flattened(rank_to_method[anc])]
 
-        decls = flattened(rank_to_method[r]) if r is not None else (None,)
-        for decl in decls:
-            decl_ancestry_map[decl] = anc_decls
+    if len(minimal_ancestry[None]) > 1:
+        # There is no single method implementation that overrides all
+        # other implementations
+        def is_default(r):
+            return rank_to_method[r].overridable
 
-    method_map_ranks = {}
-
-    def calc_highest_impls(r):
-        existing = method_map_ranks.get(r)
-        if existing is not None:
-            return
-
-        anc_impl_ranks = Set()
-        some_abstract = False
-        for anc in minimal_ancestry[r]:
-            [anc_impl, anc_abstracts] = rank_to_method[anc]
-            if anc_impl is not None:
-                anc_impl_ranks.add(anc)
-            else:
-                some_abstract = True
-                calc_highest_impls(anc)
-                anc_impl_ranks.update(method_map_ranks[anc])
-
-        if some_abstract:
-            anc_impl_ranks = get_highest_ranks(anc_impl_ranks)
-        method_map_ranks[r] = anc_impl_ranks
-
-    calc_highest_impls(None)
-    for (r, (impl, abstracts)) in rank_to_method.items():
-        if (impl is not None and not impl.shared
-            and impl.site.provisional_enabled(
-                provisional.explicit_method_decls)):
-            existing = abstracts or decl_ancestry_map[impl]
-            if impl.explicit_decl:
-                if existing:
-                    report(EOVERRIDEMETH(impl.site, existing[0].site,
-                                         impl.name,
-                                        'default ' * impl.overridable))
-            elif not existing:
-                report(ENOVERRIDEMETH(impl.site, impl.name,
-                                      'default ' * impl.overridable))
-
-        calc_highest_impls(r)
+        [r1, r2] = sorted(minimal_ancestry[None], key=is_default)[:2]
+        raise EAMBINH(rank_to_method[r1].site,
+                      rank_to_method[r2].site,
+                      rank_to_method[r1].name,
+                      r1.desc, r2.desc,
+                      is_default(r1))
 
     # Ancestry graph translated back to method ASTs. Maps method to
     # list of default methods.
     method_map = {
-        impl: [rank_to_method[anc][0] for anc in method_map_ranks[r]]
-        for (r, (impl, _)) in rank_to_method.items() if impl is not None }
+        m: [rank_to_method[x] for x in minimal_ancestry[r]]
+        for (r, m) in rank_to_method.items()}
     method_order = list(reversed(topsort.topsort(method_map)))
 
-    highest_rank_impls = method_map_ranks[None]
-    if len(highest_rank_impls) > 1:
-        # There is no single method implementation that overrides all
-        # other implementations
-        def is_default(r):
-            return rank_to_method[r][0].overridable
-
-        [r1, r2] = sorted(highest_rank_impls, key=is_default)[:2]
-        raise EAMBINH(rank_to_method[r1][0].site,
-                      rank_to_method[r2][0].site,
-                      rank_to_method[r1][0].name,
-                      r1.desc, r2.desc,
-                      is_default(r1))
-
-    if (dml.globals.dml_version == (1, 2) and method_order
-        and os.path.basename(
-            method_order[0].site.filename()) != 'dml12-compatibility.dml'):
-        m = method_order[0]
-        if len(method_order) > 2:
+    m = method_order[0]
+    if (dml.globals.dml_version == (1, 2)
+        and os.path.basename(m.site.filename()) != 'dml12-compatibility.dml'):
+        if len(implementations) > 2:
             report(WEXPERIMENTAL(
                 m.site, "more than one level of method overrides"))
-        if len(method_order) == 2 and m.overridable:
+        if len(implementations) == 2 and m.overridable:
             report(WEXPERIMENTAL(
                 m.site, "method with two default declarations"))
 
-    return (method_map, decl_ancestry_map, method_order,
-            itertools.chain(*(abstracts
-                              for (_, abstracts) in rank_to_method.values()
-                              if abstracts)))
+    return (method_map, method_order)
 
 class SubTrait:
     '''Logic shared between nodes and traits, which both can inherit
