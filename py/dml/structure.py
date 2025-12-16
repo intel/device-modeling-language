@@ -812,26 +812,6 @@ def report_poverride(sup, inf, obj_specs):
         else:
             report(POVERRIDE_IMPORT(sup_obj.site, inf.desc.text))
 
-def sort_method_declarations(declarations, obj_specs):
-    if dml.globals.dml_version == (1, 2):
-        # Backward compatibility: If there is exactly one default and
-        # one non-default implementation, then disregard template
-        # instantiation relations.
-        implementations = [impl for impl in declarations if not impl.abstract]
-        if len(implementations) == 2:
-            [m1, m2] = implementations
-            # create fake ranks to make sure methods end up in the right order
-            if m1.overridable and not m2.overridable:
-                if logging.show_porting:
-                    report_poverride(m2.obj_spec.rank, m1.obj_spec.rank,
-                                     obj_specs)
-                m2.rank = Rank({m1.rank}, m2.rank.desc)
-            elif not m1.overridable and m2.overridable:
-                if logging.show_porting:
-                    report_poverride(m1.rank, m2.rank, obj_specs)
-                m1.rank = Rank({m2.rank}, m1.rank.desc)
-    return traits.sort_method_declarations(declarations)
-
 def merge_subobj_defs(def1, def2, parent):
     (objtype, name, arrayinfo, obj_specs1) = def1
     (objtype2, name2, arrayinfo2, obj_specs2) = def2
@@ -1460,14 +1440,12 @@ class AbstractTraitMethodHandle(traits.MethodHandle):
         super(AbstractTraitMethodHandle, self).__init__(
             site, name, obj_spec, True, True, None, *sig)
 
-
-
 def process_method_declarations(obj, name, declarations,
                                 shared_impl_traits, shared_absdecl_traits,
                                 obj_specs, vtable_nothrow_dml14):
     # A method can have both shared and non-shared declarations.
     # We will create a MethodHandle object for either, which
-    # sort_method_declarations() uses to resolve override order.
+    # sort_method_implementations() uses to resolve override order.
     unshared_methods = [
         ObjMethodHandle(method_ast, obj_spec)
         for (obj_spec, method_ast) in declarations]
@@ -1480,9 +1458,55 @@ def process_method_declarations(obj, name, declarations,
         AbstractTraitMethodHandle(name, vtable_trait)
         for vtable_trait in shared_absdecl_traits]
 
-    (default_map, decl_ancestry_map, method_order,
-     abstract_decls) = sort_method_declarations(
-        unshared_methods + shared_methods + shared_abstract_methods, obj_specs)
+    methods = unshared_methods + shared_methods + shared_abstract_methods
+    impls = [meth for meth in methods if not meth.abstract]
+
+    if dml.globals.dml_version == (1, 2) and len(impls) == 2:
+        # Backward compatibility: If there is exactly one default and
+        # one non-default implementation, then disregard template
+        # instantiation relations.
+        [m1, m2] = impls
+        # create fake ranks to make sure methods end up in the right order
+        if m1.overridable and not m2.overridable:
+            if logging.show_porting:
+                report_poverride(m2.obj_spec.rank, m1.obj_spec.rank, obj_specs)
+            m2.rank = Rank({m1.rank}, m2.rank.desc)
+        elif not m1.overridable and m2.overridable:
+            if logging.show_porting:
+                report_poverride(m1.rank, m2.rank, obj_specs)
+            m1.rank = Rank({m2.rank}, m1.rank.desc)
+
+    rank_to_methods = {}
+    for meth in methods:
+        rank_to_methods.setdefault(meth.rank, []).append(meth)
+
+    minimal_ancestry = traits.calc_minimal_ancestry(frozenset(rank_to_methods))
+
+    for (r, meths) in rank_to_methods.items():
+        [impl, *others] = sorted(meths, key=lambda meth: meth.abstract)
+        if impl.abstract:
+            continue
+
+        for other in others:
+            if not other.abstract:
+                # two conflicting method definitions in the same block
+                raise ENAMECOLL(other.site, impl.site, other.name)
+
+        if (not impl.shared # Handled separately
+            and impl.site.provisional_enabled(
+                provisional.explicit_method_decls)):
+            existing = others or [m for anc in minimal_ancestry[r]
+                                  for m in rank_to_methods[anc]]
+            if impl.explicit_decl:
+                if existing:
+                    report(EOVERRIDEMETH(impl.site, existing[0].site,
+                                         impl.name,
+                                         'default ' * impl.overridable))
+            elif not existing:
+                report(ENOVERRIDEMETH(impl.site, impl.name,
+                                      'default ' * impl.overridable))
+
+    (default_map, method_order) = traits.sort_method_implementations(impls)
 
     location = Location(obj, static_indices(obj))
 
@@ -1497,29 +1521,39 @@ def process_method_declarations(obj, name, declarations,
         else:
             nonshared_impls.append(impl)
 
-    if not nonshared_impls:
-        if shared_methods:
-            shared_impl_sig = shared_methods[0].signature
-            for decl in abstract_decls:
-                if decl.shared:
-                    # handled separately
-                    continue
+    abstract_decls = [meth for meth in methods
+                      if meth.abstract and not meth.shared]
 
-                try:
-                    traits.typecheck_method_override(shared_impl_sig,
-                                                     decl.signature)
-                except DMLError as e:
-                    report(e)
-            return None
+    # Typecheck nonshared abstract decls against each other
+    for (meth0, meth1) in itertools.pairwise(abstract_decls):
+        typecheck_method_override(meth0.method_ast, meth1.method_ast,
+                                  location)
+
+    # Then typecheck any shared abstract declaration -- or, failing that,
+    # the highest ranking implementation -- against some arbitrary abstract
+    # decl
+    # This prioritization is because we consider the trait authorative for what
+    # the type should be.
+    if abstract_decls:
+        if shared_abstract_methods:
+            traits.typecheck_method_override(
+                abstract_decls[0].signature,
+                shared_abstract_methods[0].signature)
+        elif method_order:
+            impl = method_order[0]
+            if impl.shared:
+                traits.typecheck_method_override(
+                    impl.signature, abstract_decls[0].signature)
+            else:
+                typecheck_method_override(
+                    impl.method_ast, abstract_decls[0].method_ast, location)
         else:
-            assert abstract_decls
-            for decl in abstract_decls:
-                # We favor reporting EABSTEMPLATE (done by the caller)
-                # over EABSMETH
-                if not decl.shared:
-                    report(EABSMETH(decl.site, name))
+            # This only done in this path because we favor reporting
+            # EABSTEMPLATE (done by the caller) over EABSMETH
+            report(EABSMETH(abstract_decls[0].site, name))
 
-            return None
+    if not nonshared_impls:
+        return None
 
     impl_to_method = {}
     for (default_level, impl) in reversed(list(enumerate(nonshared_impls))):
@@ -1553,37 +1587,6 @@ def process_method_declarations(obj, name, declarations,
                 impl.site, vtable_nothrow_dml14,
                 obj, name, body, rbrace_site)
             throws = False
-
-        for ancestor_decl in decl_ancestry_map[impl]:
-            if (impl.site.dml_version() == (1, 2) and throws
-                and not ancestor_decl.throws
-                and ancestor_decl.site.dml_version() == (1, 4)):
-                # If a 1.4 library file defines an overrideable
-                # non-throwing method, and a 1.2 device overrides
-                # this, then assume that the method was never
-                # intended to throw, and that the throws ->
-                # nothrow change is part of the migration to 1.4.
-                # We modify the override to nothrow, and patch it
-                # to catch any exceptions.
-                body = wrap_method_body_in_try(
-                    impl.site, ancestor_decl.site,
-                    obj, name, body, rbrace_site)
-                throws = False
-            elif throws != ancestor_decl.throws:
-                if dml.globals.dml_version == (1, 2) and not throws:
-                    # Permit a nonthrowing method to override
-                    # a throwing 1.2 method, with no warning.
-                    # This is needed for some common standard
-                    # library overrides, e.g. read, write,
-                    # get, set, when sharing code between DML
-                    # 1.2 and 1.4,
-                    pass
-                else:
-                    annotation = ("no"*(dml.globals.dml_version != (1, 4))
-                                   + "throw")
-                    raise EMETH(impl.site, ancestor_decl.site,
-                                f"different {annotation} annotations")
-
         for overridden in default_map[impl]:
             if not overridden.overridable:
                 raise EDMETH(impl.site, overridden.site, name)
@@ -1595,31 +1598,37 @@ def process_method_declarations(obj, name, declarations,
                 typecheck_method_override(impl.method_ast,
                                           overridden.method_ast,
                                           location)
-
-        # Check compatibility with all non-shared abstract declarations against
-        # the highest-ranked implementation
-        if default_level == 0:
-            for decl in abstract_decls:
-                if decl.shared:
-                    # handled separately
-                    continue
-
-                typecheck_method_override(impl.method_ast,
-                                          decl.method_ast,
-                                          location)
-
-                if (not decl.throws and throws
-                    and impl.dml_version() != (1, 4)):
-
-                    body = wrap_method_body_in_try(
-                        impl.site, decl.site, obj, name, body, rbrace_site)
-                    throws = False
+            if (impl.site.dml_version() == (1, 2) and throws
+                and not overridden.throws
+                and overridden.site.dml_version() == (1, 4)):
+                # If a 1.4 library file defines an overrideable
+                # non-throwing method, and a 1.2 device overrides
+                # this, then assume that the method was never
+                # intended to throw, and that the throws ->
+                # nothrow change is part of the migration to 1.4.
+                # We modify the override to nothrow, and patch it
+                # to catch any exceptions.
+                body = wrap_method_body_in_try(
+                    impl.site, overridden.site,
+                    obj, name, body, rbrace_site)
+                throws = False
+            elif throws != overridden.throws:
+                if (dml.globals.dml_version == (1, 2)
+                      and not throws):
+                    # Permit a nonthrowing method to override
+                    # a throwing 1.2 method, with no warning.
+                    # This is needed for some common standard
+                    # library overrides, e.g. read, write,
+                    # get, set, when sharing code between DML
+                    # 1.2 and 1.4,
+                    pass
+                else:
+                    raise EMETH(impl.site, overridden.site,
+                                "different 'throws' annotations")
 
         template = (impl.obj_spec.parent_template
                     if isinstance(impl.obj_spec, InstantiatedTemplateSpec)
                     else None)
-        if isinstance(body, bool):
-            report(ICE(impl.site, f"wut: {repr(impl)}"))
         method = mkmethod(impl.site, rbrace_site,
                           location,
                           obj, name, inp_ast,
