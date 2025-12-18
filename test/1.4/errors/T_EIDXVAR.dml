@@ -11,3 +11,9 @@ group g[i < 2] {
     /// ERROR EIDXVAR
     #if ((each group in (this)).len == 13) {}
 }
+
+
+group outer[j < 2] {
+    /// ERROR EIDXVAR
+    group g[i < j];
+}
