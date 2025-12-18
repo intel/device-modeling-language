@@ -249,4 +249,5 @@
   `--no-compat` flag. This flag is easier to understand, and aligns better with
   terminology used by Simics. Existing `--no-compat` flags continue to work
   like before.
+- `release 7 7134`
 - `release 6 6449`
