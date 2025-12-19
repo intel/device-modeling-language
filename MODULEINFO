@@ -71,16 +71,6 @@ Make: dmlc
     $(HOST)/bin/dml/python/port_dml.py
     $(HOST)/bin/dml/python/dead_dml_methods.py
 
-# TODO: once all branches of the base repo use @dmlc, we can remove
-# the dmlc/6 and dmlc/7 groups
-Group: dmlc/6
-Require-tokens: public
-  @dmlc
-
-Group: dmlc/7
-Require-tokens: public
-  @dmlc
-
 Group: dmlc
 Require-tokens: public
 Release-notes: src/tools/dmlc/RELEASENOTES.md,
