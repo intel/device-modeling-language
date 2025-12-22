@@ -32,6 +32,7 @@ def project_host_path():
 
 sys.path.append(join(project_host_path(), 'bin', 'dml', 'python'))
 import dml.globals
+import dml.breaking_changes
 import dead_dml_methods
 from dead_dml_methods import line_directive_re
 
@@ -1894,6 +1895,8 @@ SPDX-License-Identifier: MPL-2.0
             'lib-old-4.8/1.2/LICENSE',
             # file listing
             'MODULEINFO',
+            # data file
+            'cmake/simics/dml-breaking-changes',
             # essentially data files
             'doc/1.2/toc.json',
             'doc/1.4/toc.json',
@@ -1939,6 +1942,30 @@ SPDX-License-Identifier: MPL-2.0
             raise TestFail('missing copyrights')
 
 all_tests.append(CopyrightTestCase('copyright'))
+
+class CMakeTestCase(BaseTestCase):
+    __slots__ = ()
+    def test(self):
+        file = (Path(__file__).parent.parent / 'cmake' / 'simics'
+                / 'dml-breaking-changes')
+        lines = [line.strip() for line in file.read_text().splitlines()]
+        lines = [line.split()
+                 for line in lines if line and not line.startswith('#')]
+        changes_in_cmake = sorted(
+            (tag, tuple(apis)) for (tag, *apis) in lines)
+        changes_in_dmlc = sorted(
+            (tag,
+             tuple(api.str for api in dml.breaking_changes.apis.values()
+                   if api > change.required_after))
+            for (tag, change) in dml.breaking_changes.changes.items())
+        if (changes_in_cmake != changes_in_dmlc):
+            self.pr(f"changes only in {file}: " + str(
+                set(changes_in_cmake) - set(changes_in_dmlc)))
+            self.pr(f"changes only in breaking_changes.py: " + str(
+                set(changes_in_dmlc) - set(changes_in_cmake)))
+            raise TestFail(f'mismatch')
+
+all_tests.append(CMakeTestCase('cmake'))
 
 # Device info XML generation works
 for version in ['1.2', '1.4']:

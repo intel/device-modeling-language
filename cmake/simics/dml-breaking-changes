@@ -1,0 +1,22 @@
+# consumed by cmake, prefixed with "dml:"
+forbid-broken-unused-types
+forbid-broken-conditional-is
+remove-port-proxy-ifaces
+remove-port-proxy-attrs
+forbid-function-in-extern-struct
+require-version-statement
+transaction-by-default 7
+port-obj-param 6 7
+shared-logs-locally 7
+enable-WLOGMIXUP 7
+modern-attributes
+strict-typechecking
+range-check-method-indices
+restrict-log-levels
+dml12-disable-inline-constants 7
+dml12-not-typecheck 6 7
+dml12-remove-misc-quirks 7
+dml12-remove-goto 7
+dml12-modern-int 7
+vect-needs-provisional
+forbid-warning-statement
