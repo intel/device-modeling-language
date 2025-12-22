@@ -302,8 +302,8 @@ features that are scheduled for removal in a future API version.''')
         for (api, changes) in sorted(by_version.items()):
             print(f'  Breaking changes enabled by --simics-api={api.ordinal + 1}'
                   ' or newer:')
-            for bc in sorted(changes, key=lambda f: f.tag()):
-                print(f'    {bc.tag().ljust(longest_name)} '
+            for bc in sorted(changes, key=lambda f: f.tag):
+                print(f'    {bc.tag.ljust(longest_name)} '
                       + bc.short)
 
 def main(argv):
@@ -614,7 +614,7 @@ def main(argv):
         for flag in options.no_compat:
             for tag in flag.split(','):
                 if tag in compat_features:
-                    options.breaking_change.append(compat_features[tag].tag())
+                    options.breaking_change.append(compat_features[tag].tag)
                 else:
                     parser.error(f'invalid tag {tag} for --no-compat.')
 

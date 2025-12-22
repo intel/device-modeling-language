@@ -182,8 +182,8 @@ class simics_util_vect(ProvisionalFeature):
     the `vect` declarations in that file.
 
     When the `simics_util_vect` feature is disabled, usage of `vect` is an
-    error if the [`vect_needs_provisional`
-    breaking change](deprecations-auto.html#vect_needs_provisional) is enabled.
+    error if the [`vect-needs-provisional`
+    breaking change](deprecations-auto.html#vect-needs-provisional) is enabled.
     '''
     short = "Allow vect syntax based on the VECT macro"
     stable = True
