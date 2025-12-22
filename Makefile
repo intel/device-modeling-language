@@ -11,6 +11,7 @@ LIBDIR := $(SIMICS_PROJECT)/$(HOST_TYPE)/bin
 PYFILES := dml/__init__.py			\
 	  dml/ast.py				\
 	  dml/breaking_changes.py		\
+	  dml/breaking-changes.yaml		\
 	  dml/c_backend.py			\
 	  dml/g_backend.py			\
 	  dml/codegen.py			\
@@ -105,12 +106,8 @@ $(OUT_GEN_PYFILES): $(LIBDIR)/dml/python/dml/%.py: %.py
 	$(info Compiling $(<F))
 	$(PYCOMPILE) $^ $@
 
-$(OUT_PYFILES): $(LIBDIR)/dml/python/%.py: $(DMLC_DIR)/py/%.py
-	$(info Compiling $(<F))
-	$(PYCOMPILE) $^ $@
-
-$(SCRIPTS): $(PYTHONPATH)/%: $(DMLC_DIR)/py/%
-	cp $< $@
+$(OUT_PYFILES) $(SCRIPTS): $(PYTHONPATH)/%: $(DMLC_DIR)/py/%
+	$(PYCOMPILE) $< $@
 
 $(HFILES): $(DMLLIB_DEST)/%: $(DMLC_DIR)/%
 	$(PYTHON) $(DMLC_DIR)/copy_h.py $< $@

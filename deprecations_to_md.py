@@ -29,9 +29,9 @@ changes can be enabled individually by passing
 to the `dmlc` compiler.
 """)
         f.write("<dl>\n")
-        for bc in sorted(bcs, key=lambda f: f.tag()):
+        for bc in sorted(bcs, key=lambda f: f.tag):
             assert bc.__doc__
-            f.write(f"  <dt>{bc.tag()}</dt>\n")
+            f.write(f"  <dt>{bc.tag}</dt>\n")
             doc = '\n'.join(line[4:] if line.startswith('    ') else line
                             for line in bc.__doc__.strip().splitlines())
             f.write(f"  <dd>\n\n{doc}\n</dd>\n")

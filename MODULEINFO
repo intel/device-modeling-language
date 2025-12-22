@@ -70,6 +70,7 @@ Make: dmlc
     $(HOST)/bin/dml/python/LICENSE
     $(HOST)/bin/dml/python/port_dml.py
     $(HOST)/bin/dml/python/dead_dml_methods.py
+    $(HOST)/bin/dml/python/dml/breaking-changes.yaml=src/tools/dmlc/py/dml/breaking-changes.yaml
 
 Group: dmlc
 Require-tokens: public
