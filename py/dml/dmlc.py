@@ -309,7 +309,7 @@ def main(argv):
     # DML files must be utf8, but are generally opened without specifying
     # the 'encoding' arg. This works only if utf8_mode is enabled.
     assert sys.flags.utf8_mode
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(prog='dmlc')
 
     # <add id="dmlc options">
     # <name>Command Line Options</name>
