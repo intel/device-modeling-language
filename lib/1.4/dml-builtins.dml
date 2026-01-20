@@ -56,6 +56,8 @@ extern const atom_t ATOM_LIST_END;
 
 extern char *_DML_describe_uint64_event(const char *base, uint64 data);
 
+extern attr_value_t VT_get_port_interfaces(conf_class_t *cls);
+
 extern typedef struct {
 } _callback_entry_t;
 
@@ -1423,6 +1425,17 @@ template connect is _conf_attribute {
 
     param _interfaces_doc auto;
 
+    shared method _has_port_object(conf_object_t *obj, const char *ns,
+                                   const char *portname) -> (bool) {
+        local conf_object_t *ns_obj = SIM_object_descendant(obj, ns);
+        if (ns_obj) {
+            if (SIM_object_descendant(ns_obj, portname) != NULL) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     shared method set_attribute(attr_value_t value) -> (set_error_t) {
         local conf_object_t *obj = NULL;
         local const char *port = NULL;
@@ -1443,35 +1456,33 @@ template connect is _conf_attribute {
 
         // Check if the new setting is valid
         if (obj) {
+            if (port != NULL) {
+                local attr_value_t ports = VT_get_port_interfaces(
+                    SIM_object_class(obj));
+                if (SIM_attr_list_size(ports) == 0) {
+                    #select ns in (["bank", "port"]) where (
+                        _has_port_object(obj, ns, port)) {
+                        // friendly hint for common error when migrating
+                        // to --breaking-change=remove-port-proxy-ifaces
+                        SIM_c_attribute_error(
+                            "The object '%s' does not have a legacy"
+                            + " interface port '%s'. Did you mean %s.%s.%s?",
+                            SIM_object_name(obj), port,
+                            SIM_object_name(obj), ns, port);
+                        return Sim_Set_Interface_Not_Found;
+                    } #else {}
+                }
+            }
             local bool valid = true;
             foreach iface in (this._each_interface) {
                 if (iface._required) {
                     if (SIM_c_get_port_interface(obj, iface.name, port)
                         == NULL) {
                         if (port) {
-                            local strbuf_t msg = sb_newf(
+                            SIM_c_attribute_error(
                                 "Interface '%s' not found for port '%s' in"
                                 + " object '%s'",
                                 iface.name, port, SIM_object_name(obj));
-                            #foreach ns in (["bank", "port"]) {
-                                // friendly hint for common error when migrating
-                                // to --breaking-change=remove-port-proxy-ifaces
-                                local conf_object_t *ns_obj
-                                    = SIM_object_descendant(obj, ns);
-                                if (ns_obj) {
-                                    local conf_object_t *port_obj
-                                        = SIM_object_descendant(ns_obj, port);
-                                    if (port_obj && SIM_c_get_interface(
-                                            port_obj, iface.name) != NULL) {
-                                        sb_addfmt(
-                                            &msg, ", did you mean %s.%s?",
-                                            SIM_object_name(ns_obj), port);
-                                        break;
-                                    }
-                                }
-                            }
-                            SIM_c_attribute_error("%s", sb_str(&msg));
-                            sb_free(&msg);
                         } else {
                             SIM_c_attribute_error(
                                 "The %s object does not implement the"
