@@ -2112,6 +2112,15 @@ template bank is (object, shown_desc) {
         return (src, num);
     }
 
+    shared independent method length() -> (uint64) {
+        local (const register *regs, int num_mapped_regs) = _sorted_regs();
+        if (num_mapped_regs > 0) {
+            local const register last_reg = regs[num_mapped_regs - 1];
+            return last_reg.offset + last_reg._size();
+        }
+        return 0;
+    }
+
     // Register dispatcher. Given the offset and size of an access, return a
     // list of registers that the access covers, and a bitmask showing 0xff for
     // all bytes of the access that were not mapped to a register. The register
