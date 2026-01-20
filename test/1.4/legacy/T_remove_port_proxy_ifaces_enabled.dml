@@ -9,8 +9,30 @@ device test;
 /// API-VERSION 6
 /// DMLC-FLAG --breaking-change=remove-port-proxy-ifaces
 
+import "simics/simulator/conf-object.dml";
+
 import "remove_port_proxy_ifaces.dml";
+
+extern const char *strstr(const char *, const char *);
 
 method init() {
     test(false);
+    // nice message
+    local attr_value_t pair = SIM_make_attr_list(
+        2, SIM_make_attr_object(dev.obj), SIM_make_attr_string("b"));
+    local set_error_t err = SIM_set_attribute(dev.obj, "rv", &pair);
+    SIM_attr_free(&pair);
+    assert SIM_clear_exception() == SimExc_InterfaceNotFound;
+    assert strstr(SIM_last_error(), "did you mean obj.bank.b?") != NULL;
+    pair = SIM_make_attr_list(
+        2, SIM_make_attr_object(dev.obj), SIM_make_attr_string("p"));
+    SIM_set_attribute(dev.obj, "sig", &pair);
+    SIM_attr_free(&pair);
+    assert SIM_clear_exception() == SimExc_InterfaceNotFound;
+    assert strstr(SIM_last_error(), "did you mean obj.port.p?") != NULL;
 }
+
+bank b;
+connect sig { interface signal; }
+connect rv { interface register_view; }
+
