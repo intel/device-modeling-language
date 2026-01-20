@@ -1448,16 +1448,36 @@ template connect is _conf_attribute {
                 if (iface._required) {
                     if (SIM_c_get_port_interface(obj, iface.name, port)
                         == NULL) {
-                        if (port)
-                            SIM_c_attribute_error(
+                        if (port) {
+                            local strbuf_t msg = sb_newf(
                                 "Interface '%s' not found for port '%s' in"
                                 + " object '%s'",
                                 iface.name, port, SIM_object_name(obj));
-                        else
+                            #foreach ns in (["bank", "port"]) {
+                                // friendly hint for common error when migrating
+                                // to --breaking-change=remove-port-proxy-ifaces
+                                local conf_object_t *ns_obj
+                                    = SIM_object_descendant(obj, ns);
+                                if (ns_obj) {
+                                    local conf_object_t *port_obj
+                                        = SIM_object_descendant(ns_obj, port);
+                                    if (port_obj && SIM_c_get_interface(
+                                            port_obj, iface.name) != NULL) {
+                                        sb_addfmt(
+                                            &msg, ", did you mean %s.%s?",
+                                            SIM_object_name(ns_obj), port);
+                                        break;
+                                    }
+                                }
+                            }
+                            SIM_c_attribute_error("%s", sb_str(&msg));
+                            sb_free(&msg);
+                        } else {
                             SIM_c_attribute_error(
                                 "The %s object does not implement the"
                                 + " required %s interface",
                                 SIM_object_name(obj), iface.name);
+                        }
                         valid = false;
                     }
                 }
