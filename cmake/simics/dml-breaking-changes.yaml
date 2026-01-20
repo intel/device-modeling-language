@@ -1,0 +1,43 @@
+# consumed by cmake, prefixed with "dml:"
+forbid-broken-unused-types:
+  opt-in: [4, 5, 6, 7]
+forbid-broken-conditional-is:
+  opt-in: [4, 5, 6, 7]
+remove-port-proxy-ifaces:
+  opt-in: [4, 5, 6, 7]
+remove-port-proxy-attrs:
+  opt-in: [4, 5, 6, 7]
+forbid-function-in-extern-struct:
+  opt-in: [4, 5, 6, 7]
+require-version-statement:
+  opt-in: [4, 5, 6, 7]
+transaction-by-default:
+  opt-in: [4, 5, 6]
+port-obj-param:
+  opt-in: [4, 5]
+shared-logs-locally:
+  opt-in: [4, 5, 6]
+enable-WLOGMIXUP:
+  opt-in: [4, 5, 6]
+modern-attributes:
+  opt-in: [4, 5, 6, 7]
+strict-typechecking:
+  opt-in: [4, 5, 6, 7]
+range-check-method-indices:
+  opt-in: [4, 5, 6, 7]
+restrict-log-levels:
+  opt-in: [4, 5, 6, 7]
+dml12-disable-inline-constants:
+  opt-in: [4, 5, 6]
+dml12-not-typecheck:
+  opt-in: [4, 5]
+dml12-remove-misc-quirks:
+  opt-in: [4, 5, 6]
+dml12-remove-goto:
+  opt-in: [4, 5, 6]
+dml12-modern-int:
+  opt-in: [4, 5, 6]
+vect-needs-provisional:
+  opt-in: [4, 5, 6, 7]
+forbid-warning-statement:
+  opt-in: [4, 5, 6, 7]
