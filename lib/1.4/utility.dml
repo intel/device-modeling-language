@@ -9,7 +9,9 @@ import "simics/devs/signal.dml";
 import "simics/devs/ram.dml";
 import "simics/devs/memory-space.dml";
 import "simics/devs/translator.dml";
+import "simics/model-iface/direct-memory.dml";
 import "simics/model-iface/transaction.dml";
+import "simics/simulator/conf-object.dml";
 
 template _reg_or_field {
     param is_register : bool;
@@ -1392,6 +1394,157 @@ template map_target is (connect, _qname) {
         return exc;
     }
 }
+
+/**
+   ### ram
+
+   This template can be instantiated on a `port`, `device`, `bank` or
+   `subdevice` object for an efficient implementation of a private RAM
+   area. This is implemented by automatically creating a separate Simics object
+   of class `ram`, with an image attached to it, and using the `direct_memory`
+   interface to access the image efficiently. This gives a small memory
+   footprint and efficient checkpointing; this can make a visible impact for
+   internal memories that are several megabytes in size.
+
+   This template adds an implementation of the `direct_memory_update` interface
+   to the instantiating object. Because of current limitations, the `queue`
+   attribute of the corresponding Simics object must be configured before the
+   first RAM access.
+
+   The template requires a single integer parameter `size`, which must be set
+   to a multiple of 8192.
+
+   The template provides the following methods:
+ */
+typedef struct {
+    direct_memory_handle_t handle;
+    uint8 *data;
+} _ram_page_t;
+template ram {
+    param size;
+    connect ram is (init_as_subobj, destroy) {
+        param documentation = "dm";
+        interface direct_memory;
+        interface ram;
+        param page_size = 8192;
+        param size = parent.size;
+        #if (size % page_size != 0) { error "size must be a multiple of 8192"; }
+        param classname = "ram";
+        session _ram_page_t pages[size / page_size];
+        method init() {
+            default();
+            SIM_set_attribute_default(this.obj, "image", SIM_make_attr_nil());
+            SIM_set_attribute_default(
+                this.obj, "self_allocated_image_size", SIM_make_attr_uint64(size));
+        }
+
+        method invalidate(direct_memory_handle_t handle) {
+            local int page = cast(direct_memory.get_user_data(handle), uintptr_t);
+            pages[page].data = NULL;
+        }
+        method request(uint64 offs) -> (uint8 *) {
+            local int page = offs / page_size;
+            if (pages[page].data == NULL) {
+                if (pages[page].handle == NULL) {
+                    pages[page].handle = direct_memory.get_handle(
+                        parent.obj, 0, page * page_size, page_size);
+                    direct_memory.set_user_data(
+                        pages[page].handle, cast(cast(page, uintptr_t), void *));
+                }
+                local direct_memory_t mem = direct_memory.request(
+                    pages[page].handle, Sim_Access_Read | Sim_Access_Write,
+                    Sim_Access_Read | Sim_Access_Write | Sim_Access_Execute);
+                pages[page].data = mem.data;
+            }
+            return pages[page].data + offs % page_size;
+        }
+
+        method destroy() {
+            for (local int i = 0; i < pages.len; i++) {
+                if (pages[i].handle != NULL) {
+                    direct_memory.release(pages[i].handle);
+                }
+            }
+        }
+
+        method read(int64 offs, buffer_t buf) {
+            assert offs + buf.len <= size;
+            local int page_mask = page_size - 1;
+            if (buf.len <= page_size - (offs & page_mask)) {
+                memcpy(buf.data, request(offs), buf.len);
+            } else {
+                local size_t copied = page_size - (offs & page_mask);
+                memcpy(buf.data, request(offs), copied);
+                while (buf.len - copied > page_size) {
+                    memcpy(buf.data + copied, request(offs + copied), page_size);
+                    copied += page_size;
+                }
+                memcpy(buf.data + copied, request(offs + copied), buf.len - copied);
+            }
+        }
+    }
+
+    /**
+       * `get_u8(int64 offs) -> (uint8)`
+
+         Return a single byte from a given offset.
+    */
+    method get_u8(uint64 offs) -> (uint8) {
+        assert offs < ram.size;
+        return *ram.request(offs);
+    }
+
+    /**
+       * `get_u8(int64 offs) -> (uint8)`
+
+         Read a 64-bit little-endian integer from a given offset
+    */
+    method get_u64_le(uint64 offs) -> (uint64) {
+        local uint64_le_t ret;
+        ram.read(offs, {.data=cast(&ret, uint8 *), .len=8});
+        return ret;
+    }
+    /**
+       * `set_u8(int64 offs) -> (uint8)`
+
+         Update a single byte at a given offset.
+    */
+    method set_u8(uint64 offs, uint8 val) {
+        assert offs < ram.size;
+        *ram.request(offs) = val;
+    }
+
+    implement direct_memory_update {
+        method release(conf_object_t *target, direct_memory_handle_t handle,
+                       direct_memory_ack_id_t id) {
+            assert target == ram.obj;
+            ram.invalidate(handle);
+            local int page = cast(
+                ram.direct_memory.get_user_data(handle), uintptr_t);
+            ram.pages[page].handle = NULL;
+            ram.direct_memory.ack(id);
+        }
+        method update_permission(conf_object_t *target,
+                                 direct_memory_handle_t handle,
+                                 access_t lost_access,
+                                 access_t lost_permission,
+                                 access_t lost_inhibit,
+                                 direct_memory_ack_id_t id) {
+            assert target == ram.obj;
+            ram.invalidate(handle);
+            ram.direct_memory.ack(id);
+        }
+        method conflicting_access(conf_object_t *target,
+                                  direct_memory_handle_t handle,
+                                  access_t conflicting_permission,
+                                  direct_memory_ack_id_t id) {
+            assert target == ram.obj;
+            ram.invalidate(handle);
+            ram.direct_memory.ack(id);
+        }
+    }
+}
+
 
 /**
 ## Signal related templates
