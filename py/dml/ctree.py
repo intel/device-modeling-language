@@ -5551,9 +5551,10 @@ class CText(Code):
         path = self.site.filename()
         (ident, h_path) = dmldir_macro(path)
         out('#define %s "%s"\n' % (ident, quote_filename(h_path)))
-        if dml.globals.linemarks:
-            linemark(self.site.lineno, path)
-        out(self.text)
+        for (i, line) in enumerate(self.text.splitlines(keepends=True)):
+            if dml.globals.linemarks:
+                linemark(self.site.lineno + i, path)
+            out(line)
         if not output.current().bol:
             out('\n')
         if dml.globals.linemarks:
