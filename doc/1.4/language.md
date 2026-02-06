@@ -215,9 +215,8 @@ accident.) The syntax for pragmas are as follows:
 /*% <em>tag</em> ... %*/
 </pre>
 Where _`tag`_ specifies the pragma used, and which determines the syntax of
-everything following it before the pragma is closed. Tags are case insensitive,
-but are fully capitilized by convention. DMLC will print a warning if a pragma
-is given with a tag that the compiler does not recognize.
+everything following it before the pragma is closed. DMLC reports an error
+if a pragma is given with a tag that the compiler does not recognize.
 
 A pragma may be given anywhere an inline comment may; however, the meaning of
 a pragma is dependent on its placement, and a specified pragma can be completely
