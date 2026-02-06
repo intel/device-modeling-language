@@ -213,7 +213,6 @@ def parse_pragmas(filename, filestr):
     return pragmas
 
 def parse_pragma(filename, start_lineno, end_lineno, pragma, data):
-    pragma = pragma.upper()
     data = data and data.strip().replace('\n', ' ').replace('\r', '')
     if pragma == 'COVERITY':
         data = data and pragma_coverity_data_re.match(data)

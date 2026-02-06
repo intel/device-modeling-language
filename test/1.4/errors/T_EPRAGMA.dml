@@ -10,6 +10,9 @@ device test;
 /*% COVERITY irrelevant %*/
 
 /// ERROR EPRAGMA
+/*% coverity irrelevant %*/
+
+/// ERROR EPRAGMA
 /*% MYVERYCOOLPRAGMA %*/
 
 /// ERROR EPRAGMA
