@@ -3,9 +3,9 @@
   SPDX-License-Identifier: MPL-2.0
 -->
 
-# A short hacking guide to dmlc
+# A Short Hacking Guide to DMLC
 
-This text is an attempt to make it easier for you to find your way around the
+This text is intended to help you find your way around the
 sources and understand what is going on inside the DML compiler (`dmlc`).
 
 ## dml/dmlc.py
