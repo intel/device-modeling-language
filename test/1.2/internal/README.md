@@ -3,13 +3,15 @@
   SPDX-License-Identifier: MPL-2.0
 -->
 
+# DML Confidentiality Parameter
+
 A new parameter `_confidentiality` (note the leading underscore) was
 introduced to allow the DML programmer to hide certain information
 from the end user. This parameter is a property of the whole device
 and is by default inherited by all the banks and registers defined in
 the device. The default value of this parameter is `undefined`, which
-means no information hidden is required. Each bank/register/bitfield
-can also override the default value hence it is possible to
+means no information hiding is required. Each bank/register/bitfield
+can also override the default value, hence it is possible to
 selectively hide confidential information for individual
 banks/registers.
 
@@ -23,12 +25,12 @@ of the log string. All of this is handled by the DML compiler without
 interference from the programmer. Attributes of confidential registers
 will be registered as internal attributes and their docstring will not
 be registered as part of property of that attribute, hence completely
-hidden from the on-line help system. Lastly, bank/register/bitfield
-marked as confidential will not be processed when generating the xml
+hidden from the online help system. Lastly, banks/registers/bitfields
+marked as confidential will not be processed when generating the XML
 information file for the device.
 
 For convenience, there is a global hidden parameter
-`_build_confidentiality` that DML compiler recognized as a way to
+`_build_confidentiality` that the DML compiler recognizes as a way to
 specify the confidentiality of the target being built. This parameter
 is preferably defined in the Makefile as an input parameter to the DML
 compiler and is effectively serving as a threshold confidentiality

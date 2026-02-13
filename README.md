@@ -52,7 +52,7 @@ regularly with a locally built DMLC, then consider setting the variables
 ### DMLC_DIR
 After building DMLC, you need to set `DMLC_DIR` to `<your-project>/<hosttype>/bin`
 in subsequent invocations of `make` in order to build devices with the locally
-build compiler. `<hosttype>` is either `linux64` or `win64` depending on your 
+built compiler. `<hosttype>` is either `linux64` or `win64` depending on your 
 host type. 
 
 ### T126_JOBS
