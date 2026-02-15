@@ -3963,7 +3963,13 @@ Non-overrideable method. Posts the event on the associated queue of the
 device. The time argument is specified in cycles or seconds, depending on which
 template was instantiated. The event will be triggered after the specified
 amount of time has elapsed. The data parameter in a `uint64` or
-`custom` event will be passed on to the event() method.
+`custom` event will be passed on to the `event()` method.
+
+It is allowed to call the `post()` method of an event object again before the
+event callback from the previous call has been invoked; in this case, the
+event callback will be invoked twice. In the `uint64_*_event` and
+`custom_*_event` cases, the event data may or may not be identical between the
+two calls.
 </dd></dl>
 
 The following methods are specific to the `simple_time_event`,
@@ -3977,6 +3983,17 @@ The following methods are specific to the `simple_time_event`,
 
 Removes all events of this type with matching data from
 the queue.
+
+> [!NOTE]
+>
+> If multiple outstanding events are needed from the same event object, and
+> these need to be selectively canceled, then this can only be achieved if the
+> event is based on `uint64_*_event`. If more complex event data is required,
+> then this can be achieved by assigning a unique integer ID with each
+> outstanding event, store the event data of all outstanding events together
+> with their IDs in an attribute, and only send the IDs as event data, thus
+> allowing `remove` to uniquely identify each posted event.
+
 </dd><dt>
 
 <small>posted() -&gt; (bool), posted(uint64 value) -&gt; (bool)</small>
