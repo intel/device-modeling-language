@@ -228,12 +228,13 @@ def unexpected_error(exc_type, exc_value, exc_traceback):
     if debug_mode:
         traceback.print_exception(exc_type, exc_value, exc_traceback)
 
-    with open("dmlc-error.log", "w") as dumpfile:
+    path = Path('dmlc-error.log').resolve()
+    with open(path, "w") as dumpfile:
         traceback.print_exception(
             exc_type, exc_value, exc_traceback, file=dumpfile)
     prerr("*** An unexpected dmlc error occurred!")
     prerr("    Please report this incident, together with the details")
-    prerr("    found in the dmlc-error.log file.")
+    prerr(f"    found in {path}.")
 
 def flush_porting_log(tmpfile, porting_filename):
     '''Flush logs saved in '''
