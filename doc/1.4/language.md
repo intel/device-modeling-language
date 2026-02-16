@@ -3923,8 +3923,15 @@ assert <em>expr</em>;
 </pre>
 
 Evaluates *`expr`*. If the result is `true`, the
-statement has no effect; otherwise, a runtime-error is generated.
+statement has no effect; otherwise, a fatal runtime error is generated, aborting the current execution thread.
 *`expr`* must have type `bool`.
+
+> [!NOTE]
+>
+> DML guarantees that the assertion expression is evaluated, and that the
+> program terminates if the expression is false. This differs from the `assert`
+> construct in the C/C++ standard libraries, which can sometimes be optimized
+> out depending on build settings.
 
 ### Error Statements
 
