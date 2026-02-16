@@ -579,8 +579,7 @@ contain a number of `field` objects. Each field is defined
 to correspond to a bit range of the containing register.
 
 The value of a field is stored in the corresponding bits of the containing
-register's storage. The easiest way to access the value of a register or field
-is to use the `get` and `set` methods.
+register's storage. The easiest way to access the value of a field is to use the `val` parameter, which expands to a [bit slice expression](#bit-slicing-expressions) over the containing register's storage.
 
 The read and write behaviour of registers and fields is in most cases
 controlled by instantiating *templates*. There are three
