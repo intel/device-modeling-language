@@ -372,8 +372,20 @@ object. Although similar to C functions, DML methods can have any number of
 input parameters and return values. DML methods also support a basic exception
 handling mechanism using `throw` and `try`.
 
-[In-detail description of method declarations are covered in a separate
-section.](#methods-detailed)
+Method declarations are covered in detail in a [separate
+section](#methods-detailed).
+
+### Navigating the object hierarchy
+
+Object declarations form nested scopes, which make it easy to reference between objects. For instance, consider a bank `regs` that contains two registers `r1` and `r2`, where the register `r1` in turn contains a field `f1`. Then any expression in the parameters and methods within `r1` can use the expression `size` to refer to the `size` parameter of `r1`, `f1.val` to refer to the `val` parameter of `f1`, and `r2.size` to refer to the size of the `r2` register. Names can be qualified; e.g., within `r1` you can write `f1`, `r1.f1` or `regs.r1.f1` interchangeably.
+
+Some universal parameters are useful when navigating the object hierarchy:
+* `dev` can be used anywhere to refer to the top level scope
+* `this` always refers to the current object, so the expressions `this.size` and `size` are interchangeable within a register
+* `parent` (or `this.parent`) refers to the nearest enclosing object; e.g., within `r1`, `parent` refers to the `regs` bank.
+* `qname` is a string that describes the current location in the hierarchy, for instance `"regs.r1.f1"`. It is useful for logging and debugging.
+
+The `dev`, `this` and `parent` parameters are sometimes needed when an identifier is shadowed by an inner scope. For instance, if a method in `r1` has a local variable named `r2`, then the `r2` register object can still be accessed safely through the expression `this.parent.r2`.
 
 ### The Device
 
