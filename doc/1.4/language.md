@@ -3693,6 +3693,14 @@ object with an event-method that performs the specified call, and posting
 that event at the given time, with associated data corresponding to the
 provided arguments.
 
+In Simics, the `after` event is posted on the clock or CPU associated with the
+device. This is not necessarily the same as the currently executing CPU. This
+means that a significant number of CPU instructions might be executed before
+the method is called, even if the delay is short. In the case when you just
+want a minimal delay to make things happen in the right order, it is often
+better to use an [Immediate After Statement](#immediate-after-statements)
+rather than providing an explicit delay of 0 or 1 cycle.
+
 #### Hook-Bound After Statements
 <pre>
 after <em>hookref</em>[-> (<em>msg1</em>, ... <em>msgN</em>)]: <em>method</em>(<em>e1</em>, ... <em>eM</em>);
