@@ -189,6 +189,35 @@ class simics_util_vect(ProvisionalFeature):
     stable = True
     dml12 = True
 
+
+@feature
+class explicit_object_extensions(ProvisionalFeature):
+    '''<a id="explicit_object_extensions"/>
+
+    This feature extends the DML syntax for object declarations to distinguish
+    between an intent to introduce a new object to the model structure, and an
+    intent to extend the definition of an existing object.
+
+    The following form is introduced to mark the intent to extend an object:
+    <pre>
+    in <em>object-type</em> <em>name</em> <em>...</em> { <em>...</em> }
+    </pre>
+    E.g.
+    <pre>
+    in bank some_bank { ... }
+    </pre>
+
+    If this form is used while there is no other non-extension declaration of
+    the named object, then DMLC will signal an error because the definition
+    was not intended to introduce the object to the model structure.
+
+    DMLC will also signal an error if there is more than one non-extension
+    declaration of the object among the files enabling
+    `explicit_object_extensions`.
+    '''
+    short = "Require `in` syntax for additional declarations of an object"
+    stable = False
+
 def parse_provisional(
         provs: list[("Site", str)]) -> dict[ProvisionalFeature, "Site"]:
     ret = {}

@@ -116,7 +116,7 @@ class ObjectSpec(object):
                     symbols[sub.args[0]] = (sub.kind, sub.site)
                 else:
                     assert sub.kind == 'error'
-            for (_, name, _, specs) in composite:
+            for (_, name, _, _, specs) in composite:
                 symbols[name] = ('subobj', specs.site)
         return symbols
 
@@ -295,11 +295,12 @@ def object_spec_from_asts(site, stmts, templates, inferior, in_each_structure,
             block = []
             for decl_ast in composite:
                 assert decl_ast.kind == 'object'
-                (name, objtype, indices, sub_stmts) = decl_ast.args
+                (name, objtype, indices, is_extension,
+                 sub_stmts) = decl_ast.args
                 spec = obj_from_asts(
                     decl_ast.site, sub_stmts + [ast.is_(
                         decl_ast.site, [(decl_ast.site, objtype)])])
-                block.append((objtype, name, indices, spec))
+                block.append((objtype, name, indices, is_extension, spec))
             blocks.append((preconds, shallow, block, in_each))
         return ObjectSpec(site, rank, is_stmts, params, blocks)
     return obj_from_asts(site, stmts)
@@ -327,7 +328,7 @@ def rank_structure(asts):
     while queue:
         (spec, conditional) = queue.pop()
         if spec.kind == 'object':
-            (_, objtype, _, stmts) = spec.args
+            (_, objtype, _, _, stmts) = spec.args
             inferior[objtype] = spec
             queue.extend((stmt, conditional) for stmt in stmts)
         elif spec.kind == 'is':

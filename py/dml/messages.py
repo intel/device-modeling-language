@@ -1168,6 +1168,43 @@ class EOVERRIDEPARAM(DMLError):
         DMLError.log(self)
         self.print_site_message(self.other_site, "existing declaration")
 
+
+class EEXTENSION(DMLError):
+    """When the [`explicit_object_extensions` provisional
+    feature](provisional-auto.html#explicit_object_extensions) is enabled,
+    any object definition made via `in` syntax is considered an extension such
+    that there must be some other non-extension declaration of the object, or
+    DMLC will reject the extension.
+    To declare and define a new object not already declared, omit the `in`
+    syntax.
+    """
+    fmt = ("object '%s' not declared elsewhere."
+           " To declare and define a new object, omit 'in'.")
+
+class EMULTIOBJDECL(DMLError):
+    """When the [`explicit_object_extensions` provisional
+    feature](provisional-auto.html#explicit_object_extensions) is enabled,
+    any object declaration not made using `in` syntax is considered a
+    declaration of a novel object &mdash; because of that, DMLC will reject
+    it if there already is another non-`in` declaration across files enabling
+    `explicit_object_extensions`.
+    """
+    fmt = ("object '%s' already declared."
+           " To extend upon the definition of an object, use 'in %s'")
+    def __init__(self, site, other_site, objtype, name):
+        super().__init__(site, name, f'{objtype} {name} ...')
+        self.other_site = other_site
+
+    def log(self):
+        from . import provisional
+        DMLError.log(self)
+        self.print_site_message(self.other_site, "existing declaration")
+        prov_site = self.site.provisional_enabled(
+            provisional.explicit_object_extensions)
+        self.print_site_message(
+            prov_site,
+            "enabled by the explicit_object_extensions provisional feature")
+
 class EVARPARAM(DMLError):
     """
     The value assigned to the parameter is not a well-defined constant.

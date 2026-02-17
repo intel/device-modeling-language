@@ -1,0 +1,11 @@
+/*
+  © 2025 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+device test;
+
+/// ERROR ESYNTAX
+in group g {}
