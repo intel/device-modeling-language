@@ -839,7 +839,7 @@ import "simics/devs/ethernet.dml"
 ### Events
 
 An *event* object is an encapsulation of a Simics event that can
-be posted on a processor time or step queue. The location of event
+be posted on the time queue of a processor. The location of event
 objects in the object hierarchy of the device is not important, so an
 event object can generally be placed wherever it is most convenient.
 
