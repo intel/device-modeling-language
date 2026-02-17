@@ -298,8 +298,8 @@ def toplevel_else_if(t):
 
 @prod_dml12
 def object_anonymous_bank(t):
-    'object : BANK object_spec'
-    t[0] = ast.object_(site(t), None, 'bank', [], t[2])
+    'object : maybe_extension BANK object_spec'
+    t[0] = ast.object_(site(t), None, 'bank', [], None, t[3])
 
 @prod
 def array_list_empty(t):
@@ -313,9 +313,9 @@ def array_list(t):
 
 @prod
 def object_regarray(t):
-    'object : REGISTER objident array_list sizespec offsetspec maybe_istemplate object_spec'
-    t[0] = ast.object_(site(t), t[2], 'register', t[3],
-                       t[4] + t[5] + t[6] + t[7])
+    'object : maybe_extension REGISTER objident array_list sizespec offsetspec maybe_istemplate object_spec'
+    t[0] = ast.object_(site(t), t[3], 'register', t[4], t[1],
+                       t[5] + t[6] + t[7] + t[8])
 
 @prod
 def bitrangespec(t):
@@ -329,8 +329,8 @@ def bitrangespec_empty(t):
 
 @prod_dml14
 def object_field(t):
-    'object : FIELD objident array_list bitrangespec maybe_istemplate object_spec'
-    t[0] = ast.object_(site(t), t[2], 'field', t[3], t[4] + t[5] + t[6])
+    'object : maybe_extension FIELD objident array_list bitrangespec maybe_istemplate object_spec'
+    t[0] = ast.object_(site(t), t[3], 'field', t[4], t[1], t[5] + t[6] + t[7])
 
 def endian_translate_bit(expr, width, bitorder):
     if bitorder == 'be':
@@ -369,10 +369,10 @@ def bitrange_2(t):
 
 @prod_dml12
 def object_field_1(t):
-    'object : FIELD objident bitrange maybe_istemplate object_spec'
+    'object : maybe_extension FIELD objident bitrange maybe_istemplate object_spec'
     if logging.show_porting:
-        report(PFIELDRANGE(site(t, 3)))
-    t[0] = ast.object_(site(t), t[2], 'field', [], t[3] + t[4] + t[5])
+        report(PFIELDRANGE(site(t, 4)))
+    t[0] = ast.object_(site(t), t[3], 'field', [], None, t[4] + t[5] + t[6])
 
 @prod_dml12
 def field_array_size_no(t):
@@ -398,8 +398,8 @@ def field_array_size(t):
 
 @prod_dml12
 def object_field_2(t):
-    'object : FIELD objident fieldarraysize bitrangespec maybe_istemplate object_spec'
-    t[0] = ast.object_(site(t), t[2], 'field', t[3], t[4] + t[5] + t[6])
+    'object : maybe_extension FIELD objident fieldarraysize bitrangespec maybe_istemplate object_spec'
+    t[0] = ast.object_(site(t), t[3], 'field', t[4], None, t[5] + t[6] + t[7])
 
 @prod_dml14
 def data(t):
@@ -473,20 +473,20 @@ def saved_decl_many_init(t):
 
 @prod
 def object3(t):
-    '''object : CONNECT   objident array_list maybe_istemplate object_spec
-              | INTERFACE objident array_list maybe_istemplate object_spec
-              | ATTRIBUTE objident array_list maybe_istemplate object_spec
-              | BANK      objident array_list maybe_istemplate object_spec
-              | EVENT     objident array_list maybe_istemplate object_spec
-              | GROUP     objident array_list maybe_istemplate object_spec
-              | PORT      objident array_list maybe_istemplate object_spec
-              | IMPLEMENT objident array_list maybe_istemplate object_spec'''
-    t[0] = ast.object_(site(t), t[2], t[1], t[3], t[4] + t[5])
+    '''object : maybe_extension CONNECT   objident array_list maybe_istemplate object_spec
+              | maybe_extension INTERFACE objident array_list maybe_istemplate object_spec
+              | maybe_extension ATTRIBUTE objident array_list maybe_istemplate object_spec
+              | maybe_extension BANK      objident array_list maybe_istemplate object_spec
+              | maybe_extension EVENT     objident array_list maybe_istemplate object_spec
+              | maybe_extension GROUP     objident array_list maybe_istemplate object_spec
+              | maybe_extension PORT      objident array_list maybe_istemplate object_spec
+              | maybe_extension IMPLEMENT objident array_list maybe_istemplate object_spec'''
+    t[0] = ast.object_(site(t), t[3], t[2], t[4], t[1], t[5] + t[6])
 
 @prod_dml14
 def object_subdevice(t):
-    '''object : SUBDEVICE objident array_list maybe_istemplate object_spec'''
-    t[0] = ast.object_(site(t), t[2], t[1], t[3], t[4] + t[5])
+    '''object : maybe_extension SUBDEVICE objident array_list maybe_istemplate object_spec'''
+    t[0] = ast.object_(site(t), t[3], t[2], t[4], t[1], t[5] + t[6])
 
 @prod_dml12
 def maybe_extern_yes(t):
@@ -911,6 +911,31 @@ def object_desc(t):
 def object_desc_none(t):
     'object_desc :'
     t[0] = []
+
+@prod_dml14
+def maybe_extension_yes(t):
+    'maybe_extension : IN'
+    if not site(t).provisional_enabled(
+            provisional.explicit_object_extensions):
+        report(ESYNTAX(site(t), 'in', None))
+        t[0] = None
+    else:
+        t[0] = True
+
+@prod_dml14
+def maybe_extension_no(t):
+    'maybe_extension : '
+    enabled = (provisional.explicit_object_extensions
+               in t.parser.file_info.provisional)
+    t[0] = False if enabled else None
+
+# Note that `maybe_extension` is used even in DML 1.2 exclusive rules, which
+# may seem redundant, but no! Removing those uses would lead to shift/reduce
+# conflicts.
+@prod_dml12
+def maybe_extension(t):
+    'maybe_extension : '
+    t[0] = None
 
 @prod
 def object_spec_none(t):

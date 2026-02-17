@@ -76,7 +76,7 @@ def traverse_ast(ast):
         for stmt in stmts:
             yield from traverse_ast(stmt)
     elif ast.kind == 'object':
-        (_, _, _, stmts) = ast.args
+        (_, _, _, _, stmts) = ast.args
         for stmt in stmts:
             yield from traverse_ast(stmt)
     elif ast.kind == 'method':

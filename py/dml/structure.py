@@ -505,9 +505,9 @@ def wrap_sites(site_constructor, spec, issite, *rest):
             else:
                 raise ICE(issite, 'unknown node type %r %r' % (asttype, stmt))
         composite_wrapped = [
-            (objtype, name, arrayinfo,
+            (objtype, name, arrayinfo, is_extension,
              ObjectSpec(*wrap_sites(site_constructor, spec, issite, *rest)))
-            for (objtype, name, arrayinfo, spec) in composite]
+            for (objtype, name, arrayinfo, is_extension, spec) in composite]
         in_eachs_wrapped = [(tgt_pred, ObjectSpec(
             *wrap_sites(site_constructor, spec, issite, *rest)))
                             for (tgt_pred, spec) in in_eachs]
@@ -820,9 +820,9 @@ def report_poverride(sup, inf, obj_specs):
             report(POVERRIDE_IMPORT(sup_obj.site, inf.desc.text))
 
 def merge_subobj_defs(name, defs, parent):
-    specs = [spec for (_, _, spec) in defs]
-    (objtype, arrayinfo, _) = defs[0]
-    for (ot, ai, spec) in defs[1:]:
+    specs = [spec for (_, _, _, spec) in defs]
+    (objtype, arrayinfo, _, _) = defs[0]
+    for (ot, ai, _, spec) in defs[1:]:
         if ot != objtype:
             report(ENAMECOLL(specs[0].site, spec.site, name))
             return merge_subobj_defs(name, defs[1:], parent)
@@ -830,11 +830,33 @@ def merge_subobj_defs(name, defs, parent):
             raise EAINCOMP(specs[0].site, spec.site, name,
                            "mixing declarations with different number "
                            "of array dimensions")
+
+    # None -> dual extension and decl
+    # True -> extension
+    # False -> explicit decl
+    if all(extension_status is True for (_, _, extension_status, _) in defs):
+        for spec in specs:
+            report(EEXTENSION(spec.site, name))
+
+    explicit_decls = [
+        spec for (_, _, extension_status, spec) in defs if extension_status is False]
+    if len(explicit_decls) > 1:
+        # Report error on all declarations except one, which is
+        # printed as context. Pick the first declaration as context,
+        # unless some other declaration has strictly lower rank.
+        lowest = explicit_decls[0]
+        for other in explicit_decls[1:]:
+            if other.rank in lowest.rank.inferior:
+                lowest = other
+        for decl in explicit_decls:
+            if decl is not lowest:
+                report(EMULTIOBJDECL(decl.site, lowest.site, objtype, name))
+
     merged_arrayinfo = []
     if arrayinfo:
         parent_scope = Location(parent, static_indices(parent))
         for (dim_i, dim) in enumerate(
-                zip(*(arrayinfo for (_, arrayinfo, _) in defs))):
+                zip(*(arrayinfo for (_, arrayinfo, _, _) in defs))):
             (idxvar_asts, len_asts) = zip(*dim)
 
             candidates = {}
@@ -874,7 +896,7 @@ def merge_subobj_defs(name, defs, parent):
 
             merged_arrayinfo.append((idxvar, length, lensite))
 
-    return (objtype, name, merged_arrayinfo, [spec for (_, _, spec) in defs])
+    return (objtype, name, merged_arrayinfo, [spec for (_, _, _, spec) in defs])
 
 def method_is_std(node, methname):
     """
@@ -1801,17 +1823,17 @@ def mkobj2(obj, obj_specs, params, each_stmts):
     subobj_spec_by_ident = {}
     for (stmts, obj_spec) in composite_subobjs:
         for s in stmts:
-            (objtype, ident, arrayinfo, subobj_spec) = s
+            (objtype, ident, arrayinfo, is_extension, subobj_spec) = s
 
             if ident is None:
                 assert (dml.globals.dml_version == (1, 2)
                         and objtype in {'bank', 'field'})
             subobj_spec_by_ident.setdefault(ident, []).append(
-                (objtype, arrayinfo, subobj_spec))
+                (objtype, arrayinfo, is_extension, subobj_spec))
     subobj_defs = {}
     for (ident, defs) in subobj_spec_by_ident.items():
         if ident in symbols:
-            for (_, _, subobj_spec) in defs:
+            for (_, _, _, subobj_spec) in defs:
                 report(ENAMECOLL(subobj_spec.site, symbols[ident], ident))
         else:
             subobj_defs[ident] = merge_subobj_defs(ident, defs, obj)
