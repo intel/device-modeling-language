@@ -4329,6 +4329,23 @@ An `each`-`in` expression can currently only be used for
 iteration in a `foreach` statement. The expression's type
 is <code>sequence(<em>template-name</em>)</code>.
 
+An expression on the form `each ... in (this)` cannot be used directly inside a [shared method](#shared-methods): `each`-`in` relies on hierarchical information that is only available from compile-time object references, whereas the `this` expression in shared context evaluates to a run-time template reference. In order to loop hierarchically within a shared method, an indirection through a [typed parameter](#parameters-detailed) is therefore needed:
+```
+template hard_reset_children {
+    // add a template member
+    param each_hard_reset: sequence(hard_reset);
+    // The template member is assigned individually in each instance of
+    // the template, when the hierarchy of the instantiating object is known
+    param each_hard_reset = each hard_reset in (this);
+    // now, the template member can be referenced from a shared method
+    shared method hard_reset_children() {
+        foreach r in (this.each_hard_reset) {
+            r.hard_reset();
+        }
+    }
+}
+```
+
 An `each`-`in` expression searches recursively in the
 object hierarchy for objects implementing the template, but once it
 finds such an object, it does not continue searching inside that
