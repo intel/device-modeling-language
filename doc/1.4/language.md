@@ -839,7 +839,7 @@ import "simics/devs/ethernet.dml"
 ### Events
 
 An *event* object is an encapsulation of a Simics event that can
-be posted on the time queue of a processor. The location of event
+be posted on the time queue of a CPU. The location of event
 objects in the object hierarchy of the device is not important, so an
 event object can generally be placed wherever it is most convenient.
 
@@ -3722,7 +3722,7 @@ after: <em>method</em>(<em>e1</em>, ... <em>eN</em>);
 </pre>
 
 In this form, the specified point in the future is when control is given back to
-the simulation engine such that the ongoing simulation of the current processor
+the simulation engine such that the ongoing simulation of the current CPU
 may progress, and would otherwise be ready to move onto the next cycle.
 This happens after all entries to devices on the call stack have been completed.
 
@@ -3737,8 +3737,8 @@ after statement is designed to execute the callback as promptly as possible
 while satisfying the semantics stated above, while `after 0 cycles: ...` is not.
 In particular, in Simics, callbacks delayed via `after 0 cycles` are always
 bound to the clock associated with the device instance, which is not always
-that of the processor currently under simulation &mdash; in such cases the
-simulated processor may progress indefinitely without the posted callback being
+that of the CPU currently under simulation &mdash; in such cases the
+simulated CPU may progress indefinitely without the posted callback being
 executed. The immediate after statement does not have this issue.
 In addition, if an immediate after statement is executed while the
 simulation is stopped (due to a device entry such as an attribute get/set
