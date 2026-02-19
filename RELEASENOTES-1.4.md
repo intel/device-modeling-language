@@ -419,10 +419,15 @@
 - `note 6` Added a provisional feature `explicit_method_decls`, which can be
   enabled per file by a statement `provisional explicit_method_decls;`.
   This feature adds a syntax `method m() :{ ... }`, which signifies that the method
-  is *not* intended as an override. The existing syntax `method m() { ... }``
+  is *not* intended as an override. The existing syntax `method m() { ... }`
   is re-purposed to signify that the method *is* intended as an override,
   Inconsistent usage will trigger compile errors. This is useful to
   catch misspelled overrides.
 - `note 6` Addressed a memory leak introduced in Simics 7.74.0 (fixes
   HSD-22022108767.)
 - `release 7 7143`
+- `note 6` Object-level `#if` now has full support for `in each` declarations
+  (fixes SIMICS-23427.)
+  Previously, any `in each` declaration appearing directly within an `#if` would
+  be rejected by the compiler unless leveraging the experimental and heavily
+  limited feature of top-level `#if`s containing unsupported declarations.
