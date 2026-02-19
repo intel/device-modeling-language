@@ -112,7 +112,7 @@ def track_lexspan():
     global site
     site = extended_site
 def start_site(site):
-    while isinstance(site, TemplateSite):
+    while isinstance(site, ExpandedSite):
         site = site.site
     assert lexspan_map
     if site not in lexspan_map:
@@ -120,7 +120,7 @@ def start_site(site):
     (start, _) = lexspan_map[site]
     return DumpableSite(site.file_info, start)
 def end_site(site):
-    while isinstance(site, TemplateSite):
+    while isinstance(site, ExpandedSite):
         site = site.site
     assert lexspan_map
     if site not in lexspan_map:
