@@ -94,14 +94,6 @@ class ObjectSpec(object):
             self.rank, ','.join(t.name for (_, t) in self.templates),
             ','.join(param.args[0] for param in self.params))
 
-    def subobjspecs(self):
-        '''Return all ObjectSpec:s defined in this spec, including recursively
-        in subobjects, but excluding instantiated templates'''
-        return [subspec
-                for (_, _, subobjs, _) in self.blocks
-                for (_, _, _, spec) in subobjs
-                for subspec in [spec] + spec.subobjspecs()]
-
     def defined_symbols(self):
         '''Return a dictionary of all symbols defined, conditionally or
         unconditionally, in this block. The dictionary maps symbol to a pair
