@@ -1139,6 +1139,7 @@ class ENOVERRIDEPARAM(DMLError):
     To declare and define a new parameter not already declared, use the `:=` or
     `:default` syntax.
     """
+    version = "1.4"
     fmt = ("parameter '%s' not declared previously."
            " To declare and define a new parameter, use the ':%s' syntax.")
 
@@ -1159,6 +1160,7 @@ class EOVERRIDEPARAM(DMLError):
     to override existing parameter declarations (not even those lacking a
     definition of the parameter.)
     """
+    version = "1.4"
     fmt = ("the parameter '%s' has already been declared "
            + "(':%s' syntax may not be used for parameter overrides)")
     def __init__(self, site, other_site, name, token):
@@ -1178,6 +1180,7 @@ class EEXTENSION(DMLError):
     To declare and define a new object not already declared, omit the `in`
     syntax.
     """
+    version = "1.4"
     fmt = ("object '%s' not declared elsewhere."
            " To declare and define a new object, omit 'in'.")
 
@@ -1189,6 +1192,7 @@ class EMULTIOBJDECL(DMLError):
     it if there already is another non-`in` declaration across files enabling
     `explicit_object_extensions`.
     """
+    version = "1.4"
     fmt = ("object '%s' already declared."
            " To extend upon the definition of an object, use 'in %s'")
     def __init__(self, site, other_site, objtype, name):
@@ -1314,6 +1318,7 @@ class ENOVERRIDEMETH(DMLError):
     To declare and define a new method not already declared, use the `:{ ... }`
     or `:default { ... }` syntax.
     """
+    version = "1.4"
     fmt = ("method '%s' not declared previously."
            " To declare and define a new method, use the ':%s{...}' syntax.")
 
@@ -1333,6 +1338,7 @@ class EOVERRIDEMETH(DMLError):
     can't be used to override existing parameter declarations (not even those
     lacking a definition of the parameter.)
     """
+    version = "1.4"
     fmt = ("the method '%s' has already been declared "
            + "(':%s{ ... }' syntax may not be used for method overrides)")
     def __init__(self, site, other_site, name, token):
