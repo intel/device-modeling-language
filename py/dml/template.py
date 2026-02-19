@@ -64,26 +64,27 @@ class Rank(object):
 class ObjectSpec(object):
     '''Partial specification of a DML object. Basically the AST of an object
     declaration block, but slightly post-processed.'''
-    __slots__ = ('site', 'rank', 'templates', 'in_eachs', 'params', 'blocks')
-    def __init__(self, site, rank, templates, in_eachs, params, blocks):
+    __slots__ = ('site', 'rank', 'templates', 'params', 'blocks')
+    def __init__(self, site, rank, templates, params, blocks):
         self.site = site
         # Rank object
         self.rank = rank
         # list of (site, Template), for instantiated templates
         self.templates = templates
-        # list of (name, ObjectSpec)
-        self.in_eachs = in_eachs
         # list of ast.param
         self.params = params
-        # list of tuples (preconds, shallow-stmts, composite-stmts),
+        # list of tuples (preconds, shallow-stmts, composite-stmts, in-eachs),
         # where preconds is a (possibly empty) list of expression
         # ASTs, and shallow-stmts is a list of ast.session, ast.method
-        # or ast.error objects, and composite-stmts is a list of
-        # tuples (objkind, name, arrayinfo, ObjectSpec list),
-        # one for each declaration of a subobject of composite
-        # kind. shallow-stmts and composite-stmts are included in the
-        # object if all exprs, evaluated in the object's scope, yield
-        # true.
+        # or ast.error objects, composite-stmts is a list of tuples
+        # (objkind, name, arrayinfo, ObjectSpec list) each representing a
+        # composite subobject declaration, and in-eachs is a list of tuples
+        # (target list of Template:s, ObjectSpec of in-each block)
+        # representing the `in each` declarations made directly within the
+        # block.
+        # The declarations that in-eachs, shallow-stmts, and composite-stmts
+        # represent are only included in the object if all exprs of preconds,
+        # evaluated in the object's scope, yield true.
         self.blocks = blocks
 
     def __repr__(self):
@@ -97,7 +98,7 @@ class ObjectSpec(object):
         '''Return all ObjectSpec:s defined in this spec, including recursively
         in subobjects, but excluding instantiated templates'''
         return [subspec
-                for (_, _, subobjs) in self.blocks
+                for (_, _, subobjs, _) in self.blocks
                 for (_, _, _, spec) in subobjs
                 for subspec in [spec] + spec.subobjspecs()]
 
@@ -111,7 +112,7 @@ class ObjectSpec(object):
                 symbols[sym] = val
         for p in self.params:
             symbols[p.args[0]] = ('param', p.site)
-        for (_, shallow, composite) in self.blocks:
+        for (_, shallow, composite, _) in self.blocks:
             for sub in shallow:
                 if sub.kind in {'method'}:
                     symbols[sub.args[0]] = (sub.kind, sub.site)
@@ -131,10 +132,9 @@ class InstantiatedTemplateSpec(ObjectSpec):
     '''The return value of `wrap_sites`, represents the object spec of
     a particular instantiation of a template'''
     __slots__ = ('parent_template',)
-    def __init__(self, parent_template, site, rank, templates, in_eachs,
-                 params, blocks):
+    def __init__(self, parent_template, site, rank, templates, params, blocks):
         self.parent_template = parent_template
-        super().__init__(site, rank, templates, in_eachs, params, blocks)
+        super().__init__(site, rank, templates, params, blocks)
 
 class Template(object):
     def __init__(self, name, trait, spec):
@@ -191,7 +191,7 @@ class Template(object):
           given by the (unrelated) ancestor templates `next_t1` and `next_t2`.
         '''
         self_is_candidate = False
-        for (preconds, shallow, composite) in self.spec.blocks:
+        for (preconds, shallow, composite, in_eachs) in self.spec.blocks:
             for sub in shallow:
                 if sub.args[0] == method_name:
                     if not preconds:
@@ -216,22 +216,26 @@ class Template(object):
 
         return (self_is_candidate, next_candidates)
 
-def flatten_ifs(stmts, preconds):
-    '''Given a sequence of {if, method, session, object, error, export} nodes,
+def flatten_ifs(in_each_specs, templates, stmts, preconds):
+    '''Given a sequence of {if, method, session, object, error, export, in-each} nodes,
     recursively flatten all ifs and return a list of (preconditions,
-    simple, composite) tuples, where preconditions is a list of
+    simple, composite, in_each) tuples, where preconditions is a list of
     expression ASTs, simple is a list of method/session/error/export ASTs,
-    and composite is a list of object ASTs.'''
+    composite is a list of object ASTs, and in_each is list of two-tuples
+    (target list of Template:s, ObjectSpec of in-each block)'''
     result = []
     simple = []
     composite = []
+    in_eachs = []
     for stmt in stmts:
         if stmt.kind == 'hashif':
             (cond, t, f) = stmt.args
-            result.extend(flatten_ifs(t, preconds + [cond]))
+            result.extend(flatten_ifs(in_each_specs, templates,
+                                      t, preconds + [cond]))
             if f:
                 neg = ast.unop(cond.site, '!', cond)
-                result.extend(flatten_ifs(f, preconds + [neg]))
+                result.extend(flatten_ifs(in_each_specs, templates,
+                                          f, preconds + [neg]))
             if logging.show_porting:
                 if t:
                     PWUNUSED.positive_conds.add(cond)
@@ -239,12 +243,16 @@ def flatten_ifs(stmts, preconds):
                     PWUNUSED.negative_conds.add(neg)
         elif stmt.kind == 'object':
             composite.append(stmt)
+        elif stmt.kind == 'in_each':
+            (names, _) = stmt.args
+            in_eachs.append(([templates[name] for name in names],
+                             in_each_specs[stmt]))
         else:
             if stmt.kind not in {'method', 'session', 'saved',
                                  'error', 'export', 'hook'}:
                 raise ICE(stmt.site, 'unexpected AST kind %s' % (stmt.kind,))
             simple.append(stmt)
-    result.append((preconds, simple, composite))
+    result.append((preconds, simple, composite, in_eachs))
     return result
 
 def object_spec_from_asts(site, stmts, templates, inferior, in_each_structure,
@@ -267,7 +275,6 @@ def object_spec_from_asts(site, stmts, templates, inferior, in_each_structure,
         params = []
         # list of pairs (site, Template)
         is_stmts = []
-        in_eachs = []
         rest = []
         for stmt in stmts:
             if stmt.kind == 'param':
@@ -285,14 +292,11 @@ def object_spec_from_asts(site, stmts, templates, inferior, in_each_structure,
                                                     template_renames[name]))
                 is_stmts.extend([(issite, templates[name])
                                  for (issite, name) in template_refs])
-            elif stmt.kind == 'in_each':
-                (names, stmts) = stmt.args
-                in_eachs.append(([templates[name] for name in names],
-                                 in_each_specs[stmt]))
             else:
                 rest.append(stmt)
         blocks = []
-        for (preconds, shallow, composite) in flatten_ifs(rest, []):
+        for (preconds, shallow, composite, in_each) in flatten_ifs(
+                in_each_specs, templates, rest, []):
             # The 'composite' list returned by flatten_ifs is just a
             # list of object ASTs; recursively transform those into
             # ObjectSpec objects
@@ -304,8 +308,8 @@ def object_spec_from_asts(site, stmts, templates, inferior, in_each_structure,
                     decl_ast.site, sub_stmts + [ast.is_(
                         decl_ast.site, [(decl_ast.site, objtype)])])
                 block.append((objtype, name, indices, spec))
-            blocks.append((preconds, shallow, block))
-        return ObjectSpec(site, rank, is_stmts, in_eachs, params, blocks)
+            blocks.append((preconds, shallow, block, in_each))
+        return ObjectSpec(site, rank, is_stmts, params, blocks)
     return obj_from_asts(site, stmts)
 
 def rank_structure(asts):

@@ -824,14 +824,6 @@ class ECONDT(DMLError):
     """
     fmt = "conditional templates are not allowed"
 
-class ECONDINEACH(DMLError):
-    """
-    It is not permitted to have an `in each` statement directly
-    inside an `if` conditional.
-    """
-    version = "1.4"
-    fmt = "conditional 'in each' is not allowed"
-
 # TODO: Consider re-wording the semantics of this error, allocate_type is only
 # relevant in 1.4 when imported from 1.2, and as per SIMICS-9393 this
 # error might not even be necessary

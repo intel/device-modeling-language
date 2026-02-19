@@ -472,7 +472,7 @@ def wrap_sites(spec, issite, tname):
               in spec.params]
 
     blocks = []
-    for (preconds, shallow, composite) in spec.blocks:
+    for (preconds, shallow, composite, in_eachs) in spec.blocks:
         shallow_wrapped = []
         for stmt in shallow:
             asttype = stmt.kind
@@ -507,10 +507,12 @@ def wrap_sites(spec, issite, tname):
             (objtype, name, arrayinfo,
              ObjectSpec(*wrap_sites(spec, issite, tname)))
             for (objtype, name, arrayinfo, spec) in composite]
-        blocks.append((preconds, shallow_wrapped, composite_wrapped))
+        in_eachs_wrapped = [(tgt_pred, ObjectSpec(*wrap_sites(spec, issite, tname)))
+                            for (tgt_pred, spec) in in_eachs]
+        blocks.append((preconds, shallow_wrapped, composite_wrapped, in_eachs_wrapped))
 
     return (TemplateSite(spec.site, issite, tname), spec.rank,
-            templates, spec.in_eachs, params, blocks)
+            templates, params, blocks)
 
 def setparam(node, name, mkexpr):
     """
@@ -1701,21 +1703,22 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             if tpl.trait:
                 obj_traits.append((issite, tpl.trait))
 
-    for obj_spec in obj_specs:
-        for (templates, spec) in obj_spec.in_eachs:
-            each_stmts = each_stmts.copy()
-            each_stmts[templates[0]] = each_stmts.get(
-                templates[0], []) + [(templates[1:], spec)]
-
+    each_stmts_for_children = each_stmts
     (shallow_subobjs, composite_subobjs) = ([], [])
     for obj_spec in obj_specs:
-        for (preconds, shallow, composite) in obj_spec.blocks:
+        for (preconds, shallow, composite, in_eachs) in obj_spec.blocks:
             if all(eval_precond(cond, obj, global_scope)
                    for cond in preconds):
                 if logging.show_porting:
                     PWUNUSED.satisfied_conds.update(preconds)
                 shallow_subobjs.append((shallow, obj_spec))
                 composite_subobjs.append((composite, obj_spec))
+                for (templates, spec) in in_eachs:
+                    if each_stmts_for_children is each_stmts:
+                        each_stmts_for_children = each_stmts.copy()
+                    each_stmts_for_children[templates[0]] = (
+                        each_stmts_for_children.get(templates[0], [])
+                        + [(templates[1:], spec)])
 
     # name -> list of (ObjectSpec, ast.method)
     method_asts = {}
@@ -1915,8 +1918,8 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                     # matter since it's not applied to any parameters
                     # or methods
                     Rank(set(), RankDesc('verbatim', '<implicit field>')),
-                    [(obj.site, dml.globals.templates['field'])], [], [], [])],
-                obj, each_stmts))
+                    [(obj.site, dml.globals.templates['field'])], [], [])],
+                obj, each_stmts_for_children))
 
     for name in sorted(sessions):
         session_spec = sessions[name]
@@ -1956,7 +1959,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             continue
         try:
             subobj = mkobj(ident, objtype, arrayinfo, subobj_specs, obj,
-                           each_stmts)
+                           each_stmts_for_children)
         except DMLError as e:
             report(e)
         else:
