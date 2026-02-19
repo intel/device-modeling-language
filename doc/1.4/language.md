@@ -2485,8 +2485,8 @@ may reference parameters declared at the same level in the object
 hierarchy, or in parent levels.
 
 The *object declarations* are any number of declarations of objects, session
-variables, saved variables, methods, or other `#if` statements, but not
-parameters, `is` statements, or `in each` statements . When the conditional is
+variables, saved variables, methods, `in each` statements, or other `#if`
+statements, but not parameters or `is` statements. When the conditional is
 `true` (or if it's the else branch of a false conditional), the object
 declarations are treated as if they had appeared without any surrounding *#if*.
 So the two following declarations are equivalent:
@@ -2853,7 +2853,7 @@ incomplete description can be found in the [section on templates](#templates).
     then the top level of *F<sub>1</sub>* has higher rank than the top
     level of *F<sub>2</sub>*.
   * A declaration has higher rank than the block of any `in each`
-    declaration it contains.
+    declaration it contains, including those inside an `#if` block.
   * An `in each` block has higher rank than the templates it applies to
   * If there are three declarations *D<sub>1</sub>*, *D<sub>2</sub>*
     and *D<sub>3</sub>*, where *D<sub>1</sub>* has higher rank than

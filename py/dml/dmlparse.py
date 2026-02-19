@@ -265,6 +265,7 @@ allowed_in_hashif = {
     'hook',
     'hashif',
     'error',
+    'in_each',
 }
 
 @prod_dml14
@@ -1001,8 +1002,6 @@ def validate_if_body(stmts):
             report(ECONDP(stmt.site))
         elif stmt.kind == 'is':
             report(ECONDT(stmt.site))
-        elif stmt.kind == 'in_each':
-            report(ECONDINEACH(stmt.site))
         else:
             raise ICE(stmt.site, 'unknown kind %r' % (stmt.kind,))
     return result
