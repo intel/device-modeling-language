@@ -1459,7 +1459,9 @@ template connect is _conf_attribute {
             if (port != NULL) {
                 local attr_value_t ports = VT_get_port_interfaces(
                     SIM_object_class(obj));
-                if (SIM_attr_list_size(ports) == 0) {
+                local uint32 num_ports = SIM_attr_list_size(ports);
+                SIM_attr_free(&ports);
+                if (num_ports == 0) {
                     #select ns in (["bank", "port"]) where (
                         _has_port_object(obj, ns, port)) {
                         // friendly hint for common error when migrating
