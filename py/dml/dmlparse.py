@@ -112,7 +112,7 @@ def track_lexspan():
     global site
     site = extended_site
 def start_site(site):
-    while isinstance(site, TemplateSite):
+    while isinstance(site, ExpandedSite):
         site = site.site
     assert lexspan_map
     if site not in lexspan_map:
@@ -120,7 +120,7 @@ def start_site(site):
     (start, _) = lexspan_map[site]
     return DumpableSite(site.file_info, start)
 def end_site(site):
-    while isinstance(site, TemplateSite):
+    while isinstance(site, ExpandedSite):
         site = site.site
     assert lexspan_map
     if site not in lexspan_map:
@@ -265,6 +265,7 @@ allowed_in_hashif = {
     'hook',
     'hashif',
     'error',
+    'in_each',
 }
 
 @prod_dml14
@@ -1001,8 +1002,6 @@ def validate_if_body(stmts):
             report(ECONDP(stmt.site))
         elif stmt.kind == 'is':
             report(ECONDT(stmt.site))
-        elif stmt.kind == 'in_each':
-            report(ECONDINEACH(stmt.site))
         else:
             raise ICE(stmt.site, 'unknown kind %r' % (stmt.kind,))
     return result

@@ -165,3 +165,52 @@ bank b3 {
         param d default 0; #if (this.d != 0) { error; }
     }
 }
+
+// Conditional in each
+template p {
+    param p default false;
+}
+
+template t {
+    param enable_in_each;
+
+    in each (group) {
+        is p;
+    }
+
+    #if (enable_in_each) {
+        in each (p) {
+            param p = true;
+        }
+    }
+}
+
+bank cond_b1 is t {
+    param enable_in_each = false;
+    group g {
+        #if (this.p) { error; }
+    }
+}
+
+bank cond_b2 is t {
+    param enable_in_each = true;
+    group g {
+        #if (!this.p) { error; }
+    }
+}
+
+// Ranking takes into account even disabled in-eachs
+template u {
+    #if (false) {
+        in each (x_1) {
+            is p;
+        }
+    }
+    group g {
+        param x = 4;
+        param p = true;
+    }
+}
+
+is u;
+group g is p;

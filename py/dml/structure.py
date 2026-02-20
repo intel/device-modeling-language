@@ -461,18 +461,19 @@ def check_unused_and_warn(node):
     for n in node.get_components():
         check_unused_and_warn(n)
 
-def wrap_sites(spec, issite, tname):
-    '''Instantiate a template, by traversing it and replacing sites, and
-       return corresponding arguments for the construction of an ObjectSpec'''
-    templates = [(TemplateSite(site, issite, tname), t)
+def wrap_sites(site_constructor, spec, issite, *rest):
+    '''Instantiate a template, or the body of an 'in each', or whatever
+    site_constructor represents, by traversing it and replacing sites, and
+    return corresponding arguments for the construction of an ObjectSpec'''
+    templates = [(site_constructor(site, issite, *rest), t)
                  for (site, t) in spec.templates]
-    params = [ast.param(TemplateSite(site, issite, tname),
+    params = [ast.param(site_constructor(site, issite, *rest),
                         name, typeinfo, is_default, value)
               for (_, site, name, typeinfo, is_default, value)
               in spec.params]
 
     blocks = []
-    for (preconds, shallow, composite) in spec.blocks:
+    for (preconds, shallow, composite, in_eachs) in spec.blocks:
         shallow_wrapped = []
         for stmt in shallow:
             asttype = stmt.kind
@@ -480,37 +481,41 @@ def wrap_sites(spec, issite, tname):
                 (_, site, name, value, overridable, explicit_decl, export,
                  rsite) = stmt
                 shallow_wrapped.append(ast.method(
-                    TemplateSite(site, issite, tname), name, value,
+                    site_constructor(site, issite, *rest), name, value,
                     overridable, explicit_decl, export, rsite))
             elif asttype == 'error':
                 (_, site, msg) = stmt
                 shallow_wrapped.append(
-                    ast.error(TemplateSite(site, issite, tname), msg))
+                    ast.error(site_constructor(site, issite, *rest), msg))
             elif asttype == 'session':
                 (_, site, decls, inits) = stmt
                 shallow_wrapped.append(
-                    ast.session(TemplateSite(site, issite, tname),
+                    ast.session(site_constructor(site, issite, *rest),
                                 decls, inits))
             elif asttype == 'saved':
                 (_, site, decls, inits) = stmt
                 shallow_wrapped.append(
-                    ast.saved(TemplateSite(site, issite, tname),
+                    ast.saved(site_constructor(site, issite, *rest),
                               decls, inits))
             elif asttype == 'hook':
-                (_, site, *rest) = stmt
+                (_, site, *args) = stmt
                 shallow_wrapped.append(
-                    ast.hook(TemplateSite(site, issite, tname),
-                             *rest))
+                    ast.hook(site_constructor(site, issite, *rest),
+                             *args))
             else:
                 raise ICE(issite, 'unknown node type %r %r' % (asttype, stmt))
         composite_wrapped = [
             (objtype, name, arrayinfo,
-             ObjectSpec(*wrap_sites(spec, issite, tname)))
+             ObjectSpec(*wrap_sites(site_constructor, spec, issite, *rest)))
             for (objtype, name, arrayinfo, spec) in composite]
-        blocks.append((preconds, shallow_wrapped, composite_wrapped))
+        in_eachs_wrapped = [(tgt_pred, ObjectSpec(
+            *wrap_sites(site_constructor, spec, issite, *rest)))
+                            for (tgt_pred, spec) in in_eachs]
+        blocks.append((preconds, shallow_wrapped, composite_wrapped,
+                       in_eachs_wrapped))
 
-    return (TemplateSite(spec.site, issite, tname), spec.rank,
-            templates, spec.in_eachs, params, blocks)
+    return (site_constructor(spec.site, issite, *rest), spec.rank,
+            templates, params, blocks)
 
 def setparam(node, name, mkexpr):
     """
@@ -548,10 +553,10 @@ def add_templates(obj_specs, each_stmts):
             obj_spec = tpl.spec
         else:
             obj_spec = InstantiatedTemplateSpec(
-                tpl, *wrap_sites(tpl.spec, site, tpl.name))
+                tpl, *wrap_sites(TemplateSite, tpl.spec, site, tpl.name))
         used_templates[tpl] = obj_spec
 
-        for (tpls, spec) in each_stmts.get(tpl, []):
+        for (tpls, orig_tpls, spec) in each_stmts.get(tpl, []):
             for t in tpls:
                 if t not in used_templates:
                     # One template did not match, at least not yet. It
@@ -560,12 +565,14 @@ def add_templates(obj_specs, each_stmts):
                     # each_stmts so we will re-consider this in-each
                     # statement when the missing template is instantiated.
                     each_stmts = each_stmts.copy()
-                    each_stmts[t] = each_stmts.get(t, []) + [(tpls, spec)]
+                    each_stmts[t] = (each_stmts.get(t, [])
+                                     + [(tpls, orig_tpls, spec)])
                     break
             else:
                 # All templates match; expand the each statement.
                 obj_specs.append(
-                    ObjectSpec(*wrap_sites(spec, spec.site, tpl.name)))
+                    ObjectSpec(*wrap_sites(InEachSite, spec, spec.site,
+                                           [t.name for t in orig_tpls])))
                 queue.extend(spec.templates)
 
         obj_specs.append(obj_spec)
@@ -1701,21 +1708,22 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             if tpl.trait:
                 obj_traits.append((issite, tpl.trait))
 
-    for obj_spec in obj_specs:
-        for (templates, spec) in obj_spec.in_eachs:
-            each_stmts = each_stmts.copy()
-            each_stmts[templates[0]] = each_stmts.get(
-                templates[0], []) + [(templates[1:], spec)]
-
+    each_stmts_for_children = each_stmts
     (shallow_subobjs, composite_subobjs) = ([], [])
     for obj_spec in obj_specs:
-        for (preconds, shallow, composite) in obj_spec.blocks:
+        for (preconds, shallow, composite, in_eachs) in obj_spec.blocks:
             if all(eval_precond(cond, obj, global_scope)
                    for cond in preconds):
                 if logging.show_porting:
                     PWUNUSED.satisfied_conds.update(preconds)
                 shallow_subobjs.append((shallow, obj_spec))
                 composite_subobjs.append((composite, obj_spec))
+                for (templates, spec) in in_eachs:
+                    if each_stmts_for_children is each_stmts:
+                        each_stmts_for_children = each_stmts.copy()
+                    each_stmts_for_children[templates[0]] = (
+                        each_stmts_for_children.get(templates[0], [])
+                        + [(templates[1:], templates, spec)])
 
     # name -> list of (ObjectSpec, ast.method)
     method_asts = {}
@@ -1915,8 +1923,8 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                     # matter since it's not applied to any parameters
                     # or methods
                     Rank(set(), RankDesc('verbatim', '<implicit field>')),
-                    [(obj.site, dml.globals.templates['field'])], [], [], [])],
-                obj, each_stmts))
+                    [(obj.site, dml.globals.templates['field'])], [], [])],
+                obj, each_stmts_for_children))
 
     for name in sorted(sessions):
         session_spec = sessions[name]
@@ -1956,7 +1964,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             continue
         try:
             subobj = mkobj(ident, objtype, arrayinfo, subobj_specs, obj,
-                           each_stmts)
+                           each_stmts_for_children)
         except DMLError as e:
             report(e)
         else:
