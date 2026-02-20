@@ -423,3 +423,5 @@
   is re-purposed to signify that the method *is* intended as an override,
   Inconsistent usage will trigger compile errors. This is useful to
   catch misspelled overrides.
+- `note 6` Addressed a memory leak introduced in Simics 7.74.0 (fixes
+  HSD-22022108767.)
