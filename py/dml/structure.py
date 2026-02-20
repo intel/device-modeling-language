@@ -504,9 +504,9 @@ def wrap_sites(spec, issite, tname):
             else:
                 raise ICE(issite, 'unknown node type %r %r' % (asttype, stmt))
         composite_wrapped = [
-            (objtype, name, arrayinfo,
+            (objtype, name, arrayinfo, is_extension,
              ObjectSpec(*wrap_sites(spec, issite, tname)))
-            for (objtype, name, arrayinfo, spec) in composite]
+            for (objtype, name, arrayinfo, is_extension, spec) in composite]
         blocks.append((preconds, shallow_wrapped, composite_wrapped))
 
     return (TemplateSite(spec.site, issite, tname), spec.rank,
@@ -813,8 +813,8 @@ def report_poverride(sup, inf, obj_specs):
             report(POVERRIDE_IMPORT(sup_obj.site, inf.desc.text))
 
 def merge_subobj_defs(def1, def2, parent):
-    (objtype, name, arrayinfo, obj_specs1) = def1
-    (objtype2, name2, arrayinfo2, obj_specs2) = def2
+    (objtype, name, arrayinfo, extension_status1, obj_specs1) = def1
+    (objtype2, name2, arrayinfo2, extension_status2, obj_specs2) = def2
     assert name == name2
 
     site1 = obj_specs1[0].site
@@ -823,6 +823,26 @@ def merge_subobj_defs(def1, def2, parent):
     if objtype != objtype2:
         report(ENAMECOLL(site1, site2, name))
         return def1
+
+    # extension status:
+    # None -> dual extension and decl
+    # True -> extension
+    # False -> explicit decl
+    if extension_status1 is extension_status2 is False:
+        # Blame the one with higher rank if possible. Otherwise, blame the
+        # new def.
+        (decl_site_1, decl_site_2) = (
+            (site1, site2) if (
+                obj_specs2[0].rank in obj_specs1[0].rank.inferior)
+            else (site2, site1))
+        report(EMULTIOBJDECL(decl_site_1, decl_site_2, objtype, name))
+    # One is explicit decl: merged is explicit decl
+    elif extension_status1 is False or extension_status2 is False:
+        extension_status1 = False
+    # If either is dual, make dual
+    elif extension_status1 is None or extension_status2 is None:
+        extension_status1 = None
+    # Otherwise, both are explicit extensions. Keep explicit extension.
 
     if len(arrayinfo) != len(arrayinfo2):
         raise EAINCOMP(site1, site2, name,
@@ -850,7 +870,8 @@ def merge_subobj_defs(def1, def2, parent):
                 merged_arrayinfo.append((idxvar1, len1))
 
 
-    return (objtype, name, merged_arrayinfo, obj_specs1 + obj_specs2)
+    return (objtype, name, merged_arrayinfo, extension_status1,
+            obj_specs1 + obj_specs2)
 
 def method_is_std(node, methname):
     """
@@ -1786,13 +1807,14 @@ def mkobj2(obj, obj_specs, params, each_stmts):
 
     for (stmts, obj_spec) in composite_subobjs:
         for s in stmts:
-            (objtype, ident, arrayinfo, subobj_spec) = s
+            (objtype, ident, arrayinfo, is_extension, subobj_spec) = s
 
             if ident is None:
                 assert (dml.globals.dml_version == (1, 2)
                         and objtype in {'bank', 'field'})
 
-            subobj_def = (objtype, ident, arrayinfo, [subobj_spec])
+            subobj_def = (objtype, ident, arrayinfo, is_extension,
+                          [subobj_spec])
             if ident in subobj_defs:
                 subobj_defs[ident] = merge_subobj_defs(subobj_defs[ident],
                                                        subobj_def, obj)
@@ -1802,7 +1824,10 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                 symbols[ident] = subobj_spec.site
                 subobj_defs[ident] = subobj_def
 
-    for (_, _, arrayinfo, specs) in subobj_defs.values():
+    for (_, ident, arrayinfo, extension_status, specs) in subobj_defs.values():
+        if extension_status is True:
+            for spec in specs:
+                report(EEXTENSION(spec.site, ident))
         for (i, (idx, dimsize_ast)) in enumerate(arrayinfo):
             if dimsize_ast is None:
                 idxref = (f" (with index variable '{idx.args[0]}')"
@@ -1904,7 +1929,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
         # the whole register.
         if obj.objtype == 'register' and not any(
                 objtype == 'field'
-                for (objtype, _, _, _) in list(subobj_defs.values())):
+                for (objtype, _, _, _, _) in list(subobj_defs.values())):
             # The implicit field instantiates the built-in field
             # template and does nothing else.
             subobjs.append(mkobj(
@@ -1946,7 +1971,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
     subobj_name_defs = {}
 
     for name in sorted(subobj_defs, key=lambda name: name or ''):
-        (objtype, ident, arrayinfo, subobj_specs) = subobj_defs[name]
+        (objtype, ident, arrayinfo, _, subobj_specs) = subobj_defs[name]
         if (not obj.accepts_child_type(objtype)
             # HACK: disallow non-toplevel banks in DML 1.2, see SIMICS-19009
             or (dml.globals.dml_version == (1, 2)
