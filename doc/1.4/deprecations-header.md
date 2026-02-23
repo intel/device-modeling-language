@@ -50,8 +50,8 @@ each individual change in a new API version can be enabled individually,
 without enabling the full API version. This has the following uses:
 
 * During migration to a new API version, enabling one breaking change at a time
-  across the whole system makes it easier to analyze errors, because you only know that
-  all errors come from the same change.
+  across the whole system makes it easier to analyze errors, because you only
+  know that all errors come from the same change.
 * When a breaking change is first introduced, it will be disabled by default in
   the latest API version, and only be enabled by default when the next API
   version is introduced.  Thus, until the next Simics major release, the
@@ -83,6 +83,6 @@ title `foo-bar` corresponds to the DMLC flag `--breaking-change=foo-bar`, and
 when that flag is passed, the global parameter `_breaking_change_foo_bar` to
 `true`.
 
-Each breaking change is also implicitly enabled when compiling with a Simics
-API version above a certain threshold. The breaking changes under the section for API
-_n_ are useful when migrating to API _n+1_.
+Each breaking change is also implicitly enabled when compiling with a Simics API
+version above a certain threshold. The breaking changes under the section for
+API _n_ are useful when migrating to API _n+1_.

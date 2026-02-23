@@ -961,7 +961,8 @@ to `true`, otherwise to `false`. Affected by
 the `miss_pattern` parameter.
 </dd><dt>
 
-read(generic\_transaction\_t \*memop, uint64 offset, uint64 size) -> (uint64 value)
+read(generic\_transaction\_t \*memop, uint64 offset, uint64 size) -> (uint64
+value)
 </dt><dd>
 
 Utility method; equivalent to calling `read_access`, but does

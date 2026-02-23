@@ -93,7 +93,9 @@ identifiers are always prefixed by a `$` character.
 Constant Literals
 </dt><dd>
 
-DML has literals for strings, characters, integers, booleans, and floating-point numbers.  The integer literals can be written in decimal (`01234`), hexadecimal (`0x12af`), or binary (`0b110110`) form.
+DML has literals for strings, characters, integers, booleans, and floating-point
+numbers.  The integer literals can be written in decimal (`01234`), hexadecimal
+(`0x12af`), or binary (`0b110110`) form.
 
 Underscores (`_`) can be used between digits, or immediately
 following the `0b`, `0x` prefixes, in integer literals
@@ -805,14 +807,14 @@ Most object types (`bank`, `register`,
 in *arrays*. The general form of an object array declaration is
 
 <pre>
-<em>type</em> <em>name</em> [<em>variable</em> in 0..<em>max</em>]... <em>extras</em> { ... }
+<em>type</em> <em>name</em> [<em>variable</em> in 0..<em>max</em>]...
+<em>extras</em> { ... }
 </pre>
 
 Here, each *variable* defines the name of one index in the array and
-<code>0..<em>max</em></code> defines the size of the corresponding dimension of the
-array. Each *variable* defines a parameter in the object scope, and thus must
-be unique.
-*max* must be a compile time constant. For instance,
+<code>0..<em>max</em></code> defines the size of the corresponding dimension of
+the array. Each *variable* defines a parameter in the object scope, and thus
+must be unique. *max* must be a compile time constant. For instance,
 
 ```
 register regs[i in 0..15] size 2 {
@@ -856,12 +858,13 @@ object; multiple "`bank { ... }`" declarations are concatenated.
 The general form of a `register` declaration is
 
 <pre>
-register <em>name</em> size <em>n</em> @ <em>d</em> is (<em>templates</em>) { ... }
+register <em>name</em> size <em>n</em> @ <em>d</em> is (<em>templates</em>) {
+... }
 </pre>
 
-Each of the "<code>size <em>n</em></code>", "<code>@ <em>d</em></code>", and "<code>is
-(<em>templates</em>)</code>" sections is optional, but if present, they must
-be specified in the above order.
+Each of the "<code>size <em>n</em></code>", "<code>@ <em>d</em></code>", and
+"<code>is (<em>templates</em>)</code>" sections is optional, but if present,
+they must be specified in the above order.
 
 * A declaration
 
@@ -906,7 +909,8 @@ Templates are further described in Section [x](#template-declarations).
 The general form of a `field` declaration is
 
 <pre>
-field <em>name</em> [<em>highbit</em>:<em>lowbit</em>] is (<em>templates</em>) { ... }
+field <em>name</em> [<em>highbit</em>:<em>lowbit</em>] is (<em>templates</em>) {
+... }
 </pre>
 
 or simply
@@ -916,22 +920,24 @@ field <em>name</em> [<em>bit</em>] ... { ... }
 </pre>
 
 specifying a range of bits of the containing register, where the syntax
-<code>[<em>bit</em>]</code> is short for <code>[<em>bit</em>:<em>bit</em>]</code>.
-Both the "`[...]`" and the <code>is (<em>templates</em>)</code>
-sections are optional; in fact, the "`[...]`" syntax is merely a
-much more convenient way of defining the (required) field parameters
+<code>[<em>bit</em>]</code> is short for
+<code>[<em>bit</em>:<em>bit</em>]</code>. Both the "`[...]`" and the <code>is
+(<em>templates</em>)</code> sections are optional; in fact, the "`[...]`" syntax
+is merely a much more convenient way of defining the (required) field parameters
 `lsb` and `msb` (cf. Section [x](libraries.html#field-parameters)).
 
 * A declaration
 
   <pre>
-  field <em>name</em> [<em>high</em>:<em>low</em>] is (<em>t1</em>,...,<em>tN</em>) { ... }
+field <em>name</em> [<em>high</em>:<em>low</em>] is
+(<em>t1</em>,...,<em>tN</em>) { ... }
   </pre>
 
   is equivalent to
 
   <pre>
-  field <em>name</em> [<em>high</em>:<em>low</em>] { is <em>t1</em>; ... is <em>tN</em>; ... }
+field <em>name</em> [<em>high</em>:<em>low</em>] { is <em>t1</em>; ... is
+<em>tN</em>; ... }
   </pre>
 
 For a range of two or more bits, the first (leftmost) number always
@@ -1320,12 +1326,11 @@ later version of DML.
   }
   ```
 
-  (only one variable can be introduced per declaration). Static
-  variables have a similar meaning as in C, they retain value over function calls.
-  But note that a `static` variable in DML is per device object, it is not
-  globally shared between device instances.
-  For symmetry with C, the keyword
-  `auto` may be used as a synonym for `local`.
+(only one variable can be introduced per declaration). Static variables have a
+similar meaning as in C, they retain value over function calls. But note that a
+`static` variable in DML is per device object, it is not globally shared between
+device instances. For symmetry with C, the keyword `auto` may be used as a
+synonym for `local`.
 
 * Plain C functions (i.e., not DML methods) can be called using normal
   function call syntax, as in `f(x)`.
@@ -1334,7 +1339,8 @@ later version of DML.
   sections of the DML file, or in one or more C source code files that are
   compiled or linked to separately.
 
-  See sections [x](#header-declarations) and [x](#footer-declarations) for more detail on `header` and `footer`.
+See sections [x](#header-declarations) and [x](#footer-declarations) for more
+detail on `header` and `footer`.
 
   In either case, the functions must also be declared as `extern` in the
   DML source code. For example:
@@ -1479,7 +1485,8 @@ not possible to specify a value to be thrown. Furthermore, in DML,
 ### Call Statements
 
 <pre>
-call <em>method</em>(<em>e1</em>, ... <em>eN</em>) -&gt; (<em>d1</em>, ... <em>dM</em>);
+call <em>method</em>(<em>e1</em>, ... <em>eN</em>) -&gt; (<em>d1</em>, ...
+<em>dM</em>);
 </pre>
 
 Calls a DML method with input arguments *`e1`*, ...
@@ -1516,7 +1523,8 @@ call me;
 ### Inline Statements
 
 <pre>
-inline <em>method</em>(<em>e1</em>, ... <em>eN</em>) -&gt; (<em>d1</em>, ... <em>dM</em>);
+inline <em>method</em>(<em>e1</em>, ... <em>eN</em>) -&gt; (<em>d1</em>, ...
+<em>dM</em>);
 </pre>
 
 This is equivalent to <code>call <em>method</em>(<em>e1</em>, ... <em>eN</em>)
@@ -1570,7 +1578,8 @@ that e.g. have pointer parameters.
 ### Log Statements
 
 <pre>
-log <em>log-type</em>, <em>level</em>, <em>groups</em>: <em>format-string</em>, <em>e1</em>, ..., <em>eN</em>;
+log <em>log-type</em>, <em>level</em>, <em>groups</em>: <em>format-string</em>,
+<em>e1</em>, ..., <em>eN</em>;
 </pre>
 
 Outputs a formatted string to the Simics logging facility. The string
@@ -1714,16 +1723,15 @@ The `break` statement can be used within a `foreach` loop to exit it.
 ### Select Statements
 
 <pre>
-select <em>identifier</em> in (<em>expr</em>) where (<em>cond-expr</em>) <em>statement</em> else <em>default-statement</em>
+select <em>identifier</em> in (<em>expr</em>) where (<em>cond-expr</em>)
+<em>statement</em> else <em>default-statement</em>
 </pre>
 
-The `select` statement
-resembles a C `switch` statement and it
-is very similar to the `foreach`
-statement, but executes the *`statement`* exactly once for
-the first matching element in the *list*  given by *`expr`*, i.e., for the first element such that
-*`cond-expr`* is `true`; or if no element matches, it
-executes the *`default-statement`*.
+The `select` statement resembles a C `switch` statement and it is very similar
+to the `foreach` statement, but executes the *`statement`* exactly once for the
+first matching element in the *list*  given by *`expr`*, i.e., for the first
+element such that *`cond-expr`* is `true`; or if no element matches, it executes
+the *`default-statement`*.
 
 If *`expr`* is a list, *and* the
 *`cond-expr`* only depends on compile-time constants, apart

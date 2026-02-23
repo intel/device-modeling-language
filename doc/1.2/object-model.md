@@ -17,11 +17,11 @@ Every object (including the device itself) can also have
 object, and *parameters*, which are constant-valued
 members that exist only during compilation.
 
-Each object is an instance of a *class*, often simply called the
-"object type"; the built-in object types are described in Section [x](#object-types). There is no way of adding user-defined classes
-in DML; however, each object is in general locally modified by
-adding (or overriding) members, methods and parameters - this can be
-viewed as creating a local one-shot subclass for each instance.
+Each object is an instance of a *class*, often simply called the "object type";
+the built-in object types are described in Section [x](#object-types). There is
+no way of adding user-defined classes in DML; however, each object is in general
+locally modified by adding (or overriding) members, methods and parameters -
+this can be viewed as creating a local one-shot subclass for each instance.
 
 Many parts of the DML object model are automatically mapped onto the
 Simics *configuration object* model; most

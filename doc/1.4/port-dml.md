@@ -35,7 +35,8 @@ changed. You can run the `port-dml` script to interpret and apply the
 changes:
 
 <pre>
-bin/port-dml --src <em>file</em>.dml --dest <em>file</em>-1.4.dml --tags <em>tagfile</em>
+bin/port-dml --src <em>file</em>.dml --dest <em>file</em>-1.4.dml --tags
+<em>tagfile</em>
 </pre>
 
 This will create a new DML 1.4 file

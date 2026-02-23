@@ -15,8 +15,7 @@ code with API calls tailored for a particular simulator.
 
 Currently, the compiler supports building models for the Intel®
 [Simics®](https://www.intel.com/content/www/us/en/developer/articles/tool/simics-simulator.html)
-simulator, but other back-ends may be added in the
-future.
+simulator, but other back-ends may be added in the future.
 
 
 ## Building and testing DMLC 
@@ -50,21 +49,21 @@ regularly with a locally built DMLC, then consider setting the variables
 `.bashrc`. Remaining variables are better to only enable when needed.
 
 ### DMLC_DIR
-After building DMLC, you need to set `DMLC_DIR` to `<your-project>/<hosttype>/bin`
-in subsequent invocations of `make` in order to build devices with the locally
-build compiler. `<hosttype>` is either `linux64` or `win64` depending on your 
-host type. 
+After building DMLC, you need to set `DMLC_DIR` to
+`<your-project>/<hosttype>/bin` in subsequent invocations of `make` in order to
+build devices with the locally build compiler. `<hosttype>` is either `linux64`
+or `win64` depending on your host type.
 
 ### T126_JOBS
 When set, the given number of tests are run in parallel.
 
 ### DMLC_PATHSUBST
 The DMLC build copies a few DML library files, e.g. `dml-builtins.dml`, into
-`<hosttype>/bin`. When a compile error happens, error messages will normally point
-to this copy rather than the source. By setting `DMLC_PATHSUBST` to
+`<hosttype>/bin`. When a compile error happens, error messages will normally
+point to this copy rather than the source. By setting `DMLC_PATHSUBST` to
 `<hosttype>/bin/dml=modules/dmlc/lib`, error messages will be rewritten to point
-to the source file instead.  `<hosttype>` is either `linux64` or `win64` 
-depending on your host type. 
+to the source file instead.  `<hosttype>` is either `linux64` or `win64`
+depending on your host type.
 
 ### PY_SYMLINKS
 When set to `1`, `make dmlc` will symlink Python files instead of copying

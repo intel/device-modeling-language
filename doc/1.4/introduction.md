@@ -208,13 +208,13 @@ register. The hierarchy is composed of the following object types:
   device, which can contain its own ports, banks, and attributes.
 
 ## Methods and Mutable Variables
-[Methods](language.html#methods-detailed) are the DML representation of subroutines.
-They may be declared as members of any object or template. Any method may have
-multiple input parameters, specified similarly as C functions. Unlike C, DML
-methods may have multiple return values, and the lack of a return value is
-indicated through an empty list of return values rather than `void`. The
-following demonstrates a method declaration with no input parameters or return
-values:
+[Methods](language.html#methods-detailed) are the DML representation of
+subroutines. They may be declared as members of any object or template. Any
+method may have multiple input parameters, specified similarly as C functions.
+Unlike C, DML methods may have multiple return values, and the lack of a return
+value is indicated through an empty list of return values rather than `void`.
+The following demonstrates a method declaration with no input parameters or
+return values:
 
 ```
 method noop() -> () {
@@ -285,9 +285,9 @@ done as follows:
 <pre>
 template <em>name</em> { <em>body</em> }
 </pre>
-where *name* is the name of the template, and *body* is a set of object statements.
-A template may be instantiated through the `is` object statement, which
-can be used within either objects, or within templates. For example:
+where *name* is the name of the template, and *body* is a set of object
+statements. A template may be instantiated through the `is` object statement,
+which can be used within either objects, or within templates. For example:
 ```
 bank regs {
     // Instantiate a single template: templateA

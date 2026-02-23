@@ -830,8 +830,9 @@ This requires that `ethernet_common_interface_t` is defined as a struct type
 with a field `frame` with the function pointer type
 `void (*)(conf_object_t *, const frags_t *, eth_frame_crc_status_t)`.
 
-Definitions of all standard Simics interface types are available as DML files named like the corresponding C header files;
-for instance, the `ethernet_common` interface can be imported as follows:
+Definitions of all standard Simics interface types are available as DML files
+named like the corresponding C header files; for instance, the `ethernet_common`
+interface can be imported as follows:
 ```
 import "simics/devs/ethernet.dml"
 ```
@@ -943,7 +944,8 @@ template instantiated by groups.
 
 #### Finite State Machines using groups
 
-The following demonstrates a simple example of how a finite state machine may be implemented using templates and group objects:
+The following demonstrates a simple example of how a finite state machine may be
+implemented using templates and group objects:
 
 ```
 // Template for finite state machines
@@ -1244,21 +1246,24 @@ param name;
 param name: type
 ```
 
-and assigned using the `=` operator. Parameters may also be given default values using the form `param name default expr`.
-For example:
+and assigned using the `=` operator. Parameters may also be given default values
+using the form `param name default expr`. For example:
 
 ```
 param offset = 8;
 param byte_order default "little-endian";
 ```
 
-A default value is overridden by an assignment (`=`).
-There can be at most one assignment for each parameter.
-Typically, a default value for a parameter is specified in a template, and the programmer may then choose to override it where the template is used.
-See [Resolution of overrides](#resolution-of-overrides) for the resolution order when there are multiple definitions of the same parameter.
+A default value is overridden by an assignment (`=`). There can be at most one
+assignment for each parameter. Typically, a default value for a parameter is
+specified in a template, and the programmer may then choose to override it where
+the template is used. See [Resolution of overrides](#resolution-of-overrides)
+for the resolution order when there are multiple definitions of the same
+parameter.
 
-A parameter that is declared without an assignment or a default value must eventually be assigned elsewhere, or the model will not compile.
-This pattern is sometimes useful in templates, as in:
+A parameter that is declared without an assignment or a default value must
+eventually be assigned elsewhere, or the model will not compile. This pattern is
+sometimes useful in templates, as in:
 
 ```
 template constant is register {
@@ -1291,7 +1296,9 @@ register r0 size 2 @ 0x0000 is (constant) {
 
 ### `explicit_param_decls` provisional feature
 
-There is a shorthand syntax for combined declaration and definition of a parameter, currently enabled by the [`explicit_param_decls` provisional feature](provisional-auto.html#explicit_param_decls):
+There is a shorthand syntax for combined declaration and definition of a
+parameter, currently enabled by the [`explicit_param_decls` provisional
+feature](provisional-auto.html#explicit_param_decls):
 
 ```
 param NAME: TYPE = value;
@@ -1300,12 +1307,15 @@ param NAME := value;
 param :default value;
 ```
 
-`explicit_param_decls` enforces that parameters are declared before they are assigned, or that the combined syntax is used.
-This distinguishes between the intent to declare a new parameter, and the intent to override an existing parameter.
-This distinction allows DML to capture misspelled parameter overrides as compile errors.
+`explicit_param_decls` enforces that parameters are declared before they are
+assigned, or that the combined syntax is used. This distinguishes between the
+intent to declare a new parameter, and the intent to override an existing
+parameter. This distinction allows DML to capture misspelled parameter overrides
+as compile errors.
 
-DMLC signals an error if the combined declaration and definition syntax is used to override an existing parameter.
-This guards against unintentional reuse of a parameter name. An example:
+DMLC signals an error if the combined declaration and definition syntax is used
+to override an existing parameter. This guards against unintentional reuse of a
+parameter name. An example:
 
 ```
 // Included file not using explicit_param_decls
@@ -1338,7 +1348,9 @@ bank foo_config {
 }
 ```
 
-It is recommended to enable `explicit_param_decls` in new DML source files and to use the new combined syntax when applicable to reduce the risk of bugs caused by misspelled parameters.
+It is recommended to enable `explicit_param_decls` in new DML source files and
+to use the new combined syntax when applicable to reduce the risk of bugs caused
+by misspelled parameters.
 
 In some rare cases, you may need to declare a parameter without
 knowing if it's an override or a new parameter. In this case, one
@@ -2148,21 +2160,16 @@ Two hook references of the same hook reference type can be compared for
 equality, and are considered equal when they both reference the same hook.
 
 > [!NOTE]
-> Hooks have a notable shortcoming in their lack of configurability;
-> for example, there is no way to configure a hook to log an error when a message
-> is sent through the hook and there is no computation suspended on the hook to
-> act upon the message. Proper hook configurability is planned to be added by the
+> Hooks have a notable shortcoming in their lack of configurability; for
+> example, there is no way to configure a hook to log an error when a message is
+> sent through the hook and there is no computation suspended on the hook to act
+> upon the message. Proper hook configurability is planned to be added by the
 > time or together with coroutines being introduced to DML. Until then, the
 > suggested approach is to create wrappers around usages of <tt>send_now()</tt>.
 > Hook reference types can be leveraged to cut down on the needed number of such
-> wrappers, for example:
-> <pre>
-> method send_now_checked_no_data(hook() h) {
->     local uint64 resumed = h.send_now();
->     if (resumed == 0) {
->         log error: "Unhandled message to hook";
->     }
-> }
+> wrappers, for example: <pre> method send_now_checked_no_data(hook() h) { local
+> uint64 resumed = h.send_now(); if (resumed == 0) { log error: "Unhandled
+> message to hook"; } }
 >
 > method send_now_checked_int(hook(int) h, int x) {
 >     local uint64 resumed = h.send_now(x);
@@ -2272,7 +2279,8 @@ Most object types (`bank`, `register`,
 in *arrays*. The general form of an object array declaration is
 
 <pre>
-<em>type</em> <em>name</em>[<em>var</em> &lt; <em>size</em>]... <em>extras</em> { ... }
+<em>type</em> <em>name</em>[<em>var</em> &lt; <em>size</em>]... <em>extras</em>
+{ ... }
 </pre>
 
 Here each <code>[<em>var</em> &lt; <em>size</em>]</code> declaration defines
@@ -2317,12 +2325,13 @@ types that have special conventions.
 The general form of a `register` declaration is
 
 <pre>
-register <em>name</em> size <em>n</em> @ <em>d</em> is (<em>templates</em>) { ... }
+register <em>name</em> size <em>n</em> @ <em>d</em> is (<em>templates</em>) {
+... }
 </pre>
 
-Each of the "<code>size <em>n</em></code>", "<code>@ <em>d</em></code>", and "<code>is
-(<em>templates</em>)</code>" sections is optional, but if present, they must
-be specified in the above order.
+Each of the "<code>size <em>n</em></code>", "<code>@ <em>d</em></code>", and
+"<code>is (<em>templates</em>)</code>" sections is optional, but if present,
+they must be specified in the above order.
 
 * A declaration
 
@@ -2354,7 +2363,8 @@ The general form of a [`field` object](dml-builtins.html#field-objects)
 declaration is
 
 <pre>
-field <em>name</em> @ [<em>highbit</em>:<em>lowbit</em>] is (<em>templates</em>) { ... }
+field <em>name</em> @ [<em>highbit</em>:<em>lowbit</em>] is (<em>templates</em>)
+{ ... }
 </pre>
 
 or simply
@@ -2364,10 +2374,10 @@ field <em>name</em> @ [<em>bit</em>] ... { ... }
 </pre>
 
 specifying a range of bits of the containing register, where the syntax
-<code>[<em>bit</em>]</code> is short for <code>[<em>bit</em>:<em>bit</em>]</code>.
-Both the "`@ [...]`" and the <code>is (<em>templates</em>)</code>
-sections are optional; in fact, the "`[...]`" syntax is merely a
-much more convenient way of defining the (required) field parameters
+<code>[<em>bit</em>]</code> is short for
+<code>[<em>bit</em>:<em>bit</em>]</code>. Both the "`@ [...]`" and the <code>is
+(<em>templates</em>)</code> sections are optional; in fact, the "`[...]`" syntax
+is merely a much more convenient way of defining the (required) field parameters
 `lsb` and `msb`.
 
 For a range of two or more bits, the first (leftmost) number always
@@ -3118,7 +3128,10 @@ DML deviates from the C language in a number of ways:
   ```
   However, such assignments are not allowed to be chained.
 
-* If a method can throw exceptions, or if it has more than one return argument, then the call must be a separate statement. If it has one or more return values, these must be assigned. If a method has multiple return arguments, these are enclosed in a parenthesis, as in:
+* If a method can throw exceptions, or if it has more than one return argument,
+  then the call must be a separate statement. If it has one or more return
+  values, these must be assigned. If a method has multiple return arguments,
+  these are enclosed in a parenthesis, as in:
   ```
   method divmod(int x, int y) -> (int, int) {
       return (x / y, x % y);
@@ -3223,8 +3236,9 @@ contents of variables through the following:
 
 ### Local Statements
 <pre>
-local <em>type</em> <em>identifier</em> [= <em>initializer</em>];
-local (<em>type1</em> <em>identifier1</em>, <em>type2</em> <em>identifier2</em>, <em>...</em>) [= <em>initializer</em>];
+local <em>type</em> <em>identifier</em> [= <em>initializer</em>]; local
+(<em>type1</em> <em>identifier1</em>, <em>type2</em> <em>identifier2</em>,
+<em>...</em>) [= <em>initializer</em>];
 </pre>
 
 Declares one or multiple local variables in the current scope. The right-hand
@@ -3275,8 +3289,9 @@ but may result in more lines of code.
 
 ### Session Statements
 <pre>
-session <em>type</em> <em>identifier</em> [= <em>initializer</em>];
-session (<em>type1</em> <em>identifier1</em>, <em>type2</em> <em>identifier2</em>, <em>...</em>) [= (<em>initializer1</em>, </em>initializer2</em>, <em>...</em>)];
+session <em>type</em> <em>identifier</em> [= <em>initializer</em>]; session
+(<em>type1</em> <em>identifier1</em>, <em>type2</em> <em>identifier2</em>,
+<em>...</em>) [= (<em>initializer1</em>, </em>initializer2</em>, <em>...</em>)];
 </pre>
 
 Declares one or multiple [session variables](#session-variables) in the current
@@ -3286,8 +3301,9 @@ initializing the device, and thus must be a compile-time constant.
 
 ### Saved Statements
 <pre>
-saved <em>type</em> <em>identifier</em> [= <em>initializer</em>];
-sabed (<em>type1</em> <em>identifier1</em>, <em>type2</em> <em>identifier2</em>, <em>...</em>) [= (<em>initializer1</em>, </em>initializer2</em>, <em>...</em>)];
+saved <em>type</em> <em>identifier</em> [= <em>initializer</em>]; sabed
+(<em>type1</em> <em>identifier1</em>, <em>type2</em> <em>identifier2</em>,
+<em>...</em>) [= (<em>initializer1</em>, </em>initializer2</em>, <em>...</em>)];
 </pre>
 
 Declares one or multiple [saved variables](#saved-variables) in the current
@@ -3624,7 +3640,8 @@ template](dml-builtins.html#object).
 
 #### After Delay Statements
 <pre>
-after <em>scalar</em> <em>unit</em>: <em>method</em>(<em>e1</em>, ... <em>eN</em>);
+after <em>scalar</em> <em>unit</em>: <em>method</em>(<em>e1</em>, ...
+<em>eN</em>);
 </pre>
 
 In this form, the specified point in the future is given through a time delay
@@ -3655,7 +3672,8 @@ provided arguments.
 
 #### Hook-Bound After Statements
 <pre>
-after <em>hookref</em>[-> (<em>msg1</em>, ... <em>msgN</em>)]: <em>method</em>(<em>e1</em>, ... <em>eM</em>);
+after <em>hookref</em>[-> (<em>msg1</em>, ... <em>msgN</em>)]:
+<em>method</em>(<em>e1</em>, ... <em>eM</em>);
 </pre>
 
 In this form, the suspended method call is bound to the
@@ -3837,7 +3855,8 @@ response of manager, even if the manager responds synchronously.
 ### Log Statements
 
 <pre>
-log <em>log-type</em>[, <em>level</em> [ then <em>subsequent-level</em> ] [, <em>groups</em>] ]: <em>format-string</em>, <em>e1</em>, ..., <em>eN</em>;
+log <em>log-type</em>[, <em>level</em> [ then <em>subsequent-level</em> ] [,
+<em>groups</em>] ]: <em>format-string</em>, <em>e1</em>, ..., <em>eN</em>;
 </pre>
 
 Outputs a formatted string to the Simics logging facility. The string
@@ -4000,7 +4019,8 @@ The `break` statement can be used within a `#foreach` loop to exit it.
 ### Select Statements
 
 <pre>
-select <em>identifier</em> in (<em>expr</em>) where (<em>cond-expr</em>) <em>statement</em> else <em>default-statement</em>
+select <em>identifier</em> in (<em>expr</em>) where (<em>cond-expr</em>)
+<em>statement</em> else <em>default-statement</em>
 </pre>
 
 The `select` statement resembles a C `switch` statement and is very similar
@@ -4010,7 +4030,8 @@ such that *`cond-expr`* is `true`; or if no element matches, it executes the
 *`default-statement`*.
 
 <pre>
-#select <em>identifier</em> in (<em>expr</em>) where (<em>cond-expr</em>) <em>statement</em> #else <em>default-statement</em>
+#select <em>identifier</em> in (<em>expr</em>) where (<em>cond-expr</em>)
+<em>statement</em> #else <em>default-statement</em>
 </pre>
 
 In this alternative form the *`expr`* is required to be a DML
