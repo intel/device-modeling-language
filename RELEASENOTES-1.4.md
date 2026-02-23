@@ -425,3 +425,4 @@
   catch misspelled overrides.
 - `note 6` Addressed a memory leak introduced in Simics 7.74.0 (fixes
   HSD-22022108767.)
+- `release 7 7143`
