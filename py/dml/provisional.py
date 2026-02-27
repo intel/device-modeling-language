@@ -93,29 +93,16 @@ class explicit_method_decls(ProvisionalFeature):
     This distinction allows DML to capture misspelled parameter overrides as
     compile errors.
 
-    This provisional feature introduces new syntax for the following purposes:
-    * Abstract method declarations
-      ```
-      method m(...) [-> (...)] [throws];
-      ```
+    The following new forms are introduced to mark the intent of declaring
+    and defining a new method:
+    ```
+    [shared] method m(...) [-> (...)] [throws] :{ ... }
+    [shared] method m(...) [-> (...)] [throws] :default { ... }
+    ```
 
-      This declaration establishes a requirement that a method of that name and
-      signature is defined in the same object as the abstract method
-      declaration. This is similar to the existing abstract `shared` method
-      declaration, but unlike abstract `shared` methods have no restrictions
-      or semantic implications beyond that (except for the fact that it
-      declares the method to exist.) In other words, it's semantically
-      analagous to untyped abstract parameter declarations (`param p;`).
-
-    * Simultaneously declaring and defining a new method
-      ```
-      method m(...) [-> (...)] [throws] :{ ... }
-      method m(...) [-> (...)] [throws] :default { ... }
-      ```
-
-      DMLC rejects a declaration of this form if the method has already been
-      declared, because this form signifies that the declaration was not
-      intended as an override.
+    DMLC rejects a declaration of any of these forms if the method has already
+    been declared, because these forms signify that the declaration was not
+    intended as an override.
 
     `explicit_metod_decls` also changes the meaning of the traditional form
     of method definitions (e.g. `method m() {}` or `method m() default {}`)
@@ -128,7 +115,9 @@ class explicit_method_decls(ProvisionalFeature):
     or `method() default {}`) with an abstract method declaration (e.g.
     `method m();`) in the same scope/rank. This marks that the method
     definition may either be for a previously declared method or a new method
-    entirely, and no error will be printed.
+    entirely, and no error will be printed. Note that this pattern can only
+    be employed for non-`shared` method definitions, as abstract `shared`
+    declarations have unique meaning and restrictions placed on them.
 
     Enabling the `explicit_method_decls` feature in a file only affects
     the method definitions specified in that file; in other words, it will not
