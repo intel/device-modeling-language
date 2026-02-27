@@ -17,6 +17,7 @@ from os.path import join, isdir, exists
 from typing import Optional
 import glob
 import json
+import yaml
 from simicsutils.host import host_type, is_windows, batch_suffix
 from simicsutils.internal import get_simics_major
 import testparams
@@ -32,6 +33,7 @@ def project_host_path():
 
 sys.path.append(join(project_host_path(), 'bin', 'dml', 'python'))
 import dml.globals
+import dml.breaking_changes
 import dead_dml_methods
 from dead_dml_methods import line_directive_re
 
@@ -1894,6 +1896,8 @@ SPDX-License-Identifier: MPL-2.0
             'lib-old-4.8/1.2/LICENSE',
             # file listing
             'MODULEINFO',
+            # data file
+            'cmake/simics/dml-breaking-changes.yaml',
             # essentially data files
             'doc/1.2/toc.json',
             'doc/1.4/toc.json',
@@ -1939,6 +1943,35 @@ SPDX-License-Identifier: MPL-2.0
             raise TestFail('missing copyrights')
 
 all_tests.append(CopyrightTestCase('copyright'))
+
+class CMakeTestCase(BaseTestCase):
+    __slots__ = ()
+    def test(self):
+        file = (Path(__file__).parent.parent / 'cmake' / 'simics'
+                / 'dml-breaking-changes.yaml')
+        changes_in_cmake = sorted(
+            (tag, tuple(bc['opt-in']), tuple(bc.get('opt-out', [])))
+            for (tag, bc) in yaml.safe_load(file.read_text()).items())
+        for (tag, opt_in, opt_out) in changes_in_cmake:
+            apis = opt_in + opt_out
+            if apis != tuple(
+                api.ordinal for api in dml.breaking_changes.apis.values())[
+                    :len(apis)]:
+                raise TestFail('versions not well-ordered: {opt_in}, {opt_out}')
+        changes_in_dmlc = sorted(
+            (tag,
+             tuple(api.ordinal for api in dml.breaking_changes.apis.values()
+                   if api <= change.required_after),
+             ())
+            for (tag, change) in dml.breaking_changes.changes.items())
+        if (changes_in_cmake != changes_in_dmlc):
+            self.pr(f"changes only in {file}: " + str(
+                set(changes_in_cmake) - set(changes_in_dmlc)))
+            self.pr(f"changes only in breaking_changes.py: " + str(
+                set(changes_in_dmlc) - set(changes_in_cmake)))
+            raise TestFail(f'mismatch')
+
+all_tests.append(CMakeTestCase('cmake'))
 
 # Device info XML generation works
 for version in ['1.2', '1.4']:

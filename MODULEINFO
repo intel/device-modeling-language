@@ -81,6 +81,7 @@ Make: dmlc
     @dml-1.2-reference-manual
     @dml-1.4-reference-manual
     @dmlc-py
+    [src/tools/dmlc/]cmake/simics/dml-breaking-changes.yaml
 
 Group: dmlc-lib
 Require-tokens: public
