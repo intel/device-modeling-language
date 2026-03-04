@@ -402,13 +402,13 @@ def object_field_2(t):
     t[0] = ast.object_(site(t), t[3], 'field', t[4], None, t[5] + t[6] + t[7])
 
 @prod_dml14
-def data(t):
-    'data : SESSION'
+def session(t):
+    'session : SESSION'
     t[0] = t[1]
 
 @prod_dml12
-def data(t):
-    'data : DATA'
+def session(t):
+    'session : DATA'
     if logging.show_porting:
         report(PSESSION(site(t), 'data', 'session'))
     t[0] = t[1]
@@ -420,24 +420,24 @@ def object_session(t):
 
 @prod
 def session_decl(t):
-    'session_decl : data named_cdecl SEMI'
+    'session_decl : session named_cdecl SEMI'
     t[0] = ast.session(site(t), [t[2]], None)
 
 @prod
 def session_decl_init(t):
-    'session_decl : data named_cdecl EQUALS initializer SEMI'
+    'session_decl : session named_cdecl EQUALS initializer SEMI'
     t[0] = ast.session(site(t), [t[2]], t[4])
 
 @prod_dml14
 def session_decl_many(t):
-    'session_decl : data LPAREN cdecl_maybe_discarded_list_nonempty RPAREN SEMI'
+    'session_decl : session LPAREN cdecl_maybe_discarded_list_nonempty RPAREN SEMI'
     cdecl_maybe_discarded_list_enforce_named(t[3])
     cdecl_maybe_discarded_list_enforce_not_discarded(t[3])
     t[0] = ast.session(site(t), t[3], None)
 
 @prod_dml14
 def session_decl_many_init(t):
-    'session_decl : data LPAREN cdecl_maybe_discarded_list_nonempty RPAREN EQUALS initializer SEMI'
+    'session_decl : session LPAREN cdecl_maybe_discarded_list_nonempty RPAREN EQUALS initializer SEMI'
     cdecl_maybe_discarded_list_enforce_named(t[3])
     cdecl_maybe_discarded_list_enforce_not_discarded(t[3])
     t[0] = ast.session(site(t), t[3], t[6])
