@@ -10,7 +10,7 @@ t_HASH = r'\#'
 
 keywords_dml12 = dict(keywords_common)
 reserved_idents = reserved_idents_common
-for kw in ['parameter', 'trait']:
+for kw in ['parameter', 'trait', 'nothrow', 'data']:
     keywords_dml12[kw] = kw.upper()
     tokens += (kw.upper(),)
     reserved_idents = reserved_idents + (kw.upper(),)

@@ -416,7 +416,7 @@ template evt {
     method get_event_info(void *data) -> (attr_value_t attr) {
         attr = SIM_make_attr_nil();
     }
-    method set_event_info(attr_value_t attr) -> (void *data) {
+    method set_event_info(attr_value_t attr) -> (void *param) {
     }
     method destroy(void *data) {}
     method event(void *data) {}

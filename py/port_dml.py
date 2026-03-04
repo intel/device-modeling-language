@@ -480,9 +480,9 @@ class PRETVAL(Transformation):
         # this.val`, which should not trigger a declaration.
         if len(outargs) == 1:
             [(_, name)] = outargs
-            # e.g., an outarg named `data` is lexed as a 'DATA' token
-            from dml import dmllex12
-            kind = (name.upper() if name.upper() in dmllex12.reserved_idents
+            # e.g., an outarg named 'group' is lexed as a 'group' token
+            from dml import dmllex14
+            kind = (name.upper() if name.upper() in dmllex14.reserved_idents
                     else 'ID')
             tokens = list(f.read_tokens(self.offset(f, body_start),
                                         self.offset(f, body_end)))
