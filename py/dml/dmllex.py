@@ -10,10 +10,10 @@ import re
 
 # Reserved words allowed as identifiers
 reserved_idents_common = (
-    'ATTRIBUTE', 'BANK', 'BITORDER', 'CONNECT', 'CONSTANT', 'DATA',
+    'ATTRIBUTE', 'BANK', 'BITORDER', 'CONNECT', 'CONSTANT',
     'DEVICE', 'EVENT', 'FIELD', 'FOOTER', 'GROUP', 'HEADER', 'IMPLEMENT',
     'IMPORT', 'INTERFACE', 'LOGGROUP', 'METHOD', 'PORT', 'SIZE',
-    'SUBDEVICE', 'NOTHROW', 'THEN', 'THROWS', '_HEADER', 'PROVISIONAL',
+    'SUBDEVICE', 'THEN', 'THROWS', '_HEADER', 'PROVISIONAL',
 )
 
 reserved = reserved_idents_common + (
