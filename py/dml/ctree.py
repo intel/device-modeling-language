@@ -713,7 +713,7 @@ class After(Statement):
             out(*args, **kwargs)
         objarg = '&_dev->obj'
         lm_out(f'if (SIM_object_clock({objarg}) == NULL)\n', postindent=1)
-        lm_out(f'''SIM_log_error({objarg}, 0, "Attribute 'queue' is '''
+        lm_out(f'''SIM_LOG_ERROR({objarg}, 0, "Attribute 'queue' is '''
                + '''not set, ignoring delayed call");\n''')
         lm_out('else {\n', preindent=-1, postindent=1)
         if self.indices or self.info.args_type or self.domains:
@@ -721,7 +721,7 @@ class After(Statement):
                    + '_simple_event_data_t);\n')
 
             if self.indices:
-                lm_out(f'uint32 *_event_indices = '
+                lm_out('uint32 *_event_indices = '
                        + f'MM_MALLOC({len(self.indices)}, uint32);\n')
                 for (i, index_expr) in enumerate(self.indices):
                     lm_out(f'_event_indices[{i}] = {index_expr.read()};\n')
