@@ -40,7 +40,6 @@ bank b {
             param soft_reset_val = 4;
             is read;
             method read() -> (uint64) {
-                local uint64 val;
                 local int r2;
                 return this.val + r6.val;
             }

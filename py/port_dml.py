@@ -487,7 +487,7 @@ class PRETVAL(Transformation):
             tokens = list(f.read_tokens(self.offset(f, body_start),
                                         self.offset(f, body_end)))
             add_locals = any(
-                (kind2, tok2) == (kind, name) and kind1 != 'DOT'
+                (kind2, tok2) == (kind, name) and kind1 != 'PERIOD'
                 for ((_, _, kind1), (_, tok2, kind2))
                 in zip(tokens, tokens[1:]))
         else:
