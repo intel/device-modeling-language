@@ -40,7 +40,6 @@ bank b {
             param soft_reset_val = 4;
             is read;
             method read() -> (uint64) {
-                local uint64 val;
                 local int r2;
                 return this.val + r6.val;
             }
@@ -431,8 +430,8 @@ template evt is event {
         return SIM_make_attr_nil();
     }
     method set_event_info(attr_value_t attr) -> (void *) {
-        local void *data;
-        return data;
+        local void *param;
+        return param;
     }
     method destroy(void *data) {}
     method event(void *data) {}

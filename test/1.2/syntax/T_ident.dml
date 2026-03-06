@@ -30,4 +30,5 @@ method init() {
     local int port;
     local int size;
     local int throws;
+    local int parameter;
 }
