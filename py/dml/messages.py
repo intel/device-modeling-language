@@ -810,31 +810,21 @@ class EUNINITIALIZED(DMLError):
     """
     fmt = "value of parameter %s is not yet initialized"
 
-class ECONDP(DMLError):
-    """
-    It is not permitted to declare a parameter directly inside an
-    `if` conditional.
-    """
-    fmt = "conditional parameters are not allowed"
-
-class ECONDT(DMLError):
-    """
-    It is not permitted to use a template directly inside an
-    `if` conditional.
-    """
-    fmt = "conditional templates are not allowed"
-
 class EBADCONDSTMT(DMLError):
     """
     `#if` statements in object scope are only allowed to contain
     certain kinds of declarations: objects, `method`, `session`,
-    `saved`, `#if`, `in each`, or `error`.
+    `saved`, `#if`, `in each`, `hook`, or `error`. This means in particular
+    that `param` and `is` statements are not permitted inside an `#if` block.
 
-    A special exception is that a `#if` on top scope may contain any
+    This restriction does *not* apply recursively: object or `in each` blocks
+    inside an `#if` are allowed to contain `param` and `is` statements.
+
+    Another special exception is that a `#if` on top scope may contain any
     kind of statement as long as the `#if` condition doesn't reference
     any identifiers other than `dml_1_2`, `true`, and `false`.
     """
-    fmt = "'%s' declaration not allowed inside `#if`"
+    fmt = "'%s' declaration not allowed immediately inside `#if`"
 
 # TODO: Consider re-wording the semantics of this error, allocate_type is only
 # relevant in 1.4 when imported from 1.2, and as per SIMICS-9393 this
