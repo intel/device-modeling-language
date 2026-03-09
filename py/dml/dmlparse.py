@@ -1023,12 +1023,9 @@ def validate_if_body(stmts):
     for stmt in stmts:
         if stmt.kind in allowed_in_hashif:
             result.append(stmt)
-        elif stmt.kind == 'param':
-            report(ECONDP(stmt.site))
-        elif stmt.kind == 'is':
-            report(ECONDT(stmt.site))
         else:
-            raise ICE(stmt.site, 'unknown kind %r' % (stmt.kind,))
+            assert stmt.kind in {'param', 'is'}
+            report(EBADCONDSTMT(stmt.site, stmt.kind))
     return result
 
 @prod_dml12
