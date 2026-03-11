@@ -612,27 +612,17 @@ class CTestCase(DMLFileTestCase):
         self.pr("Creating module_id.c")
 
         module_id_base = join(self.scratchdir, "module_id")
-        class options(object):
-            output = module_id_base + ".c"
-            modname = 'dml-test-' + self.shortname
-            classes = "test"
-            components = ""
-            user_version = None
-            user_build_id = ("__dmlc_tests__", 0)
-            cpumod = None
-            date = None
-            product = None
-            thread_safe = "no"
-            host_type = host_type()
-            py_version = None
-            py_iface_lists = []
-            iface_py_modules = []
-            init_c_wrappers = False
-            dml_devs = ([] if self.api_version in ["4.8"]
-                        else ["T_" + self.shortname])
-            user_init_local = self.api_version in ["4.8"]
 
-        module_id.CModuleId(options, False).create_module_id()
+        args = module_id.parse_arguments([
+            f'--output={module_id_base}.c',
+            f'--module-name=dml-test-{self.shortname}',
+            '--classes=test',
+            '--host-type=linux64',
+            '--build-id=__dmlc_tests__:0',
+            '--user-init-local' if self.api_version == "4.8"
+            else f'--dml-dev=T_{self.shortname}'
+        ])
+        module_id.CModuleId(args, False).create_module_id()
 
         name = self.shortname
         self.ld_stdout = join(self.scratchdir, name+'.ld_stdout')
