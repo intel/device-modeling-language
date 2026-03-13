@@ -259,4 +259,5 @@
   allows forbidden statements to appear specifically inside an `#if (dml_1_2)`
   block. The warning message was meant to highlight this irregularity, but
   caused more harm than good; error messages surrounding the special case have been improved instead.
+- `release 7 7146`
 - `release 6 6457`
