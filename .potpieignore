@@ -1,0 +1,5 @@
+# Ignore DML (Device Modeling Language) files - not parseable by tree-sitter
+*.dml
+
+# Ignore test folder
+test/
