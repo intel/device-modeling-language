@@ -271,7 +271,7 @@ def mkglobals(stmts):
                 report(e)
 
     for t in dml.globals.traits.values():
-        t.typecheck_methods()
+        t.typecheck_members()
 
     # Resolve duplicate externs
     for (name, clashes) in extern_clashes.items():
