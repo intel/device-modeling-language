@@ -274,6 +274,8 @@ class Site(metaclass=abc.ABCMeta):
     def filename(self): pass
     @abc.abstractproperty
     def lineno(self): pass
+    @abc.abstractproperty
+    def colno(self): pass
     @abc.abstractmethod
     def dml_version(self): pass
     @abc.abstractmethod
@@ -301,6 +303,7 @@ class SimpleSite(Site):
     def provisional_enabled(self, feature):
         return False
     lineno = 1
+    colno = 1
 
 def accumulate(iterable):
     '''Like itertools.accumulate from Python 3.2'''
@@ -388,6 +391,10 @@ class DumpableSite(Site):
     def lineno(self):
         (line, col) = self.file_info.loc_from_offset(self._offs)
         return line
+    @property
+    def colno(self):
+        (line, col) = self.file_info.loc_from_offset(self._offs)
+        return col
     def loc(self):
         (line, col) = self.file_info.loc_from_offset(self._offs)
         return "%s:%d:%d" % (self.filename(), line, col)
@@ -429,6 +436,8 @@ class ExpandedSite(Site):
     def bitorder(self): return self.site.bitorder()
     @property
     def lineno(self): return self.site.lineno
+    @property
+    def colno(self): return self.site.colno
     def provisional_enabled(self, feature):
         return self.site.provisional_enabled(feature)
 
