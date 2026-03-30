@@ -1,0 +1,37 @@
+/*
+  © 2026 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// COMPILE-ONLY
+
+template t {}
+
+/// WARNING WSTRAYIS
+group g; is t;
+group g;
+    /// WARNING WSTRAYIS
+    is t;
+
+
+group g
+    is t;
+    /// WARNING WSTRAYIS
+    is t;
+
+bank b {
+    register r1 size 4
+        /// WARNING WSTRAYIS
+        @ unmapped_offset; is t;
+    register r2 size 4
+        @ unmapped_offset;
+        /// WARNING WSTRAYIS
+        is t;
+}
+
+// no warning
+group g is t;
+is t; is t;
