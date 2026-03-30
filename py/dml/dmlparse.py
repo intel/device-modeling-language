@@ -230,6 +230,7 @@ def prod(f):
 @prod
 def top(t):
     'dml : maybe_provisional maybe_device maybe_bitorder device_statements'
+    stray_is_check(t[4])
     t[0] = ast.dml(site(t), t[2], t[4])
 
 
@@ -329,6 +330,7 @@ allowed_in_hashif = {
 def toplevel_if(t):
     '''toplevel_if : hashif LPAREN expression RPAREN \
                    LBRACE device_statements RBRACE toplevel_else'''
+    stray_is_check(t[6])
     bad_stmts = [stmt for stmt in t[6] + t[8]
                  if stmt.kind not in allowed_in_hashif]
     if bad_stmts:
@@ -345,6 +347,7 @@ def toplevel_else_no(t):
 @prod_dml14
 def toplevel_else_body(t):
     '''toplevel_else : hashelse LBRACE device_statements RBRACE'''
+    stray_is_check(t[3])
     t[0] = t[3]
 
 @prod_dml14
@@ -896,7 +899,8 @@ def template(t):
     'toplevel : TEMPLATE objident maybe_istemplate LBRACE template_stmts RBRACE'
     ises = [s for s in t[5] if s.kind == 'is']
     shared_methods = [s for s in t[5] if s.kind == 'sharedmethod']
-    if ises and shared_methods:
+    stray_is = stray_is_check(t[5])
+    if not stray_is and ises and shared_methods:
         report(WTEMPLATEIS(ises[0].site))
     t[0] = ast.template(site(t), t[2], t[3] + t[5])
 
@@ -1015,6 +1019,7 @@ def object_spec_none(t):
 @prod
 def object_spec(t):
     'object_spec : object_desc LBRACE object_statements RBRACE'
+    stray_is_check(t[3])
     t[0] = t[1] + t[3]
 
 @prod
@@ -1027,6 +1032,43 @@ def object_statements_empty(t):
     'object_statements : '
     fixup_emptyprod_lexpos(t)
     t[0] = []
+
+def stray_is_check(body):
+    '''Checks a block for any standalone 'is' declared following an object
+    declaration which looks like it was meant to affect that object
+    declaration, and warns for each such 'is' found.
+
+    Returns True if a warning was emitted this way.
+
+    Use this directly on a list of statements yielded by a
+    'object_statements', 'device_statements' or 'template_stmts' symbol,
+    before any manipulation of that list. Otherwise this may yield false
+    positives or negatives.
+    '''
+    some_stray_is = False
+    for (i, stmt) in enumerate(body):
+        if stmt.kind == 'object':
+            (_, obj_type, _, _, obj_body) = stmt.args
+            rough_end_site = (obj_body and obj_body[-1].site) or stmt.site
+            j = i+1
+            while j < len(body):
+                other_stmt = body[j]
+                other_site = other_stmt.site
+
+                if other_site.lineno == rough_end_site.lineno:
+                    if other_stmt.kind == 'is':
+                        report(WSTRAYIS(other_site, obj_type))
+                        some_stray_is = True
+                elif (other_site.colno > stmt.site.colno
+                      and other_stmt.kind == 'is'):
+                    report(WSTRAYIS(other_site, obj_type))
+                    some_stray_is = True
+                else:
+                    break
+
+                j += 1
+
+    return some_stray_is
 
 @prod
 def object_statement(t):
@@ -1084,6 +1126,7 @@ def object_statement_or_typedparam(t):
 @prod_dml14
 def in_each(t):
     'in_each : IN EACH istemplate_list LBRACE object_statements RBRACE'
+    stray_is_check(t[5])
     t[0] = ast.in_each(site(t), [tpl for (_, tpl) in t[3]], t[5])
 
 def validate_if_body(stmts):
@@ -1133,6 +1176,7 @@ def hashelse_nohash(t):
 def object_if(t):
     '''object_if : hashif LPAREN expression RPAREN \
                    LBRACE object_statements RBRACE object_else'''
+    stray_is_check(t[6])
     t[0] = ast.hashif(site(t), t[3], validate_if_body(t[6]), t[8])
 
 @prod
@@ -1144,6 +1188,7 @@ def object_else_no(t):
 @prod
 def object_else_body(t):
     '''object_else : hashelse LBRACE object_statements RBRACE'''
+    stray_is_check(t[3])
     t[0] = validate_if_body(t[3])
 
 @prod

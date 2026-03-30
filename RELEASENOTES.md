@@ -271,3 +271,14 @@
   Simics Base version 7.78.
 - `release 7 7150`
 - `release 6 6460`
+- `note 6` DMLC now detects and warns about any standalone `is` that looks
+  like it was instead intended for an object declared immediately before it,
+  such as the following:
+  ```
+  // Stray semicolons cause each 'is' to be standalone, affecting the
+  // containing register rather than the fields
+  field f1 @ [15:0]; is read_only;
+
+  field f2 @ [31:16];
+      is write_only;
+  ```

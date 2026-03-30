@@ -2391,6 +2391,36 @@ class WHOOKSEND(DMLWarning):
            + "information about the differences between 'send' and 'send_now'")
 
 
+class WSTRAYIS(DMLWarning):
+    """
+    A standalone `is` statement was found that looks like it was instead
+    intended to affect a preceding object declaration rather than the enclosing
+    object/template in which the `is` statement and (sub)object declaration are
+    made.
+
+    This typically happens due to a stray semicolon before the `is`, e.g.:
+    ```
+    field f @ [31:0]; is read_only;
+    ```
+    or
+    ```
+    field f @ [31:0];
+        is read_only;
+    ```
+
+    If done unintentionally, address this warning by making the `is` part of
+    the declared object. If there is indeed a stray semicolon this can
+    typically be accomplished simply by removing it.
+
+    If the standalone `is` statement is intentional, silence this warning
+    by making sure the `is` statement is on a new line separate from the object
+    declaration, and is not indented any deeper than the object declaration is.
+    """
+    fmt = ("suspect standalone 'is': formatting suggests it was meant to "
+           + "affect the %s declared just before it rather than the "
+           + "enclosing object/template. "
+           + "Perhaps you have a stray ';' before the 'is'?")
+
 class PSHA1(PortingMessage):
     """The `port-dml` script requires that the DML file has not been
     changed since the tag file was generated. This is verified by a
