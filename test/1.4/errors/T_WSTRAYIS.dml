@@ -16,10 +16,31 @@ group g;
     /// WARNING WSTRAYIS
     is t;
 
+/// WARNING WSTRAYIS
+group g; is t;
+    /// WARNING WSTRAYIS
+    is t;
+    /// WARNING WSTRAYIS
+    is t;
 
 group g
     is t;
     /// WARNING WSTRAYIS
+    is t;
+
+/// WARNING WSTRAYIS
+group g1; group g2; is t; group g3;
+
+// no warning
+// stray_is_check() could be changed to catch this, but the suggestion would
+// hurt rather than help.
+// If someone intentionally wrote something like the below, presumably their
+// intention would be to have the 'is' affect every group. Blindly following
+// the suggestion to remove the semicolon right before the 'is' would silence
+// the warning but only have the 'is' affect g3.
+// Patterns like these, if they ever would occur, are just too far gone for
+// us to salvage.
+group g1; group g2; group g3;
     is t;
 
 bank b {

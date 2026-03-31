@@ -1055,12 +1055,9 @@ def stray_is_check(body):
                 other_stmt = body[j]
                 other_site = other_stmt.site
 
-                if other_site.lineno == rough_end_site.lineno:
-                    if other_stmt.kind == 'is':
-                        report(WSTRAYIS(other_site, obj_type))
-                        some_stray_is = True
-                elif (other_site.colno > stmt.site.colno
-                      and other_stmt.kind == 'is'):
+                if (other_stmt.kind == 'is'
+                    and (other_site.lineno == rough_end_site.lineno
+                         or other_site.colno > stmt.site.colno)):
                     report(WSTRAYIS(other_site, obj_type))
                     some_stray_is = True
                 else:
