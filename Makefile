@@ -133,7 +133,7 @@ export CC
 export SIMICS_BASE
 
 RUN_PY_UNIT_TEST := $(PYTHON) $(DMLC_DIR)/run_unit_tests.py
-%-pyunit-tested: $(DMLC_DIR)/py/dml/%.py $(OUT_PYFILES)
+%-pyunit-tested: $(DMLC_DIR)/py/dml/%.py $(OUT_PYFILES) $(OUT_GEN_PYFILES)
 	$(info Testing $<)
 	$(RUN_PY_UNIT_TEST) $(SIMICS_PROJECT)/$(HOST_TYPE) $<
 	touch $@
