@@ -152,6 +152,59 @@ def parse_bitorder(t, syn):
 production_rules_dml12 = {}
 production_rules_dml14 = {}
 
+def mk_get_token(lexer):
+    '''Produces a wrapper over the lexer's token retrieval function, which must
+    be used as 'tokenfunc' when calling parse; see fixup_emptyprod_lexpos'''
+    lexer.latest_token = None
+    def get_token():
+        tok = lexer.token()
+        lexer.latest_token = tok
+        return tok
+    return get_token
+
+def fixup_emptyprod_lexpos(t):
+    '''
+    Must be called in every empty production rule to guarantee a sane lexpos
+    for it, and subsequently to guarantee sane sites for any production rules
+    that may rely on it.
+
+    Ply has *exceedingly* stupid behavior in that the lexpos it assigns to a
+    symbol yielded by an empty production is just wherever the lexer
+    happens to be at the time. Typically, that means it gets a lexpos
+    *just past* whatever token *follows* the produced symbol (the look-ahead),
+    which is absolute nonsense. This has messed up our sites since forever;
+    see SIMICS-23466.
+
+    The *actual* desired lexpos for a symbol from an empty production is at the
+    start of the next token (or EOF); i.e., the look-ahead.
+    That token will typically (always?) be the most recent one that got lexed.
+    (Ply does get weird once it encounters a parse error, arranging a
+    "lookahead stack," but the error() function we provide Ply is violent
+    enough to terminate parsing completely, so we have the luxury of not
+    needing to care.)
+
+    Hence, we hijack the function the parser uses to acquire tokens
+    (conveniently, Ply actually has an option for that) to stash the most
+    recently lexed token, and then we can use that token's lexpos to fix up the
+    lexpos of every empty production, fixing the problem at the source.
+
+    Ideally instead of peppering fixup_emptyprod_lexpos(t) all over the place
+    we'd have a check in the prod decorators such as to automatically augment
+    it onto any production rule that could yield empty. Unfortunately, that
+    breaks Ply completely. Y'see, Ply does not only rely on `.__doc__` and
+    `.__name__` of functions... but also `.__code__.co_firstlineno`. Brilliant.
+    '''
+    latest_tok = t.lexer.latest_token
+    if latest_tok is not None:
+        # HACK set_lexpos not available in Ply 3.4, so internals to the rescue.
+        # No matter; since Ply is unmaintained I can *definitively say* that
+        # this code is guaranteed to be compatible with all future versions of
+        # Ply!
+        # Haha...
+        sym = t.slice[0]
+        sym.lexpos = latest_tok.lexpos
+        sym.lineno = latest_tok.lineno
+
 def prod_dml12(f):
     '''Decorator for functions that should be used as production rules
     in the DML 1.2 grammar'''
@@ -189,6 +242,7 @@ def maybe_provisional_yes(t):
 @prod
 def maybe_provisional_no(t):
     'maybe_provisional : '
+    fixup_emptyprod_lexpos(t)
 
 
 @prod
@@ -200,11 +254,13 @@ def maybe_device_yes(t):
 @prod
 def maybe_device_no(t):
     'maybe_device : '
+    fixup_emptyprod_lexpos(t)
     t[0] = None
 
 @prod
 def maybe_bitorder_no(t):
     'maybe_bitorder : '
+    fixup_emptyprod_lexpos(t)
     t.parser.file_info.bitorder = 'le'
 
 @prod
@@ -221,6 +277,7 @@ def device_statements(t):
 @prod
 def device_statements_empty(t):
     'device_statements : '
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml12
@@ -282,6 +339,7 @@ def toplevel_if(t):
 @prod_dml14
 def toplevel_else_no(t):
     '''toplevel_else :'''
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml14
@@ -304,6 +362,7 @@ def object_anonymous_bank(t):
 @prod
 def array_list_empty(t):
     'array_list : '
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -325,6 +384,7 @@ def bitrangespec(t):
 @prod
 def bitrangespec_empty(t):
     'bitrangespec :'
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml14
@@ -377,6 +437,7 @@ def object_field_1(t):
 @prod_dml12
 def field_array_size_no(t):
     'fieldarraysize : '
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml12
@@ -496,6 +557,7 @@ def maybe_extern_yes(t):
 @prod_dml12
 def maybe_extern_no(t):
     '''maybe_extern :'''
+    fixup_emptyprod_lexpos(t)
     t[0] = False
 
 @prod
@@ -506,6 +568,7 @@ def maybe_default_yes(t):
 @prod
 def maybe_default_no(t):
     '''maybe_default :'''
+    fixup_emptyprod_lexpos(t)
     t[0] = False
 
 
@@ -540,8 +603,7 @@ def object_method_noinparams(t):
     name = t[3]
     (inp, outp, throws) = ([], t[4], True)
     if logging.show_porting:
-        i = min([4, 5, 6], key=lambda i: t.lexpos(i))
-        report(PINPARAMLIST(site(t, i)))
+        report(PINPARAMLIST(site(t, 4)))
     if logging.show_porting and outp:
         (start, end) = t.lexspan(6)
         [stmts, _] = t[6].args
@@ -616,6 +678,7 @@ def maybe_colon_yes(t):
 @prod
 def maybe_colon_no(t):
     '''maybe_colon : '''
+    fixup_emptyprod_lexpos(t)
     t[0] = False
 
 @prod_dml14
@@ -713,6 +776,7 @@ def toplevel_trait(t):
 @prod_dml12
 def trait_stmts_none(t):
     '''trait_stmts : '''
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml12
@@ -741,6 +805,7 @@ def trait_session(t):
 @prod_dml14
 def template_stmts_none(t):
     '''template_stmts : '''
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml14
@@ -787,6 +852,8 @@ def method_qualifiers(t):
                          | INDEPENDENT
                          | INDEPENDENT STARTUP
                          | INDEPENDENT STARTUP MEMOIZED'''
+    if len(t) == 1:
+        fixup_emptyprod_lexpos(t)
     t[0] = list(itertools.islice(t, 1, None))
 
 @prod_dml12
@@ -910,6 +977,7 @@ def object_desc(t):
 @prod
 def object_desc_none(t):
     'object_desc :'
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml14
@@ -925,6 +993,7 @@ def maybe_extension_yes(t):
 @prod_dml14
 def maybe_extension_no(t):
     'maybe_extension : '
+    fixup_emptyprod_lexpos(t)
     enabled = (provisional.explicit_object_extensions
                in t.parser.file_info.provisional)
     t[0] = False if enabled else None
@@ -935,6 +1004,7 @@ def maybe_extension_no(t):
 @prod_dml12
 def maybe_extension(t):
     'maybe_extension : '
+    fixup_emptyprod_lexpos(t)
     t[0] = None
 
 @prod
@@ -955,6 +1025,7 @@ def object_statements(t):
 @prod
 def object_statements_empty(t):
     'object_statements : '
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -1067,6 +1138,7 @@ def object_if(t):
 @prod
 def object_else_no(t):
     '''object_else :'''
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -1155,6 +1227,7 @@ def paramspec_default(t):
 @prod
 def method_outparams_none(t):
     'method_outparams : '
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml12
@@ -1227,6 +1300,7 @@ def method_params_typed(t):
 @prod_dml12
 def maybe_nothrow_throws(t):
     'maybe_nothrow : '
+    fixup_emptyprod_lexpos(t)
     t[0] = True
 
 @prod_dml12
@@ -1244,6 +1318,7 @@ def throws(t):
 @prod
 def throws_not(t):
     'throws : '
+    fixup_emptyprod_lexpos(t)
     t[0] = False
 
 # Method arguments
@@ -1251,6 +1326,7 @@ def throws_not(t):
 @prod_dml12
 def returnargs_empty(t):
     'returnargs : '
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml12
@@ -1262,6 +1338,7 @@ def returnargs(t):
 @prod
 def maybe_istemplate_no(t):
     'maybe_istemplate : '
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -1293,6 +1370,7 @@ def sizespec(t):
 @prod
 def sizespec_empty(t):
     'sizespec : '
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 # The shorthand offset of a register
@@ -1304,6 +1382,7 @@ def offsetspec(t):
 @prod
 def offsetspec_empty(t):
     'offsetspec : '
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 # A C-like declaration, or a simple name
@@ -1448,6 +1527,7 @@ def cdecl3(t):
 @prod
 def cdecl3_empty(t):
     'cdecl3 : '
+    fixup_emptyprod_lexpos(t)
     t[0] = [None]
 
 @prod
@@ -1469,6 +1549,7 @@ def cdecl3_par(t):
 @prod
 def cdecl_maybe_discarded_list_empty(t):
     'cdecl_maybe_discarded_list : '
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -1506,6 +1587,7 @@ def cdecl_maybe_discarded_list_opt_tellipsis_last(t):
 @prod
 def cdecl_maybe_discarded_or_ident_list_empty(t):
     'cdecl_maybe_discarded_or_ident_list : '
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -1557,6 +1639,7 @@ def struct_decls(t):
 @prod
 def struct_decls_empty(t):
     'struct_decls : '
+    fixup_emptyprod_lexpos(t)
     t[0] = ()
 
 @prod
@@ -1604,6 +1687,7 @@ def layout_decls(t):
 @prod
 def layout_decls_empty(t):
     'layout_decls : '
+    fixup_emptyprod_lexpos(t)
     t[0] = ()
 
 @prod
@@ -1649,6 +1733,7 @@ def bitfield_range_2(t):
 @prod
 def bitfields_decls_empty(t):
     'bitfields_decls : '
+    fixup_emptyprod_lexpos(t)
     t[0] = ()
 
 # ctypedecl is a type without any declared variable
@@ -1665,6 +1750,7 @@ def ctypedecl_ptr(t):
 @prod
 def stars_empty(t):
     'stars : '
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -1698,6 +1784,7 @@ def ctypedecl_simple_par(t):
 @prod
 def ctypedecl_simple_none(t):
     'ctypedecl_simple : ' # no variable here
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -1708,6 +1795,7 @@ def const_opt(t):
 @prod
 def const_opt_empty(t):
     'const_opt :'
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -1983,6 +2071,7 @@ def endianflag(t):
 @prod
 def endianflag_none(t):
     'endianflag : '
+    fixup_emptyprod_lexpos(t)
     t[0] = None
 
 # expression-opt
@@ -1995,6 +2084,7 @@ def expression_opt_1(t):
 @prod
 def expression_opt_2(t):
     'expression_opt : '
+    fixup_emptyprod_lexpos(t)
     t[0] = None
 
 # A comma-separated expression list.  A trailing comma is allowed
@@ -2002,6 +2092,7 @@ def expression_opt_2(t):
 @prod
 def expression_list(t):
     'expression_list : '
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -2019,6 +2110,7 @@ def expression_list_many(t):
 @prod_dml12
 def expression_list_ntc_empty(t):
     'expression_list_ntc : '
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml12
@@ -2226,6 +2318,7 @@ def statement_for(t):
 @prod_dml14
 def for_post_empty(t):
     'for_post : '
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml14
@@ -2310,6 +2403,7 @@ def switch_hashifelse(t):
 @prod_dml14
 def stmt_or_case_list_empty(t):
     'stmt_or_case_list : '
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml14
@@ -2352,6 +2446,7 @@ def statement_delay(t):
 @prod
 def ident_list_empty(t):
     'ident_list : '
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -2372,6 +2467,7 @@ def ident_list_many(t):
 @prod_dml14
 def ident_or_discard_list_empty(t):
     'ident_or_discard_list : '
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml14
@@ -2432,8 +2528,7 @@ def call(t):
             inargs.append(init_ast.args[0])
     else:
         if logging.show_porting:
-            i = min([3, 4], key=lambda i: t.lexpos(i))
-            report(PINPARAMLIST(site(t, i)))
+            report(PINPARAMLIST(site(t, 3)))
         method_ast = t[2]
         inargs = []
 
@@ -2640,6 +2735,7 @@ def warning_stmt(t):
 @prod
 def log_args_empty(t):
     'log_args : '
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -2659,6 +2755,7 @@ def compound_statement_2(t):
 @prod
 def statement_list_1(t):
     'statement_list : '
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -2754,6 +2851,7 @@ def local_one_multiple_init(t):
 @prod_dml14
 def simple_array_list_empty(t):
     'simple_array_list : '
+    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml14
