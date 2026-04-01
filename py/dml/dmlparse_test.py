@@ -2,27 +2,9 @@
 # SPDX-License-Identifier: MPL-2.0
 
 from dml import dmlparse, toplevel, logging
+import itertools
 import unittest
 import re
-import sys
-
-empty_prod_re = re.compile(r'[:|]\s*(?:$|\|)')
-
-bad_emptyprod_rules = set()
-for rules in (dmlparse.production_rules_dml12,
-              dmlparse.production_rules_dml14):
-    for (name, rule) in rules.items():
-        if (name != 'p_error' and empty_prod_re.search(rule.__doc__)
-            and 'fixup_emptyprod_lexpos' not in rule.__code__.co_names):
-            bad_emptyprod_rules.add(rule)
-
-if bad_emptyprod_rules:
-    sys.stderr.write(
-        "empty production rule(s) without call to 'fixup_emptyprod_lexpos':\n")
-    for rule in bad_emptyprod_rules:
-        sys.stderr.write(f'    {rule.__name__}\n')
-
-    sys.exit(1)
 
 def parse(contents):
     file_info = logging.FileInfo(
@@ -32,10 +14,37 @@ def parse(contents):
     assert ast.kind == 'dml', ast.kind
     return ast
 
+class test_calls_from_empty_prod_rules(unittest.TestCase):
+    def test(self):
+        empty_prod_re = re.compile(r'[:|]\s*(?:$|\|)')
+        assert empty_prod_re.search('foo : \n')
+        assert not empty_prod_re.search('foo : something\n')
+
+        bad_prod_rules = {}
+        for rule in itertools.chain(dmlparse.production_rules_dml12.values(),
+                                    dmlparse.production_rules_dml14.values()):
+            if rule is not dmlparse.error:
+                is_empty = empty_prod_re.search(rule.__doc__) is not None
+                if is_empty != ('fixup_emptyprod_lexpos'
+                                in rule.__code__.co_names):
+                    bad_prod_rules[rule] = is_empty
+
+        if bad_prod_rules:
+            msg = "\n"
+            for (rule, empty_prod) in bad_prod_rules.items():
+                msg += ("empty production rule without call to "
+                        if empty_prod else
+                        "non-empty production rule with call to ")
+                msg += f"'fixup_emptyprod_lexpos': {rule.__name__}\n"
+
+            self.fail(msg)
+
 class test_emptyprod_based_sites(unittest.TestCase):
     def test(self):
         # Test that sites are actually fixed up by fixup_emptyprod_lexpos.
-        # Without it, sites would be ruined by empty production rules.
+        # Some sites would get ruined without it, like those of methods without
+        # qualifiers and object declarations without the `in` syntax enabled by
+        # `explicit_object_extensions`
         ast = parse('''
 method m() {}
     group g;
