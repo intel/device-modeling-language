@@ -1128,6 +1128,14 @@ template B is A {
 See [Resolution of Overrides](#resolution-of-overrides) for a formal
 specification of override rules.
 
+### Resolving template inheritance ambiguities
+
+If the template inheritance hierarchy is ambiguous (a method or parameter has multiple definitions of the same rank), then compilation fails with an [`EAMBINH` error message.](messages.html#EAMBINH).
+There are multiple ways to resolve this:
+
+* Change one of the conflicting templates to instantiate the other, as DMLC suggests.
+* Use [template-qualified method implementation calls](#template-qualified-method-implementation-calls) to provide a final definition that overrides the ambiguous definitions.
+
 ### Templates as types
 
 Each template defines a *type*, which is similar to a class
@@ -2990,6 +2998,9 @@ It follows that:
       }
   }
   ```
+
+[Template-qualified method implementation calls](#template-qualified-method-implementation-calls) is one way of resolving overrides that are ambiguous because they have the same rank.
+This can be useful in situations where templates cannot be ordered using `is` statements because they provide different orthogonal functionality.
 
 ## Comparison to C/C++
 <a id="comparison-to-c"/>
