@@ -2885,6 +2885,22 @@ This section describes in detail the rules for how DML handles when there are
 multiple definitions of the same parameter or method. A less technical but
 incomplete description can be found in the [section on templates](#templates).
 
+These rules are designed to follow an intuition of prioritization based on
+*specificity*; roughly speaking, a particular definition will be prioritized
+ahead of another if DMLC is able to deduce that it is more specific than the
+other, based on the contexts in which each definition is made. Problems related
+to override resolution can typically be understood and solved purely through
+that lens, without the need to understand the technical rules in detail.
+
+For example, if you are a modeller introducing an implementation of a method
+`m()`, only to have DMLC complain that it conflicts with an earlier definition
+made in a template `t`, then that is because DMLC is unable to spot any
+dependency establishing that the context you're working in is more specific than
+the body of `t`. The most common solution to that is to make that dependency
+clear by adding `is t` to the object/template in which you are defining `m()`.
+
+The technical rules for resolution of overrides are as follows:
+
 * Each declaration in every DML file is assigned a *rank*. The set of ranks
   form a partial order, and are defined as follows:
   * The top level of each file has a rank.
