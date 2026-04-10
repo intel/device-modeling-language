@@ -2899,6 +2899,13 @@ dependency establishing that the context you're working in is more specific than
 the body of `t`. The most common solution to that is to make that dependency
 clear by adding `is t` to the object/template in which you are defining `m()`.
 
+Establishing dependencies may not always be desirable. In particular, it's
+possible to have conflicting templates which provide different orthogonal
+functionality, such that it would be wrong to make one depend upon the other.
+An alternate way to resolve conflicting method implementations in such cases is
+to leverage [template-qualified method implementation
+calls](#template-qualified-method-implementation-calls).
+
 The technical rules for resolution of overrides are as follows:
 
 * Each declaration in every DML file is assigned a *rank*. The set of ranks
@@ -3030,9 +3037,6 @@ It follows that:
       }
   }
   ```
-
-[Template-qualified method implementation calls](#template-qualified-method-implementation-calls) is one way of resolving overrides that are ambiguous because they have the same rank.
-This can be useful in situations where templates cannot be ordered using `is` statements because they provide different orthogonal functionality.
 
 ## Comparison to C/C++
 <a id="comparison-to-c"/>
