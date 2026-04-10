@@ -139,9 +139,13 @@ class ECYCLICTEMPLATE(DMLError):
             self.print_site_message(site, "via here")
 
 class EAMBINH(DMLError):
-    """If a method or parameter has multiple definitions, then there must
+    """<a id="EAMBINH"/>
+    If a method or parameter has multiple definitions, then there must
     be a unique definition that overrides all other definitions.
+    See [Resolution of overrides](language.html#resolution-of-overrides).
     """
+    # 'Resolution of overrides' does not exist in the 1.2 reference manual
+    version = "1.4"
     fmt = "conflicting definitions of %s when instantiating %s and %s"
     def __init__(self, site, other_site, method, rank_desc1, rank_desc2,
                  overridable=True):
