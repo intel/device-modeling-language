@@ -269,3 +269,4 @@
   This issue had always been present in DML, and most notably affected error
   messages surrounding methods, as well as object declarations since
   Simics Base version 7.78.
+- `release 7 7150`
