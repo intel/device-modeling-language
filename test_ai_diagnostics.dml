@@ -1,0 +1,25 @@
+dml 1.4;
+
+// Test file with intentional errors for AI diagnostics testing
+
+device test_device;
+
+import "simics/devs/memory-space.dml";
+
+
+// Error 1: Use local
+method do_something(int32 x) -> (int32) {
+    int32 y = 10;
+    // local int32 y = 10;
+    return y + x;
+}
+
+// Error 2: Duplicate definition
+method helper() -> (int32) {
+    return 1;
+}
+
+method helper() -> (int32) {  // EDUP error - duplicate
+    return 2;
+}
+

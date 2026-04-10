@@ -472,6 +472,17 @@ class InEachSite(ExpandedSite):
 store_errors = None
 
 def report(logmessage):
+    # Capture message for AI logging if enabled
+    try:
+        from . import ai_diagnostics
+        if ai_diagnostics.is_ai_logging_enabled():
+            ai_logger = ai_diagnostics.get_ai_logger()
+            if ai_logger:
+                ai_logger.log_message(logmessage)
+    except ImportError:
+        # ai_diagnostics not available, continue normally
+        pass
+    
     if store_errors is not None and isinstance(logmessage,
                                                (DMLError, DMLWarning)):
         store_errors.append(logmessage)
