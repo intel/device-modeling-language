@@ -1130,11 +1130,27 @@ specification of override rules.
 
 ### Resolving template inheritance ambiguities
 
-If the template inheritance hierarchy is ambiguous (a method or parameter has multiple definitions of the same rank), then compilation fails with an [`EAMBINH` error message.](messages.html#EAMBINH).
+If the template inheritance hierarchy is ambiguous such that a method or
+parameter receives definitions from multiple templates, and no definition can be
+said to be more specific than the others (see [Resolution of
+overrides](#resolution-of-overrides)), then compilation fails with an
+[`EAMBINH` error message](messages.html#EAMBINH).
+
 There are multiple ways to resolve this:
 
-* Change one of the conflicting templates to instantiate the other, as DMLC suggests.
-* Use [template-qualified method implementation calls](#template-qualified-method-implementation-calls) to provide a final definition that overrides the ambiguous definitions.
+* If appropriate, change one of the conflicting templates to instantiate the
+  others, as DMLC suggests.
+* For methods, it's possible to leverage [template-qualified method
+  implementation calls](#template-qualified-method-implementation-calls) to make
+  a final definition that combines and overrides all the ambiguous definitions.
+  This is much more complex, but can be preferable if it's undesirable to have
+  any of the conflicting templates involved be dependent on the others.
+* Depending on the situation, the conflicting templates may be modified and/or
+  new templates may be introduced such that the conflict can be avoided
+  entirely. For example, if two conflicting templates provide the same
+  definition of a parameter/method, then that definition can be broken out to a
+  common template which then both conflicting templates instantiate, making
+  them no longer conflict.
 
 ### Templates as types
 
