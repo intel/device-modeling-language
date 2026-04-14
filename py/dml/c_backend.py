@@ -554,7 +554,7 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
         if ifaces:
             doc += (
                 '\n\nRequired interfaces: '
-                + ', '.join('<iface>' + i.name + '</iface>' for i in ifaces)
+                + ', '.join('<tt>' + i.name + '</tt>' for i in ifaces)
                 + '.')
     doc = mkStringConstant(node.site, doc)
 

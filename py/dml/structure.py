@@ -2952,7 +2952,7 @@ class InterfacesDocParamExpr(objects.ParamExpr):
             self.cached = mkStringConstant(
                 self.site,
                 '\n\nRequired interfaces: '
-                + ', '.join('<iface>' + i.name + '</iface>' for i in ifaces)
+                + ', '.join('<tt>' + i.name + '</tt>' for i in ifaces)
                 + '.')
         else:
             self.cached = mkUndefined(self.site)
