@@ -270,3 +270,4 @@
   messages surrounding methods, as well as object declarations since
   Simics Base version 7.78.
 - `release 7 7150`
+- `release 6 6460`
