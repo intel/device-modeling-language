@@ -436,3 +436,9 @@
 - `note 6` The documentation of `connect` objects now lists the set of
   optional interfaces, in addition to the set of required interfaces.
 - `release 7 7152`
+- `note 6` Added the `objects_finalized` template, which is in the vein of
+  `init` and `post_init`, representing the stage after the device has been
+  created. Once Simics has successfully completed configuring the device and
+  all other objects created at the same time as it, `objects_finalized()` will
+  be called of every object that instantiates the `objects_finalized` template.
+  The device object always instantiates this template.
