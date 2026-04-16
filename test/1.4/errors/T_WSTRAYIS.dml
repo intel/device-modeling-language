@@ -7,6 +7,7 @@ dml 1.4;
 device test;
 
 /// COMPILE-ONLY
+/// ERROR EBADCONDSTMT T_WSTRAYIS.dml
 
 template t {}
 
@@ -56,3 +57,37 @@ bank b {
 // no warning
 group g is t;
 is t; is t;
+
+// Test every grammatically distinct kind of object block
+in each (subdevice) {
+    /// WARNING WSTRAYIS
+    group g; is t;
+}
+#if (true) {
+    /// WARNING WSTRAYIS
+    group g; is t;
+} #else {
+    // this is slightly questionable, but not enough so for us to care
+    /// WARNING WSTRAYIS
+    group g; is t;
+}
+
+template u {
+    shared method m() {}
+    // no WTEMPLATEIS if WSTRAYIS is detected
+    /// WARNING WSTRAYIS
+    group g; is t;
+}
+
+group g {
+    /// WARNING WSTRAYIS
+    group g; is t;
+    // top-level #if:s are grammatically distinct
+    #if (true) {
+        /// WARNING WSTRAYIS
+        group g; is t;
+    } #else {
+        /// WARNING WSTRAYIS
+        group g; is t;
+    }
+}

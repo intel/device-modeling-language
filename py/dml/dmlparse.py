@@ -1049,8 +1049,8 @@ def stray_is_check(body):
     for (i, stmt) in enumerate(body):
         if stmt.kind == 'object':
             (_, obj_type, _, _, obj_body) = stmt.args
-            rough_end_site = (obj_body and obj_body[-1].site) or stmt.site
-            j = i+1
+            rough_end_site = obj_body[-1].site if obj_body else stmt.site
+            j = i + 1
             while j < len(body):
                 other_stmt = body[j]
                 other_site = other_stmt.site
