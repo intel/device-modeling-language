@@ -21,8 +21,8 @@ def destroyed(name):
 
 obj = SIM_create_object('test', 'obj', queue=cpu, post_inc_attr=None)
 # objects_finalized will execute immediate afters posted in init(), post_init(),
-# and attribute configuration
-stest.expect_equal(obj.count, 3)
+# objects_finalized(), and attribute configuration
+stest.expect_equal(obj.count, 4)
 
 obj.count = 0
 SIM_process_pending_work()

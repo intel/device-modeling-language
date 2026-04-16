@@ -441,3 +441,10 @@
   made inquiry reads and writes to banks.
 - `release 7 7154`
 - `release 6 6461`
+- `note 6` Added the `objects_finalized` template, which is in the vein of
+  `init` and `post_init`, representing the stage after the device has been
+  created. Once Simics has successfully configured both the device and any
+  other configuration objects created at the same time, it will then ensure
+  that the `objects_finalized()` method is called of every DML object that
+  instantiates the `objects_finalized` template.
+  The device object always instantiates this template.

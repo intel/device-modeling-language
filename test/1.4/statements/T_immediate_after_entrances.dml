@@ -58,6 +58,15 @@ method post_init() {
     }
 }
 
+// The earliest moment immediate afters may be executed is at the end of
+// `objects_finalized` for the device, and DMLC ensures as much. This happens
+// just after the automatic calls to objects_finalized().
+method objects_finalized() {
+    assert !error_on_post_init.val;
+    assert count.val == 0;
+    post_inc();
+}
+
 method never_called() {
     assert false;
 }
