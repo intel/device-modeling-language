@@ -435,3 +435,4 @@
 - `release 7 7144`
 - `note 6` The documentation of `connect` objects now lists the set of
   optional interfaces, in addition to the set of required interfaces.
+- `release 7 7152`

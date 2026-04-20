@@ -282,3 +282,4 @@
   field f2 @ [31:16];
       is write_only;
   ```
+- `release 7 7152`
