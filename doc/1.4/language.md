@@ -3863,6 +3863,15 @@ simulation is stopped (due to a device entry such as an attribute get/set
 performed from a script/CLI) then the callback is registered as *work*,
 thus guaranteeing that it is called before the simulation starts again.
 
+If an immediate after statement is executed during object configuration (as part
+of [`init()`](dml-builtins.html#init) or
+[`post_init()`](dml-builtins.html#post_init), or possibly `set()` of a
+[`register`](dml-builtins.html#register-objects)/[`attribute`](dml-builtins.html#attribute-objects)/[`connect`](dml-builtins.html#connect-objects)),
+then the callback will be executed through the `objects_finalized` Simics
+mechanism (see `class_info_t` in the *Simics API Reference Manual*), just after
+the automatic calls to `objects_finalized()` of the [`objects_finalized`
+template](dml-builtins.html#objects_finalized).
+
 Within a particular device instance, method calls suspended by immediate
 after statements are executed in order of least recently suspended; in other
 words, FIFO semantics. The order in which method calls suspended by immediate
