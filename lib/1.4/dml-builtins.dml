@@ -2171,6 +2171,7 @@ template bank is (object, shown_desc) {
     shared method _dispatch(uint64 offset, uint64 size, register *hits, bool inquiry)
         -> (int, uint64) /* nhits, unmapped_bytes */ {
         local (const register *regs, int num_mapped_regs) = _sorted_regs();
+        assert size > 0 && size <= 8;
         local uint64 unmapped_bytes = cast(-1, uint64)[size * 8 - 1 : 0];
         if (num_mapped_regs == 0) {
             return (0, unmapped_bytes);
@@ -2301,6 +2302,12 @@ template bank is (object, shown_desc) {
     }
 
     shared method get(uint64 offset, uint64 size) -> (uint64) throws default {
+        if (size == 0 || size > 8) {
+            log error: "%s.get() call at 0x%llx with invalid size %d",
+                this._qname(), offset, size;
+            throw;
+        }
+
         local register hits[8];
         local int num_hits;
         local uint64 unmapped_bytes;
@@ -2387,6 +2394,12 @@ template bank is (object, shown_desc) {
     }
 
     shared method set(uint64 offset, uint64 size, uint64 value) default {
+        if (size == 0 || size > 8) {
+            log error: "%s.set() call at 0x%llx with invalid size %d",
+                this._qname(), offset, size;
+            return;
+        }
+
         local register hits[8];
         local int num_hits;
         local uint64 unmapped_bytes;
