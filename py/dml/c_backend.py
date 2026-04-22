@@ -1638,6 +1638,12 @@ def generate_objects_finalized(device):
     out(crep.structtype(device) + ' *_dev UNUSED = ('
         + crep.structtype(device) + ' *)_obj;\n')
     out('_dev->_immediate_after_state->warn_upon_deletion = true;\n')
+
+    if dml.globals.dml_version != (1, 2):
+        with crep.DeviceInstanceContext():
+            codegen_inline_byname(device, (), '_objects_finalized', [], [],
+                                  device.site).toc()
+
     out('_DML_execute_immediate_afters_now(_obj, '
         + '_dev->_immediate_after_state);\n')
     out('}\n\n', preindent = -1)

@@ -1,0 +1,37 @@
+/*
+  © 2026 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+/// INSTANTIATE-MANUALLY
+
+saved bool objects_finalized_done;
+
+connect partner;
+
+method objects_finalized() {
+    assert SIM_object_is_configured(dev.obj);
+    assert SIM_object_is_configured(partner.obj);
+    objects_finalized_done = true;
+}
+
+subdevice s is objects_finalized {
+    saved bool objects_finalized_done;
+    method objects_finalized() {
+        objects_finalized_done = true;
+    }
+}
+
+method init() {
+    after: check_objects_finalized();
+}
+
+// Immediate afters posted during configuration are executed during
+// objects_finalized just after the objects_finalized() invocations.
+method check_objects_finalized() {
+    assert objects_finalized_done;
+    assert s.objects_finalized_done;
+}

@@ -420,6 +420,42 @@ template post_init {
 }
 
 /**
+### objects_finalized
+
+Provides an abstract method `objects_finalized`, which is called once both the
+device and all other objects created at the same time as it have been
+successfully configured, such that they are ready to be communicated with.
+
+This template leverages the Simics-specific `objects_finalized` method of
+`SIM_create_class()`.
+
+Note that, like `init` and `post_init`, `objects_finalized` will also be called
+as part of checkpoint restoration, which has implications for its use. For
+example, say you want to leverage `objects_finalized` to do some initial
+handshaking with other devices to set up a valid state before the simulation is
+run for the first time. If that state gets checkpointed, and may change over
+the course of the simulation, then you should place the handshaking you do
+within `objects_finalized` inside of an `if (!SIM_is_restoring_state(dev.obj))`
+block; otherwise, the handshake may overwrite the checkpointed state that gets
+restored.
+
+The method `objects_finalized` is automatically called on all objects that
+implement the `objects_finalized` template.
+
+*/
+template objects_finalized {
+    param _each_objects_finalized : sequence(objects_finalized);
+    shared method _rec_objects_finalized() {
+        foreach obj in (this._each_objects_finalized)
+            obj._rec_objects_finalized();
+        this.objects_finalized();
+    }
+    // Perform local post-configuration actions
+    shared method objects_finalized();
+    param _each_objects_finalized = each objects_finalized in (this);
+}
+
+/**
 ### destroy
 Provides an abstract method `destroy`, which is called when the
 device is being deleted. This provides a means to clean up resources associated
@@ -628,6 +664,9 @@ template device {
     // _init and _post_init are called automatically on object instantiation
     is init;
     is post_init;
+    // _objects_finalized is automatically called after object instantiation
+    // assuming sim configuration hasn't failed and been rolled back
+    is objects_finalized;
     // _destroy is called automatically on object deletion
     is destroy;
 
@@ -715,9 +754,11 @@ template device {
 
     method _init() { _rec_init(); }
     method _post_init() { _rec_post_init(); }
+    method _objects_finalized() { _rec_objects_finalized(); }
     method _destroy() { _rec_destroy(); }
     method init() default {}
     method post_init() default {}
+    method objects_finalized() default {}
     method destroy() default {}
 }
 
