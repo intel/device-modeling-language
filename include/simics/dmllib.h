@@ -2766,10 +2766,10 @@ _move_before(conf_object_t *connection,
         _connection_entry_t *connection_entry = VGET(*connections,
                                                      connection_idx);
         VDELETE_ORDER(*connections, connection_idx);
-        if (_connection_idx(before, connections) < 0) {
+        int before_idx = _connection_idx(before, connections);
+        if (before_idx < 0) {
                 VADD(*connections, connection_entry);
         } else {
-                int before_idx = _connection_idx(before, connections);
                 VINSERT(*connections, before_idx, connection_entry);
         }
 
