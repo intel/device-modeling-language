@@ -439,3 +439,4 @@
 - `note 6` The default implementation of `get()` and `set()` of `bank`s will now log an
   error and do nothing if passed an invalid access size. This may impact poorly
   made inquiry reads and writes to banks.
+- `release 7 7154`
