@@ -471,6 +471,16 @@ def main(argv):
         '--help-breaking-change', action=BreakingChangeHelpAction,
         help='List the available tags for --no-compat')
 
+    # <dt>--ai-json=<i>FILE</i></dt>
+    # <dd>Export compilation errors and warnings in AI-friendly JSON format.
+    # This produces structured diagnostic output optimized for AI-assisted
+    # code generation and error correction. The output is written to the
+    # specified file.</dd>
+    parser.add_argument(
+        '--ai-json', dest='ai_json_output', action='store',
+        metavar='FILE',
+        help='Export diagnostics in AI-friendly JSON format to FILE')
+
     # </dl>
     # </add>
 
@@ -650,6 +660,18 @@ def main(argv):
 
     inputfilename = options.input_filename
 
+    # Initialize AI-friendly logging if requested
+    ai_logger = None
+    if options.ai_json_output:
+        try:
+            import dml.ai_diagnostics as ai_diagnostics
+            ai_logger = ai_diagnostics.enable_ai_logging()
+            # Set input file immediately so it's available even if parsing fails
+            if ai_logger:
+                ai_logger.input_file = inputfilename
+        except ImportError:
+            prerr("dmlc: warning: AI diagnostics module not available")
+
     if options.makedep_old:
         options.dep = os.path.basename(inputfilename) + 'dep'
     if options.dep and options.porting_filename:
@@ -695,6 +717,10 @@ def main(argv):
          top_tpl, imported) = toplevel.parse_main_file(
              inputfilename, options.import_path)
         logtime("parsing")
+
+        # Set compilation context for AI logger
+        if ai_logger:
+            ai_logger.set_compilation_context(inputfilename, dml_version)
 
         if dml_version != (1, 2):
             logging.show_porting = False
@@ -799,6 +825,17 @@ def main(argv):
         return 3
 
     finally:
+        # Write AI-friendly JSON output if requested
+        if ai_logger and options.ai_json_output:
+            try:
+                from pathlib import Path
+                output_path = Path(options.ai_json_output)
+                ai_logger.write_json_file(output_path)
+                # Print a message to stderr so user knows where output went
+                sys.stderr.write(f"AI diagnostics written to: {output_path}\n")
+            except Exception as e:
+                prerr(f"dmlc: warning: failed to write AI diagnostics: {e}")
+        
         if dmlc_profiler:
             dmlc_profiler.disable()
             stats = pstats.Stats(dmlc_profiler)

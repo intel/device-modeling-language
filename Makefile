@@ -44,6 +44,7 @@ PYFILES := dml/__init__.py			\
           dml/slotsmeta.py			\
           dml/structure.py			\
           dml/symtab.py				\
+          dml/ai_diagnostics.py			\
 	  __main__.py
 
 PYUNIT_FILES := $(wildcard $(DMLC_DIR)/py/dml/*_test.py)
