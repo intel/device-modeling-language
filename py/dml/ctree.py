@@ -4816,6 +4816,8 @@ class VectorRef(Expression):
     def __init__(self, site, expr, idx):
         assert not expr.writable or expr.c_lval
         self.type = realtype(self.expr.ctype()).base
+    def __str__(self):
+        return f'{self.expr}[{self.idx}]'
     def read(self):
         return 'VGET(%s, %s)' % (self.expr.read(), self.idx.read())
     # No need for write, VGET results in an lvalue
