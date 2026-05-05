@@ -1128,6 +1128,30 @@ template B is A {
 See [Resolution of Overrides](#resolution-of-overrides) for a formal
 specification of override rules.
 
+### Resolving template inheritance ambiguities
+
+If the template inheritance hierarchy is ambiguous such that a method or
+parameter receives definitions from multiple templates, and no definition can be
+said to be more specific than the others (see [Resolution of
+overrides](#resolution-of-overrides)), then compilation fails with an
+[`EAMBINH` error message](messages.html#EAMBINH).
+
+There are multiple ways to resolve this:
+
+* If appropriate, change one of the conflicting templates to instantiate the
+  others, as DMLC suggests.
+* For methods, it's possible to leverage [template-qualified method
+  implementation calls](#template-qualified-method-implementation-calls) to make
+  a final definition that combines and overrides all the ambiguous definitions.
+  This is much more complex, but can be preferable if it's undesirable to have
+  any of the conflicting templates involved be dependent on the others.
+* Depending on the situation, the conflicting templates may be modified and/or
+  new templates may be introduced such that the conflict can be avoided
+  entirely. For example, if two conflicting templates provide the same
+  definition of a parameter/method, then that definition can be broken out to a
+  common template which then both conflicting templates instantiate, making
+  them no longer conflict.
+
 ### Templates as types
 
 Each template defines a *type*, which is similar to a class
@@ -2860,6 +2884,29 @@ omitted when the referenced method is [independent](#independent-methods).
 This section describes in detail the rules for how DML handles when there are
 multiple definitions of the same parameter or method. A less technical but
 incomplete description can be found in the [section on templates](#templates).
+
+These rules are designed to follow an intuition of prioritization based on
+*specificity*; roughly speaking, a particular definition will be prioritized
+ahead of another if DMLC is able to deduce that it is more specific than the
+other, based on the contexts in which each definition is made. Problems related
+to override resolution can typically be understood and solved purely through
+that lens, without the need to understand the technical rules in detail.
+
+For example, if you are a modeller introducing an implementation of a method
+`m()`, only to have DMLC complain that it conflicts with an earlier definition
+made in a template `t`, then that is because DMLC is unable to spot any
+dependency establishing that the context you're working in is more specific than
+the body of `t`. The most common solution to that is to make that dependency
+clear by adding `is t` to the object/template in which you are defining `m()`.
+
+Establishing dependencies may not always be desirable. In particular, it's
+possible to have conflicting templates which provide different orthogonal
+functionality, such that it would be wrong to make one depend upon the other.
+An alternate way to resolve conflicting method implementations in such cases is
+to leverage [template-qualified method implementation
+calls](#template-qualified-method-implementation-calls).
+
+The technical rules for resolution of overrides are as follows:
 
 * Each declaration in every DML file is assigned a *rank*. The set of ranks
   form a partial order, and are defined as follows:

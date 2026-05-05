@@ -87,6 +87,9 @@ def traverse_ast(ast):
         for (_, _, _, typ) in inp:
             if typ is None:
                 ignored = True
+        if body is None:
+            # abstract method, no code generated
+            return
         assert body.kind == 'compound'
         if any(stmt.kind == 'error' for stmt in body.args[0]):
             # poisoned method, apparently meant to be dead

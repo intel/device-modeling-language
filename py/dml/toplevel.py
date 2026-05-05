@@ -120,7 +120,8 @@ def parse(s, file_info, filename, version):
     lexer.file_info = file_info
     lexer.lineno = 1
     try:
-        ast = parser.parse(s, lexer = lexer, tracking = True)
+        ast = parser.parse(s, lexer = lexer, tracking = True,
+                           tokenfunc = dml.dmlparse.mk_get_token(lexer))
     except dml.dmlparse.UnexpectedEOF:
         raise ESYNTAX(DumpableSite(file_info, file_info.size()),
                        None, "unexpected end-of-file")

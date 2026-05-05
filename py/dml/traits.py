@@ -98,7 +98,7 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
 
                 msg_types = []
                 for type_ast in type_asts:
-                    (struct_defs, dtype) = eval_type(type_ast, site, None,
+                    (struct_defs, dtype) = eval_type(type_ast, ast.site, None,
                                                      global_scope)
                     add_late_global_struct_defs(struct_defs)
                     # TODO maybe realtype?
@@ -783,6 +783,28 @@ class Trait(SubTrait):
 
     def type(self):
         return TTrait(self)
+
+    def typecheck_members(self):
+        self.typecheck_methods()
+        for table in (self.vtable_params, self.vtable_sessions,
+                      self.vtable_hooks):
+            bad_members = []
+            for (name, (_, typ)) in table.items():
+                try:
+                    check_named_types(typ)
+                except DMLError as e:
+                    report(e)
+                    bad_members.append(name)
+
+            for name in bad_members:
+                # Unlike shared methods, we can sanely purge bad params,
+                # session/saveds and hooks, because they don't have the same
+                # kind of complex interdependencies that methods have; they are
+                # just made part of the vtable. This will eventually *not* be
+                # the case for hooks, as hooks will eventually become compound
+                # objects, and shared compound objects (once implemented) will
+                # also have complex interdependencies
+                del table[name]
 
     def typecheck_methods(self):
         for (_, inp, outp, _, _, _, _) in self.vtable_methods.values():

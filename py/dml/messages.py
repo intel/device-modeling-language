@@ -139,9 +139,13 @@ class ECYCLICTEMPLATE(DMLError):
             self.print_site_message(site, "via here")
 
 class EAMBINH(DMLError):
-    """If a method or parameter has multiple definitions, then there must
+    """<a id="EAMBINH"/>
+    If a method or parameter has multiple definitions, then there must
     be a unique definition that overrides all other definitions.
+    See [Resolution of overrides](language.html#resolution-of-overrides).
     """
+    # 'Resolution of overrides' does not exist in the 1.2 reference manual
+    version = "1.4"
     fmt = "conflicting definitions of %s when instantiating %s and %s"
     def __init__(self, site, other_site, method, rank_desc1, rank_desc2,
                  overridable=True):
@@ -2153,10 +2157,6 @@ class WWRNSTMT(DMLWarning):
     """
     fmt = "%s"
 
-class WSYSTEMC(DMLWarning):
-    """ SystemC specific warnings """
-    fmt = "%s"
-
     # This message should be removed, SIMICS-9886
 class WREF(DMLWarning):
     """An unused parameter refers to an object that has not been declared.
@@ -2386,6 +2386,36 @@ class WHOOKSEND(DMLWarning):
            + "Declarations section in the DML 1.4 reference manual for "
            + "information about the differences between 'send' and 'send_now'")
 
+
+class WSTRAYIS(DMLWarning):
+    """
+    A standalone `is` statement was found that looks like it was instead
+    intended to affect a preceding object declaration rather than the enclosing
+    object/template in which the `is` statement and (sub)object declaration are
+    made.
+
+    This typically happens due to a stray semicolon before the `is`, e.g.:
+    ```
+    field f @ [31:0]; is read_only;
+    ```
+    or
+    ```
+    field f @ [31:0];
+        is read_only;
+    ```
+
+    If done unintentionally, address this warning by making the `is` part of
+    the declared object. If there is indeed a stray semicolon this can
+    typically be accomplished simply by removing it.
+
+    If the standalone `is` statement is intentional, silence this warning
+    by making sure the `is` statement is on a new line separate from the object
+    declaration, and is not indented any deeper than the object declaration is.
+    """
+    fmt = ("suspect standalone 'is': formatting suggests it was meant to "
+           + "affect the %s declared just before it rather than the "
+           + "enclosing object/template. "
+           + "Perhaps you have a stray ';' before the 'is'?")
 
 class PSHA1(PortingMessage):
     """The `port-dml` script requires that the DML file has not been

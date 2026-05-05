@@ -271,7 +271,7 @@ def mkglobals(stmts):
                 report(e)
 
     for t in dml.globals.traits.values():
-        t.typecheck_methods()
+        t.typecheck_members()
 
     # Resolve duplicate externs
     for (name, clashes) in extern_clashes.items():
@@ -2946,14 +2946,20 @@ class InterfacesDocParamExpr(objects.ParamExpr):
     def mkexpr(self, indices):
         if self.cached is not None:
             return self.cached
-        ifaces = [i for i in self.node.get_components('interface')
-                  if param_bool(i, 'required')]
-        if ifaces:
-            self.cached = mkStringConstant(
-                self.site,
-                '\n\nRequired interfaces: '
-                + ', '.join('<iface>' + i.name + '</iface>' for i in ifaces)
-                + '.')
+        iface_nodes = self.node.get_components('interface')
+        if iface_nodes:
+            (required, optional) = ([], [])
+            for i in iface_nodes:
+                (required if param_bool(i, 'required') else optional).append(i.name)
+            text = ''
+            for (req, ifaces) in [('Required', required),
+                                  ('Optional', optional)]:
+                if ifaces:
+                    s = 's' if len(ifaces) > 1 else ''
+                    text += (f'\n\n{req} interface{s}: '
+                             + ', '.join(f'<tt>{iface}</tt>'
+                                         for iface in sorted(ifaces)))
+            self.cached = mkStringConstant(self.site, text)
         else:
             self.cached = mkUndefined(self.site)
         return self.cached

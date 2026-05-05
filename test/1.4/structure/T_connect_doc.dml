@@ -1,0 +1,36 @@
+/*
+  © 2022 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+// Test that auto documentation of connects work
+device test;
+
+header %{
+    typedef struct { void (*f)(conf_object_t *); } a_interface_t;
+    typedef a_interface_t b_interface_t;
+    typedef a_interface_t c_interface_t;
+    typedef a_interface_t d_interface_t;
+%}
+
+extern typedef struct {} a_interface_t;
+extern typedef struct {} b_interface_t;
+extern typedef struct {} c_interface_t;
+extern typedef struct {} d_interface_t;
+
+connect abcd "desc" {
+    interface a { param required = true; }
+    interface b { param required = true; }
+    interface c { param required = false; }
+    interface d { param required = false; }
+}
+
+connect ac {
+    param documentation = "doc";
+    interface a { param required = true; }
+    interface c { param required = false; }
+}
+
+connect none "discarded" {
+    param documentation = "taken";
+}

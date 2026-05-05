@@ -20,6 +20,15 @@ extern typedef void undef_arg(undefined_type_t);
 extern typedef undefined_type undef_val;
 
 template t {
+    /// ERROR ETYPE
+    shared hook(undefined_type) h;
+    /// ERROR ETYPE
+    session undefined_type ses;
+    /// ERROR ETYPE
+    saved undefined_type sav;
+    /// ERROR ETYPE
+    param p : undefined_type;
+
     shared method m(
         // no error
         bool a,

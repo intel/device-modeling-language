@@ -433,3 +433,10 @@
   limited feature of top-level `#if`s containing unsupported declarations.
 - `release 6 6456`
 - `release 7 7144`
+- `note 6` The documentation of `connect` objects now lists the set of
+  optional interfaces, in addition to the set of required interfaces.
+- `release 7 7152`
+- `note 6` The default implementation of `get()` and `set()` of `bank`s will now log an
+  error and do nothing if passed an invalid access size. This may impact poorly
+  made inquiry reads and writes to banks.
+- `release 7 7154`

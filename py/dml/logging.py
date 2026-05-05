@@ -274,6 +274,8 @@ class Site(metaclass=abc.ABCMeta):
     def filename(self): pass
     @abc.abstractproperty
     def lineno(self): pass
+    @abc.abstractproperty
+    def colno(self): pass
     @abc.abstractmethod
     def dml_version(self): pass
     @abc.abstractmethod
@@ -301,6 +303,7 @@ class SimpleSite(Site):
     def provisional_enabled(self, feature):
         return False
     lineno = 1
+    colno = 1
 
 def accumulate(iterable):
     '''Like itertools.accumulate from Python 3.2'''
@@ -314,7 +317,7 @@ class FileInfo(object):
     with a unique FileInfo instance, which is accessible via all sites
     of the AST.'''
     __slots__ = ('name', 'version', 'bitorder', '_line_offsets',
-                 'utf8_columns', 'provisional')
+                 'provisional')
     def __init__(self, name, version, bitorder='le', content_lines=None,
                  provisional=None):
         name = str(name)
@@ -330,11 +333,6 @@ class FileInfo(object):
             content_lines = list(content_lines)
             self._line_offsets = [0] + list(
                 accumulate(len(line) for line in content_lines))
-            # Temporary py2 hack for expressing utf-8 based column numbers
-            # if line N contains unicode characters, then utf8_column[N][c]
-            # is the character index of the c:th byte
-            utf8_columns = {}
-            self.utf8_columns = utf8_columns
         self.set_name(name)
         self.provisional = provisional or {}
 
@@ -356,20 +354,17 @@ class FileInfo(object):
 
     def __getstate__(self):
         return (self.name, self.version, self.bitorder, self._line_offsets,
-                self.utf8_columns, {p.tag(): site
-                                    for (p, site) in self.provisional.items()})
+                {p.tag(): site for (p, site) in self.provisional.items()})
     def __setstate__(self, data):
         from . import provisional
         (self.name, self.version, self.bitorder, self._line_offsets,
-         self.utf8_columns, provisionals) = data
+         provisionals) = data
         self.provisional = {provisional.features[tag]: site
                             for (tag, site) in provisionals.items()}
     def loc_from_offset(self, offset):
         '''Calculate a file location as a (line, col) pair'''
         line = bisect.bisect_right(self._line_offsets, offset) - 1
         col = offset - self._line_offsets[line]
-        if line in self.utf8_columns:
-            col = self.utf8_columns[line].get(col, col)
         return (line + 1, col + 1)
     def size(self):
         return self._line_offsets[-1]
@@ -388,6 +383,10 @@ class DumpableSite(Site):
     def lineno(self):
         (line, col) = self.file_info.loc_from_offset(self._offs)
         return line
+    @property
+    def colno(self):
+        (line, col) = self.file_info.loc_from_offset(self._offs)
+        return col
     def loc(self):
         (line, col) = self.file_info.loc_from_offset(self._offs)
         return "%s:%d:%d" % (self.filename(), line, col)
@@ -429,6 +428,8 @@ class ExpandedSite(Site):
     def bitorder(self): return self.site.bitorder()
     @property
     def lineno(self): return self.site.lineno
+    @property
+    def colno(self): return self.site.colno
     def provisional_enabled(self, feature):
         return self.site.provisional_enabled(feature)
 

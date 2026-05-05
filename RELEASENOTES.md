@@ -259,3 +259,27 @@
   allows forbidden statements to appear specifically inside an `#if (dml_1_2)`
   block. The warning message was meant to highlight this irregularity, but
   caused more harm than good; error messages surrounding the special case have been improved instead.
+- `release 7 7146`
+- `release 6 6457`
+- `note 6` Addressed an issue stemming from an upstream bug that would commonly
+  cause the reported column number in warning and error messages to be
+  incorrect (fixes SIMICS-23466). This issue also affected the reported line
+  number in rare situations.
+
+  This issue had always been present in DML, and most notably affected error
+  messages surrounding methods, as well as object declarations since
+  Simics Base version 7.78.
+- `release 7 7150`
+- `release 6 6460`
+- `note 6` DMLC now detects and warns about any standalone `is` that looks
+  like it was instead intended for an object declared immediately before it,
+  such as the following:
+  ```
+  // Stray semicolons cause each 'is' to be standalone, affecting the
+  // containing register rather than the fields
+  field f1 @ [15:0]; is read_only;
+
+  field f2 @ [31:16];
+      is write_only;
+  ```
+- `release 7 7152`
