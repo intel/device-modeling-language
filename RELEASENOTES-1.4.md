@@ -440,3 +440,4 @@
   error and do nothing if passed an invalid access size. This may impact poorly
   made inquiry reads and writes to banks.
 - `release 7 7154`
+- `release 6 6461`
