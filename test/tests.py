@@ -681,11 +681,7 @@ class CTestCase(DMLFileTestCase):
         sc.write("SIM_add_module_dir(scratchdir)\n")
         sc.write("SIM_module_list_refresh()\n")
         if auto_instantiate:
-            sc.write("try:\n")
-            sc.write(f"    SIM_load_module('dml-test-{self.shortname}')\n")
-            sc.write("except:\n")
-            sc.write("    run_command('list-failed-modules -v')\n")
-            sc.write("    raise\n")
+            sc.write(f"SIM_load_module('dml-test-{self.shortname}')\n")
             sc.write("obj = SIM_create_object('test', 'obj', [])\n")
         else:
             assert pyfile
