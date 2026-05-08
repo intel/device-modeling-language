@@ -617,7 +617,7 @@ class CTestCase(DMLFileTestCase):
             f'--output={module_id_base}.c',
             f'--module-name=dml-test-{self.shortname}',
             '--classes=test',
-            '--host-type=linux64',
+            f'--host-type={host_type()}',
             '--build-id=__dmlc_tests__:0',
             '--user-init-local' if self.api_version == "4.8"
             else f'--dml-dev=T_{self.shortname}'
