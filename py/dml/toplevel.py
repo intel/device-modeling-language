@@ -319,6 +319,13 @@ def parse_dmlast_or_dml(dml_filename):
             # error in dml-builtins.dml, one accidentally edits the
             # copy in [host]/bin/dml/, instead of the one in the repo.
             report(WOLDAST(dml_filename))
+        elif (Path(__file__).parent.parent.parent.parent
+              not in Path(ast_filename).parents):
+            # The .dmlast file mechanism is meant only to speed up the
+            # parsing of the standard library. Using it elsewhere would
+            # mean that parser updates can cause confusing errors, and the
+            # speed gains are small, so refuse to do that.
+            report(WDMLAST(dml_filename))
         else:
             file_info, pragmas, parsedata = load_dmlast(ast_filename)
             if file_info.name is None:
