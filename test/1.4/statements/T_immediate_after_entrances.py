@@ -20,45 +20,53 @@ def destroyed(name):
     destroyed_map[name] = destroyed_map.get(name, 0) + 1
 
 obj = SIM_create_object('test', 'obj', queue=cpu, post_inc_attr=None)
-# objects_finalized will execute immediate afters posted in init, post_init,
+# objects_finalized will execute immediate afters posted in init(), post_init(),
 # and attribute configuration
 stest.expect_equal(obj.count, 3)
-SIM_process_pending_work()
-stest.expect_equal(obj.count, 3)
 
+obj.count = 0
+SIM_process_pending_work()
+stest.expect_equal(obj.count, 0)
+
+obj.count = 0
 obj.simple_attr = None
-stest.expect_equal(obj.count, 3)
+stest.expect_equal(obj.count, 0)
 SIM_process_pending_work()
-stest.expect_equal(obj.count, 4)
+stest.expect_equal(obj.count, 1)
 
+obj.count = 0
 obj.iface.signal.signal_raise()
-stest.expect_equal(obj.count, 4)
+stest.expect_equal(obj.count, 0)
 SIM_process_pending_work()
-stest.expect_equal(obj.count, 5)
+stest.expect_equal(obj.count, 1)
 
+obj.count = 0
 obj.recursive_entry_attr = None
-stest.expect_equal(obj.count, 5)
+stest.expect_equal(obj.count, 0)
 SIM_process_pending_work()
-stest.expect_equal(obj.count, 6)
+stest.expect_equal(obj.count, 1)
 
+obj.count = 0
 SIM_notify(obj, SIM_notifier_type("static-export"))
-stest.expect_equal(obj.count, 6)
+stest.expect_equal(obj.count, 0)
 SIM_process_pending_work()
-stest.expect_equal(obj.count, 7)
+stest.expect_equal(obj.count, 1)
 
+obj.count = 0
 SIM_notify(obj, SIM_notifier_type("extern-export"))
-stest.expect_equal(obj.count, 7)
+stest.expect_equal(obj.count, 0)
 SIM_process_pending_work()
-stest.expect_equal(obj.count, 8)
+stest.expect_equal(obj.count, 1)
 
+obj.count = 0
 SIM_continue(99999)
-stest.expect_equal(obj.count, 8)
+stest.expect_equal(obj.count, 0)
 SIM_continue(1)
-stest.expect_equal(obj.count, 9)
+stest.expect_equal(obj.count, 1)
 SIM_continue(99999)
-stest.expect_equal(obj.count, 9)
+stest.expect_equal(obj.count, 1)
 SIM_continue(1)
-stest.expect_equal(obj.count, 10)
+stest.expect_equal(obj.count, 2)
 
 obj.post_never_called = None
 # The immediate after posted by the post_never_called write will be warned
