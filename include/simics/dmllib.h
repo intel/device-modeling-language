@@ -1326,16 +1326,17 @@ typedef struct {
 typedef QUEUE(_dml_immediate_after_queue_elem_t) _dml_immediate_after_queue_t;
 
 typedef struct {
-    // Invariant: nonempty queue implies posted (but not vice versa)
+    // Invariant: if objects_finalized_done then nonempty queue implies
+    // posted (but not vice versa)
     _dml_immediate_after_queue_t queue;
+    // Signifies that a VT_stacked_post:ed _DML_execute_immediate_afters
+    // is in flight.
+    // Invariant: posted implies objects_finalized_done
     bool posted;
     // Invariant: deleted implies posted and freed, empty queue
     bool deleted;
-    // If _DML_pre_delete_cancel_immediate_afters should warn if it cancels any
-    // callbacks. This flag is set when the device object reaches
-    // objects_finalized. If it's deleted before then, then that must be
-    // because of configuration creation failure and rollback.
-    bool warn_upon_deletion;
+    // Gets set once objects_finalized has been completed for the device.
+    bool objects_finalized_done;
 } _dml_immediate_after_state_t;
 
 // Execute all pending immediate afters without relying on VT_stacked_post
@@ -1356,8 +1357,9 @@ UNUSED static void
 _DML_pre_delete_cancel_immediate_afters(conf_object_t *dev,
                                         _dml_immediate_after_state_t *state) {
     if (QEMPTY(state->queue)) return;
-
-    if (state->warn_upon_deletion) {
+    // If the device is deleted before objects_finalized gets to complete, then
+    // that must be because of configuration creation failure and rollback.
+    if (state->objects_finalized_done) {
         _DMLLIB_LOG_WARNING(
             dev, 0,
             "DML device deleted while immediate after callbacks of it are "
@@ -1382,6 +1384,7 @@ _DML_execute_immediate_afters(conf_object_t *dev, lang_void *aux) {
         MM_FREE(state);
         return;
     }
+    // Could happen due to .cancel_after()
     if (unlikely(QEMPTY(state->queue))) {
         state->posted = false;
         return;
@@ -1412,7 +1415,10 @@ _DML_post_immediate_after(
             indices, dimensions, args, args_size, domains, no_domains)
     };
     QADD(state->queue, elem);
-    if (!state->posted) {
+    // By guarding on objects_finalized_done we guarantee any callback posted
+    // before then could only be executed as part of the
+    // _DML_execute_immediate_afters_now call at the end of objects_finalized
+    if (state->objects_finalized_done && !state->posted) {
         state->posted = true;
         VT_stacked_post(dev,
                         _DML_execute_immediate_afters,
