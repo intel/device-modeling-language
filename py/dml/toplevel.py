@@ -446,8 +446,7 @@ def parse_main_file(inputfilename, explicit_import_path):
 
             deps.setdefault(path, set()).add(importfile)
 
-            path = str(Path(path).resolve())
-            normalized = os.path.normcase(path)
+            normalized = os.path.normcase(str(Path(path).resolve()))
             if normalized in imported:
                 # Already imported
                 if importfile not in imported[normalized]:
