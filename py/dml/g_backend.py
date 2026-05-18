@@ -181,7 +181,7 @@ def en_subobjs(node):
 
 def generate(classname, device, dml_version, out_file):
     with open(out_file, "wb") as outfile:
-        pickle.dump('DML', outfile, protocol=2)
-        pickle.dump(dml_version, outfile, protocol=2)
-        pickle.dump(classname, outfile, protocol=2)
-        pickle.dump(en_obj(device), outfile, protocol=2)
+        pickle.dump('DML', outfile, protocol=5)
+        pickle.dump(dml_version, outfile, protocol=5)
+        pickle.dump(classname, outfile, protocol=5)
+        pickle.dump(en_obj(device), outfile, protocol=5)
