@@ -279,10 +279,22 @@ def parse_file(dml_filename):
     ast = parse(contents, file_info, dml_filename, version)
     return ast
 
+class ASTUnpickler(pickle.Unpickler):
+    _safe_classes = {
+        ('dml.ast', 'AST'),
+        ('dml.logging', 'DumpableSite'),
+        ('dml.logging', 'FileInfo')}
+
+    def find_class(self, module, name):
+        if (module, name) not in self._safe_classes:
+            raise pickle.UnpicklingError('broken dmlast data')
+        return super().find_class(module, name)
+
 def load_dmlast(ast_filename):
     '''Return a previously compiled AST, or None'''
     try:
-        return pickle.loads(bz2.BZ2File(ast_filename).read())  # nosec
+        with bz2.BZ2File(ast_filename) as f:
+            return ASTUnpickler(f).load()
     except Exception as e:
         raise ICE(SimpleSite(ast_filename),
                    "Failed to load AST from %r: %s"
