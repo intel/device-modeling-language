@@ -279,10 +279,22 @@ def parse_file(dml_filename):
     ast = parse(contents, file_info, dml_filename, version)
     return ast
 
+class ASTUnpickler(pickle.Unpickler):
+    _safe_classes = {
+        ('dml.ast', 'AST'),
+        ('dml.logging', 'DumpableSite'),
+        ('dml.logging', 'FileInfo')}
+
+    def find_class(self, module, name):
+        if (module, name) not in self._safe_classes:
+            raise pickle.UnpicklingError('broken dmlast data')
+        return super().find_class(module, name)
+
 def load_dmlast(ast_filename):
     '''Return a previously compiled AST, or None'''
     try:
-        return pickle.loads(bz2.BZ2File(ast_filename).read())  # nosec
+        with bz2.BZ2File(ast_filename) as f:
+            return ASTUnpickler(f).load()
     except Exception as e:
         raise ICE(SimpleSite(ast_filename),
                    "Failed to load AST from %r: %s"
@@ -319,6 +331,13 @@ def parse_dmlast_or_dml(dml_filename):
             # error in dml-builtins.dml, one accidentally edits the
             # copy in [host]/bin/dml/, instead of the one in the repo.
             report(WOLDAST(dml_filename))
+        elif (Path(__file__).parent.parent.parent.parent
+              not in Path(ast_filename).parents):
+            # The .dmlast file mechanism is meant only to speed up the
+            # parsing of the standard library. Using it elsewhere would
+            # mean that parser updates can cause confusing errors, and the
+            # speed gains are small, so refuse to do that.
+            report(WDMLAST(dml_filename))
         else:
             file_info, pragmas, parsedata = load_dmlast(ast_filename)
             if file_info.name is None:
@@ -427,8 +446,7 @@ def parse_main_file(inputfilename, explicit_import_path):
 
             deps.setdefault(path, set()).add(importfile)
 
-            path = str(Path(path).resolve())
-            normalized = os.path.normcase(path)
+            normalized = os.path.normcase(str(Path(path).resolve()))
             if normalized in imported:
                 # Already imported
                 if importfile not in imported[normalized]:
