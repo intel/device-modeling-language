@@ -952,7 +952,7 @@ class ExprTests(GccTests):
                  else '0xdead0000')
                 for lhsigned in [False, True]
                 for rhsigned in [False, True]])
-    def shl(self, lh, lhsigned, rh, rhsigned, expect):
+    def shr(self, lh, lhsigned, rh, rhsigned, expect):
         return self.expect_int_binop(int_const(lh, lhsigned),
                                      int_const(rh, rhsigned),
                                      ctree.mkShR,
