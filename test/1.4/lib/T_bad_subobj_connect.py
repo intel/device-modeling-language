@@ -5,7 +5,7 @@ import simics
 import stest
 conf.sim.stop_on_error = False
 try:
-    simics.SIM_load_module(f'dml-test-bad_subobj_connect')
+    simics.SIM_load_module('dml-test-bad_subobj_connect')
 except simics.CriticalErrors as e:
     stest.expect_true('garbage' in str(e))
 else:
