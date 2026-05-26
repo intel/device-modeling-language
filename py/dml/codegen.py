@@ -3,12 +3,9 @@
 
 import re
 from abc import ABC, abstractmethod, abstractproperty
-import operator
 import contextlib
 
-from functools import reduce
 import itertools
-import os
 import math
 
 from . import objects, crep, ctree, ast, int_register, logging, serialize

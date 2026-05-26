@@ -10,7 +10,6 @@ from .output import *
 from .types import *
 from .slotsmeta import *
 
-from . import output
 
 __all__ = (
     'Code',

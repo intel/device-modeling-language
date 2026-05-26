@@ -1,7 +1,6 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
-import dev_util
 import stest
 
 import instrumentation_common as common

@@ -4,7 +4,6 @@
 from .expr import *
 from .ctree import *
 from .types import *
-from .logging import dbg
 from .symtab import *
 from .crep import node_storage_type
 from . import globals

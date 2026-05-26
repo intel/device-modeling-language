@@ -1,7 +1,6 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
-import operator
 from .ctree import *
 from .expr import *
 from .expr_util import *

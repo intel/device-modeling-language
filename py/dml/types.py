@@ -50,7 +50,6 @@ __all__ = (
     'void',
 )
 
-import sys
 import re
 from itertools import *
 

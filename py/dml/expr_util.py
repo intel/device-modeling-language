@@ -3,7 +3,7 @@
 
 # Various convenience functions for common operations on expressions
 import dml.globals
-from .logging import report, ICE
+from .logging import report
 from .messages import *
 from .types import *
 from .expr import *

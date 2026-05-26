@@ -3,7 +3,6 @@
 
 import pyobj
 import stest
-import dev_util
 import simics
 
 calls = []

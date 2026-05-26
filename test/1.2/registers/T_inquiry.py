@@ -1,8 +1,6 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
-import random
-
 from stest import *
 import dev_util as du
 from functools import reduce

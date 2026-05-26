@@ -6,11 +6,10 @@
 __all__ = ('generate',)
 
 import pickle as pickle
-from . import ctree, crep, expr_util, types
+from . import crep, types
 from . import logging
 from .expr import mkLit
 from .logging import dollar
-import dml.globals
 
 VERSION = (0, 1)
 

@@ -3,7 +3,6 @@
 
 # Lexer
 
-from ply import lex
 from .logging import report, DumpableSite
 from .messages import *
 import re

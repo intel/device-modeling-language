@@ -2,8 +2,6 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import stest
-import dev_util
-import simics
 from simics import *
 
 class signal_stub:

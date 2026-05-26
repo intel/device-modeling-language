@@ -18,7 +18,6 @@ import dml.c_backend
 import dml.info_backend
 import dml.g_backend
 import dml.globals
-import dml.dmlparse
 from .logging import *
 from .messages import *
 from .env import api_versions, default_api_version

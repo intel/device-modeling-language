@@ -1,7 +1,6 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
-from collections import namedtuple
 import operator
 import itertools
 from functools import reduce

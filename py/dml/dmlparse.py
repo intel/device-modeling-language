@@ -3,7 +3,7 @@
 
 # Parser for DML 1.2
 
-import os, sys, re, itertools
+import os, itertools
 from ply import lex, yacc
 
 from .logging import *

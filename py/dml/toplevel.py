@@ -14,13 +14,12 @@ import pickle
 
 from ply import lex, yacc
 
-from . import objects, logging, codegen, ctree, ast
+from . import logging, codegen, ctree, ast
 from . import breaking_changes
 from . import symtab
 from .messages import *
 from .logging import *
 import dml.globals
-import dml.dmllex
 import dml.dmlparse
 
 __all__ = ('produce_dmlast', 'get_parser', 'parse_main_file')

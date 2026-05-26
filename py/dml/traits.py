@@ -8,7 +8,7 @@ import functools
 import contextlib
 import abc
 import os
-from . import objects, logging, crep, codegen, toplevel, topsort
+from . import crep, codegen, topsort
 from . import breaking_changes, provisional
 from .logging import *
 from .codegen import *

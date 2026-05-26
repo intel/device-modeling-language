@@ -4,19 +4,15 @@
 # Structure stuff
 
 import itertools
-import collections
-import abc
 import re
 from contextlib import ExitStack
 import functools
 import operator
 from . import objects, logging, crep, ast
 from . import traits
-from . import toplevel
 from . import topsort
 from . import slotsmeta
 from . import ctree
-from . import env
 from . import serialize
 from .logging import *
 from .codegen import *

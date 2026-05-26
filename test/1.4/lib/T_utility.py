@@ -4,7 +4,6 @@
 import stest
 import dev_util
 import sim_commands
-import contextlib
 
 [read_write,
  ignore_write,

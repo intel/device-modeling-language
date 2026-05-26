@@ -12,8 +12,7 @@ __all__ = (
     'global_scope',
     )
 
-from .logging import report, ICE, SimpleSite, dbg
-import dml.globals
+from .logging import ICE
 
 class Symbol(object):
     "a symbol in a symbol table"

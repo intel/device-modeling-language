@@ -9,8 +9,7 @@ from collections import OrderedDict
 from .ctree import (StringConstant, IntegerConstant, mkIntegerLiteral,
                     all_index_exprs, param_str_fixup)
 from .expr_util import (
-    defined, undefined, param_int, param_defined,
-    static_indices)
+    defined, param_int, static_indices)
 from .messages import *
 from .logging import *
 

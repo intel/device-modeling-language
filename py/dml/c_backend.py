@@ -1,7 +1,7 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
-import sys, os
+import os
 import itertools
 import operator
 import re
