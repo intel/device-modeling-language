@@ -216,6 +216,26 @@ bank field_regs {
         value = 0;
         assert this.io_memory_access(&read_memop, 25, NULL);
         assert value == 0x1234;
+
+        // Test that inquiry accesses bypass dml12_compat_read_register and
+        // dml12_compat_write_register (r6 inverts bits in read_register/
+        // write_register; inquiry should access storage directly)
+        local uint32 inq_val;
+        local buffer_t inq_buf = {.len=4, .data=cast(&inq_val, uint8 *)};
+        local generic_transaction_t inq_read = SIM_make_mem_op_read(
+            0, inq_buf, true, NULL);
+        local generic_transaction_t inq_write = SIM_make_mem_op_write(
+            0, buffer_bytes(inq_buf), true, NULL);
+        r6.set(0x12345678);
+        // Inquiry read: should return stored value directly, not inverted
+        assert this.io_memory_access(&inq_read, 24, NULL);
+        assert inq_val == 0x12345678;
+        // Inquiry write: should store value directly, not inverted
+        inq_val = 0xAABBCCDD;
+        assert this.io_memory_access(&inq_write, 24, NULL);
+        r6val = r6.get();
+        assert r6val == 0xAABBCCDD;
+
         r4.f.val = 42;
         r4.f.val += 1;
         value = r4.get();

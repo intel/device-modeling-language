@@ -293,6 +293,9 @@ method _make_write_memop(uint64 enabled_bytes, uint64 *value)
 template dml12_compat_read_register {
     inline method read_access(generic_transaction_t *memop,
                               inline msb1, inline lsb) -> (uint64) {
+        if (SIM_get_mem_op_inquiry(memop)) {
+            return default(memop, msb1, lsb);
+        }
         #if (defined(msb1)) {
             local uint64 mask = 0;
             mask[msb1 - 1 : lsb] = ~0;
@@ -309,6 +312,10 @@ template dml12_compat_read_register {
 template dml12_compat_write_register {
     inline method write_access(generic_transaction_t *memop,
                                inline msb1, inline lsb, uint64 value) {
+        if (SIM_get_mem_op_inquiry(memop)) {
+            default(memop, msb1, lsb, value);
+            return;
+        }
         #if (defined(msb1)) {
             local uint64 mask = 0;
             mask[msb1 - 1 : lsb] = ~0;
