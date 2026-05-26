@@ -27,7 +27,8 @@ def find_lexer(self_path):
         path = self_path.parent
     if (path / 'dml').is_dir():
         sys.path.append(str(path))
-        import dml.dmllex14 as _
+        # https://github.com/astral-sh/ruff/issues/25399
+        import dml.dmllex14 as _  # noqa: F401
         return
     raise Exception(
         f'cannot find dmlc in {path}.'
