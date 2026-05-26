@@ -1,10 +1,10 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
-from .expr import *
+from .expr import Lit, mkApply, mkLit
 from .ctree import *
 from .types import *
-from .symtab import *
+from .symtab import global_scope, Symtab
 from .crep import node_storage_type
 from . import globals
 

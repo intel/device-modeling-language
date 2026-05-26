@@ -7,8 +7,8 @@
 from . import ctree, expr, logging, symtab, messages, output
 from . import objects
 from .types import *
-from .logging import *
-from .expr_util import *
+from .logging import ICE
+from .expr_util import expr_intval
 from .set import Set
 import dml.globals
 

@@ -1,7 +1,8 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
-from .dmllex import *
+# PLY discovers t_* rules from module namespace
+from .dmllex import *  # noqa: F403
 
 hashids = {'#' + kw: 'HASH' + kw.upper()
            for kw in [

@@ -8,14 +8,15 @@ import functools
 import contextlib
 import abc
 import os
-from . import crep, codegen, topsort
+from . import crep, codegen, symtab, topsort
+from .symtab import global_scope
 from . import breaking_changes, provisional
-from .logging import *
-from .codegen import *
-from .symtab import *
+from . import logging
+from .logging import ICE, report
+from .codegen import c_extra_inargs, c_rettype, declarations, eval_type
 from .ctree import *
-from .expr import *
-from .expr_util import *
+from .expr import mkLit, NonValue
+from .expr_util import defined
 from .messages import *
 from .slotsmeta import auto_init
 from .types import *
@@ -67,8 +68,8 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                               + ' '.join(['independent']*independent
                                          + ['startup']*startup
                                          + ['memoized']*memoized))
-                inp = eval_method_inp(inp_asts, None, global_scope)
-                outp = eval_method_outp(outp_asts, None, global_scope)
+                inp = codegen.eval_method_inp(inp_asts, None, global_scope)
+                outp = codegen.eval_method_outp(outp_asts, None, global_scope)
                 check_namecoll(mname, ast.site)
                 methods[mname] = (ast.site, inp, outp, throws, independent,
                                   startup, memoized, overridable,
@@ -103,7 +104,7 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                     add_late_global_struct_defs(struct_defs)
                     # TODO maybe realtype?
                     msg_types.append(dtype)
-                array_lens = tuple(eval_arraylen(len_ast, global_scope)
+                array_lens = tuple(codegen.eval_arraylen(len_ast, global_scope)
                                    for len_ast in arraylen_asts)
                 check_namecoll(hname, ast.site)
                 hooks[hname] = (ast.site, array_lens, msg_types)
@@ -114,7 +115,7 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
     return mktrait(site, name, ancestors, methods, params, sessions, hooks,
                    template_symbols)
 
-class NoDefaultSymbol(Symbol):
+class NoDefaultSymbol(symtab.Symbol):
     """A broken reference to 'default' inside a method that has no default
     method. This is represented as an explicit symbol in order to
     report ENDEFAULT instead of the slightly less informative
@@ -124,7 +125,7 @@ class NoDefaultSymbol(Symbol):
     def expr(self, site):
         raise ENDEFAULT(site)
 
-class AmbiguousDefaultSymbol(Symbol):
+class AmbiguousDefaultSymbol(symtab.Symbol):
     """A broken reference to 'default' inside a method that has two
     possible parent methods. This is represented as an explicit
     symbol in order to report EAMBDEFAULT instead of the slightly
@@ -224,9 +225,9 @@ class TraitMethod(TraitVTableItem):
     def codegen_body(self):
         with (crep.DeviceInstanceContext()
               if not self.independent else contextlib.nullcontext()):
-            scope = MethodParamScope(self.trait.scope(global_scope))
+            scope = symtab.MethodParamScope(self.trait.scope(global_scope))
             implicit_inargs = self.vtable_trait.implicit_args()
-            site = SimpleSite(self.site.loc())
+            site = logging.SimpleSite(self.site.loc())
             if len(self.default_traits) > 1:
                 default = AmbiguousDefaultSymbol(
                     [trait.method_impls[self.name].site
@@ -257,7 +258,7 @@ class TraitMethod(TraitVTableItem):
                 memoization = codegen.SharedIndependentMemoized(self)
             else:
                 memoization = None
-            body = codegen_method(
+            body = codegen.codegen_method(
                 self.astbody.site, self.inp, self.outp, self.throws,
                 self.independent, memoization, self.astbody, default,
                 Location(dml.globals.device, ()), scope, self.rbrace_site)
@@ -842,7 +843,7 @@ class Trait(SubTrait):
 
     def scope(self, global_scope):
         '''Return a scope for looking up sibling objects in this trait'''
-        s = Symtab(global_scope)
+        s = symtab.Symtab(global_scope)
         selfref = mkLit(self.site, '_' + cident(self.name), self.type())
         for name in self.members():
             # This is very hacky, but works well

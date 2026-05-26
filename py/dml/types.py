@@ -56,7 +56,7 @@ from itertools import *
 from .env import is_windows
 from .output import out
 from .messages import *
-from .logging import *
+from .logging import ICE, report
 from . import breaking_changes
 from . import output
 import dml .globals

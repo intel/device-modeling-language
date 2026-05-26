@@ -3,7 +3,8 @@
 
 # Lexer
 
-from .logging import report, DumpableSite
+from . import logging
+from .logging import report
 from .messages import *
 import re
 
@@ -215,7 +216,7 @@ escapes = {
     }
 
 def syntax_error(t, tokenstr, reason):
-    raise ESYNTAX(DumpableSite(t.lexer.file_info, t.lexpos), tokenstr, reason)
+    raise ESYNTAX(logging.DumpableSite(t.lexer.file_info, t.lexpos), tokenstr, reason)
 
 def t_SCONST(t):
     r'"(?:[^\x00-\x1f\x7f"\\]|\\.)*"'

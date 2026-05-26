@@ -5,11 +5,12 @@ import operator
 import itertools
 from functools import reduce
 import dml.globals
-from . import logging
+from . import expr_util, logging
 from .ctree import *
-from .logging import *
+from .logging import report
 from .messages import *
-from .expr_util import *
+from .expr_util import (
+    defined, param_expr, param_expr_site, param_int, static_indices, undefined)
 
 __all__ = ('explode_registers',)
 
@@ -157,9 +158,9 @@ def one_register(node, indices, bank):
     try:
         if dml.globals.dml_version == (1, 2):
             roffset = param_expr(node, 'offset', bank_indices + indices)
-            roffset = expr_intval(roffset) if defined(roffset) else None
+            roffset = expr_util.expr_intval(roffset) if defined(roffset) else None
             regnum = param_expr(node, 'regnum', bank_indices + indices)
-            regnum = expr_intval(regnum) if defined(regnum) else None
+            regnum = expr_util.expr_intval(regnum) if defined(regnum) else None
         else:
             roffset = param_int(node, 'offset', indices=bank_indices + indices)
             # in 1.4, we use the magic constant unmapped_offset to denote

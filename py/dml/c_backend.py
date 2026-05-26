@@ -12,19 +12,24 @@ import dataclasses
 import json
 from pathlib import Path
 
-from . import objects, logging, crep, output, ctree, serialize, structure
+from . import objects, expr_util, logging, crep, output, ctree, serialize, structure
 from . import traits
 from . import breaking_changes
 import dml.globals
 from .structure import get_attr_name, port_class_ident, need_port_proxy_attrs
-from .logging import *
+from . import logging
+from .logging import ICE, report
 from .messages import *
-from .output import *
+from . import output
+from .output import out
 from .ctree import *
-from .expr import *
-from .expr_util import *
-from .symtab import *
-from .codegen import *
+from .expr import Expression, mkLit, NonValue
+from .expr_util import (
+    apply, param_defined, param_expr_site, param_str,
+    static_indices, undefined)
+from .symtab import global_scope, LocalSymbol, Symtab
+from . import codegen
+from .codegen import codegen_inline_byname
 from .types import *
 from .set import Set
 
@@ -39,7 +44,7 @@ structfilename = None
 
 def get_attr_flags(obj):
     conf = param_str(obj, 'configuration')
-    persist = param_bool(obj, 'persistent')
+    persist = expr_util.param_bool(obj, 'persistent')
     internal = (param_bool_fixup(obj, 'internal', True)
                 or obj.is_confidential())
 
@@ -68,7 +73,7 @@ def get_short_doc(node):
         else:
             return None
     else:
-        return param_str_or_null(node, 'shown_desc')
+        return expr_util.param_str_or_null(node, 'shown_desc')
 
 def get_long_doc(node):
     doc = None
@@ -243,7 +248,7 @@ def generate_structfile(device, filename, outprefix):
     out('typedef struct %s %s_t;\n\n' % (crep.cname(device),
                                          crep.cname(device)))
     out('conf_class_t *%s(void);\n\n' % (init_function_name(device, outprefix)))
-    for (name, (func, export_site)) in list(exported_methods.items()):
+    for (name, (func, export_site)) in list(codegen.exported_methods.items()):
         if export_site.dml_version() != (1, 2):
             out("extern %s;\n"
                 % func.rettype.declaration(
@@ -264,7 +269,7 @@ def generate_hfile(device, headers, filename):
     legacy_attrs = int(not breaking_changes.modern_attributes.enabled)
     out(f'#define DML_LEGACY_ATTRS {legacy_attrs}\n')
 
-    with allow_linemarks():
+    with output.allow_linemarks():
         for c in headers:
             c.toc()
             out('\n')
@@ -279,8 +284,8 @@ def generate_hfile(device, headers, filename):
         out(f'typedef _traitref_t {cident(name)};\n')
 
     # Constraints from C:
-    # - Types must be defined before they are referred to
-    # - Structs can be referred to by struct label before they are defined,
+    # - Types must be expr_util.defined before they are referred to
+    # - Structs can be referred to by struct label before they are expr_util.defined,
     #   but the struct's definition (member list) must appear before
     #   it can be used as a direct member of another struct. An indirect member
     #   (struct x *member) may however appear before the struct's definition.
@@ -425,7 +430,7 @@ def generate_attr_setter(fname, node, port, dimsizes, cprefix, loopvars,
         out('attr_value_t attr%d = %s;\n' % (dim, list_item))
         valuevar = 'attr%d' % (dim,)
 
-    with NoFailure(node.site), crep.DeviceInstanceContext():
+    with codegen.NoFailure(node.site), crep.DeviceInstanceContext():
         setcode = [
             codegen_inline_byname(
                 node, port_indices + loopvars,
@@ -436,7 +441,7 @@ def generate_attr_setter(fname, node, port, dimsizes, cprefix, loopvars,
                 node.site,
                 inhibit_copyin = not loopvars)]
 
-    code = mkCompound(None, declarations(fscope) + setcode)
+    code = mkCompound(None, codegen.declarations(fscope) + setcode)
     code.toc_inline()
     if dimsizes:
         # abort on first bad value
@@ -485,13 +490,13 @@ def generate_attr_getter(fname, node, port, dimsizes, cprefix, loopvars):
         out('attr_value_t %s;\n' % (next_valuevar.read()))
         valuevar = next_valuevar
 
-    with NoFailure(node.site), crep.DeviceInstanceContext():
+    with codegen.NoFailure(node.site), crep.DeviceInstanceContext():
         getcode = codegen_inline_byname(
             node, port_indices + loopvars,
             '_get_attribute' if dml.globals.dml_version == (1, 2)
             else 'get_attribute',
             [], [valuevar], node.site)
-        code = mkCompound(node.site, declarations(fscope) + [getcode])
+        code = mkCompound(node.site, codegen.declarations(fscope) + [getcode])
         code.toc_inline()
 
     for depth, loopvar in reversed(list(enumerate(loopvars))):
@@ -550,7 +555,7 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
     # append the required interfaces to the docstring
     if node.objtype == 'connect':
         ifaces = [i for i in node.get_components('interface')
-                  if param_bool(i, 'required')]
+                  if expr_util.param_bool(i, 'required')]
         if ifaces:
             doc += (
                 '\n\nRequired interfaces: '
@@ -746,13 +751,13 @@ def wrap_method(meth, wrapper_name, indices=()):
     with crep.DeviceInstanceContext():
         if retvar:
             mkDeclaration(meth.site, retvar, rettype,
-                          init = get_initializer(meth.site, rettype,
+                          init = codegen.get_initializer(meth.site, rettype,
                                                  None, None, None)).toc()
 
-        with LogFailure(meth.site, meth, indices):
+        with codegen.LogFailure(meth.site, meth, indices):
             inargs = [mkLit(meth.site, p.c_ident, p.typ) for p in meth.inp]
             outargs = [mkLit(meth.site, v, t) for v, t in meth.outp]
-            codegen_call(meth.site, meth,
+            codegen.codegen_call(meth.site, meth,
                          indices,
                          inargs, outargs).toc()
     output_dml_state_change('_dev')
@@ -768,13 +773,13 @@ def generate_implement_method(device, ifacestruct, meth, indices):
     # codegen_method so it generates a function that returns
     # the value if there is a single output parameter.
     #
-    # meth.func.fail = IgnoreFailure()
+    # meth.func.fail = codegen.IgnoreFailure()
     # meth.func.confobj = 1
-    # codegen_method(meth)
+    # codegen.codegen_method(meth)
     # out(meth.get_c())
 
     try:
-        require_fully_typed(None, meth)
+        codegen.require_fully_typed(None, meth)
 
         # Calculate the expected method signature
         member_type = ifacestruct.get_member_qualified(meth.name)
@@ -836,7 +841,7 @@ def interface_block(device, ifacestruct, methods, indices = ()):
         # placeholder, so try placating it with a zero.
         return "{ 0 }"
 
-    indent = ' ' * indent_level
+    indent = ' ' * output.indent_level
     indent2 = indent * 2
     return "{\n%s%s%s}" % (
         indent2,
@@ -1111,7 +1116,7 @@ def generate_simple_events(device):
 
 def generate_after_on_hooks_artifacts(device):
     for info in dml.globals.after_on_hook_infos:
-        site = SimpleSite(f'after on hook {string_literal(info.string_key)}')
+        site = logging.SimpleSite(f'after on hook {string_literal(info.string_key)}')
 
         start_function_definition(
             f'void {info.cident_callback}(conf_object_t *_obj, '
@@ -1362,11 +1367,11 @@ def generate_reg_callback(meth, name):
         + ', '.join(params) + ')\n')
     out('{\n', postindent = 1)
     out('%s *_dev = _obj;\n' % dev_t)
-    fail = ReturnFailure(meth.site)
+    fail = codegen.ReturnFailure(meth.site)
     with fail, crep.DeviceInstanceContext():
         inargs = [mkLit(meth.site, p.c_ident, p.typ) for p in meth.inp]
         outargs = [mkLit(meth.site, "*" + n, t) for n, t in meth.outp]
-        code = [codegen_call(
+        code = [codegen.codegen_call(
                 meth.site, meth,
                 tuple(mkLit(meth.site, 'indices[%d]' % i, TInt(32, False))
                       for i in range(meth.dimensions)),
@@ -1396,8 +1401,8 @@ def generate_register_tables(device):
                          len(dims),
                          '_DML_MI_%s' % crep.cref_method(getter),
                          '_DML_MI_%s' % crep.cref_method(setter)))
-            mark_method_referenced(method_instance(getter))
-            mark_method_referenced(method_instance(setter))
+            codegen.mark_method_referenced(codegen.method_instance(getter))
+            codegen.mark_method_referenced(codegen.method_instance(setter))
             regidxs[r] = i
             i += 1
         out('// Register tables for %s\n' % bank.name)
@@ -1534,7 +1539,7 @@ def generate_hook_auxiliary_info_array():
                          * hook.dimensions)))
 
         try:
-            typeseq_uniq = get_type_sequence_info(
+            typeseq_uniq = codegen.get_type_sequence_info(
                 hook.msg_types, create_new=True).uniq
             items.append('{%s, %d, %d}' % (offset, typeseq_uniq, hook.uniq))
         except DMLUnkeyableType:
@@ -1586,8 +1591,8 @@ def generate_initialize(device):
             stmts = []
             for method_name in ['init', 'hard_reset']:
                 method = device.get_component(method_name, 'method')
-                with InitFailure(method.site):
-                    stmts.append(codegen_call_byname(
+                with codegen.InitFailure(method.site):
+                    stmts.append(codegen.codegen_call_byname(
                         method.site, device, (), method_name, [], []))
 
             mkCompound(device.site, stmts).toc()
@@ -1620,7 +1625,7 @@ def generate_finalize(device):
             # Functions called from new_instance shouldn't throw any
             # exceptions.  But we don't want to force them to insert try-catch
             # in the init method.
-            with LogFailure(
+            with codegen.LogFailure(
                     device.get_component('post_init', 'method').site,
                     device, ()):
                 code = codegen_inline_byname(device, (), 'post_init', [], [],
@@ -1679,7 +1684,7 @@ def generate_pre_delete(device):
                             for i in range(len(dims)))
             for event in events:
                 method = event.get_component('_cancel_all', 'method')
-                codegen_inline(method.site, method, indices, [], []).toc()
+                codegen.codegen_inline(method.site, method, indices, [], []).toc()
             for i in range(len(dims)):
                 out('}\n', preindent=-1)
 
@@ -1754,8 +1759,8 @@ def generate_reset(device, hardness):
         + crep.structtype(device) + ' *)_obj;\n\n')
     method_name = hardness + '_reset'
     method = device.get_component(method_name, 'method')
-    with LogFailure(method.site, device, ()), crep.DeviceInstanceContext():
-        code = codegen_call_byname(method.site, device, (),
+    with codegen.LogFailure(method.site, device, ()), crep.DeviceInstanceContext():
+        code = codegen.codegen_call_byname(method.site, device, (),
                                    method_name, [], [])
     code.toc_inline()
     out('}\n\n', preindent = -1)
@@ -1897,20 +1902,20 @@ def generate_init_data_objs(device):
             try:
                 # only data/method obj
                 assert not node.isindexed()
-                init = eval_initializer(
+                init = codegen.eval_initializer(
                     node.site, node._type, node.astinit,
                     Location(node.parent, static_indices(node)),
                     global_scope, True)
             # mainly meant to capture EIDXVAR; for other errors, the error will
             # normally re-appear when evaluating per instance
             except DMLError:
-                with allow_linemarks():
+                with output.allow_linemarks():
                     for indices in node.all_indices():
                         index_exprs = tuple(mkIntegerLiteral(node.site, i)
                                             for i in indices)
                         nref = mkNodeRef(node.site, node, index_exprs)
                         try:
-                            init = eval_initializer(
+                            init = codegen.eval_initializer(
                                 node.site, node._type, node.astinit,
                                 Location(node.parent, index_exprs),
                                 global_scope, True)
@@ -1919,7 +1924,7 @@ def generate_init_data_objs(device):
                         else:
                             markers = ([('store_writes_const_field', 'FALSE')]
                                        if deep_const(node._type) else [])
-                            coverity_markers(markers, init.site)
+                            output.coverity_markers(markers, init.site)
                             out(init.assign_to(nref.read(), node._type) + ';\n')
             else:
                 index_exprs = ()
@@ -1930,10 +1935,10 @@ def generate_init_data_objs(device):
                         postindent=1)
                     index_exprs += (mkLit(node.site, var, TInt(64, True)),)
                 nref = mkNodeRef(node.site, node, index_exprs)
-                with allow_linemarks():
+                with output.allow_linemarks():
                     markers = ([('store_writes_const_field', 'FALSE')]
                                if deep_const(node._type) else [])
-                    coverity_markers(markers, init.site)
+                    output.coverity_markers(markers, init.site)
                     out(init.assign_to(nref.read(), node._type) + ';\n')
                 for _ in range(node.dimensions):
                     out('}\n', postindent=-1)
@@ -2194,24 +2199,24 @@ def generate_trait_method(m):
     code = m.codegen_body()
     out('/* %s */\n' % (str(m),))
     start_function_definition(m.declaration())
-    with allow_linemarks():
-        site_linemark(m.astbody.site)
+    with output.allow_linemarks():
+        output.site_linemark(m.astbody.site)
         out('{\n', postindent=1)
         code.toc_inline()
-        site_linemark(m.rbrace_site)
+        output.site_linemark(m.rbrace_site)
         out('}\n', preindent=-1)
 
 def generate_adjustor_thunk(traitname, name, inp, outp, throws, independent,
                             vtable_path, def_path, hardcoded_impl=None):
     generated_name = "__adj_%s__%s__%s" % (
         traitname, '__'.join(t.name for t in vtable_path), name)
-    rettype = c_rettype(outp, throws)
+    rettype = codegen.c_rettype(outp, throws)
     out('static ' + rettype.declaration('\n%s' % (generated_name,)))
     vtable_trait = vtable_path[-1]
     assert vtable_trait is def_path[-1]
     implicit_inargs = vtable_trait.implicit_args()
     preargs = crep.maybe_dev_arg(independent) + implicit_inargs
-    inargs = [(p.c_ident, p.typ) for p in inp] + c_extra_inargs(outp, throws)
+    inargs = [(p.c_ident, p.typ) for p in inp] + codegen.c_extra_inargs(outp, throws)
     out('(%s)\n{\n' % (", ".join(t.declaration(n) for (n, t) in (preargs
                                                                  + inargs))),
         postindent=1)
@@ -2754,13 +2759,13 @@ def resolve_trait_param_values(node):
 
 def generate_trait_trampoline(method, vtable_trait):
     implicit_inargs = vtable_trait.implicit_args()
-    extra_inargs = c_extra_inargs(method.outp, method.throws)
+    extra_inargs = codegen.c_extra_inargs(method.outp, method.throws)
     inparams = ", ".join([t.declaration(n)
                           for (n, t) in (crep.maybe_dev_arg(method.independent)
                                          + implicit_inargs)]
                          + [p.declaration() for p in method.inp]
                          + [t.declaration(n) for (n, t) in extra_inargs])
-    rettype = c_rettype(method.outp, method.throws)
+    rettype = codegen.c_rettype(method.outp, method.throws)
 
     # guaranteed to exist; created by ObjTraits.mark_referenced
     func = method.funcs[None]
@@ -2782,7 +2787,7 @@ def generate_trait_trampoline(method, vtable_trait):
             for dim in range(obj.dimensions)]
         args = ([mkLit(site, p.c_ident, p.typ) for p in method.inp]
                 + [mkLit(site, n, t) for (n, t) in extra_inargs])
-        call_expr = mkcall_method(site, func, indices)(args)
+        call_expr = codegen.mkcall_method(site, func, indices)(args)
     if not rettype.void:
         out('return ')
     out('%s;\n' % call_expr.read())
@@ -2868,8 +2873,8 @@ def generate_saved_userdata(node, dimensions, prefix):
         elif child.objtype == 'method':
             # if the method is not generated, the variable is dead and
             # we dont have to bother
-            if child in saved_method_variables:
-                for sym_spec in saved_method_variables[child]:
+            if child in codegen.saved_method_variables:
+                for sym_spec in codegen.saved_method_variables[child]:
                     try:
                         yield calculate_saved_userdata(
                             child, dimensions, prefix + child.ident,
@@ -2882,7 +2887,7 @@ def generate_saved_userdata(node, dimensions, prefix):
                 assert (dml.globals.dml_version == (1, 2)
                         and child.objtype == 'field')
                 if (child.get_recursive_components('saved')
-                    or any(meth in saved_method_variables
+                    or any(meth in codegen.saved_method_variables
                            for meth in
                            child.get_recursive_components('method'))):
                     raise ICE(child.site,
@@ -3173,8 +3178,8 @@ def generate_startup_trait_calls(data, idxvars):
 
             method_ref = TraitMethodDirect(
                 method.site, mkLit(method.site, '_tref', TTrait(trait)), method)
-            with IgnoreFailure(site):
-                codegen_call_traitmethod(method.site, method_ref, [],
+            with codegen.IgnoreFailure(site):
+                codegen.codegen_call_traitmethod(method.site, method_ref, [],
                                          outargs).toc()
     out('}\n', preindent=-1)
 
@@ -3186,8 +3191,8 @@ def generate_startup_regular_call(method, idxvars):
     # Memoization of the throw then allows for the user to check whether
     # or not the method did throw during startup by calling the method
     # again.
-    with IgnoreFailure(site):
-        codegen_call(method.site, method, indices, [], outargs).toc()
+    with codegen.IgnoreFailure(site):
+        codegen.codegen_call(method.site, method, indices, [], outargs).toc()
 
 def generate_startup_calls_entry_function(devnode):
     start_function_definition('void _startup_calls(void)')
@@ -3233,9 +3238,9 @@ def generate_startup_calls_entry_function(devnode):
     out('}\n', preindent=-1)
 
 
-class MultiFileOutput(FileOutput):
+class MultiFileOutput(output.FileOutput):
     def __init__(self, stem, header):
-        FileOutput.__init__(self, stem + '-0.c')
+        output.FileOutput.__init__(self, stem + '-0.c')
         self.stem = stem
         self.header = header
         self.index = 0
@@ -3304,7 +3309,7 @@ def generate_cfile(device, footers,
     if c_split_threshold:
         c_file = MultiFileOutput(filename_prefix, c_top)
     else:
-        c_file = FileOutput(filename_prefix + '.c')
+        c_file = output.FileOutput(filename_prefix + '.c')
         c_file.out(c_top)
     with c_file, device.use_for_codegen():
         generate_cfile_body(device, footers, full_module, filename_prefix)
@@ -3316,7 +3321,7 @@ def generate_cfile(device, footers,
 def generate_cfile_body(device, footers, full_module, filename_prefix):
 
     # An output buffer for code that should be included in the init function
-    init_code = StrOutput()
+    init_code = output.StrOutput()
     init_code.out('', postindent=1)
 
     # The marker must be generated before any lines annotated with #line
@@ -3368,7 +3373,7 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     for t in list(dml.globals.traits.values()):
         for m in list(t.method_impls.values()):
             if gather_size_statistics:
-                ctx = StrOutput(filename=output.current().filename,
+                ctx = output.StrOutput(filename=output.current().filename,
                                 lineno=output.current().lineno)
                 with ctx:
                     generate_trait_method(m)
@@ -3376,15 +3381,15 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
                 out(ctx.buf)
             else:
                 generate_trait_method(m)
-    # Note: methods may be added to method_queue while doing this,
+    # Note: methods may be added to codegen.method_queue while doing this,
     # so don't try to be too smart
     generated_funcs = set()
-    while method_queue:
-        func = method_queue.pop()
+    while codegen.method_queue:
+        func = codegen.method_queue.pop()
         if func in generated_funcs:
             continue
         generated_funcs.add(func)
-        code = codegen_method_func(func)
+        code = codegen.codegen_method_func(func)
 
         specializations = [(p.ident,
                             'undefined' if undefined(p.expr) else p.expr.value)
@@ -3392,11 +3397,11 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
                            if p.ident is not None and p.expr is not None]
 
         if gather_size_statistics:
-            ctx = StrOutput(lineno=output.current().lineno,
+            ctx = output.StrOutput(lineno=output.current().lineno,
                             filename=output.current().filename)
         else:
             ctx = nullcontext()
-        with ErrorContext(func.method), ctx:
+        with logging.ErrorContext(func.method), ctx:
             if specializations:
                 out('/* %s\n' % func.get_name())
                 for (n, v) in specializations:
@@ -3406,8 +3411,8 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
                 out('/* %s */\n' % func.get_name())
 
             start_function_definition(func.prototype)
-            with allow_linemarks():
-                site_linemark(func.method.astcode.site)
+            with output.allow_linemarks():
+                output.site_linemark(func.method.astcode.site)
                 out('{\n', postindent=1)
                 try:
                     code.toc_inline()
@@ -3417,7 +3422,7 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
                     # codegen_method, when all Expression and Statement
                     # objects are instantiated.
                     raise ICE(e.site, 'error during late compile stage')
-                site_linemark(func.method.rbrace_site)
+                output.site_linemark(func.method.rbrace_site)
                 out('}\n', preindent=-1)
             out('\n')
         if gather_size_statistics:
@@ -3458,10 +3463,10 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     # and generate_simple_events
     generate_serialize(device)
 
-    for func in statically_exported_methods:
+    for func in codegen.statically_exported_methods:
         generate_static_trampoline(func)
 
-    for (name, (func, export_site)) in list(exported_methods.items()):
+    for (name, (func, export_site)) in list(codegen.exported_methods.items()):
         if export_site.dml_version() == (1, 2):
             generate_extern_trampoline_dml12(name, func)
         else:
@@ -3470,7 +3475,7 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     generate_index_enumerations()
     generate_tuple_table()
 
-    with allow_linemarks():
+    with output.allow_linemarks():
         for c in footers:
             c.toc()
             out('\n')
@@ -3485,10 +3490,10 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
         out('%s();\n' % (init_function_name(device, filename_prefix),))
         out('}\n', preindent = -1)
 
-    if method_queue:
+    if codegen.method_queue:
         # this could e.g. be triggered if _cancel_all in
         # dml-builtins.dml would call another method
-        raise ICE(None, 'late additions to method_queue')
+        raise ICE(None, 'late additions to codegen.method_queue')
 
     if dml.globals.dml_version == (1, 2):
         for error in EBADFAIL_dml12.all_errors():
@@ -3504,10 +3509,10 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
                     # don't waste time on methods that are already converted
                     continue
                 # run code generation for all dead methods
-                func = method_instance(method)
+                func = codegen.method_instance(method)
                 if func not in generated_funcs:
                     with logging.suppress_errors():
-                        codegen_method_func(func).toc_inline()
+                        codegen.codegen_method_func(func).toc_inline()
 
         for (site, method) in list(PWUNUSED.inline_methods.items()):
             if site in PWUNUSED.inlined_methods:
@@ -3532,21 +3537,21 @@ def generate(device, headers, footers, prefix, source_files, full_module):
     generate_cfile(device, footers, prefix, hfilename,
                    protofilename, source_files, full_module)
 
-    outfile = FileOutput(structfilename)
+    outfile = output.FileOutput(structfilename)
     with outfile:
         generate_structfile(device, structfilename, prefix)
     outfile.close()
     if not logging.failure:
         outfile.commit()
 
-    outfile = FileOutput(hfilename)
+    outfile = output.FileOutput(hfilename)
     with outfile:
         generate_hfile(device, headers, hfilename)
     outfile.close()
     if not logging.failure:
         outfile.commit()
 
-    outfile = FileOutput(protofilename)
+    outfile = output.FileOutput(protofilename)
     with outfile:
         generate_protofile(device)
     outfile.close()

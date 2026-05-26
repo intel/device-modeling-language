@@ -18,7 +18,7 @@ from . import logging, codegen, ctree, ast
 from . import breaking_changes
 from . import symtab
 from .messages import *
-from .logging import *
+from .logging import ICE, report
 import dml.globals
 import dml.dmlparse
 
@@ -71,7 +71,7 @@ def determine_version(filestr, filename):
         column = ver_start - filestr.rfind('\n', 0, ver_start)
         m = check_version.match(filestr, pos=ver_start)
         if not m:
-            raise ESYNTAX(SimpleSite(f"{filename}:{lineno}:{column}"),
+            raise ESYNTAX(logging.SimpleSite(f"{filename}:{lineno}:{column}"),
                           None, "malformed DML version tag")
         version = (int(m.group('major')), int(m.group('minor')))
         # Remove the language version tag, but preserve the correct
@@ -83,30 +83,30 @@ def determine_version(filestr, filename):
         filestr = ' ' * ver_end + filestr[ver_end:]
     else:
         if not breaking_changes.require_version_statement.enabled:
-            report(WNOVER(SimpleSite(f"{filename}:1")))
+            report(WNOVER(logging.SimpleSite(f"{filename}:1")))
             version = (1, 2)
             lineno = 1
             column = 1
         else:
             raise ESYNTAX(
-                SimpleSite(f"{filename}:1"), None,
+                logging.SimpleSite(f"{filename}:1"), None,
                 "missing DML version statement")
 
     if (not breaking_changes.require_version_statement.enabled
         and version == (1, 3)):
         report(WDEPRECATED(
-            SimpleSite(f"{filename}:{lineno}:{column}"),
+            logging.SimpleSite(f"{filename}:{lineno}:{column}"),
             "'dml 1.3' is a deprecated alias of dml 1.4"))
         version = (1, 4)
 
     if version not in supported_versions:
-        raise ESYNTAX(SimpleSite(f"{filename}:{lineno}:{column}"), None,
+        raise ESYNTAX(logging.SimpleSite(f"{filename}:{lineno}:{column}"), None,
                       "DML version %s not supported; allowed: %s"
                       % (fmt_version(version),
                          ", ".join(map(fmt_version, supported_versions))))
 
     if logging.show_porting and version == (1, 2):
-        report(PVERSION(SimpleSite(f"{filename}:{lineno}:{column}")))
+        report(PVERSION(logging.SimpleSite(f"{filename}:{lineno}:{column}")))
 
     return (version, filestr)
 
@@ -122,7 +122,7 @@ def parse(s, file_info, filename, version):
         ast = parser.parse(s, lexer = lexer, tracking = True,
                            tokenfunc = dml.dmlparse.mk_get_token(lexer))
     except dml.dmlparse.UnexpectedEOF:
-        raise ESYNTAX(DumpableSite(file_info, file_info.size()),
+        raise ESYNTAX(logging.DumpableSite(file_info, file_info.size()),
                        None, "unexpected end-of-file")
     return ast
 
@@ -150,7 +150,7 @@ def scan_statements(filename, site, stmts):
         elif s.kind == 'toplevel_if':
             [cond, tbranch, fbranch, bad_stmts] = s.args
             scope = symtab.Symtab()
-            bsite = SimpleSite('<builtin>',
+            bsite = logging.SimpleSite('<builtin>',
                                dml_version=dml.globals.dml_version)
             # HACK Add constants to scope typically defined by dml-builtins,
             # which is not accessible here
@@ -202,7 +202,7 @@ def check_bidi(filename, filestr):
     for m in bidi_re.finditer(filestr):
         lineno = filestr[:m.start()].count('\n') + 1
         col = m.start() - filestr.rfind('\n', 0, m.start())
-        report(ESYNTAX(SimpleSite(f"{filename}:{lineno}:{col}"),
+        report(ESYNTAX(logging.SimpleSite(f"{filename}:{lineno}:{col}"),
                        repr(m.group())[1:-1],
                        "Unicode BiDi character not allowed"))
 
@@ -221,7 +221,7 @@ def parse_pragma(filename, start_lineno, end_lineno, pragma, data):
     if pragma == 'COVERITY':
         data = data and pragma_coverity_data_re.match(data)
         if data is None:
-            report(ESYNTAX(SimpleSite(f"{filename}:{start_lineno}"),
+            report(ESYNTAX(logging.SimpleSite(f"{filename}:{start_lineno}"),
                            None,
                            "COVERITY pragma must specify event to suppress, "
                            + "and optionally classification"))
@@ -229,7 +229,7 @@ def parse_pragma(filename, start_lineno, end_lineno, pragma, data):
             return ('COVERITY',
                     (filename, start_lineno, end_lineno + 1, data.groups()))
     else:
-        report(EPRAGMA(SimpleSite(f"{filename}:{start_lineno}"), pragma))
+        report(EPRAGMA(logging.SimpleSite(f"{filename}:{start_lineno}"), pragma))
         return None
 
 def process_pragma(t):
@@ -250,7 +250,7 @@ def parse_file(dml_filename):
         with open(dml_filename, 'r') as f:
             filestr = f.read()
     except IOError as msg:
-        raise EIMPORT(SimpleSite(f"{dml_filename}:0"), f"{dml_filename}: {msg}")
+        raise EIMPORT(logging.SimpleSite(f"{dml_filename}:0"), f"{dml_filename}: {msg}")
     except UnicodeDecodeError:
         with open(dml_filename, 'rb') as f:
             for (lineno, line) in enumerate(f):
@@ -258,7 +258,7 @@ def parse_file(dml_filename):
                     line.decode('utf-8')
                 except UnicodeDecodeError as e:
                     raise ESYNTAX(
-                        SimpleSite(
+                        logging.SimpleSite(
                             f"{dml_filename}:{lineno + 1}:{e.start + 1}"),
                         repr(line[e.start:e.end]),
                         'utf-8 decoding error: ' + e.reason)
@@ -274,7 +274,7 @@ def parse_file(dml_filename):
     if version == (1, 2) and logging.show_porting:
         with open(dml_filename, 'rb') as f:
             sha1 = hashlib.sha1(f.read()).hexdigest()  # nosec
-        report(PSHA1(SimpleSite(f'{dml_filename}:1:0'), sha1))
+        report(PSHA1(logging.SimpleSite(f'{dml_filename}:1:0'), sha1))
     ast = parse(contents, file_info, dml_filename, version)
     return ast
 
@@ -283,7 +283,7 @@ def load_dmlast(ast_filename):
     try:
         return pickle.loads(bz2.BZ2File(ast_filename).read())  # nosec
     except Exception as e:
-        raise ICE(SimpleSite(ast_filename),
+        raise ICE(logging.SimpleSite(ast_filename),
                    "Failed to load AST from %r: %s"
                    % (ast_filename, e))
 
@@ -340,7 +340,7 @@ def import_file(importsite, path):
     version = site.dml_version()
     if (version != dml.globals.dml_version
         and (version, dml.globals.dml_version) != ((1, 4), (1, 2))):
-        raise EVERS(SimpleSite(f"{path}:0"),
+        raise EVERS(logging.SimpleSite(f"{path}:0"),
                      importsite,
                      fmt_version(version),
                      fmt_version(importsite.dml_version()))
@@ -361,7 +361,7 @@ def exists(filename):
 
 def parse_main_file(inputfilename, explicit_import_path):
     if not exists(inputfilename):
-        raise ENOFILE(SimpleSite(f"{inputfilename}:0"))
+        raise ENOFILE(logging.SimpleSite(f"{inputfilename}:0"))
     (kind, site, name, stmts) = parse_dmlast_or_dml(
         str(Path(inputfilename).resolve()))
     # guaranteed by grammar

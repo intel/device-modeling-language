@@ -10,7 +10,7 @@ import math
 import shlex
 from pathlib import Path
 
-from dml import ctree, types, logging, messages, output, symtab, traits
+from dml import ctree, expr, types, logging, messages, output, symtab, traits
 from dml.ctree import string_escape, mkCompound, dmldir_macro
 from dml.env import is_windows
 
@@ -1344,7 +1344,7 @@ class ExprTests(GccTests):
 
     @subtest()
     def null_pointers(self):
-        null = ctree.mkNullConstant(site)
+        null = types.mkNullConstant(site)
         for expr in (lit(types.TPtr(types.TInt(8, True))),
                      ctree.mkCast(site, null,
                                   types.TPtr(types.TInt(8, True)))):
@@ -1356,7 +1356,7 @@ class ExprTests(GccTests):
                 self.assertFalse(res.constant)
         for (invert, op) in ((False, ctree.mkEquals),
                              (True, ctree.mkNotEquals)):
-            res = op(site, null, ctree.mkNullConstant(site));
+            res = op(site, null, types.mkNullConstant(site));
             self.assertTrue(res.constant)
             self.assertEqual(res.value, True != invert)
             res = op(site, null, ctree.mkStringConstant(site, "non-null"))

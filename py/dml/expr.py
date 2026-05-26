@@ -4,11 +4,12 @@
 import abc
 
 import dml.globals
-from .logging import *
+from . import logging
+from .logging import ICE
 from .messages import *
-from .output import *
+from . import output
 from .types import *
-from .slotsmeta import *
+from .slotsmeta import SlotsMeta, auto_init
 
 
 __all__ = (
@@ -35,7 +36,7 @@ class Code(object, metaclass=SlotsMeta):
                                     for name in self.init_args[2:]))
 
     def linemark(self):
-        site_linemark(self.site)
+        output.site_linemark(self.site)
 
 class Expression(Code):
     '''An Expression can represent either:
@@ -122,9 +123,9 @@ class Expression(Code):
     c_lval = False
 
     def __init__(self, site):
-        assert not site or isinstance(site, Site)
+        assert not site or isinstance(site, logging.Site)
         self.site = site
-        self.context = ErrorContext.current()
+        self.context = logging.ErrorContext.current()
 
     def __str__(self):
         "Format the expression in DML form"
@@ -479,6 +480,6 @@ class StaticIndex(NonValue):
     def __init__(self, site, var):
         pass
     def __str__(self):
-        return dollar(self.site) + ("_" if self.var is None else self.var)
+        return logging.dollar(self.site) + ("_" if self.var is None else self.var)
     def exc(self):
         return EIDXVAR(self.site, str(self))

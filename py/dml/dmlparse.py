@@ -6,7 +6,8 @@
 import os, itertools
 from ply import lex, yacc
 
-from .logging import *
+from . import logging
+from .logging import report
 from .messages import *
 from . import ast, logging
 import dml.globals
@@ -85,7 +86,7 @@ def default_site(t, elt=1):
     # tracking, which would sometimes happen if tracking=False was
     # passed to parse().
     assert lexpos != 0 or t.lineno(elt) != 0
-    return DumpableSite(t.parser.file_info, lexpos)
+    return logging.DumpableSite(t.parser.file_info, lexpos)
 
 site = default_site
 
@@ -112,15 +113,15 @@ def track_lexspan():
     global site
     site = extended_site
 def start_site(site):
-    while isinstance(site, ExpandedSite):
+    while isinstance(site, logging.ExpandedSite):
         site = site.site
     assert lexspan_map
     if site not in lexspan_map:
         return None
     (start, _) = lexspan_map[site]
-    return DumpableSite(site.file_info, start)
+    return logging.DumpableSite(site.file_info, start)
 def end_site(site):
-    while isinstance(site, ExpandedSite):
+    while isinstance(site, logging.ExpandedSite):
         site = site.site
     assert lexspan_map
     if site not in lexspan_map:
@@ -131,16 +132,16 @@ def end_site(site):
         # We still produce a well-formed site, to avoid confusing
         # port-dml's tag parser
         if os.path.isfile(site.filename() + 'ast'):
-            return SimpleSite(site.filename() + ':1:1')
+            return logging.SimpleSite(site.filename() + ':1:1')
         # unknown...
         return None
     (_, end) = lexspan_map[site]
-    return DumpableSite(site.file_info, end)
+    return logging.DumpableSite(site.file_info, end)
 
 def lex_end_site(t, elt):
     info = t.parser.file_info
     (start, end) = t.lexspan(elt)
-    return DumpableSite(info, end)
+    return logging.DumpableSite(info, end)
 
 def parse_bitorder(t, syn):
     if syn not in {'be', 'le'}:
@@ -593,14 +594,14 @@ def report_pretval(site, file_info, start, end, rparen, outp, stmts):
             ends_with_return = True
     report(PRETVAL(
         site,
-        DumpableSite(file_info, start),
-        DumpableSite(file_info, end),
-        DumpableSite(file_info, rparen),
+        logging.DumpableSite(file_info, start),
+        logging.DumpableSite(file_info, end),
+        logging.DumpableSite(file_info, rparen),
         [(psite.loc(), pname) for (_, psite, pname, _) in outp]))
     if not ends_with_return:
         report(PRETVAL_END(
             site,
-            DumpableSite(file_info, end),
+            logging.DumpableSite(file_info, end),
             [pname for (_, psite, pname, _) in outp]))
 
 
@@ -3031,7 +3032,7 @@ def error(t):
         raise UnexpectedEOF()
     else:
         value = str(t.value)
-        raise ESYNTAX(DumpableSite(t.lexer.file_info, t.lexpos), value, None)
+        raise ESYNTAX(logging.DumpableSite(t.lexer.file_info, t.lexpos), value, None)
 
 # Specific grammars to be passed to ply
 class Grammar(object):

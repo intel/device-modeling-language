@@ -5,12 +5,12 @@
 # encoding of device state in the C device structure.
 
 import dml.globals
-from .objects import *
+from .objects import Method
 from .types import *
-from .logging import *
-from .expr_util import *
+from .logging import ICE, report
+from .expr_util import param_expr, param_str
 from .messages import *
-from . import breaking_changes
+from . import breaking_changes, expr_util
 
 __all__ = (
     'cname',
@@ -75,7 +75,7 @@ def cname(node):
         # this is weird... kept for compatibility
         name = param_str(node, 'c_name').replace('-', '_')
         if name != node.name and breaking_changes.dml12_remove_misc_quirks.enabled:
-            report(WDEPRECATED(param_expr_site(node, 'c_name'),
+            report(WDEPRECATED(expr_util.param_expr_site(node, 'c_name'),
                                'parameter c_name'))
         return name
     elif node.name:
@@ -162,7 +162,7 @@ def node_storage_type(node, site = None):
 
 def node_storage_type_dml12(node, site):
     if node.objtype == 'attribute':
-        if param_defined(node, 'allocate_type'):
+        if expr_util.param_defined(node, 'allocate_type'):
             allocate_type = param_str(node, 'allocate_type')
             if allocate_type == "string":
                 return TPtr(TNamed('char'))
@@ -194,8 +194,8 @@ def node_storage_type_dml12(node, site):
         # we have to handle this case, which is triggered when someone (e.g.
         # method get from template register) writes 'typeof($reg)' where
         # '$reg' is a register with explicit fields.
-        signed = param_bool(node, 'signed')
-        return TInt(param_int(node, 'bitsize'), signed)
+        signed = expr_util.param_bool(node, 'signed')
+        return TInt(expr_util.param_int(node, 'bitsize'), signed)
     elif node.objtype == 'field':
         # TODO: this access to ctree is unholy. We should probably
         # make bitsize a property of the field object instead, but for
@@ -205,9 +205,9 @@ def node_storage_type_dml12(node, site):
         # constant across register indices; it could however happen that
         # structure.register_fields().
         indices = (ctree.mkIntegerLiteral(node.site, 0),) * node.dimensions
-        msb = expr_intval(param_expr(node, 'msb', indices))
-        lsb = expr_intval(param_expr(node, 'lsb', indices))
-        signed = param_bool(node, 'signed')
+        msb = expr_util.expr_intval(param_expr(node, 'msb', indices))
+        lsb = expr_util.expr_intval(param_expr(node, 'lsb', indices))
+        signed = expr_util.param_bool(node, 'signed')
         return TInt(msb - lsb + 1, signed)
     elif node.objtype in {'bank', 'group', 'event', 'port', 'connect',
                           'subdevice'}:

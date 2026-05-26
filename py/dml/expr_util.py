@@ -6,7 +6,7 @@ import dml.globals
 from .logging import report
 from .messages import *
 from .types import *
-from .expr import *
+from .expr import Lit, NonValue, NullConstant, StaticIndex
 
 __all__ = (
     'defined', 'undefined',

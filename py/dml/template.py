@@ -7,7 +7,7 @@ import os
 import functools
 from . import ast, logging
 from . import breaking_changes
-from .logging import *
+from .logging import ICE, report
 from .messages import *
 from .set import Set
 import dml.globals

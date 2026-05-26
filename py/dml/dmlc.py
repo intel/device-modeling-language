@@ -18,7 +18,8 @@ import dml.c_backend
 import dml.info_backend
 import dml.g_backend
 import dml.globals
-from .logging import *
+from . import logging
+from .logging import ICE, dbg, report
 from .messages import *
 from .env import api_versions, default_api_version
 import tarfile
@@ -35,11 +36,11 @@ output_c = True
 
 
 # Ignore some warnings by default
-ignore_warning('WASSERT')
-ignore_warning('WNDOC')
-ignore_warning('WSHALL')
-ignore_warning('WUNUSED')
-ignore_warning('WNSHORTDESC')
+logging.ignore_warning('WASSERT')
+logging.ignore_warning('WNDOC')
+logging.ignore_warning('WSHALL')
+logging.ignore_warning('WUNUSED')
+logging.ignore_warning('WNSHORTDESC')
 
 if os.getenv('DMLC_DEBUG'):
     debug_mode = True
@@ -74,9 +75,9 @@ def process(devname, global_defs, top_tpl, extra_params):
         # inheriting the main file, thereby overriding any default
         # declarations from there
         param_tpl = '@<command-line>'
-        param_site = SimpleSite("<command-line>:0",
+        param_site = logging.SimpleSite("<command-line>:0",
                                 dml_version=dml.globals.dml_version)
-        top_site = SimpleSite(top_tpl[1:] + ':1',
+        top_site = logging.SimpleSite(top_tpl[1:] + ':1',
                               dml_version=dml.globals.dml_version)
         global_defs.append(ast.template_dml12(
             top_site, param_tpl, [
@@ -114,7 +115,7 @@ def mytrace(frame, event, arg):
 
 def parse_define(arg):
     "Parse a parameter assignment given as a -D option"
-    define_site = SimpleSite('<command-line>:0',
+    define_site = logging.SimpleSite('<command-line>:0',
                              dml_version=dml.globals.dml_version)
     (lexer, _) = toplevel.get_parser((1, 4))
     lexer.filename = filename = "<command-line>"
@@ -274,7 +275,7 @@ class WarnHelpAction(HelpAction):
         print('''Tags accepted by --warn and --nowarn:''')
         by_ignored = {True: [], False: []}
         for tag in sorted(messages.warnings):
-            by_ignored[warning_is_ignored(tag)].append(tag)
+            by_ignored[logging.warning_is_ignored(tag)].append(tag)
         print('  Enabled by default:')
         for tag in by_ignored[False]:
             print(f'    {tag}')
@@ -513,7 +514,7 @@ def main(argv):
     global outputbase, output_c
 
     if options.include_tag:
-        set_include_tag(True)
+        logging.set_include_tag(True)
 
     if options.debuggable:
         dml.globals.debuggable = True
@@ -633,19 +634,19 @@ def main(argv):
         changes.values())
 
     if not breaking_changes.enable_WLOGMIXUP.enabled:
-        ignore_warning('WLOGMIXUP')
+        logging.ignore_warning('WLOGMIXUP')
 
     for w in options.disabled_warnings:
-        if not is_warning_tag(w):
+        if not logging.is_warning_tag(w):
             prerr("dmlc: the tag '%s' is not a valid warning tag" % w)
             sys.exit(1)
-        ignore_warning(w)
+        logging.ignore_warning(w)
 
     for w in options.enabled_warnings:
-        if not is_warning_tag(w):
+        if not logging.is_warning_tag(w):
             prerr("dmlc: the tag '%s' is not a valid warning tag" % w)
             sys.exit(1)
-        enable_warning(w)
+        logging.enable_warning(w)
 
     inputfilename = options.input_filename
 
@@ -789,7 +790,7 @@ def main(argv):
         return 3
 
     except (RuntimeError, Exception) as e:
-        ctx = ErrorContext.last_entered
+        ctx = logging.ErrorContext.last_entered
         if ctx:
             report(ICE(ctx.node,
                        "Unexpected exception '%s' in %s"

@@ -2,20 +2,19 @@
 # SPDX-License-Identifier: MPL-2.0
 
 from .ctree import *
-from .expr import *
-from .expr_util import *
+from .expr import mkLit
+from .expr_util import param_bool, param_defined, param_str
 from .types import *
 from .logging import report
 from .messages import WEXPERIMENTAL_UNMAPPED
-from .symtab import *
-from .codegen import (require_fully_typed, mark_method_referenced,
-                      method_instance, codegen_call_byname, declarations,
-                      ReturnFailure)
+from .symtab import global_scope, Symtab
+from .codegen import codegen_call_byname, declarations
+from . import codegen
 from . import crep
 import dml.globals
 
 # Emit a warning if the hook methods are overridden, as they are
-# introduced as an experimental feature, at the moment.   
+# introduced as an experimental feature, at the moment.
 def check_unmapped_access_handling(bank, isread):
     if isread:
         meth_node = bank.get_component('_unmapped_read_access', 'method')
@@ -146,9 +145,9 @@ def codegen_access(bank, bank_indices, isread, memop, offset, size, writevalue,
 
     for reg in bank.mapped_registers:
         meth_node = reg.node.get_component(method_name, 'method')
-        require_fully_typed(site, meth_node)
-        func = method_instance(meth_node)
-        mark_method_referenced(func)
+        codegen.require_fully_typed(site, meth_node)
+        func = codegen.method_instance(meth_node)
+        codegen.mark_method_referenced(func)
         cname = func.get_cname()
         by_dims.setdefault(len(reg.layout[0].coord), []).extend(
             (instance, cname) for instance in reg.layout)
@@ -285,7 +284,7 @@ def codegen_access(bank, bank_indices, isread, memop, offset, size, writevalue,
     scope = Symtab(global_scope)
     code = [mkInline(site, line) for line in lines]
     check_unmapped_access_handling(bank, isread)
-    with ReturnFailure(site):
+    with codegen.ReturnFailure(site):
         code.append(unmapped_access(site, bank, bank_indices, scope, isread,
                                     overlapping, bigendian, memop,
                                     offset, size, writevalue, size2, value2))

@@ -8,16 +8,18 @@ import contextlib
 import itertools
 import math
 
-from . import objects, crep, ctree, ast, int_register, logging, serialize
+from . import objects, crep, symtab, ctree, expr_util, expr, ast, int_register, logging, serialize
 from . import dmlparse, output
 from . import breaking_changes
-from .logging import *
-from .expr import *
+from . import logging
+from .logging import ICE, report
+from .expr import Apply, Expression, Lit, mkApply, mkLit, NonValue, typecheck_inarg_inits
 from .ctree import *
-from .expr_util import *
-from .symtab import *
+from .expr_util import apply, defined, expr_intval, undefined
+from .symtab import global_scope, MethodParamScope, Symtab
 from .messages import *
-from .output import *
+from . import output
+from .output import out
 from .types import *
 from .set import Set
 from .slotsmeta import auto_init
@@ -330,7 +332,7 @@ class IndependentMemoized(Memoization):
         self.func = func
         self.method = func.method
         # SimpleSite wrapper to avoid linemarks being generated.
-        self.site = SimpleSite(self.method.site.loc())
+        self.site = logging.SimpleSite(self.method.site.loc())
 
     def make_ref(self, ref, typ):
         indexing = ''.join([f'[_idx{i}]'
@@ -363,7 +365,7 @@ class SharedIndependentMemoized(Memoization):
         assert method.independent
         self.method = method
         # SimpleSite wrapper to avoid linemarks being generated.
-        self.site = SimpleSite(self.method.site.loc())
+        self.site = logging.SimpleSite(self.method.site.loc())
     def make_ref(self, ref, typ):
         traitname = cident(self.method.trait.name)
         return mkLit(self.site,
@@ -1119,7 +1121,7 @@ def expr_unop(tree, location, scope):
         if op == 'defined':
             if undefined(rh):
                 return mkBoolConstant(tree.site, False)
-            if isinstance(rh, (NodeRef, NonValueArrayRef, AbstractList)):
+            if isinstance(rh, (NodeRef, expr.NonValueArrayRef, AbstractList)):
                 return mkBoolConstant(tree.site, True)
         if op == '!' and isinstance(rh, InterfaceMethodRef):
             # see SIMICS-9868
@@ -1233,7 +1235,7 @@ def expr_objectref(tree, location, scope):
     [name] = tree.args
     if not location:
         # This happens when invoked from mkglobals
-        raise ENCONST(tree.site, dollar(tree.site)+name)
+        raise ENCONST(tree.site, logging.dollar(tree.site)+name)
     e = ctree.lookup_component(
         tree.site, location.node, location.indices, name, False)
     if not e:
@@ -2062,7 +2064,7 @@ def stmt_local(stmt, location, scope):
 
     def mk_sym(name, typ, mkunique=not dml.globals.debuggable):
         cname = scope.unique_cname(name) if mkunique else name
-        return LocalSymbol(name, cname, type=typ, site=stmt.site, stmt=True)
+        return symtab.LocalSymbol(name, cname, type=typ, site=stmt.site, stmt=True)
 
     if method_call_init:
         syms_to_add = []
@@ -2200,7 +2202,7 @@ def make_static_var(site, location, static_sym_type, name, init=None,
             init = CompoundInitializer(site, [init] * dimsize)
 
     static_sym_name = f'static{len(dml.globals.static_vars)}_{name}'
-    static_sym = StaticSymbol(static_sym_name, static_sym_name,
+    static_sym = symtab.StaticSymbol(static_sym_name, static_sym_name,
                               static_sym_type, site, init, stmt)
     static_var_expr = mkStaticVariable(site, static_sym)
     for idx in location.indices:
@@ -2211,7 +2213,7 @@ def make_static_var(site, location, static_sym_type, name, init=None,
         init_code = output.StrOutput()
         with init_code:
             if deep_const(static_sym_type):
-                coverity_marker('store_writes_const_field', 'FALSE')
+                output.coverity_marker('store_writes_const_field', 'FALSE')
             out(init.assign_to(mkStaticVariable(site, static_sym).read(),
                                static_sym_type) + ';\n')
         c_init = init_code.buf
@@ -2833,7 +2835,7 @@ def stmt_log(stmt, location, scope):
         pre_statements = [mkDeclaration(site, "_calculated_level",
                                         TInt(64, False),
                                         ExpressionInitializer(level_expr))]
-        adjusted_level = mkLocalVariable(site, LocalSymbol("_calculated_level",
+        adjusted_level = mkLocalVariable(site, symtab.LocalSymbol("_calculated_level",
                                                            "_calculated_level",
                                                            TInt(64, False),
                                                            site=site))
@@ -3723,7 +3725,7 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
     # Open the scope
     # TODO: in python 3.10 we can use parentheses instead of \
     with RecursiveInlineGuard(site, meth_node),  \
-         ErrorContext(meth_node, site),          \
+         logging.ErrorContext(meth_node, site),          \
          contextlib.nullcontext() if meth_node.throws else NoFailure(site):
         param_scope = MethodParamScope(global_scope)
         param_scope.add(meth_node.default_method.default_sym(indices))
@@ -3753,7 +3755,7 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
 
                 if constviol:
                     raise ECONSTP(site, p.logref, "method call")
-                arg = coerce_if_eint(arg)
+                arg = expr_util.coerce_if_eint(arg)
 
             if p.ident is None:
                 pre.append(mkExpressionStatement(arg.site, arg,
@@ -3962,7 +3964,7 @@ def codegen_method_func(func):
     method = func.method
 
     indices = tuple(mkLit(method.site, '_idx%d' % i, TInt(32, False),
-                          str=(dollar(method.site)
+                          str=(logging.dollar(method.site)
                                + ("_" if idxvar is None else "")))
                     for (i, idxvar) in enumerate(method.parent.idxvars()))
     intercepted = intercepted_method(method)
@@ -3973,7 +3975,7 @@ def codegen_method_func(func):
                 method.parent, indices,
                 [mkLit(method.site, p.c_ident, p.typ) for p in func.inp],
                 [mkLit(method.site, "*%s" % n, t) for (n, t) in func.outp],
-                SimpleSite(method.site.loc()))
+                logging.SimpleSite(method.site.loc()))
     inline_scope = MethodParamScope(global_scope)
     for p in func.inp:
         e = p.expr
@@ -3989,7 +3991,7 @@ def codegen_method_func(func):
                 p.ident, inlined_arg, p.site))
     inp = [p for p in func.inp if not p.inlined]
 
-    with ErrorContext(method):
+    with logging.ErrorContext(method):
         location = Location(method, indices)
         if func.memoized:
             assert func.independent and func.startup
@@ -4025,7 +4027,7 @@ def codegen_return(site, outp, throws, retvals):
         if (return_first_outarg and site.dml_version() == (1, 2)):
             # Avoid outputting "*x = *x" for nothrow methods in 1.2
             assert isinstance(val, ctree.Dereference)
-            assert isinstance(val.rh, ctree.Lit)
+            assert isinstance(val.rh, expr.Lit)
             assert val.rh.str == name
             continue
         stmts.append(mkCopyData(site, val, mkLit(site, "*%s" % (name,), typ)))
@@ -4185,7 +4187,7 @@ def codegen_call_traitmethod(site, expr, inargs, outargs):
     def mkcall(args):
         rettype = c_rettype(expr.outp, expr.throws)
         # implicitly convert endian int arguments to integers
-        args = [coerce_if_eint(arg) for arg in args]
+        args = [expr_util.coerce_if_eint(arg) for arg in args]
         return expr.call_expr(args, rettype)
     return codegen_call_stmt(site, str(expr), mkcall, expr.inp, expr.outp,
                              expr.throws, inargs, outargs)
@@ -4284,7 +4286,7 @@ def codegen_call_stmt(site, name, mkcall, inp, outp, throws, inargs, outargs):
         outargs_conv.append(mkAddressOf(var.site, var))
         postcode.append(copy_outarg(arg, var, parmname, parmtype, name))
 
-    typecheck_inargs(site, inargs, inp, 'method')
+    expr.typecheck_inargs(site, inargs, inp, 'method')
     call_expr = mkcall(list(inargs) + outargs_conv)
 
     if throws:

@@ -11,16 +11,20 @@ import itertools
 import math
 from functools import reduce
 
-from dml import objects, symtab, logging, crep
-from .logging import *
+from dml import objects, symtab, expr, logging, crep
+from . import logging
+from .logging import ICE, report
 from .messages import *
-from .output import *
+from . import output
+from .output import linemark, out
 from .types import *
-from .expr import *
-from .expr_util import *
+from .expr import (Apply, Code, Expression, mkApply, mkLit,
+                   NonValue, NonValueArrayRef, NullConstant,
+                   StaticIndex, typecheck_inarg_inits)
+from .expr_util import apply, param_bool, param_str, undefined
 from .set import Set
 from .slotsmeta import auto_init
-from . import dmlparse, output
+from . import expr_util, dmlparse, output
 from . import breaking_changes
 import dml.globals
 # set from codegen.py
@@ -345,7 +349,7 @@ class Statement(Code):
     is_empty = False
     def __init__(self, site):
         self.site = site
-        self.context = ErrorContext.current()
+        self.context = logging.ErrorContext.current()
 
     # Emit a single (labeled) C statement.
     @abc.abstractmethod
@@ -392,7 +396,7 @@ class Compound(Statement):
         self.linemark()
         out('{\n', postindent=1)
         self.toc_inline()
-        site_linemark(self.rbrace_site)
+        output.site_linemark(self.rbrace_site)
         out('}\n', preindent=-1)
 
     @property
@@ -544,12 +548,12 @@ class TryCatch(Statement):
 
         if (dml.globals.dml_version != (1, 2)
             and not self.tryblock.control_flow().fallthrough):
-            site_linemark(self.catchblock.site)
+            output.site_linemark(self.catchblock.site)
             out(f'{self.label}:;\n')
             self.catchblock.toc()
         else:
             # Our fallthrough analysis is more conservative than Coverity's
-            coverity_marker('unreachable', site=self.catchblock.site)
+            output.coverity_marker('unreachable', site=self.catchblock.site)
             out(f'if (false) {self.label}:\n')
             toc_under_if(self.catchblock)
 
@@ -595,7 +599,7 @@ class InlinedMethod(Statement):
     def toc_inline(self):
         for stmt in self.pre:
             stmt.toc()
-        with allow_linemarks():
+        with output.allow_linemarks():
             for stmt in self.body:
                 stmt.toc()
         for stmt in self.post:
@@ -639,7 +643,7 @@ class Assert(Statement):
     def toc_stmt(self):
         self.linemark()
         out('DML_ASSERT("%s", %d, %s);\n'
-            % (quote_filename(self.site.filename()),
+            % (output.quote_filename(self.site.filename()),
                self.site.lineno, self.expr.read()))
     def control_flow(self):
         return ControlFlow(
@@ -843,7 +847,7 @@ class If(Statement):
         toc_under_if(self.truebranch)
 
         if self.falsebranch:
-            site_linemark(self.else_site)
+            output.site_linemark(self.else_site)
             out('else\n')
             self.falsebranch.toc_stmt()
 
@@ -899,7 +903,7 @@ class DoWhile(Statement):
         self.linemark()
         out('do\n')
         self.stmt.toc_stmt()
-        site_linemark(self.cond.site)
+        output.site_linemark(self.cond.site)
         out(f'while ({self.cond.read()});\n')
     def control_flow(self):
         bodyflow = self.stmt.control_flow()
@@ -986,14 +990,14 @@ class ForeachSequence(Statement):
             self.linemark()
             out(*args, **kwargs)
         lm_out(f'_each_in_t __each_in_expr = {self.each_in_expr.read()};\n')
-        coverity_marker('unreachable', site=self.site)
+        output.coverity_marker('unreachable', site=self.site)
         out('for (uint32 _outer_idx = 0; _outer_idx < __each_in_expr.num; '
             + '++_outer_idx) {\n', postindent=1)
         lm_out(f'_vtable_list_t _list = {EachIn.array_ident(self.trait)}'
                + '[__each_in_expr.base_idx + _outer_idx];\n')
         lm_out('uint32 _num = _list.num / __each_in_expr.array_size;\n')
         lm_out('uint32 _start = _num * __each_in_expr.array_idx;\n')
-        coverity_marker('unreachable', site=self.site)
+        output.coverity_marker('unreachable', site=self.site)
         out('for (uint32 _inner_idx = _start; _inner_idx < _start + _num; '
             + '++_inner_idx)\n')
         self.body.toc_stmt()
@@ -1052,7 +1056,7 @@ class SubsequentCases(Statement):
     def toc_stmt(self):
         for (i, case) in enumerate(self.cases):
             assert isinstance(case, (Case, Default))
-            site_linemark(case.site)
+            output.site_linemark(case.site)
             semi = ';' * (i == len(self.cases) - 1)
             if isinstance(case, Case):
                 out(f'case {case.expr.read()}:{semi}\n', preindent = -1,
@@ -1170,7 +1174,7 @@ def as_bool(e):
         return mkFlag(e.site, e)
     elif isinstance(t, TPtr):
         return mkNotEquals(e.site, e,
-                           Lit(None, 'NULL', TPtr(TVoid()), 1))
+                           expr.Lit(None, 'NULL', TPtr(TVoid()), 1))
     else:
         report(ENBOOL(e))
         return mkBoolConstant(e.site, False)
@@ -1704,7 +1708,7 @@ class IdentityEq(Expression):
             return f'_identity_eq({self.lh.read()}, {self.rh.read()})'
         else:
             return (f'_identity_eq_at_site({self.lh.read()}, {self.rh.read()}'
-                    + f', "{quote_filename(self.site.filename())}", '
+                    + f', "{output.quote_filename(self.site.filename())}", '
                     + f'{self.site.lineno})')
 
 
@@ -2008,7 +2012,7 @@ class ShL(BitShift):
         if self.type.signed:
             return ('DML_shl(%s, %s, "%s", %s)'
                     % (self.lh.read(), self.rh.read(),
-                       quote_filename(self.site.filename()),
+                       output.quote_filename(self.site.filename()),
                        self.site.lineno))
         else:
             return 'DML_shlu(%s, %s)' % (self.lh.read(), self.rh.read())
@@ -2083,7 +2087,7 @@ class ShR(BitShift):
         if self.type.signed:
             return ('DML_shr(%s, %s, "%s", %s)'
                     % (self.lh.read(), self.rh.read(),
-                       quote_filename(self.site.filename()),
+                       output.quote_filename(self.site.filename()),
                        self.site.lineno))
         else:
             return 'DML_shru(%s, %s)' % (self.lh.read(), self.rh.read())
@@ -2285,7 +2289,7 @@ class Div(DivModOp):
         return ('%s(%s, %s, "%s", %s)'
                     % ('DML_div' if self.type.signed else 'DML_divu',
                        self.lh.read(), self.rh.read(),
-                       quote_filename(self.site.filename()),
+                       output.quote_filename(self.site.filename()),
                        self.site.lineno))
 
 def mkDiv(site, lh, rh):
@@ -2328,7 +2332,7 @@ class Mod(DivModOp):
         return ('%s(%s, %s, "%s", %s)'
                     % ('DML_mod' if self.type.signed else 'DML_modu',
                        self.lh.read(), self.rh.read(),
-                       quote_filename(self.site.filename()),
+                       output.quote_filename(self.site.filename()),
                        self.site.lineno))
 
 def mkMod(site, lh, rh):
@@ -4051,7 +4055,7 @@ class NodeRef(Expression):
     def __str__(self):
         name = self.node.logname(self.indices)
         if name:
-            return dollar(self.site)+name
+            return logging.dollar(self.site)+name
         else:
             assert dml.globals.dml_version == (1, 2)
             return '$<anonymous %s>' % self.node.objtype
@@ -4110,7 +4114,7 @@ class NodeRefWithStorage(NodeRef, LValue):
             assert dml.globals.dml_version == (1, 2)
             raise EAPPLYMETH(self.site, self.node.name)
         # storage might be a function pointer
-        return mkApplyInits(self.site, self, inits, location, scope)
+        return expr.mkApplyInits(self.site, self, inits, location, scope)
 
 class SessionVariableRef(LValue):
     "A reference to a session variable"
@@ -4182,7 +4186,7 @@ class RegisterWithFields(PlainNodeRef):
 
 # This one can happen in both 1.2 and 1.4, for data members.
 class IncompleteNodeRefWithStorage(PlainNodeRef):
-    '''NodeRefWithStorage where not all indices are defined'''
+    '''NodeRefWithStorage where not all indices are expr_util.defined'''
     @auto_init
     def __init__(self, site, node, indices, node_type, static_index):
         assert isinstance(static_index, NonValue)
@@ -4276,7 +4280,7 @@ class NodeArrayRef(NonValueArrayRef):
 
     def __str__(self):
         name = self.node.logname(self.indices)
-        return dollar(self.site) + name
+        return logging.dollar(self.site) + name
 
     def exc(self):
         return EARRAY(self.site, self.node.identity())
@@ -5110,7 +5114,7 @@ class InlinedParam(RValue):
         return self.expr.value
 
 def mkInlinedParam(site, expr, name, type):
-    if not defined(expr):
+    if not expr_util.defined(expr):
         raise ICE(site, 'undefined parameter')
     if isinstance(expr, InlinedParam):
         expr = expr.expr
@@ -5135,7 +5139,7 @@ class QName(Expression):
         if self.indices and not all(x.constant for x in self.indices):
             crep.require_dev(site)
     def __str__(self):
-        return dollar(self.site) + '%s.qname' % (self.node)
+        return logging.dollar(self.site) + '%s.qname' % (self.node)
     def read(self):
         if (dml.globals.dml_version == (1, 2)
             and self.node.logname() != self.node.logname_anonymized()):
@@ -5160,7 +5164,7 @@ mkQName = QName
 
 def get_anonymized_name(obj):
     if obj.objtype == 'register':
-        offset = param_expr(obj, 'offset',
+        offset = expr_util.param_expr(obj, 'offset',
                             (mkIntegerLiteral(obj.site, 0),) * obj.dimensions)
         if undefined(offset):
             # acquire a unique name, based on this banks unmapped registers
@@ -5173,7 +5177,7 @@ def get_anonymized_name(obj):
     else:
         assert(obj.objtype == 'field')
         [msb, lsb] = [
-            param_int(
+            expr_util.param_int(
                 obj, name,
                 indices=(mkIntegerLiteral(obj.site, 0),) * obj.dimensions)
             for name in ['msb', 'lsb']]
@@ -5187,7 +5191,7 @@ class HiddenName(StringConstant):
     def __init__(self, site, value, node):
         assert(node.objtype in {'register', 'field'})
     def __str__(self):
-        return dollar(self.site) + '%s.name' % (self.node,)
+        return logging.dollar(self.site) + '%s.name' % (self.node,)
     def read(self):
         report(WCONFIDENTIAL(self.site))
         return self.quoted
@@ -5203,7 +5207,7 @@ class HiddenQName(Expression):
     def __init__(self, site, node, indices):
         assert(node.objtype in {'register', 'field'})
     def __str__(self):
-        return dollar(self.site) + '%s.qname' % (self.node)
+        return logging.dollar(self.site) + '%s.qname' % (self.node)
     def read(self):
         return QName(self.site, self.node, 'device', self.indices).read()
     def fmt(self):
@@ -5478,7 +5482,7 @@ class Declaration(Statement):
             # ducks a potential GCC warning, and also serves to
             # zero-initialize VLAs
             self.type.print_declaration(self.name, unused = self.unused)
-            site_linemark(self.init.site)
+            output.site_linemark(self.init.site)
             out(self.init.assign_to(self.name, self.type) + ';\n')
         else:
             self.type.print_declaration(
@@ -5552,14 +5556,14 @@ class CText(Code):
     def toc(self):
         path = self.site.filename()
         (ident, h_path) = dmldir_macro(path)
-        out('#define %s "%s"\n' % (ident, quote_filename(h_path)))
+        out('#define %s "%s"\n' % (ident, output.quote_filename(h_path)))
         if dml.globals.linemarks:
             linemark(self.site.lineno, path)
         out(self.text)
         if not output.current().bol:
             out('\n')
         if dml.globals.linemarks:
-            reset_line_directive()
+            output.reset_line_directive()
         out('#undef %s\n' % (ident,))
 
 mkCText = CText

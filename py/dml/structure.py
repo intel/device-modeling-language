@@ -8,18 +8,23 @@ import re
 from contextlib import ExitStack
 import functools
 import operator
-from . import objects, logging, crep, ast
+from . import objects, expr_util, logging, crep, ast
 from . import traits
 from . import topsort
 from . import slotsmeta
 from . import ctree
 from . import serialize
-from .logging import *
-from .codegen import *
-from .symtab import *
-from .expr import *
+from . import logging
+from .logging import ICE, report
+from . import codegen
+from .codegen import declarations, eval_type
+from .symtab import global_scope
+from .expr import Expression, mkLit, mkNullConstant, NonValue, StaticIndex
 from .ctree import *
-from .expr_util import *
+from .expr_util import (
+    defined, param_bool, param_defined, param_expr,
+    param_expr_site, param_int, param_str,
+    static_indices, undefined)
 from .messages import *
 from .types import *
 import dml.globals
@@ -113,7 +118,7 @@ def mkglobals(stmts):
         try:
             if stmt[0] == 'constant':
                 _, site, name, expr = stmt
-                expr = codegen_expression_maybe_nonvalue(
+                expr = codegen.codegen_expression_maybe_nonvalue(
                     expr, None, global_scope)
                 check_constant_expr(expr)
                 if expr.constant:
@@ -447,7 +452,7 @@ def check_unused_and_warn(node):
     not used. This usually applies to methods and parameters."""
 
     if node.refcount == 0:
-        if not warning_is_ignored('WUNUSED'):
+        if not logging.warning_is_ignored('WUNUSED'):
             report(WUNUSED(node))
         elif is_unused_default(node):
             report(WUNUSEDDEFAULT(node))
@@ -549,7 +554,7 @@ def add_templates(obj_specs, each_stmts):
             obj_spec = tpl.spec
         else:
             obj_spec = InstantiatedTemplateSpec(
-                tpl, *wrap_sites(TemplateSite, tpl.spec, site, tpl.name))
+                tpl, *wrap_sites(logging.TemplateSite, tpl.spec, site, tpl.name))
         used_templates[tpl] = obj_spec
 
         for (tpls, orig_tpls, spec) in each_stmts.get(tpl, []):
@@ -567,7 +572,7 @@ def add_templates(obj_specs, each_stmts):
             else:
                 # All templates match; expand the each statement.
                 obj_specs.append(
-                    ObjectSpec(*wrap_sites(InEachSite, spec, spec.site,
+                    ObjectSpec(*wrap_sites(logging.InEachSite, spec, spec.site,
                                            [t.name for t in orig_tpls])))
                 queue.extend(spec.templates)
 
@@ -874,7 +879,7 @@ def merge_subobj_defs(name, defs, parent):
             candidates = {}
             for len_ast in len_asts:
                 if len_ast is not None:
-                    length = eval_arraylen(len_ast, parent_scope)
+                    length = codegen.eval_arraylen(len_ast, parent_scope)
                     candidates.setdefault(length, []).append(len_ast)
             if len(candidates) == 0:
                 idxref = (f" (with index variable '{idxvar}')"
@@ -959,7 +964,7 @@ def mkhook(spec, parent):
                              e.clarification))
         types.append(typ)
 
-    array_lens = tuple(eval_arraylen(len_ast, parent_scope)
+    array_lens = tuple(codegen.eval_arraylen(len_ast, parent_scope)
                        for len_ast in arraylen_asts)
 
     return objects.Hook(name, site, parent, types, array_lens)
@@ -1050,7 +1055,7 @@ def mkobj(ident, objtype, arrayinfo, obj_specs, parent, each_stmts):
     if num_elems >= 1 << 31:
         raise EASZLARGE(site, num_elems)
 
-    with ErrorContext(obj):
+    with logging.ErrorContext(obj):
         (obj_specs, used_templates) = add_templates(obj_specs, each_stmts)
         obj.templates = used_templates
         obj_params = create_parameters(obj, obj_specs, index_vars, index_sites)
@@ -1273,8 +1278,8 @@ def create_parameters(obj, obj_specs, index_vars, index_sites):
 
 def eval_precond(cond_ast, obj, global_scope):
     try:
-        with ErrorContext(obj, cond_ast.site):
-            cond = codegen_expression(
+        with logging.ErrorContext(obj, cond_ast.site):
+            cond = codegen.codegen_expression(
                 cond_ast, Location(obj, static_indices(obj, cond_ast.site)),
                 global_scope)
     except DMLError as e:
@@ -1681,17 +1686,17 @@ def process_method_declarations(obj, name, declarations,
             if exported:
                 if not method.fully_typed:
                     raise EEXTERN(method.site)
-                func = method_instance(method)
-                mark_method_referenced(func)
-                mark_method_exported(func, crep.cref_method(method), msite)
+                func = codegen.method_instance(method)
+                codegen.mark_method_referenced(func)
+                codegen.mark_method_exported(func, crep.cref_method(method), msite)
                 break
         # Export hard_reset and soft_reset from device objects in 1.2
         # automatically
         if (obj.objtype == 'device' and
             name in {'hard_reset', 'soft_reset'}):
-            func = method_instance(method)
-            mark_method_referenced(func)
-            mark_method_exported(func, crep.cref_method(method), obj.site)
+            func = codegen.method_instance(method)
+            codegen.mark_method_referenced(func)
+            codegen.mark_method_exported(func, crep.cref_method(method), obj.site)
 
     return method
 
@@ -2005,7 +2010,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
     for o in subobjs:
         obj.add_component(o)
 
-    # Map name to MethodFunc.
+    # Map name to codegen.MethodFunc.
     trait_method_overrides = {}
     # Map name to objects.Parameter.
     trait_param_nodes = {}
@@ -2110,7 +2115,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                 for indices in all_index_exprs(b):
                     funexpr = param_expr(b, 'function', indices)
                     if defined(funexpr):
-                        funnum = expr_intval(funexpr)
+                        funnum = expr_util.expr_intval(funexpr)
                         if funnum in used:
                             report(EDBFUNC(param_expr(b, 'function'),
                                            param_expr(used[funnum], 'function'),
@@ -2141,7 +2146,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
         zero_index = (mkIntegerLiteral(obj.site, 0),)
         for param in obj.get_recursive_components('parameter'):
             with ExitStack() as stack:
-                stack.enter_context(ErrorContext(param, None))
+                stack.enter_context(logging.ErrorContext(param, None))
                 stack.enter_context(crep.DeviceInstanceContext())
                 try:
                     try:
@@ -2192,9 +2197,9 @@ def mkobj2(obj, obj_specs, params, each_stmts):
         # try to evaluate their exporting
         for export in exports:
             method_ref_ast, name_ast = (export.args)
-            method_ref = codegen_expression_maybe_nonvalue(
+            method_ref = codegen.codegen_expression_maybe_nonvalue(
                 method_ref_ast, obj_scope, global_scope)
-            name_expr = codegen_expression(name_ast, obj_scope, global_scope)
+            name_expr = codegen.codegen_expression(name_ast, obj_scope, global_scope)
             # By continuing we can discover more error, since exports
             # have no effect if invalid
             if not isinstance(method_ref, NodeRef):
@@ -2210,16 +2215,16 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             if not method.fully_typed:
                 report(EEXPORT(method.site, export.site))
                 continue
-            name = expr_strval(name_expr)
+            name = expr_util.expr_strval(name_expr)
             if not re.match(r"[A-Za-z_][\w_]*", name):
                 report(ENAMEID(name_ast.site, name))
                 continue
             if method.throws or len(method.outp) > 1:
                 report(EEXPORT(method.site, export.site))
                 continue
-            func = method_instance(method)
-            mark_method_referenced(func)
-            mark_method_exported(func, name, export.site)
+            func = codegen.method_instance(method)
+            codegen.mark_method_referenced(func)
+            codegen.mark_method_exported(func, name, export.site)
 
     elif obj.objtype == 'bank':
         set_confidential_object(obj)
@@ -2329,7 +2334,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             param = obj.get_component('allocate_type')
             atype_expr = param.get_expr(static_indices(obj))
             if defined(atype_expr):
-                atype = expr_strval(atype_expr)
+                atype = expr_util.expr_strval(atype_expr)
                 type_param = obj.get_component('type')
                 # if 'parameter type = "i"' appears together with allocate_type,
                 # then remove that as well
@@ -2398,7 +2403,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
 
 def set_confidential_object(obj):
     expr = param_expr(obj, '_confidentiality')
-    val = expr_intval(expr) if defined(expr) else 0
+    val = expr_util.expr_intval(expr) if defined(expr) else 0
     if (val - dml.globals.build_confidentiality) > 0:
         obj._confidential = True
         if obj.objtype in {'register', 'field'} and obj.name:
@@ -2704,7 +2709,7 @@ class ASTParamExpr(objects.ParamExpr):
                 self.params_on_stack.index(self):]])
         self.params_on_stack.append(self)
         try:
-            expr = codegen_expression_maybe_nonvalue(
+            expr = codegen.codegen_expression_maybe_nonvalue(
                 self.ast, Location(self.parent, indices), global_scope)
         finally:
             popped = self.params_on_stack.pop()
@@ -3259,8 +3264,8 @@ def mkmethod(site, rbrace_site, location, parent_obj, name, inp_ast,
                 and default.node.site.dml_version() == (1, 4)):
                 report(PTHROWS(body.site))
 
-    inp = eval_method_inp(inp_ast, location, global_scope)
-    outp = eval_method_outp(outp_ast, location, global_scope)
+    inp = codegen.eval_method_inp(inp_ast, location, global_scope)
+    outp = codegen.eval_method_outp(outp_ast, location, global_scope)
 
     for t in [p.typ for p in inp] + [t for (_, t) in outp]:
         if t:
@@ -3285,8 +3290,8 @@ def mkmethod(site, rbrace_site, location, parent_obj, name, inp_ast,
                             body, default, rbrace_site)
     if startup:
         (memoized_startups if memoized else startups).append(method)
-        func = method_instance(method)
-        mark_method_referenced(func)
+        func = codegen.method_instance(method)
+        codegen.mark_method_referenced(func)
 
     if logging.show_porting:
         if method.fully_typed:
