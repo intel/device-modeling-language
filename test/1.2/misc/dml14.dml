@@ -220,7 +220,7 @@ bank field_regs {
         // Test that inquiry accesses bypass dml12_compat_read_register and
         // dml12_compat_write_register (r6 inverts bits in read_register/
         // write_register; inquiry should access storage directly)
-        local uint32 inq_val;
+        local uint32_le_t inq_val;
         local buffer_t inq_buf = {.len=4, .data=cast(&inq_val, uint8 *)};
         local generic_transaction_t inq_read = SIM_make_mem_op_read(
             0, inq_buf, true, NULL);
