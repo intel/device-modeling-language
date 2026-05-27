@@ -448,3 +448,4 @@
   that the `objects_finalized()` method is called of every DML object that
   instantiates the `objects_finalized` template.
   The device object always instantiates this template.
+- `release 6 6464`
