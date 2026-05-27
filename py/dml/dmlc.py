@@ -8,8 +8,7 @@ import shutil
 import time
 from pathlib import Path
 
-from . import structure, logging, messages, ctree, ast, expr_util, toplevel
-from . import errors as E, warnings as W
+from . import structure, logging, ctree, ast, expr_util, toplevel
 from . import serialize
 from . import dmlparse
 from . import output
@@ -19,9 +18,8 @@ import dml.c_backend
 import dml.info_backend
 import dml.g_backend
 import dml.globals
-from . import logging
 from .logging import ICE, dbg, report
-from .messages import *
+from . import errors as E, warnings as W
 from .env import api_versions, default_api_version
 import tarfile
 
@@ -539,7 +537,7 @@ def main(argv):
                      " or older")
 
     if options.werror:
-        DMLWarning.enable_werror()
+        logging.DMLWarning.enable_werror()
 
     try:
         logging.max_errors = int(options.max_errors)

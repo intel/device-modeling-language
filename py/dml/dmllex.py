@@ -5,7 +5,6 @@
 
 from . import logging
 from .logging import report
-from .messages import *
 from . import errors as E
 import re
 

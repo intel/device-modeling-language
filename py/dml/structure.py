@@ -14,8 +14,7 @@ from . import topsort
 from . import slotsmeta
 from . import ctree
 from . import serialize
-from . import logging
-from .logging import ICE, report
+from .logging import ICE, report, DMLError
 from . import codegen
 from .codegen import declarations, eval_type
 from .symtab import global_scope
@@ -26,9 +25,7 @@ from .expr_util import (
     defined, param_bool, param_defined, param_expr,
     param_expr_site, param_int, param_str,
     static_indices, undefined)
-from .messages import *
-from . import warnings as W
-from . import errors as E
+from . import errors as E, warnings as W
 from . import types as tp
 import dml.globals
 from . import template

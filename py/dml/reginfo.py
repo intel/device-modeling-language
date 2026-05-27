@@ -8,10 +8,8 @@ import dml.globals
 from . import expr_util, logging
 from . import ctree as c
 from . import porting as P
-from .logging import report
-from .messages import *
-from . import warnings as W
-from . import errors as E
+from .logging import report, DMLError
+from . import errors as E, warnings as W
 from .expr_util import (
     defined, param_expr, param_expr_site, param_int, static_indices, undefined)
 

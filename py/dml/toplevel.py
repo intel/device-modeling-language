@@ -17,11 +17,8 @@ from ply import lex, yacc
 from . import logging, codegen, ctree, ast
 from . import breaking_changes
 from . import symtab
-from .messages import *
-from . import warnings as W
-from . import errors as E
-from . import porting as P
-from .logging import ICE, report
+from . import errors as E, warnings as W, porting as P
+from .logging import ICE, DMLError, report
 import dml.globals
 import dml.dmlparse
 

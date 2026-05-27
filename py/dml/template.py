@@ -8,9 +8,7 @@ import functools
 from . import ast, logging
 from . import breaking_changes
 from .logging import ICE, report
-from .messages import *
-from . import errors as E
-from . import porting as P
+from . import errors as E, porting as P
 from .set import Set
 import dml.globals
 import dml.traits

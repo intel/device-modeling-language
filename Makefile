@@ -35,7 +35,6 @@ PYFILES := dml/__init__.py			\
           dml/io_memory.py			\
           dml/int_register.py			\
           dml/logging.py			\
-          dml/messages.py			\
           dml/objects.py			\
           dml/output.py				\
           dml/porting.py			\

@@ -8,11 +8,8 @@ from ply import lex, yacc
 
 from . import logging
 from .logging import report
-from .messages import *
-from . import warnings as W
-from . import errors as E
-from . import porting as P
-from . import ast, logging
+from . import errors as E, warnings as W, porting as P
+from . import ast
 import dml.globals
 from . import dmllex12
 from . import dmllex14

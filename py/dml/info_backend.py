@@ -10,8 +10,7 @@ from . import expr_util
 from .ctree import (StringConstant, IntegerConstant, mkIntegerLiteral,
                     all_index_exprs, param_str_fixup)
 from .expr_util import defined
-from .messages import *
-from .logging import report
+from .logging import report, DMLError
 
 class XMLWriter(object):
     def __init__(self, filename):

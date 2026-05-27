@@ -4,7 +4,7 @@
 # PLY discovers t_* rules from module namespace
 from .dmllex import *  # noqa: F403
 from . import errors as E
-from .logging import DumpableSite
+from .logging import report, DumpableSite
 
 hashids = {'#' + kw: 'HASH' + kw.upper()
            for kw in [

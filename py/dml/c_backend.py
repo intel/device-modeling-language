@@ -17,13 +17,8 @@ from . import traits
 from . import breaking_changes
 import dml.globals
 from .structure import get_attr_name, port_class_ident, need_port_proxy_attrs
-from . import logging
-from .logging import ICE, report
-from .messages import *
-from . import warnings as W
-from . import errors as E
-from . import porting as P
-from . import output
+from .logging import DMLError, ICE, report
+from . import errors as E, warnings as W, porting as P
 from .output import out
 from . import ctree as c
 from .expr import Expression, mkLit, NonValue

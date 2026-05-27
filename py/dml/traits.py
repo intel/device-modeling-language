@@ -12,14 +12,12 @@ from . import crep, codegen, symtab, topsort
 from .symtab import global_scope
 from . import breaking_changes, provisional
 from . import logging
-from .logging import ICE, report
+from .logging import ICE, DMLError, report
 from .codegen import c_extra_inargs, c_rettype, declarations, eval_type
 from . import ctree as c
 from .expr import mkLit, NonValue
 from .expr_util import defined
-from .messages import *
-from . import warnings as W
-from . import errors as E
+from . import errors as E, warnings as W
 from .slotsmeta import auto_init
 from . import types as tp
 from .set import Set

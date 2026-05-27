@@ -9,9 +9,7 @@ from .objects import Method
 from . import types as tp
 from .logging import ICE, report
 from .expr_util import param_expr, param_str
-from .messages import *
-from . import warnings as W
-from . import errors as E
+from . import errors as E, warnings as W
 from . import breaking_changes, expr_util
 
 __all__ = (

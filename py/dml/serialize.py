@@ -4,8 +4,7 @@
 # This module contains the functions used to generate methods to convert between
 # dml values and attribute values
 
-from . import ctree, expr, logging, symtab, messages, output
-from . import errors as E
+from . import ctree, expr, logging, symtab, errors as E, output
 from . import objects
 from . import types as tp
 from .logging import ICE

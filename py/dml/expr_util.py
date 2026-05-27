@@ -3,8 +3,7 @@
 
 # Various convenience functions for common operations on expressions
 import dml.globals
-from .logging import report
-from .messages import *
+from .logging import report, DMLError
 from . import errors as E
 from . import types as tp
 from .expr import Lit, NonValue, NullConstant, StaticIndex

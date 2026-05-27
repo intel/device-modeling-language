@@ -11,17 +11,13 @@ import math
 from . import objects, crep, symtab, ctree, expr_util, expr, ast, int_register, logging, serialize
 from . import dmlparse, output
 from . import breaking_changes
-from . import logging
-from .logging import ICE, report
+from .logging import ICE, report, DMLError
 from .expr import Apply, Expression, Lit, mkApply, mkLit, NonValue, typecheck_inarg_inits
 from . import ctree as c
 from . import porting as P
 from .expr_util import apply, defined, expr_intval, undefined
 from .symtab import global_scope, MethodParamScope, Symtab
-from .messages import *
-from . import warnings as W
-from . import errors as E
-from . import output
+from . import errors as E, warnings as W
 from .output import out
 from . import types as tp
 from .set import Set

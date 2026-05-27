@@ -51,7 +51,6 @@ Make: dmlc
     $(HOST)/bin/dml/python/dml/int_register.py
     $(HOST)/bin/dml/python/dml/io_memory.py
     $(HOST)/bin/dml/python/dml/logging.py
-    $(HOST)/bin/dml/python/dml/messages.py
     $(HOST)/bin/dml/python/dml/objects.py
     $(HOST)/bin/dml/python/dml/output.py
     $(HOST)/bin/dml/python/dml/porting.py

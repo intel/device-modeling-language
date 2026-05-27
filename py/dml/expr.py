@@ -6,7 +6,6 @@ import abc
 import dml.globals
 from . import logging
 from .logging import ICE
-from .messages import *
 from . import errors as E
 from . import output
 from . import types as tp

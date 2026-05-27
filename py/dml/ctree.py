@@ -13,11 +13,8 @@ from functools import reduce
 
 from dml import objects, symtab, expr, logging, crep
 from . import logging
-from .logging import ICE, report, binary_dump
-from .messages import *
-from . import warnings as W
-from . import errors as E
-from . import porting as P
+from .logging import ICE, DMLError, report, binary_dump
+from . import errors as E, warnings as W, porting as P
 from . import output
 from .output import linemark, out
 from . import types as tp
@@ -27,7 +24,7 @@ from .expr import (Apply, Code, Expression, mkApply, mkLit,
 from .expr_util import apply, param_bool, param_str, undefined
 from .set import Set
 from .slotsmeta import auto_init
-from . import expr_util, dmlparse, output
+from . import expr_util, dmlparse
 from . import breaking_changes
 import dml.globals
 # set from codegen.py
