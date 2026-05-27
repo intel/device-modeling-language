@@ -5,6 +5,8 @@ import simics
 from functools import reduce
 import operator
 import stest, dev_util
+import testenv
+obj = testenv.instantiate()
 simics.SIM_run_command("log-level 4")
 
 def check(bank, offset, size):

@@ -4,6 +4,8 @@
 import simics
 import dev_util as du
 import stest
+import testenv
+obj = testenv.instantiate()
 
 expect = '''
 Write to unimplemented register regs.r1 (0x10) (value written = 0x00001267).

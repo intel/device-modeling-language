@@ -3,6 +3,8 @@
 
 import stest
 import simics
+import testenv
+obj = testenv.instantiate()
 
 [footype] = [attr[4] for attr in simics.VT_get_all_attributes("test")
              if attr[0] == 'foo']

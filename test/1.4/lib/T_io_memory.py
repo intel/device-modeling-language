@@ -4,6 +4,8 @@
 import simics
 import stest
 import dev_util
+import testenv
+obj = testenv.instantiate()
 
 # bank_io_memory works
 stest.expect_equal(dev_util.Register_LE(obj.port.bare, 0, size=1).read(), 0xaa)

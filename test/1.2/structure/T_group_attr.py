@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import simics
+import testenv
+obj = testenv.instantiate()
 print(obj.b_ga_a)
 
 if obj.b_ga_a == [[[i*100 + j*10 + k for k in range(3)]

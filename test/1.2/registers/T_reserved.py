@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import simics
+import testenv
+obj = testenv.instantiate()
 simics.SIM_run_command("log-level 4")
 mem = simics.SIM_create_object("memory-space", "mem",
                         [["map", [[0, [obj, "regs"], 0, 0, 0x10000000]]]])

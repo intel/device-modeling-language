@@ -3,6 +3,8 @@
 
 import simics
 import stest
+import testenv
+obj = testenv.instantiate()
 print(simics.SIM_get_port_interface(obj, "io_memory", "b1"))
 
 try:

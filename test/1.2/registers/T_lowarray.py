@@ -3,6 +3,8 @@
 
 import simics
 import stest
+import testenv
+obj = testenv.instantiate()
 stest.untrap_log("spec-viol")
 
 mem = simics.SIM_create_object("memory-space", "mem",

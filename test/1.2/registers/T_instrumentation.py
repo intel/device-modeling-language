@@ -23,6 +23,8 @@ import instrumentation_range
 import instrumentation_remove_callback
 import instrumentation_remove_connection_callbacks
 import instrumentation_subscribe_multiple
+import testenv
+obj = testenv.instantiate()
 
 subscribe_b1 = simics.SIM_get_port_interface(
     obj, 'bank_instrumentation_subscribe', 'b1')

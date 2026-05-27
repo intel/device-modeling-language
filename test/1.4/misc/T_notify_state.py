@@ -3,6 +3,8 @@
 
 import simics
 import stest
+import testenv
+obj = testenv.instantiate()
 
 stest.expect_equal(obj.count, 0)
 

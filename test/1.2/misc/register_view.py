@@ -3,6 +3,8 @@
 
 import test_register_view
 from stest import expect_equal, expect_log_mgr
+import testenv
+obj = testenv.instantiate()
 
 test_register_view.test(obj)
 

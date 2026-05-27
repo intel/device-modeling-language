@@ -3,6 +3,8 @@
 
 import simics
 import stest
+import testenv
+obj = testenv.instantiate()
 
 arr_iface = simics.SIM_get_port_interface(obj, "signal", "prt[0]")
 arr_iface.signal_raise()

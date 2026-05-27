@@ -3,6 +3,8 @@
 
 import simics
 import stest
+import testenv
+obj = testenv.instantiate()
 
 # Needed so that we can check 'after'
 cpu = simics.SIM_create_object("clock", "clock", [["freq_mhz", 1]])

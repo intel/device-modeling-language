@@ -6,7 +6,6 @@ dml 1.2;
 device test;
 
 // must set required attributes
-/// INSTANTIATE-MANUALLY
 
 attribute persist {
     parameter persistent = true;

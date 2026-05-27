@@ -4,6 +4,8 @@
 import contextlib
 import simics
 import stest, dev_util
+import testenv
+obj = testenv.instantiate()
 
 def byte_at(offs, big_endian_regsize):
     if big_endian_regsize:

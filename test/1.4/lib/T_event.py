@@ -4,6 +4,8 @@
 import simics
 import sim_commands
 import stest
+import testenv
+obj = testenv.instantiate()
 
 cpu = simics.SIM_create_object("clock", "clock", [["freq_mhz", 1]])
 obj.queue = cpu

@@ -3,6 +3,8 @@
 
 import simics
 import stest
+import testenv
+obj = testenv.instantiate()
 
 def check_reg(bankname, name, regnum, val):
     iface = simics.SIM_get_port_interface(obj, "int_register", bankname)

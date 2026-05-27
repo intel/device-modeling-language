@@ -3,6 +3,8 @@
 
 import simics
 import stest
+import testenv
+obj = testenv.instantiate()
 # Test that all banks get the int_register interface, no matter if
 # they are mappable or not
 for bank in ('b1', 'b2', 'b3'):

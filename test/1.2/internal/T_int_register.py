@@ -1,6 +1,8 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import testenv
+obj = testenv.instantiate()
 RN = 17
 RS = '_r0x0'                    # anonymized name
 

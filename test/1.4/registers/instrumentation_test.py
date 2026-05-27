@@ -24,6 +24,8 @@ import instrumentation_remove_callback
 import instrumentation_remove_connection_callbacks
 
 import stest
+import testenv
+obj = testenv.instantiate()
 
 def test(obj):
     subscribe_b1 = obj.bank.b1.iface.bank_instrumentation_subscribe

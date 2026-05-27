@@ -4,6 +4,8 @@
 import contextlib
 import stest, dev_util
 from stest import expect_equal
+import testenv
+obj = testenv.instantiate()
 
 mkR = dev_util.Register_LE
 

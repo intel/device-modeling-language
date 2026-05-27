@@ -3,6 +3,8 @@
 
 import simics
 import stest
+import testenv
+obj = testenv.instantiate()
 
 
 for b, endian in ((obj.bank.b, 'little'), (obj.bank.be, 'big')):

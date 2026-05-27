@@ -6,6 +6,8 @@
 
 import stest
 import dev_util as du
+import testenv
+obj = testenv.instantiate()
 
 # Create register objects for accessing the DUT. R0 is a simple
 # read-only register and R1 has a field. Both registers implement the

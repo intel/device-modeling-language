@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import simics
+import testenv
+obj = testenv.instantiate()
 obj.log_level = 4
 cpu = simics.SIM_create_object("clock", "cpu", [["freq_mhz", 1]])
 mem = simics.SIM_create_object("memory-space", "mem",

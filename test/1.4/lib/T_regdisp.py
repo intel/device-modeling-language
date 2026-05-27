@@ -4,6 +4,8 @@
 import contextlib
 import simics
 import stest
+import testenv
+obj = testenv.instantiate()
 
 def test_some(mem, obj, port, allow_partial, allow_overlapping,
               bigendian=False):

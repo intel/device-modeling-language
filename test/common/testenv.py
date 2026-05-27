@@ -8,3 +8,8 @@ _scratchdir: str = ''
 
 def scratchdir() -> str:
     return _scratchdir
+
+
+def instantiate():
+    import simics
+    return simics.SIM_create_object('test', 'obj', [])

@@ -3,6 +3,8 @@
 
 import simics
 import stest
+import testenv
+obj = testenv.instantiate()
 stest.expect_equal(obj.b_r0, 0x12345678)
 stest.expect_equal(obj.b_r1, 0x12345678)
 

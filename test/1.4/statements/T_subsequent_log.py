@@ -3,6 +3,8 @@
 
 import sim_commands
 import stest
+import testenv
+obj = testenv.instantiate()
 
 obj.log_level = 1
 

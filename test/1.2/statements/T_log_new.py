@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import simics
+import testenv
+obj = testenv.instantiate()
 conf.sim.stop_on_error = False
 if not obj.runtest:
     print('test attribute returned false')

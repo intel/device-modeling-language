@@ -3,6 +3,8 @@
 
 import simics
 import stest
+import testenv
+obj = testenv.instantiate()
 
 with stest.expect_exception_mgr(simics.SimExc_IllegalValue):
     obj.a = None

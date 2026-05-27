@@ -5,6 +5,8 @@
 # remain after executing this script.
 
 import simics
+import testenv
+obj = testenv.instantiate()
 cpu = simics.SIM_create_object("clock", "clock", [["freq_mhz", 1]])
 
 o = simics.SIM_create_object("test", "o", [["queue", cpu]])

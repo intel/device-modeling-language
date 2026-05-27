@@ -4,6 +4,8 @@
 import simics
 from dev_util import Register_LE
 from stest import expect_equal, expect_true, expect_false
+import testenv
+obj = testenv.instantiate()
 
 simics.SIM_run_command("log-level 4")
 

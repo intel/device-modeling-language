@@ -3,6 +3,8 @@
 
 import simics
 import stest
+import testenv
+obj = testenv.instantiate()
 
 # check the initial values where applicable
 stest.expect_equal(obj.DML_saved_saved_initialized_int, 5)

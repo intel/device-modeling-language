@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import simics
+import testenv
+obj = testenv.instantiate()
 try:
     print(obj.b_r)
     print("attribute get didn't fail as it should have")

@@ -6,6 +6,7 @@ from os.path import join, dirname
 import subprocess
 from simicsutils.host import batch_suffix
 import testenv
+obj = testenv.instantiate()
 
 obj.setup_state = None
 

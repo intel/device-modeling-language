@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: MPL-2.0
 import simics
 import stest
+import testenv
+obj = testenv.instantiate()
 
 destroy_list = None
 def on_destroyed(*invocations):

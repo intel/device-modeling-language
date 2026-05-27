@@ -3,6 +3,8 @@
 
 import simics
 from stest import expect_equal
+import testenv
+obj = testenv.instantiate()
 
 def test(obj):
     b = simics.SIM_get_port_interface(obj, 'register_view', 'b')

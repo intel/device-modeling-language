@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import stest, dev_util
+import testenv
+obj = testenv.instantiate()
 
 regs = [dev_util.Register_LE(obj.bank.b, i, size=1) for i in range(3)]
 

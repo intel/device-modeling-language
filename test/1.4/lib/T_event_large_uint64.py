@@ -3,6 +3,8 @@
 
 import simics
 import stest
+import testenv
+obj = testenv.instantiate()
 
 clock = simics.SIM_create_object('clock', 'clock', [['freq_mhz', 1]])
 obj.queue = clock

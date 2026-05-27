@@ -5,6 +5,8 @@ import simics
 import stest
 import dev_util as du
 from functools import reduce
+import testenv
+obj = testenv.instantiate()
 
 simics.SIM_run_command("log-level 4")
 

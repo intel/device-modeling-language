@@ -3,6 +3,8 @@
 
 import simics
 import stest
+import testenv
+obj = testenv.instantiate()
 
 iface = simics.SIM_get_port_interface(obj, "simple_interrupt", "p")
 iface.interrupt(17)

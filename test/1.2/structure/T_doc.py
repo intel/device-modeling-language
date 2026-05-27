@@ -3,6 +3,8 @@
 
 import simics
 import stest
+import testenv
+obj = testenv.instantiate()
 
 stest.expect_equal(obj.class_desc, None)
 stest.expect_equal(simics.VT_get_class_description(simics.SIM_object_class(obj)),
