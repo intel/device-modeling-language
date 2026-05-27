@@ -675,9 +675,7 @@ class CTestCase(DMLFileTestCase):
         sc = open(self.scriptname, "w")
         #sc.write("print conf.sim.module_searchpath\n")
         #sc.write("run_command('list-modules')\n")
-        sc.write("testname = %r\n" % self.shortname)
         sc.write("scratchdir = %r\n" % self.scratchdir)
-        sc.write("basedir = %r\n" % join(os.path.dirname(self.filename)))
         sc.write("SIM_add_module_dir(scratchdir)\n")
         sc.write("SIM_module_list_refresh()\n")
         if auto_instantiate:
