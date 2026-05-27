@@ -284,7 +284,7 @@ class test_SourceFile(unittest.TestCase):
 
     def test_read_tokens(self):
         find_lexer(Path(__file__))
-        from dml.messages import ESYNTAX
+        import dml.errors as E
 
         with TempFile(b"75 /**/ xyz;") as tf:
             f = SourceFile(tf.name)
@@ -297,7 +297,7 @@ class test_SourceFile(unittest.TestCase):
             try:
                 for _ in f.read_tokens(2):
                     pass
-            except ESYNTAX as e:
+            except E.SYNTAX as e:
                 self.assertIn('%s:5:4:' % (tf.name,), str(e))
             else:
                 self.fail('expected ESYNTAX')

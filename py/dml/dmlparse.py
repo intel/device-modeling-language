@@ -9,6 +9,7 @@ from ply import lex, yacc
 from . import logging
 from .logging import report
 from .messages import *
+from . import errors as E
 from . import ast, logging
 import dml.globals
 from . import dmllex12
@@ -145,7 +146,7 @@ def lex_end_site(t, elt):
 
 def parse_bitorder(t, syn):
     if syn not in {'be', 'le'}:
-        report(EBITO(site(t), syn))
+        report(E.BITO(site(t), syn))
         return 'le'
     return syn
 
@@ -308,7 +309,7 @@ def toplevel_param(t):
     '''toplevel_param : param'''
     (_, type_info, _, _) = t[1].args
     if type_info is not None and type_info.kind == 'paramtype':
-        report(ESYNTAX(site(t), ':',
+        report(E.SYNTAX(site(t), ':',
                        'parameter type declaration only permitted'
                        + ' in top level template block'))
         # fallback: dummy statement
@@ -448,7 +449,7 @@ def field_array_size_no_dml12(t):
 def field_array_size_dml12(t):
     'fieldarraysize : LBRACKET ident IN expression DOTDOT expression RBRACKET fieldarraysize'
     if t[4].kind != 'int' or t[4].args != (0,):
-        report(EZRANGE(site(t, 4)))
+        report(E.ZRANGE(site(t, 4)))
     s = site(t)
     t[0] = [(ast.variable(site(t, 2), t[2]),
              ast.binop(s, ast.int(s, 1), '+', t[6]))] + t[8]
@@ -548,7 +549,7 @@ def object3(t):
               | maybe_extension IMPLEMENT objident array_list maybe_istemplate object_spec'''
     array_spec = t[4]
     if array_spec and t[2] in {'interface', 'implement'}:
-        report(ESYNTAX(site(t, 4), '[', f'{t[2]} array not allowed'))
+        report(E.SYNTAX(site(t, 4), '[', f'{t[2]} array not allowed'))
         array_spec = []
     t[0] = ast.object_(site(t), t[3], t[2], array_spec, t[1], t[5] + t[6])
 
@@ -657,20 +658,20 @@ def method_qualifiers_check(site, qualifiers, inp, outp, throws, default):
     memoized = 'memoized' in qualifiers
     if startup:
         if inp:
-            report(ESYNTAX(site, None,
+            report(E.SYNTAX(site, None,
                            'startup methods may not have input parameters'))
             inp = []
         if (outp or throws) and not memoized:
-            report(ESYNTAX(site, None,
+            report(E.SYNTAX(site, None,
                            'non-memoized startup methods may not have return'
                            + 'values or be throwing'))
             outp = []
         elif not (outp or throws) and memoized:
-            report(ESYNTAX(site, None,
+            report(E.SYNTAX(site, None,
                            'memoized methods must have return values and/or '
                            'be throwing'))
         if default:
-            report(ESYNTAX(site, None,
+            report(E.SYNTAX(site, None,
                            "startup methods may not be declared 'default'"))
     return (inp, outp)
 
@@ -678,7 +679,7 @@ def method_qualifiers_check(site, qualifiers, inp, outp, throws, default):
 def maybe_colon_yes(t):
     '''maybe_colon : COLON'''
     if not site(t).provisional_enabled(provisional.explicit_method_decls):
-        report(ESYNTAX(site(t), ':', "expected '{' or 'default'"))
+        report(E.SYNTAX(site(t), ':', "expected '{' or 'default'"))
         t[0] = False
     else:
         t[0] = True
@@ -721,7 +722,7 @@ def object_inline_method(t):
     if all(typ for (_, asite, name, typ) in inp):
         # inline annotation would have no effect for fully typed methods.
         # We forbid it as a way to strongly discourage unneeded use of inline.
-        report(ESYNTAX(site(t, 2), 'inline',
+        report(E.SYNTAX(site(t, 2), 'inline',
                        'only use inline if there are untyped arguments'))
     body = t[7]
     t[0] = ast.method(site(t), name,
@@ -740,7 +741,7 @@ def arraydef1_dml12(t):
 def arraydef2_dml12(t):
     '''arraydef : ident IN expression DOTDOT expression'''
     if t[3].kind != 'int' or t[3].args != (0,):
-        report(EZRANGE(site(t, 3)))
+        report(E.ZRANGE(site(t, 3)))
     s = site(t)
     t[0] = (ast.variable(site(t, 1), t[1]),
             ast.binop(s, ast.int(s, 1), '+', t[5]))
@@ -851,7 +852,7 @@ def trait_template_dml12(t):
             # 'is' in a trait block means the same as it would have
             # meant in its template block, and it's confusing to have
             # two syntaxes for the same thing.
-            report(EISINTPL(stmt.site))
+            report(E.ISINTPL(stmt.site))
     t[0] = t[3]
 
 @prod_dml14
@@ -994,7 +995,7 @@ def maybe_extension_yes(t):
     'maybe_extension : IN'
     if not site(t).provisional_enabled(
             provisional.explicit_object_extensions):
-        report(ESYNTAX(site(t), 'in', None))
+        report(E.SYNTAX(site(t), 'in', None))
         t[0] = None
     else:
         t[0] = True
@@ -1077,7 +1078,7 @@ def object_statement(t):
     '''object_statement : object_statement_or_typedparam'''
     if (t[1].kind == 'param' and t[1].args[1] is not None
         and t[1].args[1].kind == 'paramtype'):
-        report(ESYNTAX(t[1].args[1].site, None,
+        report(E.SYNTAX(t[1].args[1].site, None,
                        'parameter type declaration only permitted'
                        + ' in top level template block'))
         # fallback: dummy statement
@@ -1093,7 +1094,7 @@ def object_statement_bad_shared_method(t):
 @prod_dml14
 def bad_shared_method(t):
     '''bad_shared_method : SHARED method_qualifiers METHOD shared_method'''
-    report(ESYNTAX(site(t), 'shared',
+    report(E.SYNTAX(site(t), 'shared',
                    'shared method declaration only permitted'
                    + ' in top level template block'))
     # fallback: dummy statement
@@ -1141,7 +1142,7 @@ def validate_if_body(stmts):
             result.append(stmt)
         else:
             assert stmt.kind in {'param', 'is'}
-            report(EBADCONDSTMT(stmt.site, stmt.kind))
+            report(E.BADCONDSTMT(stmt.site, stmt.kind))
     return result
 
 @prod_dml12
@@ -1157,7 +1158,7 @@ def hashif(t):
 @prod_dml14
 def hashif_nohash(t):
     '''hashif : IF'''
-    report(ESYNTAX(site(t), 'if', "invalid 'if', use '#if' in object context"))
+    report(E.SYNTAX(site(t), 'if', "invalid 'if', use '#if' in object context"))
 
 @prod_dml12
 def hashelse_dml12(t):
@@ -1172,7 +1173,7 @@ def hashelse(t):
 @prod_dml14
 def hashelse_nohash(t):
     '''hashelse : ELSE'''
-    report(ESYNTAX(site(t), 'else', "invalid 'else', use '#else'"))
+    report(E.SYNTAX(site(t), 'else', "invalid 'else', use '#else'"))
 
 @prod
 def object_if(t):
@@ -1233,7 +1234,7 @@ def object_param_walrus(t):
     '''param : PARAM objident COLON paramspec'''
     param_type = ast.walrus(site(t, 3))
     if provisional.explicit_param_decls not in t.parser.file_info.provisional:
-        report(ESYNTAX(site(t, 3), ':', "expected '=' or 'default'"))
+        report(E.SYNTAX(site(t, 3), ':', "expected '=' or 'default'"))
         param_type = None
     t[0] = ast.param(site(t), t[2], param_type, *t[4])
 
@@ -1244,7 +1245,7 @@ def object_param_typed(t):
     if (value is not None
         and (provisional.explicit_param_decls
              not in t.parser.file_info.provisional)):
-        report(ESYNTAX(site(t, 5), 'default' if is_default else '=',
+        report(E.SYNTAX(site(t, 5), 'default' if is_default else '=',
                        'expected ;'))
         (is_default, value) = (True, None)
     t[0] = ast.param(site(t), t[2], ast.paramtype(site(t, 2), t[4]),
@@ -1291,7 +1292,7 @@ def method_outparams_some(t):
             # It would be logical to just use ESYNTAX here, but be nicer
             # because this is a very common mistake until 1.2 is
             # deprecated
-            report(ERETARGNAME(
+            report(E.RETARGNAME(
                 psite, name.args[0] if name.kind == 'variable' else '_'))
         t[3][i] = ast.cdecl(psite, None, typ)
     t[0] = t[3]
@@ -1306,7 +1307,7 @@ def cdecl_maybe_discarded_list_enforce_unnamed(decls):
     for (i, (kind, psite, name, typ)) in enumerate(decls):
         assert kind == 'cdecl_maybe_discarded'
         if name:
-            report(ESYNTAX(
+            report(E.SYNTAX(
                 psite, name.args[0] if name.kind == 'variable' else '_', ''))
         decls[i] = ast.cdecl(psite, None, typ)
 
@@ -1314,7 +1315,7 @@ def cdecl_maybe_discarded_list_enforce_named(decls):
     for (i, (kind, psite, name, typ)) in enumerate(decls):
         assert kind == 'cdecl_maybe_discarded', kind
         if not name:
-            report(ESYNTAX(psite, None,
+            report(E.SYNTAX(psite, None,
                            'name omitted in parameter declaration'))
             decls[i] = ast.cdecl_maybe_discarded(
                 psite,
@@ -1447,7 +1448,7 @@ def cdecl_maybe_discarded_or_ident_decl_dml12(t):
                                          ast.variable(site, typ[0]),
                                          None)
     else:
-        raise ESYNTAX(site, None, "missing parameter name")
+        raise E.SYNTAX(site, None, "missing parameter name")
 
 @prod_dml14
 def cdecl_maybe_discarded_or_ident_decl(t):
@@ -1470,7 +1471,7 @@ def named_cdecl_maybe_discarded(t):
     if name:
         t[0] = t[1]
     else:
-        report(ESYNTAX(site, None, "missing name in declaration"))
+        report(E.SYNTAX(site, None, "missing name in declaration"))
         t[0] = ast.cdecl_maybe_discarded(site,
                                          ast.variable(site, '_name_omitted'),
                                          typ)
@@ -1555,7 +1556,7 @@ def cdecl2_vect(t):
                 # compatibility
                 report(WEXPERIMENTAL(site(t), 'vect types'))
         else:
-            report(EOLDVECT(site(t)))
+            report(E.OLDVECT(site(t)))
     t[0] = ['vect'] + t[2]
 
 @prod_dml12
@@ -1668,7 +1669,7 @@ def check_struct_namecoll(member_decls):
                 continue
             (name,) = ident.args
         if name in sites_by_name:
-            report(ENAMECOLL(decl.site, sites_by_name[name], name))
+            report(E.NAMECOLL(decl.site, sites_by_name[name], name))
         else:
             sites_by_name[name] = decl.site
 
@@ -1716,7 +1717,7 @@ def layout_decl(t):
         fields = t[4]
         check_struct_namecoll(fields)
     if endian not in {'big-endian', 'little-endian'}:
-        raise ESYNTAX(site(t, 2), '"%s"' % endian,
+        raise E.SYNTAX(site(t, 2), '"%s"' % endian,
                       'not one of "big-endian" or "little-endian"')
 
     t[0] = (endian, fields)
@@ -2010,7 +2011,7 @@ def utf8_string(t):
     try:
         t[0] = t[1].decode('utf-8')
     except UnicodeDecodeError as e:
-        raise ESYNTAX(
+        raise E.SYNTAX(
             site(t),
             repr(t),
             'utf-8 decoding error: ' + e.reason)
@@ -2486,7 +2487,7 @@ def statement_delay(t):
     supported_units = ['s', 'ps', 'cycles']
     if unit not in supported_units:
         suggestions = ' or '.join(f"'{unit}'" for unit in supported_units)
-        raise ESYNTAX(site(t, 3), t[3],
+        raise E.SYNTAX(site(t, 3), t[3],
                       f"expected time unit ({suggestions})")
     t[0] = ast.after(site(t), unit, t[2], t[5])
 
@@ -2599,7 +2600,7 @@ def log_kind(t):
                 | ERROR'''
     lt = log_types.get(t[1], None)
     if lt is None:
-        report(ELTYPE(site(t), t[1]))
+        report(E.LTYPE(site(t), t[1]))
         lt = 'info'
     t[0] = lt
 
@@ -2619,7 +2620,7 @@ def log_kind_old_dml12(t):
     'log_kind : utf8_sconst'
     lt = t[1]
     if lt not in old_log_types:
-        report(ELTYPE(site(t), t[1]))
+        report(E.LTYPE(site(t), t[1]))
         lt = 'info'
     if logging.show_porting:
         [newkind] = [k for k in log_types if log_types[k] == lt]
@@ -2718,7 +2719,7 @@ def case_statement_default(t):
 def goto_statement(t):
     'statement_except_hashif : GOTO ident SEMI'
     # Restricted goto should be implemented, see SIMICS-6130
-    report(ESYNTAX(site(t), 'goto',
+    report(E.SYNTAX(site(t), 'goto',
                   'goto statements are not yet implemented in DML 1.4'))
     t[0] = ast.null(site(t))
 
@@ -2774,7 +2775,7 @@ def warning_statement(t):
 def warning_stmt(t):
     'warning_stmt : _WARNING bracketed_string_literal SEMI'
     if breaking_changes.forbid_warning_statement.enabled:
-        raise ESYNTAX(site(t), '_warning', 'deprecated _warning statement')
+        raise E.SYNTAX(site(t), '_warning', 'deprecated _warning statement')
     report(WEXPERIMENTAL(site(t), "_warning statement"))
     t[0] = ast.warning(site(t), t[2])
 
@@ -2849,7 +2850,7 @@ def local_one(t):
 
     assert typ
     if not name:
-        raise ESYNTAX(tsite, ";", "variable name omitted")
+        raise E.SYNTAX(tsite, ";", "variable name omitted")
     if t[1] in {'session', 'saved'}:
         decl = cdecl_enforce_not_discarded(decl)
 
@@ -2866,7 +2867,7 @@ def local_one_init(t):
     (_, _, name, typ) = decl = t[2]
     assert typ
     if not name:
-        raise ESYNTAX(site(t, 3), "=", "variable name omitted")
+        raise E.SYNTAX(site(t, 3), "=", "variable name omitted")
     if t[1] in {'session', 'saved'}:
         decl = cdecl_enforce_not_discarded(decl)
 
@@ -2918,7 +2919,7 @@ def hook_decl(t):
                 site(t),
                 "***FEATURE FOR INTERNAL TESTING***: hook arrays"))
         else:
-            report(ESYNTAX(site(t, 6), '[', ''))
+            report(E.SYNTAX(site(t, 6), '[', ''))
     t[0] = ast.hook(site(t), t[5], t[6], [typ for (_, _, _, typ) in t[3]])
 
 @prod_dml14
@@ -2964,7 +2965,7 @@ def objident_discard(t):
     t[0] = '__'
 
 def discard_error(site):
-    report(ESYNTAX(site,
+    report(E.SYNTAX(site,
                    "_",
                    "can't use the name '_' (the discard identifier) in this "
                    + "context. See the description of 'Identifiers' within "
@@ -3014,12 +3015,12 @@ reserved_words_14 = reserved_words_12 + ['CALL', 'AUTO',
 @prod_dml12
 @lex.TOKEN(ident_rule(reserved_words_12))
 def reserved_dml12(t):
-    raise ESYNTAX(site(t, 1), str(t[1]), "reserved word")
+    raise E.SYNTAX(site(t, 1), str(t[1]), "reserved word")
 
 @prod_dml14
 @lex.TOKEN(ident_rule(reserved_words_14))
 def reserved(t):
-    raise ESYNTAX(site(t, 1), str(t[1]), "reserved word")
+    raise E.SYNTAX(site(t, 1), str(t[1]), "reserved word")
 
 # Error handling
 @prod
@@ -3032,7 +3033,7 @@ def error(t):
         raise UnexpectedEOF()
     else:
         value = str(t.value)
-        raise ESYNTAX(logging.DumpableSite(t.lexer.file_info, t.lexpos), value, None)
+        raise E.SYNTAX(logging.DumpableSite(t.lexer.file_info, t.lexpos), value, None)
 
 # Specific grammars to be passed to ply
 class Grammar(object):

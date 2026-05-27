@@ -13,8 +13,9 @@ from functools import reduce
 
 from dml import objects, symtab, expr, logging, crep
 from . import logging
-from .logging import ICE, report
+from .logging import ICE, report, binary_dump
 from .messages import *
+from . import errors as E
 from . import output
 from .output import linemark, out
 from . import types as tp
@@ -215,7 +216,7 @@ def assert_comparable_types(site, expr1, expr2, equality):
     if not comparable_types(expr1, expr2, equality):
         typ1 = tp.realtype(expr1.ctype())
         typ2 = tp.realtype(expr2.ctype())
-        raise EILLCOMP(site, expr1, typ1, expr2, typ2)
+        raise E.ILLCOMP(site, expr1, typ1, expr2, typ2)
 
 
 class SimpleParamExpr(objects.ParamExpr):
@@ -1129,9 +1130,9 @@ class AssignStatement(Statement):
 
 def mkAssignStatement(site, target, init):
     if isinstance(target, InlinedParam):
-        raise EASSINL(target.site, target.name)
+        raise E.ASSINL(target.site, target.name)
     if not target.writable:
-        raise EASSIGN(site, target)
+        raise E.ASSIGN(site, target)
 
     if isinstance(target, NonValue):
         target_type = target.type if target.explicit_type else None
@@ -1140,7 +1141,7 @@ def mkAssignStatement(site, target, init):
 
 
     if target_type is not None and tp.deep_const(target_type):
-        raise ECONST(site)
+        raise E.CONST(site)
 
     return AssignStatement(site, target, init)
 
@@ -1176,7 +1177,7 @@ def as_bool(e):
         return mkNotEquals(e.site, e,
                            expr.Lit(None, 'NULL', tp.Ptr(tp.Void()), 1))
     else:
-        report(ENBOOL(e))
+        report(E.NBOOL(e))
         return mkBoolConstant(e.site, False)
 
 def as_int(e):
@@ -1191,7 +1192,7 @@ def as_int(e):
     if isinstance(t, tp.Int) and dml.globals.compat_dml12_int(e.site):
         return e
     if not t.is_int:
-        raise EBTYPE(e.site, e.ctype(), "integer type")
+        raise E.BTYPE(e.site, e.ctype(), "integer type")
     if t.bits == 64 and not t.signed:
         target_type = tp.Int(64, False)
     else:
@@ -1293,7 +1294,7 @@ def mkIfExpr(site, cond, texpr, fexpr):
             elif tp.safe_realtype_unconst(ttype).eq(tp.safe_realtype_unconst(ftype)):
                 utype = ttype
             else:
-                raise EBINOP(site, ':', texpr, fexpr)
+                raise E.BINOP(site, ':', texpr, fexpr)
         if cond.constant:
             # should be safe: texpr and fexpr now have compatible types
             return texpr if cond.value else fexpr
@@ -1460,7 +1461,7 @@ class Compare(BinOp):
                 and tp.safe_realtype_unconst(lhtype.base).eq(
                     tp.safe_realtype_unconst(rhtype.base)))):
             return cls.make_simple(site, lh, rh)
-        raise EILLCOMP(site, lh, lhtype, rh, rhtype)
+        raise E.ILLCOMP(site, lh, lhtype, rh, rhtype)
 
     @classmethod
     def make_simple(cls, site, lh, rh):
@@ -1679,7 +1680,7 @@ class Equals(BinOp):
             and lhtype.eq(rhtype)):
             return IdentityEq(site, lh, rh)
 
-        raise EILLCOMP(site, lh, lhtype, rh, rhtype)
+        raise E.ILLCOMP(site, lh, lhtype, rh, rhtype)
 
 def mkEquals(site, lh, rh):
     if dml.globals.compat_dml12_int(site):
@@ -1937,7 +1938,7 @@ class ShL_dml12(BitShift_dml12):
             if rh.value < 0:
                 # it's an error in Python to shift a negative number of bits
                 # (better raise an error instead of e.g. substituting 0)
-                raise ESHNEG(site, rh)
+                raise E.SHNEG(site, rh)
             elif rh.value == 0:
                 return lh
 
@@ -1993,7 +1994,7 @@ class BitShift(BinOp):
 
         (lh, rh, common_type) = usual_int_conv(lh, ltype, rh, rtype)
         if rh.constant and rh.value < 0:
-            raise ESHNEG(site, rh)
+            raise E.SHNEG(site, rh)
         if lh.constant and rh.constant:
             return mkIntegerConstant(site, cls.eval_const(lh.value, rh.value),
                                      common_type.signed)
@@ -2057,7 +2058,7 @@ class ShR_dml12(BitShift_dml12):
             if rh.value < 0:
                 # it's an error in Python to shift a negative number of bits
                 # (better raise an error instead of e.g. substituting 0)
-                raise ESHNEG(site, rh)
+                raise E.SHNEG(site, rh)
             elif rh.value == 0:
                 return lh
 
@@ -2248,7 +2249,7 @@ class Div_dml12(ArithBinOp_dml12):
 
         if rh.constant and rhtype.is_int:
             if rh.value == 0:
-                raise EDIVZ(rh, '/')
+                raise E.DIVZ(rh, '/')
             elif rh.value == 1:
                 return lh
             elif lh.constant and lhtype.is_int:
@@ -2278,7 +2279,7 @@ class Div(DivModOp):
     @staticmethod
     def eval_const(left, right):
         if right == 0:
-            raise EDIVZ(right, '/')
+            raise E.DIVZ(right, '/')
         if (left < 0) == (right < 0):
             return left // right
         else:
@@ -2309,7 +2310,7 @@ class Mod_dml12(ArithBinOp_dml12):
 
         if rh.constant:
             if rh.value == 0:
-                raise EDIVZ(rh, '%')
+                raise E.DIVZ(rh, '%')
             elif lh.constant:
                 return IntegerConstant_dml12(site, lh.value % rh.value)
 
@@ -2322,7 +2323,7 @@ class Mod(DivModOp):
     @staticmethod
     def eval_const(lh, rh):
         if rh == 0:
-            raise EDIVZ(rh, '%')
+            raise E.DIVZ(rh, '%')
         if lh < 0:
             return -(abs(lh) % abs(rh))
         else:
@@ -2364,7 +2365,7 @@ class Add_dml12(ArithBinOp_dml12):
         elif isinstance(lhtype, (tp.Ptr, tp.Array)) and rhtype.is_int:
             pass
         else:
-            raise EBINOP(site, '+', lh, rh)
+            raise E.BINOP(site, '+', lh, rh)
 
         # Constant folding
         if lh.constant and rh.constant and lhtype.is_int and rhtype.is_int:
@@ -2414,7 +2415,7 @@ class Add(ArithBinOp):
             and isinstance(lhtype.base, tp.Int) and isinstance(rhtype.base, tp.Int)
             and lhtype.base.bits == 8 and rhtype.base.bits == 8
             and lhtype.base.signed and rhtype.base.signed):
-            raise ECSADD(site)
+            raise E.CSADD(site)
         if (isinstance(lhtype, (tp.Array, tp.Ptr))
             and not lhtype.base.void):
             rtype, rh = arith_argument_conv(rh)
@@ -2450,7 +2451,7 @@ class Subtract_dml12(ArithBinOp_dml12):
         elif lhtype.is_arith and rhtype.is_arith:
             pass
         else:
-            raise EBINOP(site, '-', lh, rh)
+            raise E.BINOP(site, '-', lh, rh)
 
         # Constant folding
         if (lh.constant and rh.constant
@@ -2524,12 +2525,12 @@ def source_for_assignment(site, target_type, source):
     try:
         source_type = source.ctype()
         if isinstance(source_type, tp.Unknown):
-            raise ENTYPE(site)
+            raise E.NTYPE(site)
         real_target_type = tp.realtype(target_type)
         real_source_type = tp.realtype(source_type)
         ok, trunc, constviol = real_target_type.canstore(real_source_type)
         if constviol:
-            raise EDISCONST(site)
+            raise E.DISCONST(site)
         if not ok:
             # Assigning boolean values to one-bit targets is ok
             if (isinstance(real_target_type, tp.Int)
@@ -2546,7 +2547,7 @@ def source_for_assignment(site, target_type, source):
                                       mkIntegerLiteral(site, 1),
                                       mkIntegerLiteral(site, 0))
             else:
-                raise EASTYPE(site, target_type, source)
+                raise E.ASTYPE(site, target_type, source)
         if ((isinstance(real_target_type, tp.Int)
              and not dml.globals.compat_dml12_int(site))
             or (real_target_type.is_int and real_target_type.is_endian)
@@ -2556,7 +2557,7 @@ def source_for_assignment(site, target_type, source):
             source = mkCast(site, source, target_type)
 
     except tp.DMLUnknownType as e:
-        raise ETYPE(site, e.type)
+        raise E.TYPE(site, e.type)
     return source
 
 class AssignOp(BinOp):
@@ -2581,15 +2582,15 @@ class AssignOp(BinOp):
 
 def mkAssignOp(site, target, source):
     if isinstance(target, InlinedParam):
-        raise EASSINL(target.site, target.name)
+        raise E.ASSINL(target.site, target.name)
     if not target.writable:
-        raise EASSIGN(site, target)
+        raise E.ASSIGN(site, target)
 
     target_type = target.ctype()
 
     source = source_for_assignment(site, target_type, source)
     if tp.deep_const(target_type):
-        raise ECONST(site)
+        raise E.CONST(site)
     return AssignOp(site, target, source)
 
 class UnaryOp(Expression):
@@ -2647,7 +2648,7 @@ class AddressOf(UnaryOp):
                               tp.Void())))
         if (breaking_changes.dml12_remove_misc_quirks.enabled
             and not rh.addressable):
-            raise ERVAL(rh.site, '&')
+            raise E.RVAL(rh.site, '&')
         return AddressOf(site, rh)
 
     @property
@@ -2681,7 +2682,7 @@ class Dereference(UnaryOp, LValue):
         etype = tp.realtype(rh.ctype())
 
         if etype and not isinstance(etype, tp.Ptr):
-            raise ENOPTR(site, rh)
+            raise E.NOPTR(site, rh)
         return Dereference(site, rh)
 
     @property
@@ -2747,9 +2748,9 @@ def arith_argument_conv(expr):
     else:
         try:
             new_expr = as_int(expr)
-        except EBTYPE:
+        except E.BTYPE:
             # This translation result in slightly more informative errors
-            raise EBTYPE(expr.site, expr.ctype(), "float or integer")
+            raise E.BTYPE(expr.site, expr.ctype(), "float or integer")
         return (tp.safe_realtype(new_expr.ctype()), new_expr)
 
 def promote_integer(expr, etype):
@@ -2838,13 +2839,13 @@ class IncDec(UnaryOp):
     def make_simple(cls, site, rh):
         rhtype = tp.safe_realtype(rh.ctype())
         if not isinstance(rhtype, (tp.IntegerType, tp.Ptr)):
-            raise EINCTYPE(site, cls.op)
+            raise E.INCTYPE(site, cls.op)
         if not rh.addressable:
             if isinstance(rh, BitSlice):
                 hint = 'try %s= 1' % (cls.base_op[0],)
             else:
                 hint = None
-            raise EINC(site, hint)
+            raise E.INC(site, hint)
         result = cls(site, rh)
         if dml.globals.compat_dml12_int(site) or isinstance(rhtype, tp.Ptr):
             return result
@@ -2976,7 +2977,7 @@ class InterfaceMethodRef(NonValue):
             self.site, self.node_expr,
             self.method_name, [self.obj_arg] + args, self.ftype.output_type)
     def exc(self):
-        return EIFREF(self.site, self)
+        return E.IFREF(self.site, self)
 
 def mkInterfaceMethodRef(site, iface_node, indices, method_name):
     struct_name = param_str(iface_node,
@@ -2990,10 +2991,10 @@ def mkInterfaceMethodRef(site, iface_node, indices, method_name):
         raise ICE(site, "unknown type %r" % (struct_name,))
     stype = tp.safe_realtype(stype)
     if not isinstance(stype, tp.StructType):
-        raise ENOSTRUCT(site, mkNodeRef(site, iface_node, indices), stype)
+        raise E.NOSTRUCT(site, mkNodeRef(site, iface_node, indices), stype)
     ftype = stype.get_member_qualified(method_name)
     if not ftype:
-        raise EMEMBER(site, struct_name, method_name)
+        raise E.MEMBER(site, struct_name, method_name)
     ftype = tp.safe_realtype(ftype)
 
     if (not isinstance(ftype, tp.Ptr)
@@ -3002,7 +3003,7 @@ def mkInterfaceMethodRef(site, iface_node, indices, method_name):
         or not tp.Ptr(tp.safe_realtype_unconst(tp.Named('conf_object_t'))).eq(
             tp.safe_realtype_unconst(ftype.base.input_types[0]))):
         # non-method members are not accessible
-        raise EMEMBER(site, struct_name, method_name)
+        raise E.MEMBER(site, struct_name, method_name)
 
     obj_node = iface_node.parent.get_component('obj')
     if not obj_node or not obj_node.objtype == 'session':
@@ -3078,7 +3079,7 @@ def mkBitSlice(site, expr, msb, lsb, bitorder):
 
     t = tp.realtype(expr.ctype())
     if not t.is_int:
-        report(EBSLICE(site))
+        report(E.BSLICE(site))
         return expr
 
     if not bitorder:
@@ -3087,7 +3088,7 @@ def mkBitSlice(site, expr, msb, lsb, bitorder):
     if bitorder != 'le':
         if not expr.explicit_type:
             #dbg('BITSLICE %r : %r' % (expr, t))
-            raise EBSBE(site)
+            raise E.BSBE(site)
 
         # Normalize to le bitorder
         expr_bits = mkIntegerLiteral(site, t.bits)
@@ -3104,7 +3105,7 @@ def mkBitSlice(site, expr, msb, lsb, bitorder):
 
     if size.constant:
         if size.value <= 0 or size.value > 64:
-            raise EBSSIZE(site, size)
+            raise E.BSSIZE(site, size)
         mask = mkIntegerConstant(site, (1 << size.value) - 1, False)
     else:
         mask = mkSubtract(site,
@@ -3586,7 +3587,7 @@ class Undefined(NonValue):
     def __str__(self):
         return 'undefined'
     def exc(self):
-        return EUNDEF(self)
+        return E.UNDEF(self)
 
 mkUndefined = Undefined
 
@@ -3602,7 +3603,7 @@ class DiscardRef(NonValue):
         return '_'
 
     def exc(self):
-        return EDISCARDREF(self.site)
+        return E.DISCARDREF(self.site)
 
     def write(self, source):
         if self.explicit_type:
@@ -3804,7 +3805,7 @@ def mkTraitUpcast(site, sub, parent):
             return TraitUpcast(site, sub, parent)
         elif parent is dml.globals.object_trait:
             return TraitObjectCast(site, sub)
-    raise ETEMPLATEUPCAST(site, typ, parent.type())
+    raise E.TEMPLATEUPCAST(site, typ, parent.type())
 
 def vtable_read(expr):
     typ = tp.realtype(expr.ctype())
@@ -3881,9 +3882,9 @@ class TraitMethodRef(NonValue):
     def apply(self, inits, location, scope):
         '''Return expression for application as a function'''
         if self.throws or len(self.outp) > 1:
-            raise EAPPLYMETH(self.site, self)
+            raise E.APPLYMETH(self.site, self)
         if crep.TypedParamContext.active and self.independent:
-            raise ETYPEDPARAMVIOL(self.site)
+            raise E.TYPEDPARAMVIOL(self.site)
         args = typecheck_inarg_inits(self.site, inits, self.inp,
                                      location, scope, 'method')
         if self.outp:
@@ -4065,10 +4066,10 @@ class NodeRef(Expression):
         '''Apply as an expression'''
         if self.node.objtype == 'method':
             if self.node.throws or len(self.node.outp) > 1:
-                raise EAPPLYMETH(self.site, self.node.name)
+                raise E.APPLYMETH(self.site, self.node.name)
             return codegen_call_expr(self.site, self.node, self.indices, inits,
                                      location, scope)
-        raise EAPPLY(self, self.node.objtype + " object")
+        raise E.APPLY(self, self.node.objtype + " object")
 
 class NodeRefWithStorage(NodeRef, LValue):
     '''Reference to node that also contains storage, such as allocated
@@ -4112,7 +4113,7 @@ class NodeRefWithStorage(NodeRef, LValue):
     def apply(self, inits, location, scope):
         if self.node.objtype == 'method':
             assert dml.globals.dml_version == (1, 2)
-            raise EAPPLYMETH(self.site, self.node.name)
+            raise E.APPLYMETH(self.site, self.node.name)
         # storage might be a function pointer
         return expr.mkApplyInits(self.site, self, inits, location, scope)
 
@@ -4176,13 +4177,13 @@ class NoallocNodeRef(PlainNodeRef):
     @auto_init
     def __init__(self, site, node, indices, node_type): pass
     def exc(self):
-        return ENALLOC(self.site, self.node)
+        return E.NALLOC(self.site, self.node)
 
 class RegisterWithFields(PlainNodeRef):
     @auto_init
     def __init__(self, site, node, indices, node_type): pass
     def exc(self):
-        return EREGVAL(self.site, self.node)
+        return E.REGVAL(self.site, self.node)
 
 # This one can happen in both 1.2 and 1.4, for data members.
 class IncompleteNodeRefWithStorage(PlainNodeRef):
@@ -4283,7 +4284,7 @@ class NodeArrayRef(NonValueArrayRef):
         return logging.dollar(self.site) + name
 
     def exc(self):
-        return EARRAY(self.site, self.node.identity())
+        return E.ARRAY(self.site, self.node.identity())
 
 class HookSuspended(Expression):
     '''Reference to the suspended member of a hook'''
@@ -4423,9 +4424,9 @@ class TemplatesSubRef(NonValue):
 def mkTemplatesSubRef(site, templates_ref, template_name):
     tmpl = dml.globals.templates.get(template_name)
     if tmpl is None:
-        raise ENTMPL(site, template_name)
+        raise E.NTMPL(site, template_name)
     if tmpl not in templates_ref.node.templates:
-        raise ETQMIC(site, templates_ref.node.identity(), template_name)
+        raise E.TQMIC(site, templates_ref.node.identity(), template_name)
     return TemplatesSubRef(site, templates_ref, template_name)
 
 def mkTemplateQualifiedMethodRef(site, templates_subref, method_name):
@@ -4489,11 +4490,11 @@ def mkTemplateQualifiedMethodRef(site, templates_subref, method_name):
         abstract = (trait is not None
                     and trait.member_declaration(method_name) is not None
                     and trait.member_kind(method_name) == 'method')
-        raise EMEMBERTQMIC(site, template, method_name, abstract,
+        raise E.MEMBERTQMIC(site, template, method_name, abstract,
                            node if some_spec_eliminated else None)
 
     if len(candidates) > 1:
-        raise EAMBTQMIC(site, template_name, method_name, some_spec_eliminated,
+        raise E.AMBTQMIC(site, template_name, method_name, some_spec_eliminated,
                         candidates)
 
     (tmpl, method) = candidates[0]
@@ -4533,10 +4534,10 @@ class TraitTemplatesSubRef(NonValue):
 def mkTraitTemplatesSubRef(site, templates_ref, template_name):
     trait = dml.globals.traits.get(template_name)
     if trait is None:
-        raise ENTMPL(site, template_name)
+        raise E.NTMPL(site, template_name)
     if not (templates_ref.trait.implements(trait)
             or trait is dml.globals.object_trait):
-        raise ETTQMIC(site, trait.name, templates_ref.trait.name)
+        raise E.TTQMIC(site, trait.name, templates_ref.trait.name)
 
     return TraitTemplatesSubRef(site, templates_ref, trait)
 
@@ -4551,11 +4552,11 @@ def mkTraitTemplateQualifiedMethodRef(site, templates_subref, method_name):
     impl_traits = trait.method_impl_traits.get(method_name)
     if not impl_traits:
         if impl_tmpls:
-            raise ENSHAREDTQMIC(site, trait, method_name)
+            raise E.NSHAREDTQMIC(site, trait, method_name)
         else:
             abstract = (trait.member_declaration(method_name) is not None
                         and trait.member_kind(method_name) == 'method')
-            raise EMEMBERTQMIC(site, trait, method_name, abstract, None)
+            raise E.MEMBERTQMIC(site, trait, method_name, abstract, None)
 
     # If there is any non-shared method specification not lower in rank than
     # some shared method implementation, then it could be a potential
@@ -4564,10 +4565,10 @@ def mkTraitTemplateQualifiedMethodRef(site, templates_subref, method_name):
         if all(impl_tmpl.spec.rank
                not in dml.globals.templates[impl_trait.name].spec.rank.inferior
                for impl_trait in impl_traits):
-            raise ENSHAREDTQMIC(site, trait, method_name)
+            raise E.NSHAREDTQMIC(site, trait, method_name)
 
     if len(impl_traits) > 1:
-        raise EAMBTQMIC(site, trait.name, method_name, False,
+        raise E.AMBTQMIC(site, trait.name, method_name, False,
                         [(impl_trait, impl_trait.method_impls[method_name])
                          for impl_trait in impl_traits])
 
@@ -4697,10 +4698,10 @@ def mkSubRef(site, expr, sub, op):
         (node, indices) = expr.get_ref()
         if node.objtype == 'interface':
             if op == "->":
-                raise ENOPTR(site, expr)
+                raise E.NOPTR(site, expr)
             return mkInterfaceMethodRef(site, node, indices, sub)
         else:
-            raise EREF(site, sub, expr)
+            raise E.REF(site, sub, expr)
 
     if isinstance(expr, NonValue):
         if op == '.':
@@ -4732,13 +4733,13 @@ def mkSubRef(site, expr, sub, op):
 
     if isinstance(real_etype, tp.Ptr):
         if op == '.':
-            raise ENOSTRUCT(site, expr)
+            raise E.NOSTRUCT(site, expr)
         basetype = real_etype.base
         real_basetype = tp.safe_realtype(basetype)
         baseexpr = mkDereference(site, expr)
     else:
         if op == '->':
-            raise ENOPTR(site, expr)
+            raise E.NOPTR(site, expr)
         basetype = etype
         real_basetype = tp.safe_realtype(etype)
         baseexpr = expr
@@ -4748,12 +4749,12 @@ def mkSubRef(site, expr, sub, op):
     if isinstance(real_basetype, tp.StructType):
         typ = real_basetype.get_member_qualified(sub)
         if not typ:
-            raise EMEMBER(site, baseexpr, sub)
+            raise E.MEMBER(site, baseexpr, sub)
         return StructMember(site, expr, sub, typ, op)
     elif real_basetype.is_int and real_basetype.is_bitfields:
         member = real_basetype.members.get(sub)
         if member is None:
-            raise EMEMBER(site, expr, sub)
+            raise E.MEMBER(site, expr, sub)
         (_, msb, lsb) = member
         return mkBitSlice(site,
                           baseexpr,
@@ -4763,18 +4764,18 @@ def mkSubRef(site, expr, sub, op):
     elif isinstance(real_basetype, tp.Trait):
         m = real_basetype.trait.lookup(sub, baseexpr, site)
         if not m:
-            raise EMEMBER(site, expr, sub)
+            raise E.MEMBER(site, expr, sub)
         return m
     elif isinstance(real_basetype, tp.Array) and sub == 'len':
         if real_basetype.size.constant:
             return mkIntegerConstant(site, real_basetype.size.value, False)
         else:
-            raise EVLALEN(site)
+            raise E.VLALEN(site)
     elif isinstance(real_basetype, tp.TraitList) and sub == 'len':
         try:
             trait = dml.globals.traits[real_basetype.traitname]
         except KeyError:
-            raise ETYPE(basetype.declaration_site or site, basetype)
+            raise E.TYPE(basetype.declaration_site or site, basetype)
         return mkSequenceLength(site, baseexpr, trait)
     elif isinstance(real_basetype, tp.Hook):
         real_basetype.validate(basetype.declaration_site or site)
@@ -4785,7 +4786,7 @@ def mkSubRef(site, expr, sub, op):
         elif sub == 'suspended':
             return mkHookSuspended(site, baseexpr)
 
-    raise ENOSTRUCT(site, expr)
+    raise E.NOSTRUCT(site, expr)
 
 class ArrayRef(LValue):
     slots = ('type',)
@@ -4852,7 +4853,7 @@ def mkIndex(site, expr, idx):
                 if idx.constant:
                     if (idx.value < 0 or
                         idx.value >= expr.local_dimsizes[len(local_indices)]):
-                        raise EOOB(idx)
+                        raise E.OOB(idx)
             if len(expr.local_dimsizes) > len(local_indices) + 1:
                 if isinstance(expr, NodeArrayRef):
                     return NodeArrayRef(site, expr.node, expr.indices + (idx,))
@@ -4871,12 +4872,12 @@ def mkIndex(site, expr, idx):
         if isinstance(expr, AbstractList):
             if idx.constant:
                 if idx.value < 0 or idx.value >= len(expr.value):
-                    raise EOOB(expr)
+                    raise E.OOB(expr)
 
                 assert isinstance(expr.value[idx.value], Expression)
                 return expr.value[idx.value]
 
-            raise EAVAR(idx.site)
+            raise E.AVAR(idx.site)
         raise expr.exc()
 
     typ = tp.safe_realtype(expr.ctype())
@@ -4890,7 +4891,7 @@ def mkIndex(site, expr, idx):
     if isinstance(typ, (tp.Vector)):
         return VectorRef(site, expr, idx)
 
-    raise ENARRAY(expr)
+    raise E.NARRAY(expr)
 
 class Cast(Expression):
     "A C type cast"
@@ -4918,7 +4919,7 @@ def mkCast(site, expr, new_type):
             (node, indices) = expr.get_ref()
             if real.trait in node.traits.ancestors:
                 return ObjTraitRef(site, node, real.trait, indices)
-            raise ETEMPLATEUPCAST(site, "object", new_type)
+            raise E.TEMPLATEUPCAST(site, "object", new_type)
         else:
             return mkTraitUpcast(site, expr, real.trait)
 
@@ -4938,7 +4939,7 @@ def mkCast(site, expr, new_type):
         # the same type, which is useless
         return Cast(site, expr, new_type)
     if isinstance(real, (tp.Void, tp.Array, tp.Function)):
-        raise ECAST(site, expr, new_type)
+        raise E.CAST(site, expr, new_type)
     if old_type.eq(real):
         if (dml.globals.compat_dml12_int(expr.site)
             and old_type.is_int
@@ -4954,9 +4955,9 @@ def mkCast(site, expr, new_type):
             return Cast(site, expr, new_type)
         return mkRValue(expr)
     if isinstance(real, (tp.Struct, tp.ExternStruct, tp.Vector, tp.TraitList)):
-        raise ECAST(site, expr, new_type)
+        raise E.CAST(site, expr, new_type)
     if isinstance(old_type, (tp.Void, tp.Struct, tp.Vector, tp.TraitList, tp.Trait)):
-        raise ECAST(site, expr, new_type)
+        raise E.CAST(site, expr, new_type)
     if old_type.is_int and old_type.is_endian:
         expr = as_int(expr)
         old_type = tp.safe_realtype(expr.ctype())
@@ -4984,7 +4985,7 @@ def mkCast(site, expr, new_type):
             old_type = tp.Int(64, False)
             expr = Cast(site, expr, old_type)
         elif not old_type.is_int:
-            raise ECAST(site, expr, new_type)
+            raise E.CAST(site, expr, new_type)
         if not dml.globals.compat_dml12_int(site):
             # (uint64)x -> x if x is already uint64
             if (isinstance(old_type, tp.Int)
@@ -5015,7 +5016,7 @@ def mkCast(site, expr, new_type):
                 mkLit(expr.site, *real.get_store_fun()),
                 (mkCast(expr.site, expr, tp.Int(64, False)),))
         else:
-            raise ECAST(site, expr, new_type)
+            raise E.CAST(site, expr, new_type)
     if ((real.is_arith or isinstance(real, tp.Bool))
          and (old_type.is_arith or isinstance(old_type, tp.Bool))):
         assert (not (real.is_int and real.is_endian)
@@ -5061,7 +5062,7 @@ def mkCast(site, expr, new_type):
         and expr.get_ref()[0].objtype == 'device' and isinstance(real, tp.Ptr)):
         return Cast(site, expr, new_type)
 
-    raise ECAST(site, expr, new_type)
+    raise E.CAST(site, expr, new_type)
 
 class RValue(Expression):
     '''Wraps an lvalue to prohibit write. Useful when a composite

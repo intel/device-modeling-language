@@ -18,6 +18,7 @@ from . import logging, codegen, ctree, ast
 from . import breaking_changes
 from . import symtab
 from .messages import *
+from . import errors as E
 from .logging import ICE, report
 import dml.globals
 import dml.dmlparse
@@ -71,7 +72,7 @@ def determine_version(filestr, filename):
         column = ver_start - filestr.rfind('\n', 0, ver_start)
         m = check_version.match(filestr, pos=ver_start)
         if not m:
-            raise ESYNTAX(logging.SimpleSite(f"{filename}:{lineno}:{column}"),
+            raise E.SYNTAX(logging.SimpleSite(f"{filename}:{lineno}:{column}"),
                           None, "malformed DML version tag")
         version = (int(m.group('major')), int(m.group('minor')))
         # Remove the language version tag, but preserve the correct
@@ -88,7 +89,7 @@ def determine_version(filestr, filename):
             lineno = 1
             column = 1
         else:
-            raise ESYNTAX(
+            raise E.SYNTAX(
                 logging.SimpleSite(f"{filename}:1"), None,
                 "missing DML version statement")
 
@@ -100,7 +101,7 @@ def determine_version(filestr, filename):
         version = (1, 4)
 
     if version not in supported_versions:
-        raise ESYNTAX(logging.SimpleSite(f"{filename}:{lineno}:{column}"), None,
+        raise E.SYNTAX(logging.SimpleSite(f"{filename}:{lineno}:{column}"), None,
                       "DML version %s not supported; allowed: %s"
                       % (fmt_version(version),
                          ", ".join(map(fmt_version, supported_versions))))
@@ -122,7 +123,7 @@ def parse(s, file_info, filename, version):
         ast = parser.parse(s, lexer = lexer, tracking = True,
                            tokenfunc = dml.dmlparse.mk_get_token(lexer))
     except dml.dmlparse.UnexpectedEOF:
-        raise ESYNTAX(logging.DumpableSite(file_info, file_info.size()),
+        raise E.SYNTAX(logging.DumpableSite(file_info, file_info.size()),
                        None, "unexpected end-of-file")
     return ast
 
@@ -167,10 +168,10 @@ def scan_statements(filename, site, stmts):
                 expr = ctree.as_bool(codegen.codegen_expression(
                     cond, None, scope))
                 if not expr.constant:
-                    raise ENCONST(expr.site, expr)
-            except EIDENT:
+                    raise E.NCONST(expr.site, expr)
+            except E.IDENT:
                 for stmt in bad_stmts:
-                    report(EBADCONDSTMT(stmt.site, stmt.kind))
+                    report(E.BADCONDSTMT(stmt.site, stmt.kind))
             except DMLError as e:
                 report(e)
             else:
@@ -202,7 +203,7 @@ def check_bidi(filename, filestr):
     for m in bidi_re.finditer(filestr):
         lineno = filestr[:m.start()].count('\n') + 1
         col = m.start() - filestr.rfind('\n', 0, m.start())
-        report(ESYNTAX(logging.SimpleSite(f"{filename}:{lineno}:{col}"),
+        report(E.SYNTAX(logging.SimpleSite(f"{filename}:{lineno}:{col}"),
                        repr(m.group())[1:-1],
                        "Unicode BiDi character not allowed"))
 
@@ -221,7 +222,7 @@ def parse_pragma(filename, start_lineno, end_lineno, pragma, data):
     if pragma == 'COVERITY':
         data = data and pragma_coverity_data_re.match(data)
         if data is None:
-            report(ESYNTAX(logging.SimpleSite(f"{filename}:{start_lineno}"),
+            report(E.SYNTAX(logging.SimpleSite(f"{filename}:{start_lineno}"),
                            None,
                            "COVERITY pragma must specify event to suppress, "
                            + "and optionally classification"))
@@ -229,7 +230,7 @@ def parse_pragma(filename, start_lineno, end_lineno, pragma, data):
             return ('COVERITY',
                     (filename, start_lineno, end_lineno + 1, data.groups()))
     else:
-        report(EPRAGMA(logging.SimpleSite(f"{filename}:{start_lineno}"), pragma))
+        report(E.PRAGMA(logging.SimpleSite(f"{filename}:{start_lineno}"), pragma))
         return None
 
 def process_pragma(t):
@@ -250,14 +251,14 @@ def parse_file(dml_filename):
         with open(dml_filename, 'r') as f:
             filestr = f.read()
     except IOError as msg:
-        raise EIMPORT(logging.SimpleSite(f"{dml_filename}:0"), f"{dml_filename}: {msg}")
+        raise E.IMPORT(logging.SimpleSite(f"{dml_filename}:0"), f"{dml_filename}: {msg}")
     except UnicodeDecodeError:
         with open(dml_filename, 'rb') as f:
             for (lineno, line) in enumerate(f):
                 try:
                     line.decode('utf-8')
                 except UnicodeDecodeError as e:
-                    raise ESYNTAX(
+                    raise E.SYNTAX(
                         logging.SimpleSite(
                             f"{dml_filename}:{lineno + 1}:{e.start + 1}"),
                         repr(line[e.start:e.end]),
@@ -340,7 +341,7 @@ def import_file(importsite, path):
     version = site.dml_version()
     if (version != dml.globals.dml_version
         and (version, dml.globals.dml_version) != ((1, 4), (1, 2))):
-        raise EVERS(logging.SimpleSite(f"{path}:0"),
+        raise E.VERS(logging.SimpleSite(f"{path}:0"),
                      importsite,
                      fmt_version(version),
                      fmt_version(importsite.dml_version()))
@@ -349,7 +350,7 @@ def import_file(importsite, path):
     assert version in ((1, 2), (1, 4))
 
     if name is not None:
-        raise EDEVIMP(importsite)
+        raise E.DEVIMP(importsite)
     return (site, stmts)
 
 def exists(filename):
@@ -361,7 +362,7 @@ def exists(filename):
 
 def parse_main_file(inputfilename, explicit_import_path):
     if not exists(inputfilename):
-        raise ENOFILE(logging.SimpleSite(f"{inputfilename}:0"))
+        raise E.NOFILE(logging.SimpleSite(f"{inputfilename}:0"))
     (kind, site, name, stmts) = parse_dmlast_or_dml(
         str(Path(inputfilename).resolve()))
     # guaranteed by grammar
@@ -386,7 +387,7 @@ def parse_main_file(inputfilename, explicit_import_path):
     global_defs.append(ast.template_dml12(site, '@' + inputfilename, spec_asts))
 
     if name is None:
-        raise EDEVICE(site)
+        raise E.DEVICE(site)
 
     # Also look in a subdir named like the DML version
     import_path = [
@@ -398,7 +399,7 @@ def parse_main_file(inputfilename, explicit_import_path):
     # we may want to bump last version to 8 if we want to postpone the
     # deprecation of DML 1.2
     if version == (1, 2) and dml.globals.api_version > breaking_changes.api_7:
-        raise ESIMAPI(site, fmt_version(version), dml.globals.api_version.str)
+        raise E.SIMAPI(site, fmt_version(version), dml.globals.api_version.str)
 
     # Map normalized, absolute path of an imported file, to list of
     # seen spellings. One spelling is a string in an import statement which
@@ -422,7 +423,7 @@ def parse_main_file(inputfilename, explicit_import_path):
             path = find_file_in_dirs(importfile, import_path)
         try:
             if path is None:
-                raise EIMPORT(importsite, importfile)
+                raise E.IMPORT(importsite, importfile)
 
             deps.setdefault(path, set()).add(importfile)
 

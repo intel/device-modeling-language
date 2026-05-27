@@ -3,6 +3,8 @@
 
 # PLY discovers t_* rules from module namespace
 from .dmllex import *  # noqa: F403
+from . import errors as E
+from .logging import DumpableSite
 
 hashids = {'#' + kw: 'HASH' + kw.upper()
            for kw in [
@@ -41,7 +43,7 @@ def t_HASHID(t):
     r'\#[A-Za-z_][\w_]*'
     value = hashids.get(t.value)
     if not value:
-        report(ESYNTAX(DumpableSite(t.lexer.file_info, t.lexpos), t.value,
+        report(E.SYNTAX(DumpableSite(t.lexer.file_info, t.lexpos), t.value,
                        "illegal # symbol"))
         return None
     t.type = value

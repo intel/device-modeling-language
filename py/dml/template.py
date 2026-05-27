@@ -9,6 +9,7 @@ from . import ast, logging
 from . import breaking_changes
 from .logging import ICE, report
 from .messages import *
+from . import errors as E
 from .set import Set
 import dml.globals
 import dml.traits
@@ -380,7 +381,7 @@ def process_templates(template_decls):
                     # delay error until template instantiation
                     dml.globals.missing_templates.add(missing)
                 else:
-                    report(ENTMPL(site, missing))
+                    report(E.NTMPL(site, missing))
                 template_decls[missing] = (site, [], None)
             return process_templates(template_decls)
     try:
@@ -393,9 +394,9 @@ def process_templates(template_decls):
             (ref_asts, _, _) = rank_structure(asts)
             is_sites.append(ref_asts[p].site)
         if any(name.startswith('@') for name in e.cycle):
-            report(ECYCLICIMP(is_sites))
+            report(E.CYCLICIMP(is_sites))
         else:
-            report(ECYCLICTEMPLATE(is_sites))
+            report(E.CYCLICTEMPLATE(is_sites))
         for name in e.cycle:
             # prune the templates that created a cycle
             (site, _, _) = template_decls[name]

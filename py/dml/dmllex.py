@@ -6,6 +6,7 @@
 from . import logging
 from .logging import report
 from .messages import *
+from . import errors as E
 import re
 
 # Reserved words allowed as identifiers
@@ -179,7 +180,7 @@ def rangecheck_int(t, value):
     if value >= 1 << 64:
         try:
             syntax_error(t, t.value, 'too large integer constant')
-        except ESYNTAX as e:
+        except E.SYNTAX as e:
             report(e)
         return value & ((1 << 64) - 1)
     return value
@@ -216,7 +217,7 @@ escapes = {
     }
 
 def syntax_error(t, tokenstr, reason):
-    raise ESYNTAX(logging.DumpableSite(t.lexer.file_info, t.lexpos), tokenstr, reason)
+    raise E.SYNTAX(logging.DumpableSite(t.lexer.file_info, t.lexpos), tokenstr, reason)
 
 def t_SCONST(t):
     r'"(?:[^\x00-\x1f\x7f"\\]|\\.)*"'

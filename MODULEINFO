@@ -42,6 +42,7 @@ Make: dmlc
     $(HOST)/bin/dml/python/dml/dmllex14.py
     $(HOST)/bin/dml/python/dml/dmlparse.py
     $(HOST)/bin/dml/python/dml/dmlc.py
+    $(HOST)/bin/dml/python/dml/errors.py
     $(HOST)/bin/dml/python/dml/expr.py
     $(HOST)/bin/dml/python/dml/expr_util.py
     $(HOST)/bin/dml/python/dml/globals.py

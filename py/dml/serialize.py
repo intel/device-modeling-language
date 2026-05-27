@@ -5,6 +5,7 @@
 # dml values and attribute values
 
 from . import ctree, expr, logging, symtab, messages, output
+from . import errors as E
 from . import objects
 from . import types as tp
 from .logging import ICE
@@ -104,12 +105,12 @@ def mkSubRefLit(site, expr, sub, typ, op):
 
     if isinstance(real_etype, tp.Ptr):
         if op == '.':
-            raise ENOSTRUCT(site, expr)
+            raise E.NOSTRUCT(site, expr)
         basetype = real_etype.base
         real_basetype = tp.safe_realtype(basetype)
     else:
         if op == '->':
-            raise ENOPTR(site, expr)
+            raise E.NOPTR(site, expr)
         real_basetype = tp.safe_realtype(etype)
 
     real_basetype = real_basetype.resolve()
@@ -399,7 +400,7 @@ def mark_for_serialization(site, dmltype):
     elif isinstance(real_type, tp.Array):
         # Can only serialize constant-size arrays
         if not real_type.size.constant:
-            raise messages.ESERIALIZE(site, dmltype)
+            raise E.SERIALIZE(site, dmltype)
         mark_for_serialization(site, real_type.base)
     elif isinstance(real_type, tp.Trait):
         dml.globals.serialized_traits.add(real_type.trait)
@@ -408,7 +409,7 @@ def mark_for_serialization(site, dmltype):
         from .codegen import get_type_sequence_info
         get_type_sequence_info(real_type.msg_types, create_new=True)
     elif not isinstance(real_type, (tp.IntegerType, tp.Bool, tp.Float)):
-        raise messages.ESERIALIZE(site, dmltype)
+        raise E.SERIALIZE(site, dmltype)
 
 # generate a part of the function name from a description of the dmltype
 # Each type maps uniquely to a string, obeying the following invariants:

@@ -9,6 +9,7 @@ from . import expr_util, logging
 from . import ctree as c
 from .logging import report
 from .messages import *
+from . import errors as E
 from .expr_util import (
     defined, param_expr, param_expr_site, param_int, static_indices, undefined)
 
@@ -121,7 +122,7 @@ def explode_register(node):
             offset = param_expr(node, 'offset', indices)
             if offset.undefined:
                 report(PUNDEFOFFS(offset.site))
-        except EIDXVAR:
+        except E.IDXVAR:
             pass
     for indices in itertools.product(*(
             (c.mkIntegerLiteral(node.site, idx) for idx in range(dimsize))
@@ -190,7 +191,7 @@ def check_overlap(regs):
             [[node1], [node2]] = [
                 [reg.node for reg in regs if ri in reg.layout]
                 for ri in [ri1, ri2]]
-            report(EREGOL(node1, node2, ri1.coord, ri2.coord))
+            report(E.REGOL(node1, node2, ri1.coord, ri2.coord))
 
 def explode_registers(bank):
     """Expand all registers of a bank, and calculate the offsets of every

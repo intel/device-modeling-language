@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from . import structure, logging, messages, ctree, ast, expr_util, toplevel
+from . import errors as E
 from . import serialize
 from . import dmlparse
 from . import output
@@ -123,10 +124,10 @@ def parse_define(arg):
     lexer.input(arg)
     tokens = list(lexer)
     if len(tokens) < 3 or tokens[1].type != 'EQUALS':
-        raise ESYNTAX(define_site, '-D' + arg, "expected name=value")
+        raise E.SYNTAX(define_site, '-D' + arg, "expected name=value")
     (ident, _, literal) = tokens[:3]
     if ident.type != 'ID':
-        raise ESYNTAX(define_site, '-D' + arg,
+        raise E.SYNTAX(define_site, '-D' + arg,
                       "invalid identifier: %s" % (ident.value,))
 
     if literal.type == 'FCONST':
@@ -138,10 +139,10 @@ def parse_define(arg):
     elif literal.type == 'ID' and literal.value in {'true', 'false'}:
         value = ast.variable(define_site, literal.value)
     else:
-        raise ESYNTAX(define_site, '-D' + arg,
+        raise E.SYNTAX(define_site, '-D' + arg,
                       "Invalid literal %s" % (literal.value,))
     if len(tokens) > 3:
-        raise ESYNTAX(define_site, '-D' + arg,
+        raise E.SYNTAX(define_site, '-D' + arg,
                       "garbage after literal: " + str(tokens[3].value))
 
     return (ident.value, value)
@@ -523,7 +524,7 @@ def main(argv):
     for d in options.defines:
         try:
             (name, value) = parse_define(d)
-        except ESYNTAX as e:
+        except E.SYNTAX as e:
             report(e)
         else:
             defs[name] = value

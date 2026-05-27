@@ -20,6 +20,7 @@ from .structure import get_attr_name, port_class_ident, need_port_proxy_attrs
 from . import logging
 from .logging import ICE, report
 from .messages import *
+from . import errors as E
 from . import output
 from .output import out
 from . import ctree as c
@@ -55,7 +56,7 @@ def get_attr_flags(obj):
     elif conf == 'pseudo':
         flags = 'Sim_Attr_Pseudo'
     else:
-        raise EPARAM(param_expr_site(obj, "configuration"), "configuration")
+        raise E.PARAM(param_expr_site(obj, "configuration"), "configuration")
 
     if persist:
         flags += "|Sim_Attr_Persistent"
@@ -108,10 +109,10 @@ def register_attribute(site, port, name):
     global registered_attribute_names
 
     if name in dml.globals.illegal_attributes:
-        report(EANAME(site, name))
+        report(E.ANAME(site, name))
     key = (port, name)
     if key in registered_attribute_names:
-        report(EATTRCOLL(site, registered_attribute_names[key]))
+        report(E.ATTRCOLL(site, registered_attribute_names[key]))
     registered_attribute_names[key] = site
 
 # Creating the C struct definition is done in two steps. First, the
@@ -209,7 +210,7 @@ def print_device_substruct(node):
         allocate_type = crep.node_storage_type(node)
         if allocate_type:
             if composite_type:
-                report(EATTRDATA(node,
+                report(E.ATTRDATA(node,
                                  param_expr_site(node, 'allocate_type'),
                                  [session.site for session in
                                   node.get_recursive_components('session')]))
@@ -784,16 +785,16 @@ def generate_implement_method(device, ifacestruct, meth, indices):
         # Calculate the expected method signature
         member_type = ifacestruct.get_member_qualified(meth.name)
         if not member_type:
-            raise EMEMBER(meth.site, meth.parent.name, meth.name)
+            raise E.MEMBER(meth.site, meth.parent.name, meth.name)
         member_type = tp.safe_realtype(member_type)
         if not isinstance(member_type, tp.Ptr):
-            raise EIMPLMEMBER(
+            raise E.IMPLMEMBER(
                 meth.site,
                 f'{meth.parent.name}_interface_t.{meth.name}',
                 ifacestruct.declaration_site)
         func_type = member_type.base
         if not isinstance(func_type, tp.Function):
-            raise EIMPLMEMBER(meth.site,
+            raise E.IMPLMEMBER(meth.site,
                               f'{meth.parent.name}_interface_t.{meth.name}',
                               ifacestruct.declaration_site)
         iface_input_types = func_type.input_types[1:]
@@ -801,24 +802,24 @@ def generate_implement_method(device, ifacestruct, meth, indices):
 
         # Check the signature
         if len(meth.inp) != len(iface_input_types):
-            raise EMETH(meth.site, None,
+            raise E.METH(meth.site, None,
                         'different number of input parameters')
         if len(meth.outp) != iface_num_outputs:
-            raise EMETH(meth.site, None,
+            raise E.METH(meth.site, None,
                         'different number of output parameters')
         if func_type.varargs:
             # currently impossible to implement a varargs interface
             # method in DML
-            raise EMETH(meth.site, None, 'interface method is variadic')
+            raise E.METH(meth.site, None, 'interface method is variadic')
         for (mp, it) in zip(meth.inp, iface_input_types):
             if not tp.safe_realtype_unconst(mp.typ).eq(tp.safe_realtype_unconst(it)):
-                raise EARGT(meth.site, 'implement', meth.name,
+                raise E.ARGT(meth.site, 'implement', meth.name,
                             mp.typ, mp.logref, it, 'method')
         if iface_num_outputs and dml.globals.dml_version != (1, 2):
             [(_, mt)] = meth.outp
             if not tp.safe_realtype_unconst(mt).eq(
                     tp.safe_realtype_unconst(func_type.output_type)):
-                raise EARGT(meth.site, 'implement', meth.name,
+                raise E.ARGT(meth.site, 'implement', meth.name,
                             mt, '<return value>', func_type.output_type,
                             'method')
         if indices is PORTOBJ:
@@ -868,7 +869,7 @@ def generate_implement(code, device, impl):
     ifacestruct = tp.safe_realtype(ifacetype)
 
     if not isinstance(ifacestruct, (tp.Struct, tp.ExternStruct)):
-        raise EIFTYPE(impl.site, ifacetype)
+        raise E.IFTYPE(impl.site, ifacetype)
 
     port = impl.parent
     assert port.objtype in  {'port', 'bank', 'device', 'subdevice'}
@@ -876,7 +877,7 @@ def generate_implement(code, device, impl):
     if not port.name:
         # anonymous bank
         assert dml.globals.dml_version == (1, 2)
-        raise EANONPORT(impl.site, port)
+        raise E.ANONPORT(impl.site, port)
     code.out("{\n", postindent = 1)
     if not port.parent:
         # device
@@ -2714,7 +2715,7 @@ def trait_param_value(node, param_type_site, param_type):
             if isinstance(expr, NonValue):
                 raise expr.exc()
             expr = c.source_for_assignment(expr.site, param_type, expr)
-        except EIDXVAR:
+        except E.IDXVAR:
             indices = tuple(mkLit(node.site, v, tp.Int(32, False))
                             for v in IndexedParamValue.indexvars(node))
             expr = node.get_expr(indices)
@@ -2868,7 +2869,7 @@ def generate_saved_userdata(node, dimensions, prefix):
             try:
                 yield calculate_saved_userdata(child, dimensions,
                                                prefix + child.ident)
-            except ESERIALIZE as e:
+            except E.SERIALIZE as e:
                 report(e)
         elif child.objtype == 'method':
             # if the method is not generated, the variable is dead and
@@ -2879,7 +2880,7 @@ def generate_saved_userdata(node, dimensions, prefix):
                         yield calculate_saved_userdata(
                             child, dimensions, prefix + child.ident,
                             sym_spec)
-                    except ESERIALIZE as e:
+                    except E.SERIALIZE as e:
                         report(e)
         elif (isinstance(child, objects.CompositeObject)
               and child.objtype not in {'bank', 'port', 'subdevice'}):
@@ -3496,7 +3497,7 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
         raise ICE(None, 'late additions to codegen.method_queue')
 
     if dml.globals.dml_version == (1, 2):
-        for error in EBADFAIL_dml12.all_errors():
+        for error in E.BADFAIL_dml12.all_errors():
             report(error)
 
     if logging.show_porting:

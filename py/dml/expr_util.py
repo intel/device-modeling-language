@@ -5,6 +5,7 @@
 import dml.globals
 from .logging import report
 from .messages import *
+from . import errors as E
 from . import types as tp
 from .expr import Lit, NonValue, NullConstant, StaticIndex
 
@@ -62,9 +63,9 @@ def expr_constvalue(expr, pytype, typestr):
     if isinstance(expr, NonValue):
         raise expr.exc()
     if not expr.constant:
-        raise ENCONST(expr.site, expr)
+        raise E.NCONST(expr.site, expr)
     if not isinstance(expr.value, pytype):
-        raise EBTYPE(expr.site, expr.ctype(), typestr)
+        raise E.BTYPE(expr.site, expr.ctype(), typestr)
     return expr.value
 
 
@@ -73,7 +74,7 @@ def expr_strval(expr):
     try:
         return value.decode('utf-8')
     except UnicodeDecodeError:
-        raise EBTYPE(expr.site, expr.ctype(), 'utf-8 encoded string')
+        raise E.BTYPE(expr.site, expr.ctype(), 'utf-8 encoded string')
 
 
 def expr_intval(expr):

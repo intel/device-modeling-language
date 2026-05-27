@@ -10,6 +10,7 @@ from . import types as tp
 from .logging import ICE, report
 from .expr_util import param_expr, param_str
 from .messages import *
+from . import errors as E
 from . import breaking_changes, expr_util
 
 __all__ = (
@@ -59,7 +60,7 @@ def dev(site):
 
 def require_dev(site):
     if not DeviceInstanceContext.active:
-        raise EINDEPENDENTVIOL(site)
+        raise E.INDEPENDENTVIOL(site)
 
 def maybe_dev_arg(independent):
     return ([] if independent

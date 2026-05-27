@@ -27,6 +27,7 @@ PYFILES := dml/__init__.py			\
           dml/dmllex14.py			\
           dml/dmlparse.py			\
           dml/dmlc.py				\
+          dml/errors.py				\
           dml/expr.py				\
           dml/expr_util.py			\
 	  dml/globals.py			\

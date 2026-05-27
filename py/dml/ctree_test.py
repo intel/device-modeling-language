@@ -11,6 +11,7 @@ import shlex
 from pathlib import Path
 
 from dml import ctree, expr, types, logging, messages, output, symtab, traits
+from dml import errors as E
 from dml.ctree import string_escape, mkCompound, dmldir_macro
 from dml.env import is_windows
 from dml.expr import mkNullConstant
@@ -653,10 +654,10 @@ class ExprTests(GccTests):
     @subtest()
     def unary_plus_rval(self):
         i = ctree.mkUnaryPlus(site, variable('i', types.Int(64, False)))
-        with self.assertRaises(messages.ERVAL):
+        with self.assertRaises(E.RVAL):
             ctree.mkAddressOf(site, i)
         f = ctree.mkUnaryPlus(site, variable('f', types.Float('double')))
-        with self.assertRaises(messages.ERVAL):
+        with self.assertRaises(E.RVAL):
             ctree.mkAddressOf(site, f)
         return None
 
@@ -933,7 +934,7 @@ class ExprTests(GccTests):
     def sh_neg(self, op, lh, rh):
         lhconst = int_const(lh, True)
         rhconst = int_const(rh, True)
-        with self.assertRaises(messages.ESHNEG):
+        with self.assertRaises(E.SHNEG):
             op(site, lhconst, rhconst)
         var_op = op(site, variable('a', lhconst.type),
                               variable('b', rhconst.type))
@@ -1043,7 +1044,7 @@ class ExprTests(GccTests):
                          (ctree.mkAdd, i, p),
                          (ctree.mkSubtract, p, i),
                          (ctree.mkSubtract, p, p)]:
-            with self.assertRaises(messages.EBTYPE):
+            with self.assertRaises(E.BTYPE):
                 op(site, lh, rh)
         return None
 
@@ -1148,7 +1149,7 @@ class ExprTests(GccTests):
               for lhsigned in [True, False]])
     def divmod_by_zero(self, lh, op):
         rh = int_const(0, True)
-        with self.assertRaises(messages.EDIVZ):
+        with self.assertRaises(E.DIVZ):
             op(site, lh, rh)
         var_op = op(site, variable('a', lh.type),
                     variable('b', rh.type))
@@ -1238,11 +1239,11 @@ class ExprTests(GccTests):
                         site, rh,
                         int_const(0), int_const(0))]:
                 for cond in [int_const(0), float_const(0.3)]:
-                    with self.assertRaises(messages.ENBOOL):
+                    with self.assertRaises(E.NBOOL):
                         op(site, cond)
         finally:
             ctree.report = logging.report
-        with self.assertRaises(messages.EBINOP):
+        with self.assertRaises(E.BINOP):
             ctree.mkIfExpr(
                 site,
                 ctree.mkBoolConstant(site, True),
@@ -1339,7 +1340,7 @@ class ExprTests(GccTests):
                    ctree.mkLessThanOrEquals,
                    ctree.mkGreaterThan,
                    ctree.mkGreaterThanOrEquals]:
-            with self.assertRaises(messages.EILLCOMP):
+            with self.assertRaises(E.ILLCOMP):
                 op(site, lit(types.Ptr(types.Int(8, True))),
                    lit(types.Ptr(types.Void())))
 

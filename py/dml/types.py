@@ -56,6 +56,7 @@ from itertools import *
 from .env import is_windows
 from .output import out
 from .messages import *
+from . import errors as E
 from .logging import ICE, report
 from . import breaking_changes
 from . import output
@@ -92,7 +93,7 @@ def check_named_types(t):
     '''Checks that a type does not reference a non-existing type'''
     if isinstance(t, Named):
         if t.c not in typedefs:
-            raise ETYPE(t.declaration_site, t)
+            raise E.TYPE(t.declaration_site, t)
     elif isinstance(t, StructType):
         t.resolve()
         for (mn, mt) in t.members:
@@ -105,7 +106,7 @@ def check_named_types(t):
         check_named_types(t.output_type)
     elif isinstance(t, TraitList):
         if t.traitname not in dml.globals.traits:
-            raise ETYPE(t.declaration_site, t)
+            raise E.TYPE(t.declaration_site, t)
     elif isinstance(t, Hook):
         for msg_t in t.msg_types:
             check_named_types(msg_t)
@@ -132,7 +133,7 @@ def realtype_shallow(t):
             raise DMLUnknownType(t)
         if t.const and not t2.const:
             if isinstance(t2, Function):
-                raise ECONSTFUN(t.declaration_site)
+                raise E.CONSTFUN(t.declaration_site)
             t = t2.clone()
             t.const = True
         else:
@@ -180,13 +181,13 @@ def safe_realtype(t):
     try:
         return realtype(t)
     except DMLUnknownType as e:
-        raise ETYPE(e.type.declaration_site or None, e.type)
+        raise E.TYPE(e.type.declaration_site or None, e.type)
 
 def safe_realtype_shallow(t):
     try:
         return realtype_shallow(t)
     except DMLUnknownType as e:
-        raise ETYPE(e.type.declaration_site or None, e.type)
+        raise E.TYPE(e.type.declaration_site or None, e.type)
 
 def conv_const(const, t):
     # Functions cannot be const. Usually function types cannot happen
@@ -1323,7 +1324,7 @@ class Layout(Struct):
                 return t, rt
             if rt.is_int:
                 if (rt.bits % 8) != 0:
-                    raise ELAYOUT(site,
+                    raise E.LAYOUT(site,
                                   f"size of {memberref} is not a whole byte")
             if (isinstance(rt, Int)
                 or (dml.globals.compat_dml12_int(site)
@@ -1341,7 +1342,7 @@ class Layout(Struct):
                     site, rt.base, memberref)
                 return (Array(new_base, rt.size, rt.const),
                         Array(real_base, rt.size, rt.const),)
-            raise ELAYOUT(site, "illegal layout member type: %s" % t)
+            raise E.LAYOUT(site, "illegal layout member type: %s" % t)
 
         self.size = 0
         self.named_members = {}
@@ -1364,7 +1365,7 @@ class Layout(Struct):
                 size = rt.sizeof()
                 if size is None:
                     # variable-sized array
-                    raise ELAYOUT(site, "unknown layout size")
+                    raise E.LAYOUT(site, "unknown layout size")
                 else:
                     self.size += size
             except DMLError as e:
@@ -1509,7 +1510,7 @@ class Hook(DMLType):
                 try:
                     safe_realtype(typ).key()
                 except DMLUnkeyableType as e:
-                    raise EHOOKTYPE(self.declaration_site or fallback_site,
+                    raise E.HOOKTYPE(self.declaration_site or fallback_site,
                                     typ, e.clarification) from e
 
 

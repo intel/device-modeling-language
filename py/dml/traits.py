@@ -18,6 +18,7 @@ from . import ctree as c
 from .expr import mkLit, NonValue
 from .expr_util import defined
 from .messages import *
+from . import errors as E
 from .slotsmeta import auto_init
 from . import types as tp
 from .set import Set
@@ -43,16 +44,16 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
     def check_namecoll(name, site):
         if name in methods:
             (othersite, _, _, _, _, _, _, _, _, _, _) = methods[name]
-            raise ENAMECOLL(site, othersite, name)
+            raise E.NAMECOLL(site, othersite, name)
         if name in params:
             (othersite, _) = params[name]
-            raise ENAMECOLL(site, othersite, name)
+            raise E.NAMECOLL(site, othersite, name)
         if name in sessions:
             (othersite, _) = sessions[name]
-            raise ENAMECOLL(site, othersite, name)
+            raise E.NAMECOLL(site, othersite, name)
         if name in hooks:
             (othersite, _, _) = hooks[name]
-            raise ENAMECOLL(site, othersite, name)
+            raise E.NAMECOLL(site, othersite, name)
 
     for ast in subasts:
         try:
@@ -91,7 +92,7 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                                                  global_scope)
                 # this would be trivial to support, but completely meaningless
                 for (err_site, _) in struct_defs:
-                    report(EANONSTRUCT(err_site, "parameter type"))
+                    report(E.ANONSTRUCT(err_site, "parameter type"))
                 check_namecoll(pname, ast.site)
                 params[pname] = (ast.site, ptype)
             elif ast.kind == 'hook':
@@ -123,7 +124,7 @@ class NoDefaultSymbol(symtab.Symbol):
     def __init__(self, site):
         super(NoDefaultSymbol, self).__init__('default', site=site)
     def expr(self, site):
-        raise ENDEFAULT(site)
+        raise E.NDEFAULT(site)
 
 class AmbiguousDefaultSymbol(symtab.Symbol):
     """A broken reference to 'default' inside a method that has two
@@ -135,7 +136,7 @@ class AmbiguousDefaultSymbol(symtab.Symbol):
             'default', site=default_method_sites[0])
         self.default_method_sites = default_method_sites
     def expr(self, site):
-        raise EAMBDEFAULT(site, self.default_method_sites)
+        raise E.AMBDEFAULT(site, self.default_method_sites)
 
 class TraitVTableItem(metaclass=abc.ABCMeta):
     '''A value for a struct field in a vtable instance'''
@@ -286,7 +287,7 @@ def merge_ancestor_vtables(ancestors, site):
                 # This may mean that an abstract method or parameter is
                 # defined in two traits. We could allow this, as long
                 # as types match, and it's overridden in an unambiguous way.
-                report(EAMBINH(site, None, name,
+                report(E.AMBINH(site, None, name,
                                ancestor.name, ancestor_vtables[name].name))
             else:
                 ancestor_vtables[name] = ancestor
@@ -309,7 +310,7 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
             if coll:
                 (orig_site, _) = coll
                 (param_site, _) = params[name]
-                report(ENAMECOLL(param_site, orig_site, name))
+                report(E.NAMECOLL(param_site, orig_site, name))
                 bad_params.append(name)
     for name in bad_params:
         del params[name]
@@ -321,7 +322,7 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
             if coll:
                 (orig_site, _) = coll
                 (session_site, _) = sessions[name]
-                report(ENAMECOLL(session_site, orig_site, name))
+                report(E.NAMECOLL(session_site, orig_site, name))
                 bad_sessions.append(name)
     for name in bad_sessions:
         del sessions[name]
@@ -334,7 +335,7 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
         for p in inp:
             if p.ident:
                 if p.ident in argnames:
-                    report(EARGD(msite, p.ident))
+                    report(E.ARGD(msite, p.ident))
                     bad_methods.add(name)
                 argnames.add(p.ident)
 
@@ -346,7 +347,7 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
                 (orig_site, orig_trait) = coll
                 if orig_trait.member_kind(name) != 'method':
                     # cannot override non-method with method
-                    report(ENAMECOLL(msite, orig_site, name))
+                    report(E.NAMECOLL(msite, orig_site, name))
                     bad_methods.add(name)
 
                 elif body is None and name in ancestor_vtables:
@@ -355,16 +356,16 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
                     # declarations would make no sense, because the
                     # only sensible interpretation would be to ignore
                     # the declaration.
-                    report(EAMETH(msite, orig_site, name))
+                    report(E.AMETH(msite, orig_site, name))
                     bad_methods.add(name)
 
                 elif (name in orig_trait.method_impls
                       and not orig_trait.method_impls[name].overridable):
-                    report(EDMETH(msite, orig_trait.method_impls[name].site,
+                    report(E.DMETH(msite, orig_trait.method_impls[name].site,
                                   name))
                     bad_methods.add(name)
                 elif explicit_decl:
-                    report(EOVERRIDEMETH(msite, orig_site, name,
+                    report(E.OVERRIDEMETH(msite, orig_site, name,
                                          'default ' * overridable))
                     bad_methods.add(name)
                 elif name not in ancestor_vtables:
@@ -376,7 +377,7 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
 
         if (body is not None and not some_coll and not explicit_decl
             and msite.provisional_enabled(provisional.explicit_method_decls)):
-            report(ENOVERRIDEMETH(msite, name, 'default ' * overridable))
+            report(E.NOVERRIDEMETH(msite, name, 'default ' * overridable))
             bad_methods.add(name)
 
     for name in bad_methods:
@@ -389,7 +390,7 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
             if coll:
                 (orig_site, _) = coll
                 (session_site, _, _) = hooks[name]
-                report(ENAMECOLL(session_site, orig_site, name))
+                report(E.NAMECOLL(session_site, orig_site, name))
                 bad_hooks.append(name)
     for name in bad_hooks:
         del hooks[name]
@@ -412,11 +413,11 @@ def typecheck_method_override(left, right):
     (site0, inp0, outp0, throws0, independent0, startup0, memoized0) = left
     (site1, inp1, outp1, throws1, independent1, startup1, memoized1) = right
     if len(inp0) != len(inp1):
-        raise EMETH(site0, site1, "different number of input arguments")
+        raise E.METH(site0, site1, "different number of input arguments")
     if len(outp0) != len(outp1):
-        raise EMETH(site0, site1, "different number of output arguments")
+        raise E.METH(site0, site1, "different number of output arguments")
     if throws0 != throws1:
-        raise EMETH(site0, site1, "different 'throws' annotations")
+        raise E.METH(site0, site1, "different 'throws' annotations")
     for (p0, p1) in zip(inp0, inp1):
         t0 = tp.safe_realtype_unconst(p0.typ)
         t1 = tp.safe_realtype_unconst(p1.typ)
@@ -424,7 +425,7 @@ def typecheck_method_override(left, right):
               if not breaking_changes.strict_typechecking.enabled
               else t0.eq(t1))
         if not ok:
-            raise EMETH(site0, site1,
+            raise E.METH(site0, site1,
                         f"mismatching types in input argument {p0.logref}")
     for (i, ((_, t0), (_, t1))) in enumerate(zip(outp0, outp1)):
         t0 = tp.safe_realtype_unconst(t0)
@@ -433,12 +434,12 @@ def typecheck_method_override(left, right):
               if not breaking_changes.strict_typechecking.enabled
               else t0.eq(t1))
         if not ok:
-            raise EMETH(site0, site1,
+            raise E.METH(site0, site1,
                         "mismatching types in output argument %d" % (i + 1,))
 
     def qualifier_check(qualifier_name, qualifier0, qualifier1):
         if qualifier0 != qualifier1:
-            raise EMETH(site0, site1,
+            raise E.METH(site0, site1,
                         (f"one declaration is qualified as {qualifier_name}, "
                          + "but the other is not"))
 
@@ -501,7 +502,7 @@ def merge_method_impl_maps(site, parents):
                                 and (len(existing_impls) != 1
                                      or existing_impls[0].method_impls[
                                          mname].overridable))):
-                            report(EAMBINH(
+                            report(E.AMBINH(
                                 site, None, mname,
                                 unmerged_impl.name,
                                 existing_impls[0].name))
@@ -588,7 +589,7 @@ def sort_method_implementations(implementations):
             return rank_to_method[r].overridable
 
         [r1, r2] = sorted(minimal_ancestry[None], key=is_default)[:2]
-        raise EAMBINH(rank_to_method[r1].site,
+        raise E.AMBINH(rank_to_method[r1].site,
                       rank_to_method[r2].site,
                       rank_to_method[r1].name,
                       r1.desc, r2.desc,
@@ -717,7 +718,7 @@ class ReservedSymbol(NonValue):
                # template type, but not if declared inside #if
                'subobj': 'subobject %s',
                }[self.kind] % (self.name,)
-        return ENSHARED(self.site, fmt, self.template, self.decl_site)
+        return E.NSHARED(self.site, fmt, self.template, self.decl_site)
 
 class Trait(SubTrait):
     '''A trait, as defined by a top-level 'trait' statement'''
@@ -849,8 +850,8 @@ class Trait(SubTrait):
             # This is very hacky, but works well
             try:
                 expr = c.mkSubRef(self.site, selfref, name, '.')
-            except EINDEPENDENTVIOL:
-                expr = c.InvalidSymbol(self.site, name, EINDEPENDENTVIOL)
+            except E.INDEPENDENTVIOL:
+                expr = c.InvalidSymbol(self.site, name, E.INDEPENDENTVIOL)
             s.add(c.ExpressionSymbol(name, expr, self.site))
         # grammar prohibits name collision on 'this'
         s.add(c.ExpressionSymbol('this', selfref, self.site))
