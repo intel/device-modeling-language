@@ -3039,7 +3039,7 @@ def generate_hook_attribute_funs():
         &_typeseq_after_on_hook_hts[acc->typeseq_uniq],
         &_id_info_ht, _id_infos };
     _id_info_t info = _hook_id_infos[acc->hook_id - 1];
-    uint32 dimension_strides[info.dimensions];
+    uint32 dimension_strides[info.dimensions ? info.dimensions : 1];
     _DML_init_dimension_strides_from_dimsizes(
         dimension_strides, info.dimsizes, info.dimensions,
         sizeof(_dml_hook_t));
@@ -3063,7 +3063,7 @@ def generate_hook_attribute_funs():
         &_typeseq_after_on_hook_hts[acc->typeseq_uniq],
         &_id_info_ht, _id_infos };
     _id_info_t info = _hook_id_infos[acc->hook_id - 1];
-    uint32 dimension_strides[info.dimensions];
+    uint32 dimension_strides[info.dimensions ? info.dimensions : 1];
     _DML_init_dimension_strides_from_dimsizes(
         dimension_strides, info.dimsizes, info.dimensions,
         sizeof(_dml_hook_t));
@@ -3089,11 +3089,13 @@ def generate_hook_attribute_funs():
         &_typeseq_after_on_hook_hts[acc->typeseq_uniq],
         &_id_info_ht, _id_infos };
     _id_info_t info = _hook_id_infos[acc->hook_id - 1];
-    uint32 dimension_strides[info.dimensions];
+    uint32 dimension_strides[info.dimensions ? info.dimensions : 1];
     _DML_init_dimension_strides_from_dimsizes(
         dimension_strides, info.dimsizes, info.dimensions,
         sizeof(_dml_hook_t));
     char *ptr = (char *)obj + acc->device_offset;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
     for (int i = 0; i < portobj->ndims; ++i) {
             ptr += portobj->indices[i] * dimension_strides[i];
     }
@@ -3105,6 +3107,7 @@ def generate_hook_attribute_funs():
                                           info.dimensions - portobj->ndims,
                                           _DML_get_single_hook_attr,
                                           (uintptr_t) &data);
+#pragma GCC diagnostic pop
     return val;
 }\n'''
     out(body)
@@ -3121,11 +3124,13 @@ def generate_hook_attribute_funs():
         &_typeseq_after_on_hook_hts[acc->typeseq_uniq],
         &_id_info_ht, _id_infos };
     _id_info_t info = _hook_id_infos[acc->hook_id - 1];
-    uint32 dimension_strides[info.dimensions];
+    uint32 dimension_strides[info.dimensions ? info.dimensions : 1];
     _DML_init_dimension_strides_from_dimsizes(
         dimension_strides, info.dimsizes, info.dimensions,
         sizeof(_dml_hook_t));
     char *ptr = (char *)obj + acc->device_offset;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
     for (int i = 0; i < portobj->ndims; ++i) {
             ptr += portobj->indices[i] * dimension_strides[i];
     }
@@ -3136,6 +3141,7 @@ def generate_hook_attribute_funs():
                                            info.dimensions - portobj->ndims,
                                            _DML_set_single_hook_attr,
                                            (uintptr_t) &data);
+#pragma GCC diagnostic pop
     return error;
 }\n'''
     out(body)
