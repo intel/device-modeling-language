@@ -3,6 +3,7 @@
 
 import abc
 from . import logging
+from .logging import Site
 from . import errors as E
 
 class ProvisionalFeature(abc.ABC):

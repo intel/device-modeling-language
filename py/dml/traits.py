@@ -12,6 +12,7 @@ from . import crep, codegen, symtab, topsort
 from .symtab import global_scope
 from . import breaking_changes, provisional
 from . import logging
+from .template import Rank
 from .logging import ICE, DMLError, report
 from .codegen import c_extra_inargs, c_rettype, eval_type
 from . import ctree as c
