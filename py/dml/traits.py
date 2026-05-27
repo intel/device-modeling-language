@@ -27,7 +27,6 @@ __all__ = (
     'merge_ancestor_vtables',
     'typecheck_method_override',
     'ObjTraits',
-    'TraitObjMethod',
     'mktrait',
     'NoDefaultSymbol',
     'AmbiguousDefaultSymbol',

@@ -17,8 +17,6 @@ __all__ = (
     'cref_method',
     'cref_portobj',
     'cref_session',
-    'ctype',
-    'conf_obj',
     'cloggroup',
     'dev',
     'require_dev',
