@@ -115,13 +115,13 @@ def traverse_ast(ast):
 
 def method_locations(path):
     from dml.toplevel import parse_file, determine_version
-    from dml import logging, messages
+    from dml import logging, warnings
     from dml import breaking_changes
     # needed to parse 1.2/utility.dml
     breaking_changes.BreakingChange.enabled_breaking_changes = (
         set(breaking_changes.changes.values())
         - {breaking_changes.forbid_warning_statement})
-    for warning in messages.warnings:
+    for warning in warnings.all_warnings:
         logging.ignore_warning(warning)
 
     (version, _) = determine_version(path.read_text(), path)

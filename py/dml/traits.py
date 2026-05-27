@@ -18,6 +18,7 @@ from . import ctree as c
 from .expr import mkLit, NonValue
 from .expr_util import defined
 from .messages import *
+from . import warnings as W
 from . import errors as E
 from .slotsmeta import auto_init
 from . import types as tp
@@ -606,10 +607,10 @@ def sort_method_implementations(implementations):
     if (dml.globals.dml_version == (1, 2)
         and os.path.basename(m.site.filename()) != 'dml12-compatibility.dml'):
         if len(implementations) > 2:
-            report(WEXPERIMENTAL(
+            report(W.EXPERIMENTAL(
                 m.site, "more than one level of method overrides"))
         if len(implementations) == 2 and m.overridable:
-            report(WEXPERIMENTAL(
+            report(W.EXPERIMENTAL(
                 m.site, "method with two default declarations"))
 
     return (method_map, method_order)

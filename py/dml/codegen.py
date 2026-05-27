@@ -18,6 +18,7 @@ from . import ctree as c
 from .expr_util import apply, defined, expr_intval, undefined
 from .symtab import global_scope, MethodParamScope, Symtab
 from .messages import *
+from . import warnings as W
 from . import errors as E
 from . import output
 from .output import out
@@ -1105,7 +1106,7 @@ def expr_unop(tree, location, scope):
         and op == 'sizeof' and rh_ast.kind == 'variable_dml12'):
         var = rh_ast.args[0]
         if var in tp.typedefs and scope.lookup(var) is None:
-            report(WSIZEOFTYPE(tree.site))
+            report(W.SIZEOFTYPE(tree.site))
             return codegen_sizeof(
                 tree.site, mkLit(tree.site, tp.cident(var), None))
     try:
@@ -1810,7 +1811,7 @@ def mk_bitfield_compound_initializer_expr(site, etype, inits, location, scope,
             if (isinstance(og_expr, (c.FloatConstant, c.IntegerConstant))
                 and loss_on_truncation(og_expr.value, msb - lsb + 1,
                                        real_ft.signed)):
-                report(WASTRUNC(e.site, ft))
+                report(W.ASTRUNC(e.site, ft))
         else:
             if not real_ft.is_bitfields:
                 designated = e.kind == 'initializer_designated_struct'
@@ -2014,7 +2015,7 @@ def check_shadowing(scope, name, site):
     if (dml.globals.dml_version == (1, 2)
         and isinstance(scope.parent, MethodParamScope)):
         if scope.parent.lookup(name, local = True):
-            report(WDEPRECATED(site,
+            report(W.DEPRECATED(site,
                     'c.Variable %s in top-level method scope shadows parameter'
                     % name))
 
@@ -2606,7 +2607,7 @@ def stmt_error(stmt, location, scope):
 @statement_dispatcher
 def stmt_warning(stmt, location, scope):
     [msg] = stmt.args
-    report(WWRNSTMT(stmt.site, msg))
+    report(W.WRNSTMT(stmt.site, msg))
     return []
 
 @statement_dispatcher
@@ -2804,7 +2805,7 @@ def stmt_log(stmt, location, scope):
             later_level, location, scope))
         if (later_level.constant and level.constant and
             later_level.value == level.value):
-            report(WREDUNDANTLEVEL(site))
+            report(W.REDUNDANTLEVEL(site))
         if (error_logkind
             and breaking_changes.restrict_log_levels.enabled):
             if not later_level.constant or later_level.value not in {1, 5}:
@@ -2851,7 +2852,7 @@ def stmt_log(stmt, location, scope):
     groups = ctree.as_int(codegen_expression(groups, location, scope))
     warn_mixup = warn_mixup or probable_loglevel_specification(groups)
     if warn_mixup:
-        report(WLOGMIXUP(site, logkind, level, later_level, groups))
+        report(W.LOGMIXUP(site, logkind, level, later_level, groups))
     fmt, args = fix_printf(fmt, args, argsites, site)
     return [c.mkCompound(site, pre_statements + [
         log_wrapper(c.log_statement(site, logobj, logkind, adjusted_level,
@@ -2908,7 +2909,7 @@ def stmt_after(stmt, location, scope):
         raise E.BTYPE(site, old_delay_type, unit_type)
 
     if unit in {'cycles', 'ps'} and not tp.safe_realtype(old_delay_type).is_int:
-        report(WTTYPEC(site, old_delay_type, unit_type, unit))
+        report(W.TTYPEC(site, old_delay_type, unit_type, unit))
 
     # TODO after statement should be extended to allow the user to explicitly
     # give the domains
@@ -3169,7 +3170,7 @@ def stmt_immediateafter(stmt, location, scope):
 
     inargs = typecheck_inarg_inits(
         site, inarg_asts, inp, location, scope, kind,
-        on_ptr_to_stack=(lambda x: report(WIMMAFTER(x.site, x))))
+        on_ptr_to_stack=(lambda x: report(W.IMMAFTER(x.site, x))))
 
 
     if kind == 'method':

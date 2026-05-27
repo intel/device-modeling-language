@@ -10,6 +10,7 @@ from . import types as tp
 from .logging import ICE, report
 from .expr_util import param_expr, param_str
 from .messages import *
+from . import warnings as W
 from . import errors as E
 from . import breaking_changes, expr_util
 
@@ -76,7 +77,7 @@ def cname(node):
         # this is weird... kept for compatibility
         name = param_str(node, 'c_name').replace('-', '_')
         if name != node.name and breaking_changes.dml12_remove_misc_quirks.enabled:
-            report(WDEPRECATED(expr_util.param_expr_site(node, 'c_name'),
+            report(W.DEPRECATED(expr_util.param_expr_site(node, 'c_name'),
                                'parameter c_name'))
         return name
     elif node.name:

@@ -6,7 +6,7 @@ from .expr import mkLit
 from .expr_util import param_bool, param_defined, param_str
 from . import types as tp
 from .logging import report
-from .messages import WEXPERIMENTAL_UNMAPPED
+from . import warnings as W
 from .symtab import global_scope, Symtab
 from .codegen import codegen_call_byname, declarations
 from . import codegen
@@ -23,7 +23,7 @@ def check_unmapped_access_handling(bank, isread):
 
     overridden = meth_node and meth_node.default_method.node
     if overridden:
-        report(WEXPERIMENTAL_UNMAPPED(meth_node, meth_node.name))
+        report(W.EXPERIMENTAL_UNMAPPED(meth_node, meth_node.name))
 
 def unmapped_access(site, bank, idx, scope, isread, overlapping, bigendian,
                     memop, offset, size, writevalue, size2, value2):

@@ -26,6 +26,7 @@ from .expr_util import (
     param_expr_site, param_int, param_str,
     static_indices, undefined)
 from .messages import *
+from . import warnings as W
 from . import errors as E
 from . import types as tp
 import dml.globals
@@ -449,11 +450,11 @@ def check_unused_and_warn(node):
 
     if node.refcount == 0:
         if not logging.warning_is_ignored('WUNUSED'):
-            report(WUNUSED(node))
+            report(W.UNUSED(node))
         elif is_unused_default(node):
-            report(WUNUSEDDEFAULT(node))
+            report(W.UNUSEDDEFAULT(node))
         elif dml.globals.dml_version != (1, 2) and is_dml12_method(node):
-            report(WUNUSED_DML12(node))
+            report(W.UNUSED_DML12(node))
 
     for n in node.get_components():
         check_unused_and_warn(n)
@@ -705,10 +706,10 @@ def merge_parameters(params, obj_specs):
         if len(defs) == 2:
             (_, _, is_default, _) = param0.args
             if is_default:
-                report(WEXPERIMENTAL(
+                report(W.EXPERIMENTAL(
                     param0.site, "parameter with two default declarations"))
         elif len(defs) > 2:
-            report(WEXPERIMENTAL(
+            report(W.EXPERIMENTAL(
                 param0.site, "more than one level of parameter overrides"))
 
     return param0
@@ -1438,7 +1439,7 @@ def wrap_method_body_in_try(site, overridden_site, obj, name, body,
                             rbrace_site):
     if (obj.objtype != 'implement'
         and not site.filename().endswith('dml-builtins.dml')):
-        report(WTHROWS_DML12(site, overridden_site))
+        report(W.THROWS_DML12(site, overridden_site))
     return ast.compound(site, [
         ast.try_(site, body, ast.log(
             site, 'error', ast.int(site, 1), None, ast.int(site, 0),
@@ -1894,7 +1895,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             }.get(obj.objtype, set())):
             if dml.globals.traits[name] not in ancestors:
                 (_, mast) = declarations[0]
-                report(WNOIS(mast.site, name))
+                report(W.NOIS(mast.site, name))
 
         trait_impls = trait_method_impls.get(name, [])
         trait_abstract_decls = Set()
@@ -2170,7 +2171,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                         #
                         # In future versions, we should not forgive
                         # broken dead parameters. This is SIMICS-9886.
-                        WREF.instances.append(WREF(
+                        W.REF.instances.append(W.REF(
                             param.site, param.logname(), e))
                     else:
                         report(e)
@@ -2378,7 +2379,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
     elif obj.objtype == 'event':
         if (dml.globals.dml_version == (1, 2)
             and param_str(obj, 'timebase') == 'stacked'):
-            report(WDEPRECATED(obj.get_component('timebase').site,
+            report(W.DEPRECATED(obj.get_component('timebase').site,
                                "stacked events are deprecated"))
         if logging.show_porting and dml.globals.dml_version == (1, 2):
             timebase = param_str(obj, 'timebase')

@@ -8,7 +8,6 @@ __all__ = (
     'ICE',
 
     'show_porting',
-    'is_warning_tag',
     'ignore_warning',
     'warning_is_ignored',
     'enable_warning',
@@ -52,11 +51,6 @@ include_tag = False
 def set_include_tag(val):
     global include_tag
     include_tag = val
-
-def is_warning_tag(tag):
-    from . import messages
-    cls = getattr(messages, tag, None)
-    return isinstance(cls, type) and issubclass(cls, DMLWarning)
 
 # A set of ignored warnings
 ignored_warnings = {}
@@ -220,7 +214,7 @@ class ICE(Exception, LogMessage):
 # This is a base class for warning messages
 #
 class DMLWarning(LogMessage):
-    tag_prefix = ''
+    tag_prefix = 'W'
     kind = "warning"
     next_warning_yields_error = False
 

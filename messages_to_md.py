@@ -21,9 +21,9 @@ def fmt_message(err):
 
 def extract_messages(sys_path):
     sys.path.append(sys_path)
-    from dml import messages, errors
+    from dml import warnings, errors
 
-    return (messages.warnings, errors.all_errors)
+    return (warnings.all_warnings, errors.all_errors)
 
 def print_message_table(f, messages):
     f.write("<dl>\n")

@@ -66,6 +66,7 @@ Make: dmlc
     $(HOST)/bin/dml/python/dml/topsort.py
     $(HOST)/bin/dml/python/dml/traits.py
     $(HOST)/bin/dml/python/dml/types.py
+    $(HOST)/bin/dml/python/dml/warnings.py
     $(HOST)/bin/dml/python/dml/dml12_parsetab.py
     $(HOST)/bin/dml/python/dml/dml14_parsetab.py
     $(HOST)/bin/dml/python/LICENSE

@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 from . import structure, logging, messages, ctree, ast, expr_util, toplevel
-from . import errors as E
+from . import errors as E, warnings as W
 from . import serialize
 from . import dmlparse
 from . import output
@@ -275,7 +275,7 @@ class WarnHelpAction(HelpAction):
     def print_help(self):
         print('''Tags accepted by --warn and --nowarn:''')
         by_ignored = {True: [], False: []}
-        for tag in sorted(messages.warnings):
+        for tag in sorted(W.all_warnings):
             by_ignored[logging.warning_is_ignored(tag)].append(tag)
         print('  Enabled by default:')
         for tag in by_ignored[False]:
@@ -638,13 +638,13 @@ def main(argv):
         logging.ignore_warning('WLOGMIXUP')
 
     for w in options.disabled_warnings:
-        if not logging.is_warning_tag(w):
+        if w not in W.all_warnings:
             prerr("dmlc: the tag '%s' is not a valid warning tag" % w)
             sys.exit(1)
         logging.ignore_warning(w)
 
     for w in options.enabled_warnings:
-        if not logging.is_warning_tag(w):
+        if w not in W.all_warnings:
             prerr("dmlc: the tag '%s' is not a valid warning tag" % w)
             sys.exit(1)
         logging.enable_warning(w)
@@ -765,7 +765,7 @@ def main(argv):
             # if there's already a hard error somewhere, because if the
             # parameter was actually used, then the WREF is a duplicate
             # of an already reported error.
-            for wref in messages.WREF.instances:
+            for wref in W.REF.instances:
                 report(wref)
 
         logtime("total")

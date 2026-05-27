@@ -18,6 +18,7 @@ from . import logging, codegen, ctree, ast
 from . import breaking_changes
 from . import symtab
 from .messages import *
+from . import warnings as W
 from . import errors as E
 from .logging import ICE, report
 import dml.globals
@@ -84,7 +85,7 @@ def determine_version(filestr, filename):
         filestr = ' ' * ver_end + filestr[ver_end:]
     else:
         if not breaking_changes.require_version_statement.enabled:
-            report(WNOVER(logging.SimpleSite(f"{filename}:1")))
+            report(W.NOVER(logging.SimpleSite(f"{filename}:1")))
             version = (1, 2)
             lineno = 1
             column = 1
@@ -95,7 +96,7 @@ def determine_version(filestr, filename):
 
     if (not breaking_changes.require_version_statement.enabled
         and version == (1, 3)):
-        report(WDEPRECATED(
+        report(W.DEPRECATED(
             logging.SimpleSite(f"{filename}:{lineno}:{column}"),
             "'dml 1.3' is a deprecated alias of dml 1.4"))
         version = (1, 4)
@@ -318,7 +319,7 @@ def parse_dmlast_or_dml(dml_filename):
             # This detects a common error: after getting a compile
             # error in dml-builtins.dml, one accidentally edits the
             # copy in [host]/bin/dml/, instead of the one in the repo.
-            report(WOLDAST(dml_filename))
+            report(W.OLDAST(dml_filename))
         else:
             file_info, pragmas, parsedata = load_dmlast(ast_filename)
             if file_info.name is None:

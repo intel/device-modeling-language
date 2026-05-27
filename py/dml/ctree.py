@@ -15,6 +15,7 @@ from dml import objects, symtab, expr, logging, crep
 from . import logging
 from .logging import ICE, report, binary_dump
 from .messages import *
+from . import warnings as W
 from . import errors as E
 from . import output
 from .output import linemark, out
@@ -1441,7 +1442,7 @@ class Compare(BinOp):
             (signed_expr, unsigned_expr) = ((lh, rh) if lh_maybe_negative
                                             else (rh, lh))
             if signed_expr.constant and signed_expr.value < 0:
-                report(WNEGCONSTCOMP(site, signed_expr,
+                report(W.NEGCONSTCOMP(site, signed_expr,
                                      unsigned_expr.ctype()))
             # we must convert (uint64)x < (int64)y to DML_lt(x, y), because
             # C:'s < would do an unsigned comparison. No need to do this if y
@@ -1655,7 +1656,7 @@ class Equals(BinOp):
             (signed_expr, unsigned_expr) = ((lh, rh) if lh_maybe_negative
                                             else (rh, lh))
             if signed_expr.constant and signed_expr.value < 0:
-                report(WNEGCONSTCOMP(site, signed_expr, unsigned_expr.ctype()))
+                report(W.NEGCONSTCOMP(site, signed_expr, unsigned_expr.ctype()))
             if not (signed_expr.constant and 0 <= signed_expr.value < 1 << 63):
                 return mkApply(
                     site, mkLit(
@@ -2070,7 +2071,7 @@ class ShR_dml12(BitShift_dml12):
         assert etype.is_int
         ltype = tp.realtype(lh.ctype())
         if etype.bits < 1:
-            report(WSHALL(site, lh, rh))
+            report(W.SHALL(site, lh, rh))
         elif ltype.bits > 32 and etype.bits <= 32:
             expr = mkCast(site, expr, etype)
         return expr
@@ -4363,7 +4364,7 @@ class HookSendRef(NonValue):
             [(f'comp{i}', t)
              for (i, t) in enumerate(msg_types)],
             location, scope, 'send',
-            on_ptr_to_stack=(lambda x: report(WHOOKSEND(x.site, x))))
+            on_ptr_to_stack=(lambda x: report(W.HOOKSEND(x.site, x))))
         from .codegen import get_type_sequence_info, get_immediate_after
         typeseq_info = get_type_sequence_info(msg_types, create_new=True)
         after_info = get_immediate_after(typeseq_info)
@@ -5046,7 +5047,7 @@ def mkCast(site, expr, new_type):
                                              new_base.signed,
                                              byte_order,
                                              const=new_base.const)
-                report(WPCAST(site, old_base, new_base, likely_intended))
+                report(W.PCAST(site, old_base, new_base, likely_intended))
 
         return Cast(site, expr, new_type)
 
@@ -5144,7 +5145,7 @@ class QName(Expression):
     def read(self):
         if (dml.globals.dml_version == (1, 2)
             and self.node.logname() != self.node.logname_anonymized()):
-            report(WCONFIDENTIAL(self.site))
+            report(W.CONFIDENTIAL(self.site))
 
         if self.indices and not all(x.constant for x in self.indices):
             idx_args = [", (int)" + idx.read() for idx in self.indices]
@@ -5194,7 +5195,7 @@ class HiddenName(StringConstant):
     def __str__(self):
         return logging.dollar(self.site) + '%s.name' % (self.node,)
     def read(self):
-        report(WCONFIDENTIAL(self.site))
+        report(W.CONFIDENTIAL(self.site))
         return self.quoted
     def fmt(self):
         return (get_anonymized_name(self.node), ())

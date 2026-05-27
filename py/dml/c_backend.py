@@ -20,6 +20,7 @@ from .structure import get_attr_name, port_class_ident, need_port_proxy_attrs
 from . import logging
 from .logging import ICE, report
 from .messages import *
+from . import warnings as W
 from . import errors as E
 from . import output
 from .output import out
@@ -518,9 +519,9 @@ def check_attribute(node, port, prefix):
     if not get_long_doc(node):
         if (node.objtype in {'attribute', 'connect'}
             and config_param == 'required'):
-            report(WNDOCRA(node, node.logname()))
+            report(W.NDOCRA(node, node.logname()))
         elif node.objtype != 'register':
-            report(WNDOC(node, node.logname()))
+            report(W.NDOC(node, node.logname()))
     attrname = get_attr_name(prefix, node)
     register_attribute(node.site, port, attrname)
     if port and need_port_proxy_attrs(port):
@@ -547,10 +548,10 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
         doc = 'register ' + node.logname_anonymized()
     elif (node.objtype in {'attribute', 'connect'}
           and config_param == 'required'):
-        report(WNDOCRA(node, node.logname()))
+        report(W.NDOCRA(node, node.logname()))
         doc = "Undocumented"
     else:
-        report(WNDOC(node, node.logname()))
+        report(W.NDOC(node, node.logname()))
         doc = "Undocumented"
 
     # append the required interfaces to the docstring
@@ -1985,7 +1986,7 @@ def generate_init(device, initcode, outprefix):
     if sdoc:
         out('.short_desc = '+sdoc.read()+',\n')
     else:
-        report(WNSHORTDESC(device.site))
+        report(W.NSHORTDESC(device.site))
     out('};\n', preindent = -1)
     out('\n')
     out('conf_class_t *class = SIM_create_class("'

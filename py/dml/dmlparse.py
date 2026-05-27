@@ -9,6 +9,7 @@ from ply import lex, yacc
 from . import logging
 from .logging import report
 from .messages import *
+from . import warnings as W
 from . import errors as E
 from . import ast, logging
 import dml.globals
@@ -779,7 +780,7 @@ def arraydef_implicit(t):
 @prod_dml12
 def toplevel_trait_dml12(t):
     'toplevel : TRAIT typeident maybe_istemplate LBRACE trait_stmts RBRACE'
-    report(WEXPERIMENTAL(site(t), 'traits'))
+    report(W.EXPERIMENTAL(site(t), 'traits'))
     t[0] = ast.template(site(t), t[2], t[3] + t[5])
 
 @prod_dml12
@@ -907,7 +908,7 @@ def template(t):
     shared_methods = [s for s in t[5] if s.kind == 'sharedmethod']
     stray_is = stray_is_check(t[5])
     if not stray_is and ises and shared_methods:
-        report(WTEMPLATEIS(ises[0].site))
+        report(W.TEMPLATEIS(ises[0].site))
     t[0] = ast.template(site(t), t[2], t[3] + t[5])
 
 # Header/footer
@@ -1064,7 +1065,7 @@ def stray_is_check(body):
                 if (other_stmt.kind == 'is'
                     and (other_site.lineno == rough_end_site.lineno
                          or other_site.colno > stmt.site.colno)):
-                    report(WSTRAYIS(other_site, obj_type))
+                    report(W.STRAYIS(other_site, obj_type))
                     some_stray_is = True
                 else:
                     break
@@ -1554,7 +1555,7 @@ def cdecl2_vect(t):
             if vsite.dml_version() != (1, 2):
                 # defensively suppress warning in 1.2, for
                 # compatibility
-                report(WEXPERIMENTAL(site(t), 'vect types'))
+                report(W.EXPERIMENTAL(site(t), 'vect types'))
         else:
             report(E.OLDVECT(site(t)))
     t[0] = ['vect'] + t[2]
@@ -2776,7 +2777,7 @@ def warning_stmt(t):
     'warning_stmt : _WARNING bracketed_string_literal SEMI'
     if breaking_changes.forbid_warning_statement.enabled:
         raise E.SYNTAX(site(t), '_warning', 'deprecated _warning statement')
-    report(WEXPERIMENTAL(site(t), "_warning statement"))
+    report(W.EXPERIMENTAL(site(t), "_warning statement"))
     t[0] = ast.warning(site(t), t[2])
 
 # Format arguments for log statements
@@ -2915,7 +2916,7 @@ def hook_decl(t):
         # Hook arrays are an internal feature, as their design depends on if we
         # are able to make hooks compound objects in the future
         if dml.globals.enable_testing_features:
-            report(WEXPERIMENTAL(
+            report(W.EXPERIMENTAL(
                 site(t),
                 "***FEATURE FOR INTERNAL TESTING***: hook arrays"))
         else:

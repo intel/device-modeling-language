@@ -9,6 +9,7 @@ from . import expr_util, logging
 from . import ctree as c
 from .logging import report
 from .messages import *
+from . import warnings as W
 from . import errors as E
 from .expr_util import (
     defined, param_expr, param_expr_site, param_int, static_indices, undefined)
@@ -175,7 +176,7 @@ def one_register(node, indices, bank):
 
         # roffset is undefined for unmapped registers
         if roffset and roffset < 0:
-            report(WNEGOFFS(param_expr_site(node, 'offset'), roffset))
+            report(W.NEGOFFS(param_expr_site(node, 'offset'), roffset))
             roffset &= 0xffffffffffffffff
 
         return (roffset, rsize, regnum)
