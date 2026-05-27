@@ -1189,7 +1189,7 @@ class ExternStruct(StructType):
 
     def declaration(self, var):
         if not self.typename:
-            raise EANONEXT(self.declaration_site)
+            raise ICE(self.declaration_site, 'no typename')
         return "%s %s%s" % (self.typename, self.const_str, var)
 
     def eq(self, other):
