@@ -21,7 +21,7 @@ from .logging import DMLError, ICE, report
 from . import errors as E, warnings as W, porting as P
 from .output import out
 from . import ctree as c
-from .expr import Expression, mkLit, NonValue
+from .expr import mkLit, NonValue
 from .expr_util import (
     apply, param_defined, param_expr_site, param_str,
     static_indices, undefined)

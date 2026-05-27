@@ -10,7 +10,7 @@ import math
 import shlex
 from pathlib import Path
 
-from dml import ctree, expr, types, logging, output, symtab, traits
+from dml import ctree, types, logging, output, symtab, traits
 from dml import errors as E
 from dml.ctree import string_escape, mkCompound, dmldir_macro
 from dml.env import is_windows

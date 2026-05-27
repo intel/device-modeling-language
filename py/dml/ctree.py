@@ -12,7 +12,6 @@ import math
 from functools import reduce
 
 from dml import objects, symtab, expr, logging, crep
-from . import logging
 from .logging import ICE, DMLError, report, binary_dump
 from . import errors as E, warnings as W, porting as P
 from . import output
@@ -21,7 +20,7 @@ from . import types as tp
 from .expr import (Apply, Code, Expression, mkApply, mkLit,
                    NonValue, NonValueArrayRef, NullConstant,
                    StaticIndex, typecheck_inarg_inits)
-from .expr_util import apply, param_bool, param_str, undefined
+from .expr_util import param_bool, param_str, undefined
 from .set import Set
 from .slotsmeta import auto_init
 from . import expr_util, dmlparse

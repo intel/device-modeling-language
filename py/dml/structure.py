@@ -16,7 +16,7 @@ from . import ctree
 from . import serialize
 from .logging import ICE, report, DMLError
 from . import codegen
-from .codegen import declarations, eval_type
+from .codegen import eval_type
 from .symtab import global_scope
 from .expr import Expression, mkLit, mkNullConstant, NonValue, StaticIndex
 from . import ctree as c
@@ -24,7 +24,7 @@ from . import porting as P
 from .expr_util import (
     defined, param_bool, param_defined, param_expr,
     param_expr_site, param_int, param_str,
-    static_indices, undefined)
+    static_indices)
 from . import errors as E, warnings as W
 from . import types as tp
 import dml.globals

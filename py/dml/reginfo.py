@@ -11,7 +11,7 @@ from . import porting as P
 from .logging import report, DMLError
 from . import errors as E, warnings as W
 from .expr_util import (
-    defined, param_expr, param_expr_site, param_int, static_indices, undefined)
+    defined, param_expr, param_expr_site, param_int, static_indices)
 
 __all__ = ('explode_registers',)
 

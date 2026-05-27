@@ -51,7 +51,6 @@ __all__ = (
 )
 
 import re
-from itertools import *
 
 from .env import is_windows
 from .output import out

@@ -12,10 +12,10 @@ from . import objects, crep, symtab, ctree, expr_util, expr, ast, int_register, 
 from . import dmlparse, output
 from . import breaking_changes
 from .logging import ICE, report, DMLError
-from .expr import Apply, Expression, Lit, mkApply, mkLit, NonValue, typecheck_inarg_inits
+from .expr import Apply, Expression, mkApply, mkLit, NonValue, typecheck_inarg_inits
 from . import ctree as c
 from . import porting as P
-from .expr_util import apply, defined, expr_intval, undefined
+from .expr_util import defined, expr_intval, undefined
 from .symtab import global_scope, MethodParamScope, Symtab
 from . import errors as E, warnings as W
 from .output import out

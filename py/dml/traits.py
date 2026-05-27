@@ -13,10 +13,9 @@ from .symtab import global_scope
 from . import breaking_changes, provisional
 from . import logging
 from .logging import ICE, DMLError, report
-from .codegen import c_extra_inargs, c_rettype, declarations, eval_type
+from .codegen import c_extra_inargs, c_rettype, eval_type
 from . import ctree as c
 from .expr import mkLit, NonValue
-from .expr_util import defined
 from . import errors as E, warnings as W
 from .slotsmeta import auto_init
 from . import types as tp
