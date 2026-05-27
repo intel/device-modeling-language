@@ -1,10 +1,11 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import simics
 import stest
 
 def check_reg(bankname, name, regnum, val):
-    iface = SIM_get_port_interface(obj, "int_register", bankname)
+    iface = simics.SIM_get_port_interface(obj, "int_register", bankname)
 
     if name:
         qname = bankname + "." + name

@@ -1,6 +1,7 @@
 # © 2024 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import sim_commands
 import stest
 
 class LogCapture(object):

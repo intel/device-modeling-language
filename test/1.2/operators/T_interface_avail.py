@@ -1,7 +1,8 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
-cpu = SIM_create_object("clock", "cpu", [["freq_mhz", 1]])
+import simics
+cpu = simics.SIM_create_object("clock", "cpu", [["freq_mhz", 1]])
 
 failures = 0
 
@@ -33,5 +34,5 @@ else:
     failures += 1
 
 if failures:
-    SIM_quit(1)
+    simics.SIM_quit(1)
 

@@ -1,9 +1,10 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import simics
 import stest
 
-SIM_continue(1000000)
+simics.SIM_continue(1000000)
 
 stest.expect_equal(conf.obj.a_flag, True)
 stest.expect_equal(conf.obj.b_flag, True)

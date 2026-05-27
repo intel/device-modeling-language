@@ -133,8 +133,6 @@ def test_partial():
     r5.write(0xabcd)
     expect_equal(ru.read(), 0xcdab)
 
-#conf.obj.log_level = 4
-
 test_overlap()
 test_partial()
 

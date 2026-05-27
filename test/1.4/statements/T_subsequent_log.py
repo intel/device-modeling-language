@@ -1,6 +1,7 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import sim_commands
 import stest
 
 obj.log_level = 1

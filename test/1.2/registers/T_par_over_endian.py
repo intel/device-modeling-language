@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import contextlib
-from simics import *
+import simics
 import stest, dev_util
 
 def byte_at(offs, big_endian_regsize):
@@ -36,8 +36,8 @@ def write(bank, offset, length, partial = False, overlapping = False,
     data = expected_data(offset, length, not little_endian)
     print("DATA %x" % (data,))
     illegal = (illegal
-               or (partial and 'nonpar' in SIM_object_name(bank))
-               or (overlapping and 'nonover' in SIM_object_name(bank)))
+               or (partial and 'nonpar' in simics.SIM_object_name(bank))
+               or (overlapping and 'nonover' in simics.SIM_object_name(bank)))
     if illegal:
         with expect_miss(bank):
             reg.write(data)
@@ -50,8 +50,8 @@ def read(bank, offset, length,
     print("Reading %d bytes from offset %#x" % (length, offset))
     reg = dev_util.Register_LE(bank, offset, size=length)
     illegal = (illegal
-               or (partial and 'nonpar' in SIM_object_name(bank))
-               or (overlapping and 'nonover' in SIM_object_name(bank)))
+               or (partial and 'nonpar' in simics.SIM_object_name(bank))
+               or (overlapping and 'nonover' in simics.SIM_object_name(bank)))
     if illegal:
         with expect_miss(bank):
             reg.read()
@@ -154,5 +154,5 @@ exit(0)
 for p in ['nonpar', 'par']:
     for o in ['nonover', 'over']:
         for e in ['le', 'be']:
-            test_some(SIM_object_descendant(obj.bank, '_'.join([p, o, e])),
+            test_some(simics.SIM_object_descendant(obj.bank, '_'.join([p, o, e])),
                       e == 'le')

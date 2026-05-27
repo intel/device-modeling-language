@@ -1,6 +1,7 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import simics
 import dev_util as du
 import stest
 
@@ -124,7 +125,7 @@ def collect(arg, obj, logtype, msg):
     global log_messages
     log_messages.append(msg)
 
-SIM_hap_add_callback("Core_Log_Message", collect, 0)
+simics.SIM_hap_add_callback("Core_Log_Message", collect, 0)
 
 def write(reg, val):
     reg.write(val)
@@ -143,7 +144,7 @@ def test(obj, access):
         reg = du.Register_LE(obj.bank.with_fields, offset)
         access(reg)
 
-o = SIM_create_object("test", "o", [])
+o = simics.SIM_create_object("test", "o", [])
 n = 4711
 for l in range(1, 5):
     o.bank.regs.log_level = l

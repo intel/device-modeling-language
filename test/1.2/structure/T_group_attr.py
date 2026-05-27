@@ -1,6 +1,7 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import simics
 print(obj.b_ga_a)
 
 if obj.b_ga_a == [[[i*100 + j*10 + k for k in range(3)]
@@ -9,4 +10,4 @@ if obj.b_ga_a == [[[i*100 + j*10 + k for k in range(3)]
     print("OK")
 else:
     print("Incorrect value")
-    SIM_quit(1)
+    simics.SIM_quit(1)

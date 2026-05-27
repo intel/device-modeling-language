@@ -1,6 +1,7 @@
 # © 2025 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import simics
 import dev_util
 import stest
 

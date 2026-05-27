@@ -1,11 +1,12 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import simics
 import dev_util
 from stest import expect_equal
 
-mem = SIM_create_object("memory-space", "mem",
-                        [["map", 
+mem = simics.SIM_create_object("memory-space", "mem",
+                        [["map",
                           [[0x0,   [obj, "regs[0]"], 0, 0, 0x100],
                            [0x100, [obj, "regs[1]"], 0, 0, 0x100],
                            [0x200, obj, 3, 0, 0x100],

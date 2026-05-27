@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import contextlib
-from simics import *
+import simics
 import stest
 
 def test_some(mem, obj, port, allow_partial, allow_overlapping,
@@ -31,11 +31,11 @@ def test_some(mem, obj, port, allow_partial, allow_overlapping,
                    or (overlapping and not allow_overlapping))
         with contextlib.ExitStack() as ctx:
             if illegal:
-                ctx.enter_context(stest.expect_exception_mgr(SimExc_Memory))
+                ctx.enter_context(stest.expect_exception_mgr(simics.SimExc_Memory))
                 ctx.enter_context(stest.expect_log_mgr(None, 'spec-viol'))
             exc = mem.iface.memory_space.write(None, offset, data, 0)
-            if exc != Sim_PE_No_Exception:
-                raise SimExc_Memory
+            if exc != simics.Sim_PE_No_Exception:
+                raise simics.SimExc_Memory
             print("Wrote %r to %#x" % (data, offset))
 
     def read(offset, length, partial, overlapping, illegal):
@@ -46,7 +46,7 @@ def test_some(mem, obj, port, allow_partial, allow_overlapping,
                    or (overlapping and not allow_overlapping))
         with contextlib.ExitStack() as ctx:
             if illegal:
-                ctx.enter_context(stest.expect_exception_mgr(SimExc_Memory))
+                ctx.enter_context(stest.expect_exception_mgr(simics.SimExc_Memory))
                 ctx.enter_context(stest.expect_log_mgr(None, 'spec-viol'))
             data = mem.iface.memory_space.read(None, offset, length, 0)
             print("Read %r from %#x" % (data, offset))
@@ -121,7 +121,7 @@ def test_some(mem, obj, port, allow_partial, allow_overlapping,
     access(0x500, 8, overlapping = True)
     access(0x501, 8, overlapping = True)
 
-mem = SIM_create_object("memory-space", "mem", [])
+mem = simics.SIM_create_object("memory-space", "mem", [])
 
 test_some(mem, obj, 'par_over',
           allow_partial = True,
