@@ -584,7 +584,7 @@ class ExprTests(GccTests):
             # value fits in 8 bits, so we can test with 8-bit
             # non-constant operands, to cover sign extension
             var8_op = unop(site, variable(
-                'y', ctree.TInt(8, const.type.signed)))
+                'y', types.TInt(8, const.type.signed)))
             test_8bit = ['%sint8 y = %s;' % ('' if const.type.signed else 'u',
                                              const.read()),
                          'EXPECT(%s == %s);' % (var8_op.read(), expected,)]
@@ -829,7 +829,7 @@ class ExprTests(GccTests):
                        variable('y', lhconst.type))
         self.expect_int_type(var_op.ctype(), expect_signed)
         [lh8type, rh8type] = [
-            ctree.TInt(8, const.value < 0)
+            types.TInt(8, const.value < 0)
             if -128 <= const.value < 256 and const.type.signed
             else const.type
             for const in [lhconst, rhconst]]
@@ -1344,7 +1344,7 @@ class ExprTests(GccTests):
 
     @subtest()
     def null_pointers(self):
-        null = types.mkNullConstant(site)
+        null = ctree.mkNullConstant(site)
         for expr in (lit(types.TPtr(types.TInt(8, True))),
                      ctree.mkCast(site, null,
                                   types.TPtr(types.TInt(8, True)))):
@@ -1356,7 +1356,7 @@ class ExprTests(GccTests):
                 self.assertFalse(res.constant)
         for (invert, op) in ((False, ctree.mkEquals),
                              (True, ctree.mkNotEquals)):
-            res = op(site, null, types.mkNullConstant(site));
+            res = op(site, null, ctree.mkNullConstant(site));
             self.assertTrue(res.constant)
             self.assertEqual(res.value, True != invert)
             res = op(site, null, ctree.mkStringConstant(site, "non-null"))

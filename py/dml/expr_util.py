@@ -5,7 +5,7 @@
 import dml.globals
 from .logging import report
 from .messages import *
-from .types import *
+from . import types as tp
 from .expr import Lit, NonValue, NullConstant, StaticIndex
 
 __all__ = (
@@ -111,7 +111,7 @@ def param_bool(node, name):
 
 def coerce_if_eint(expr):
     from .ctree import as_int
-    e_type = realtype(expr.ctype())
+    e_type = tp.realtype(expr.ctype())
     if e_type.is_int and e_type.is_endian:
         return as_int(expr)
     return expr

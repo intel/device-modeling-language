@@ -20,7 +20,7 @@ from .symtab import global_scope, MethodParamScope, Symtab
 from .messages import *
 from . import output
 from .output import out
-from .types import *
+from . import types as tp
 from .set import Set
 from .slotsmeta import auto_init
 import dml.globals
@@ -267,8 +267,8 @@ class ReturnExit(ExitHandler):
         return codegen_return(site, self.outp, self.throws, retvals)
 
 def memoized_return_failure_leave(site, make_ref, failed):
-    ran = make_ref('ran', TInt(8, True))
-    threw = make_ref('threw', TBool())
+    ran = make_ref('ran', tp.TInt(8, True))
+    threw = make_ref('threw', tp.TBool())
     stmts = [mkCopyData(site, mkIntegerLiteral(site, 1), ran),
              mkCopyData(site, mkBoolConstant(site, failed), threw),
              mkReturn(site, mkBoolConstant(site, failed))]
@@ -300,10 +300,10 @@ class MemoizedReturnExit(ExitHandler):
         self.make_ref = make_ref
 
     def codegen_exit(self, site, retvals):
-        ran = self.make_ref('ran', TInt(8, True))
+        ran = self.make_ref('ran', tp.TInt(8, True))
         stmts = [mkCopyData(site, mkIntegerLiteral(site, 1), ran)]
         if self.throws:
-            threw = self.make_ref('threw', TBool())
+            threw = self.make_ref('threw', tp.TBool())
             stmts.append(mkCopyData(site, mkBoolConstant(site, False), threw))
         targets = []
         for ((name, typ), val) in zip(self.outp, retvals):
@@ -343,8 +343,8 @@ class IndependentMemoized(Memoization):
         struct_body = ''.join(
             f'{typ.declaration(name)}; '
             for (name, typ) in (
-                    [('ran', TInt(8, True))]
-                    + ([('threw', TBool())] if self.func.throws else [])
+                    [('ran', tp.TInt(8, True))]
+                    + ([('threw', tp.TBool())] if self.func.throws else [])
                     + [(f'p_{name}', typ) for (name, typ) in self.func.outp]))
         array_defs = ''.join([f'[{i}]' for i in self.method.dimsizes])
         struct_var_def = mkInline(
@@ -367,7 +367,7 @@ class SharedIndependentMemoized(Memoization):
         # SimpleSite wrapper to avoid linemarks being generated.
         self.site = logging.SimpleSite(self.method.site.loc())
     def make_ref(self, ref, typ):
-        traitname = cident(self.method.trait.name)
+        traitname = tp.cident(self.method.trait.name)
         return mkLit(self.site,
                      f'((struct _{traitname} *) _{traitname}.trait)'
                      + f'->_memo_outs_{self.method.name}'
@@ -392,7 +392,7 @@ def memoization_common_prelude(name, site, outp, throws, make_ref):
     # cached return values are retrieved and returned.
     if throws:
         has_run_stmts.append(
-            mkIf(site, make_ref('threw', TBool()),
+            mkIf(site, make_ref('threw', tp.TBool()),
                  mkReturn(site, mkBoolConstant(site, True))))
     has_run_stmts.append(
         codegen_return(site, outp, throws,
@@ -406,7 +406,7 @@ def memoization_common_prelude(name, site, outp, throws, make_ref):
     # - -1: called before, but not to completion. This only happens due to an
     #       (indirect) recursive call. Raise critical error, and then proceed
     #       as though ran == 0. Hopefully things will turn out ok.
-    ran = make_ref('ran', TInt(8, True))
+    ran = make_ref('ran', tp.TInt(8, True))
     unrun   = [mkCase(site, mkIntegerLiteral(site, 0)),
                mkCopyData(site, mkIntegerConstant(site, -1, True), ran),
                mkBreak(site)]
@@ -414,7 +414,7 @@ def memoization_common_prelude(name, site, outp, throws, make_ref):
     running = [mkDefault(site),
                mkInline(site, f'_memoized_recursion("{name}");')]
     return [mkSwitch(site,
-                     make_ref('ran', TInt(8, True)),
+                     make_ref('ran', tp.TInt(8, True)),
                      mkCompound(site, unrun + has_run + running))]
 
 class TypeSequenceInfo:
@@ -423,7 +423,7 @@ class TypeSequenceInfo:
         self.types = types
         self.uniq = uniq
         self.after_on_hooks = {}
-        self.struct = (TStruct({f'comp{i}': typ
+        self.struct = (tp.TStruct({f'comp{i}': typ
                                  for (i, typ) in enumerate(types)},
                                 label=f'_typeseq_{self.uniq}')
                        if types else None)
@@ -445,7 +445,7 @@ class TypeSequenceInfo:
             return info
 
 def get_type_sequence_info(index, create_new=False):
-    typeseq = TypeSequence(index)
+    typeseq = tp.TypeSequence(index)
     try:
         return dml.globals.type_sequence_infos[typeseq]
     except KeyError:
@@ -595,7 +595,7 @@ class AfterDelayIntoMethodInfo(AfterDelayInfo):
     def __init__(self, method, uniq):
         self.method = method
         super().__init__(method, method.dimsizes, uniq)
-        self._args_type = (TStruct({p.c_ident: p.typ for p in method.inp},
+        self._args_type = (tp.TStruct({p.c_ident: p.typ for p in method.inp},
                                    label=f'_simple_event_{self.uniq}_args')
                            if method.inp else None)
 
@@ -613,7 +613,7 @@ class AfterDelayIntoMethodInfo(AfterDelayInfo):
 
     def generate_callback_call(self, indices_lit, args_lit):
         site = self.method.site
-        indices = tuple(mkLit(site, f'{indices_lit}[{i}]', TInt(32, False))
+        indices = tuple(mkLit(site, f'{indices_lit}[{i}]', tp.TInt(32, False))
                         for i in range(self.method.dimensions))
         args = tuple(mkLit(site, f'{args_lit}->{p.c_ident}', p.typ)
                      for p in self.method.inp)
@@ -627,9 +627,9 @@ class AfterDelayIntoSendNowInfo(AfterDelayInfo):
     def __init__(self, typeseq_info, uniq):
         super().__init__(typeseq_info, [], uniq)
         self .typeseq_info = typeseq_info
-        hookref_type = THook(typeseq_info.types, validated=True)
+        hookref_type = tp.THook(typeseq_info.types, validated=True)
         self._args_type = (
-            TStruct({'hookref': hookref_type,
+            tp.TStruct({'hookref': hookref_type,
                      'args': typeseq_info.struct},
                     label=f'_simple_event_{self.uniq}_args')
             if typeseq_info.types else hookref_type)
@@ -671,7 +671,7 @@ class AfterOnHookIntoMethodInfo(AfterOnHookInfo):
         super().__init__(method.dimsizes, method.parent, typeseq_info, method,
                          param_to_msg_comp, method.inp, bool(self.method.inp))
         self._args_type = (
-            TStruct({p.c_ident: p.typ
+            tp.TStruct({p.c_ident: p.typ
                     for (i, p) in enumerate(method.inp)
                      if i not in param_to_msg_comp},
                     label=f'_after_on_hook_{self.uniq}_args')
@@ -679,7 +679,7 @@ class AfterOnHookIntoMethodInfo(AfterOnHookInfo):
 
     def generate_callback_call(self, indices_lit, args_lit, msg_lit):
         site = self.method.site
-        indices = tuple(mkLit(site, f'{indices_lit}[{i}]', TInt(32, False))
+        indices = tuple(mkLit(site, f'{indices_lit}[{i}]', tp.TInt(32, False))
                         for i in range(self.method.dimensions))
         args = tuple(
             mkLit(site,
@@ -696,7 +696,7 @@ class AfterOnHookIntoMethodInfo(AfterOnHookInfo):
 
     def generate_args_serializer(self, site, args_expr, out_expr):
         sources = tuple((ctree.mkSubRef(site, args_expr, p.c_ident, "."),
-                         safe_realtype(p.typ))
+                         tp.safe_realtype(p.typ))
                         if i not in self.param_to_msg_comp else None
                         for (i, p) in enumerate(self.method.inp))
         serialize.serialize_sources_to_list(site, sources, out_expr)
@@ -709,7 +709,7 @@ class AfterOnHookIntoMethodInfo(AfterOnHookInfo):
         else:
             tmp_out_ref = None
         targets = tuple((ctree.mkSubRef(site, tmp_out_ref, p.c_ident, "."),
-                         safe_realtype(p.typ))
+                         tp.safe_realtype(p.typ))
                         if i not in self.param_to_msg_comp else None
                         for (i, p) in enumerate(self.method.inp))
 
@@ -745,16 +745,16 @@ class AfterOnHookIntoSendNowInfo(AfterOnHookInfo):
         has_inner_args = len(inp) > len(param_to_msg_comp)
         super().__init__([], dml.globals.device, typeseq_info,
                          sendnow_typeseq_info, param_to_msg_comp, inp, True)
-        sendnow_hookref_type = THook(sendnow_typeseq_info.types,
+        sendnow_hookref_type = tp.THook(sendnow_typeseq_info.types,
                                      validated=True)
         self.inner_args_type = (
-            TStruct({name: typ
+            tp.TStruct({name: typ
                     for (i, (name, typ)) in enumerate(inp)
                      if i not in param_to_msg_comp},
                     label=f'_after_on_hook_{self.uniq}_inner_args')
             if has_inner_args else None)
         self._args_type = (
-            TStruct({'hookref': sendnow_hookref_type,
+            tp.TStruct({'hookref': sendnow_hookref_type,
                      'args': self.inner_args_type},
                      label=f'_after_on_hook_{self.uniq}_args')
             if has_inner_args else sendnow_hookref_type)
@@ -785,10 +785,10 @@ class AfterOnHookIntoSendNowInfo(AfterOnHookInfo):
         hookref = (ctree.mkSubRef(site, args_expr, "hookref", ".")
                    if has_inner_args else args_expr)
         sources = [(hookref,
-                    THook(self.sendnow_typeseq_info.types, validated=True))]
+                    tp.THook(self.sendnow_typeseq_info.types, validated=True))]
         if has_inner_args:
             inner_args_val_decl, inner_args_val = serialize.declare_variable(
-                site, 'inner_args_val', TNamed('attr_value_t'))
+                site, 'inner_args_val', tp.TNamed('attr_value_t'))
             inner_args_val_decl.toc()
             inner_args = ctree.mkSubRef(site, args_expr, 'args', '.')
             inner_args_sources = (
@@ -810,11 +810,11 @@ class AfterOnHookIntoSendNowInfo(AfterOnHookInfo):
         hookref = (ctree.mkSubRef(site, tmp_out_ref, 'hookref', '.')
                    if has_inner_args else tmp_out_ref)
         targets = [(hookref,
-                    safe_realtype(THook(self.sendnow_typeseq_info.types,
+                    tp.safe_realtype(tp.THook(self.sendnow_typeseq_info.types,
                                         validated=True)))]
         if has_inner_args:
             inner_args_val_decl, inner_args_val = serialize.declare_variable(
-                site, '_inner_args_val', TNamed('attr_value_t'))
+                site, '_inner_args_val', tp.TNamed('attr_value_t'))
             inner_args_val_decl.toc()
             targets.append((inner_args_val, None))
 
@@ -830,7 +830,7 @@ class AfterOnHookIntoSendNowInfo(AfterOnHookInfo):
             inner_args = ctree.mkSubRef(site, tmp_out_ref, 'args', '.')
             inner_args_targets = (
                 (ctree.mkSubRef(site, inner_args, f'comp{i}', '.'),
-                 safe_realtype(typ))
+                 tp.safe_realtype(typ))
                 if i not in self.param_to_msg_comp else None
                 for (i, typ) in enumerate(self.sendnow_typeseq_info.types))
             serialize.deserialize_list_to_targets(
@@ -857,7 +857,7 @@ class ImmediateAfterIntoMethodInfo(ImmediateAfterInfo):
     def __init__(self, method, uniq):
         self.method = method
         super().__init__(method, method.dimsizes, uniq)
-        self._args_type = (TStruct({p.c_ident: p.typ for p in method.inp},
+        self._args_type = (tp.TStruct({p.c_ident: p.typ for p in method.inp},
                                    label=f'_immediate_after_{self.uniq}_args')
                            if method.inp else None)
 
@@ -871,7 +871,7 @@ class ImmediateAfterIntoMethodInfo(ImmediateAfterInfo):
 
     def generate_callback_call(self, indices_lit, args_lit):
         site = self.method.site
-        indices = tuple(mkLit(site, f'{indices_lit}[{i}]', TInt(32, False))
+        indices = tuple(mkLit(site, f'{indices_lit}[{i}]', tp.TInt(32, False))
                         for i in range(self.method.dimensions))
         args = tuple(mkLit(site, f'{args_lit}->{p.c_ident}', p.typ)
                      for p in self.method.inp)
@@ -885,9 +885,9 @@ class ImmediateAfterIntoSendNowInfo(ImmediateAfterInfo):
     def __init__(self, typeseq_info, uniq):
         super().__init__(typeseq_info, [], uniq)
         self.typeseq_info = typeseq_info
-        hookref_type = THook(typeseq_info.types, validated=True)
+        hookref_type = tp.THook(typeseq_info.types, validated=True)
         self._args_type = (
-            TStruct({'hookref': hookref_type,
+            tp.TStruct({'hookref': hookref_type,
                      'args': typeseq_info.struct},
                     label=f'_immediate_after_{self.uniq}_args')
             if typeseq_info.types else hookref_type)
@@ -1080,7 +1080,7 @@ def expr_binop(tree, location, scope):
 
 def codegen_sizeof(site, expr):
     fun = mkLit(site, 'sizeof',
-                TFunction([], TNamed('size_t'),
+                tp.TFunction([], tp.TNamed('size_t'),
                           varargs = True))
     return Apply(site, fun, [expr], fun.ctype())
 
@@ -1103,17 +1103,17 @@ def expr_unop(tree, location, scope):
     if (not breaking_changes.dml12_remove_misc_quirks.enabled
         and op == 'sizeof' and rh_ast.kind == 'variable_dml12'):
         var = rh_ast.args[0]
-        if var in typedefs and scope.lookup(var) is None:
+        if var in tp.typedefs and scope.lookup(var) is None:
             report(WSIZEOFTYPE(tree.site))
             return codegen_sizeof(
-                tree.site, mkLit(tree.site, cident(var), None))
+                tree.site, mkLit(tree.site, tp.cident(var), None))
     try:
         rh = codegen_expression_maybe_nonvalue(rh_ast, location, scope)
     except EIDENT as e:
         if op == 'sizeof':
-            is_primitive_type = not isinstance(parse_type(e.identifier),
-                                               TNamed)
-            if is_primitive_type or e.identifier in typedefs:
+            is_primitive_type = not isinstance(tp.parse_type(e.identifier),
+                                               tp.TNamed)
+            if is_primitive_type or e.identifier in tp.typedefs:
                 raise EIDENTSIZEOF(e.site, e.identifier)
         raise
 
@@ -1143,7 +1143,7 @@ def expr_unop(tree, location, scope):
     if   op == '!':
         if not breaking_changes.dml12_not_typecheck.enabled:
             t = rh.ctype()
-            if isinstance(safe_realtype(t), TInt) and subast_has_dollar(rh_ast):
+            if isinstance(tp.safe_realtype(t), tp.TInt) and subast_has_dollar(rh_ast):
                 # A previous bug caused DMLC to permit expressions on
                 # the form '!$reg'. This pattern was fairly common;
                 # this hack is an attempt to reduce the short-term
@@ -1375,7 +1375,7 @@ def fix_printf(fmt, args, argsites, site):
         if width == '*':
             filtered_args.append(mkCast(args[argi].site,
                                         ctree.as_int(args[argi]),
-                                        TInt(32, True)))
+                                        tp.TInt(32, True)))
             argi += 1
 
         if precision == '.*':
@@ -1392,12 +1392,12 @@ def fix_printf(fmt, args, argsites, site):
             # purposes of logging, it is a sufficient workaround
             # to unconditionally cast to long long.
             length = "ll"
-            arg = mkCast(arg.site, as_int(args[argi]), TInt(64, False))
+            arg = mkCast(arg.site, as_int(args[argi]), tp.TInt(64, False))
 
         elif conversion in "p":
-            argtype = safe_realtype(arg.ctype())
+            argtype = tp.safe_realtype(arg.ctype())
 
-            if not isinstance(argtype, TPtr):
+            if not isinstance(argtype, tp.TPtr):
                 raise EFMTARGT(argsites[argi], arg,
                                 argi+1, "pointer")
 
@@ -1406,16 +1406,16 @@ def fix_printf(fmt, args, argsites, site):
             if isinstance(arg, (QName, HiddenName, HiddenQName)):
                 qfmt, qargs = arg.fmt()
                 filtered_fmt += qfmt
-                assumed_type = TInt(32, False)
+                assumed_type = tp.TInt(32, False)
                 for qarg in qargs:
                     filtered_args.append(mkCast(qarg.site, qarg, assumed_type))
                 argi += 1
                 continue
-            elif isinstance(argtype, TNamed) and argtype.c == 'strbuf_t':
+            elif isinstance(argtype, tp.TNamed) and argtype.c == 'strbuf_t':
                 arg = mkApply(site,
                               mkLit(site, 'sb_str',
-                                    TFunction([TPtr(argtype)],
-                                              TPtr(TNamed('char',
+                                    tp.TFunction([tp.TPtr(argtype)],
+                                              tp.TPtr(tp.TNamed('char',
                                                           const=True)))),
                               [mkAddressOf(site, arg)])
 
@@ -1442,8 +1442,8 @@ def eval_arraylen(size_ast, parent_scope):
 def eval_type(asttype, site, location, scope, extern=False, typename=None,
               allow_void=False):
     '''Interpret a type AST.
-    The return value is a pair (struct_defs, type), where type is the DMLType
-    instance, and struct_defs is a list of StructType statements required by
+    The return value is a pair (struct_defs, type), where type is the tp.DMLType
+    instance, and struct_defs is a list of tp.StructType statements required by
     C to interpret a declaration that uses the type.
     'extern' is true inside 'extern typedef' declarations.
     'typename' is used as hint for a good struct label, e.g.
@@ -1462,24 +1462,24 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
             for (_, msite, name, type_ast) in info:
                 (member_struct_defs, member_type) = eval_type(
                     type_ast, msite, location, scope, extern)
-                if isinstance(member_type, TFunction):
+                if isinstance(member_type, tp.TFunction):
                     if (not (breaking_changes
                              .forbid_function_in_extern_struct.enabled)
                         and extern):
-                        member_type = TPtr(member_type)
+                        member_type = tp.TPtr(member_type)
                     else:
                         raise EFUNSTRUCT(msite)
                 members[name] = member_type
                 struct_defs.extend(member_struct_defs)
             if extern:
-                id = typename or TExternStruct.unique_id()
-                etype = TExternStruct(members, id, typename=typename)
+                id = typename or tp.TExternStruct.unique_id()
+                etype = tp.TExternStruct(members, id, typename=typename)
             elif members:
-                etype = TStruct(members, label=typename)
+                etype = tp.TStruct(members, label=typename)
                 struct_defs.append((site, etype))
             else:
                 if site.dml_version() == (1, 2):
-                    etype = TVoid()
+                    etype = tp.TVoid()
                 else:
                     raise EEMPTYSTRUCT(site)
         elif tag == 'layout':
@@ -1491,7 +1491,7 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
             for (_, msite, ident, type_ast) in fields:
                 (member_struct_defs, member_type) = eval_type(
                     type_ast, msite, location, scope, False)
-                if isinstance(member_type, TFunction):
+                if isinstance(member_type, tp.TFunction):
                     raise EFUNSTRUCT(msite)
                 member_decls.append((
                     msite,
@@ -1500,7 +1500,7 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
                 struct_defs.extend(member_struct_defs)
             if not member_decls:
                 raise EEMPTYSTRUCT(site)
-            etype = TLayout(endian, member_decls, label=typename)
+            etype = tp.TLayout(endian, member_decls, label=typename)
             struct_defs.append((site, etype))
         elif tag == 'bitfields':
             width, fields = info
@@ -1522,7 +1522,7 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
                     raise EBFLD(fsite, "field %s has wrong size" % name)
 
                 members[name] = (mtype, msb, lsb)
-            etype = TInt(width, False, members, label=typename)
+            etype = tp.TInt(width, False, members, label=typename)
         elif tag == 'typeof':
             expr = codegen_expression_maybe_nonvalue(info, location, scope)
             if isinstance(expr, NonValue):
@@ -1542,7 +1542,7 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
                 raise ICE(site, "No type for expression: %s (%r)"
                            % (expr, expr))
         elif tag == 'sequence':
-            etype = TTraitList(info)
+            etype = tp.TTraitList(info)
         elif tag == 'hook':
             msg_comp_types = []
             for (_, tsite, _, type_ast) in info:
@@ -1550,11 +1550,11 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
                     type_ast, tsite, location, scope, extern)
                 msg_comp_types.append(msg_comp_type)
                 struct_defs.extend(msg_comp_struct_defs)
-            etype = THook(msg_comp_types)
+            etype = tp.THook(msg_comp_types)
         else:
             raise ICE(site, "Strange type")
     elif isinstance(asttype[0], str):
-        etype = parse_type(asttype[0])
+        etype = tp.parse_type(asttype[0])
     else:
         raise ICE(site, "Stranger type")
 
@@ -1563,7 +1563,7 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
     asttype = asttype[1:]
     while asttype:
         if asttype[0] == 'const':
-            if isinstance(etype, TFunction):
+            if isinstance(etype, tp.TFunction):
                 raise ECONSTFUN(site)
             etype.const = True
             asttype = asttype[1:]
@@ -1571,21 +1571,21 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
             if (etype.is_int
                 and not etype.is_endian
                 and etype.bits not in {8, 16, 32, 64}):
-                raise EINTPTRTYPE(site, TPtr(etype))
-            etype = TPtr(etype)
+                raise EINTPTRTYPE(site, tp.TPtr(etype))
+            etype = tp.TPtr(etype)
             asttype = asttype[1:]
         elif asttype[0] == 'vect':
             if etype.void:
                 raise EVOID(site)
-            etype = TVector(etype)
+            etype = tp.TVector(etype)
             asttype = asttype[1:]
         elif asttype[0] == 'array':
             if etype.void:
                 raise EVOID(site)
-            if isinstance(etype, TFunction):
+            if isinstance(etype, tp.TFunction):
                 raise EFUNARRAY(site)
             alen = codegen_expression(asttype[1], location, scope)
-            etype = TArray(etype, as_int(alen))
+            etype = tp.TArray(etype, as_int(alen))
             asttype = asttype[2:]
         elif asttype[0] == 'funcall':
             if struct_defs:
@@ -1613,17 +1613,17 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
             # Function parameters that are declared as arrays are
             # interpreted as pointers
             for i, arg in enumerate(inargs):
-                if isinstance(arg, TArray):
+                if isinstance(arg, tp.TArray):
                     # C99 has a syntax for specifying that the array
                     # should be converted to a const pointer, but DML
                     # doesn't support that syntax.
-                    inargs[i] = TPtr(arg.base, False)
+                    inargs[i] = tp.TPtr(arg.base, False)
                 if arg.is_int and arg.is_endian:
                     raise EEARG(site)
 
             if etype.is_int and etype.is_endian:
                 raise EEARG(site)
-            etype = TFunction(inargs, etype, varargs)
+            etype = tp.TFunction(inargs, etype, varargs)
             asttype = asttype[2:]
         else:
             raise ICE(site, "weird type info: " + repr(asttype))
@@ -1737,7 +1737,7 @@ def eval_method_outp(outp_asts, location, scope):
     return outp
 
 def check_designated_initializers(site, etype, init_asts, allow_partial):
-    shallow_real_etype = safe_realtype_shallow(etype)
+    shallow_real_etype = tp.safe_realtype_shallow(etype)
     duplicates = set()
     bad_fields = set()
     remaining = set(shallow_real_etype.named_members)
@@ -1790,7 +1790,7 @@ def mk_bitfield_compound_initializer_expr(site, etype, inits, location, scope,
                                           static):
     bitfields_expr = mkIntegerLiteral(site, 0)
     for ((ft, msb, lsb), e) in inits:
-        real_ft = safe_realtype(ft)
+        real_ft = tp.safe_realtype(ft)
 
         if e.kind == 'initializer_scalar':
             e = e.args[0]
@@ -1858,7 +1858,7 @@ def eval_initializer(site, etype, astinit, location, scope, static):
        number of initializers must match the number of elements of
        compound data types."""
     def do_eval(etype, astinit):
-        shallow_real_etype = safe_realtype_shallow(etype)
+        shallow_real_etype = tp.safe_realtype_shallow(etype)
         if astinit.kind == 'initializer_scalar':
             expr = codegen_expression(astinit.args[0], location, scope)
             if static and not expr.constant:
@@ -1868,7 +1868,7 @@ def eval_initializer(site, etype, astinit, location, scope, static):
                 source_for_assignment(astinit.site, etype, expr))
         elif astinit.kind == 'initializer_designated_struct':
             (init_asts, allow_partial) = astinit.args
-            if isinstance(shallow_real_etype, StructType):
+            if isinstance(shallow_real_etype, tp.StructType):
                 check_designated_initializers(astinit.site, etype, init_asts,
                                               allow_partial)
                 inits = {field: do_eval(shallow_real_etype
@@ -1892,7 +1892,7 @@ def eval_initializer(site, etype, astinit, location, scope, static):
 
         assert astinit.kind == 'initializer_compound'
         init_asts = astinit.args[0]
-        if isinstance(etype, TArray):
+        if isinstance(etype, tp.TArray):
             assert isinstance(etype.size, Expression)
             if etype.size.constant:
                 alen = etype.size.value
@@ -1902,14 +1902,14 @@ def eval_initializer(site, etype, astinit, location, scope, static):
                 raise EDATAINIT(site, 'mismatched array size')
             init = tuple(do_eval(etype.base, e) for e in init_asts)
             return CompoundInitializer(site, init)
-        elif isinstance(etype, TStruct):
+        elif isinstance(etype, tp.TStruct):
             members = list(etype.members_qualified)
             if len(members) != len(init_asts):
                 raise EDATAINIT(site, 'mismatched number of fields')
             init = tuple(do_eval(mt, e)
                          for ((mn, mt), e) in zip(members, init_asts))
             return CompoundInitializer(site, init)
-        elif isinstance(etype, TExternStruct):
+        elif isinstance(etype, tp.TExternStruct):
             if len(etype.named_members) != len(init_asts):
                 raise EDATAINIT(site, 'mismatched number of fields')
             init = {mn: do_eval(mt, e)
@@ -1924,8 +1924,8 @@ def eval_initializer(site, etype, astinit, location, scope, static):
                     site, etype,
                     zip((t[1:] for t in etype.members_qualified), init_asts),
                     location, scope, static))
-        elif isinstance(etype, TNamed):
-            return do_eval(safe_realtype(etype), astinit)
+        elif isinstance(etype, tp.TNamed):
+            return do_eval(tp.safe_realtype(etype), astinit)
         else:
             raise EDATAINIT(site,
                 'compound initializer not supported for type %s' % etype)
@@ -1937,8 +1937,8 @@ def get_initializer(site, etype, astinit, location, scope):
     None. This also checks for an invalid 'etype'."""
     # Check that the type is defined
     try:
-        typ = realtype(etype)
-    except DMLUnknownType:
+        typ = tp.realtype(etype)
+    except tp.DMLUnknownType:
         raise ETYPE(site, etype)
 
     if astinit:
@@ -1954,19 +1954,19 @@ def get_initializer(site, etype, astinit, location, scope):
             return MemsetInitializer(site)
         else:
             return ExpressionInitializer(mkIntegerLiteral(site, 0))
-    elif isinstance(typ, TBool):
+    elif isinstance(typ, tp.TBool):
         return ExpressionInitializer(mkBoolConstant(site, False))
     elif typ.is_float:
         return ExpressionInitializer(mkFloatConstant(site, 0.0))
-    elif isinstance(typ, (TStruct, TExternStruct, TArray, TTrait, THook)):
+    elif isinstance(typ, (tp.TStruct, tp.TExternStruct, tp.TArray, tp.TTrait, tp.THook)):
         return MemsetInitializer(site)
-    elif isinstance(typ, TPtr):
+    elif isinstance(typ, tp.TPtr):
         return ExpressionInitializer(mkLit(site, 'NULL', typ))
-    elif isinstance(typ, TVector):
+    elif isinstance(typ, tp.TVector):
         return ExpressionInitializer(mkLit(site, 'VNULL', typ))
-    elif isinstance(typ, TFunction):
+    elif isinstance(typ, tp.TFunction):
         raise EVARTYPE(site, etype.describe())
-    elif isinstance(typ, TTraitList):
+    elif isinstance(typ, tp.TTraitList):
         return ExpressionInitializer(mkLit(site, '{NULL, 0, 0, 0, 0}', typ))
     raise ICE(site, "No initializer for %r" % (etype,))
 
@@ -2053,8 +2053,8 @@ def stmt_local(stmt, location, scope):
         (struct_decls, etype) = eval_type(asttype, stmt.site, location, scope)
         stmts.extend(mkStructDefinition(site, t) for (site, t) in struct_decls)
         etype = etype.resolve()
-        rt = safe_realtype_shallow(etype)
-        if isinstance(rt, TArray) and not rt.size.constant and deep_const(rt):
+        rt = tp.safe_realtype_shallow(etype)
+        if isinstance(rt, tp.TArray) and not rt.size.constant and tp.deep_const(rt):
             raise EVLACONST(stmt.site)
         if name is not None:
             check_shadowing(scope, name, stmt.site)
@@ -2075,13 +2075,13 @@ def stmt_local(stmt, location, scope):
         for (ident_site, name, typ) in decls:
             if name is None:
                 tgts.append(mkDiscardRef(ident_site,
-                                         safe_realtype_unconst(typ)))
+                                         tp.safe_realtype_unconst(typ)))
                 continue
 
             sym = mk_sym(name, typ)
-            tgt_typ = safe_realtype_shallow(typ)
-            if shallow_const(tgt_typ):
-                nonconst_typ = safe_realtype_unconst(tgt_typ)
+            tgt_typ = tp.safe_realtype_shallow(typ)
+            if tp.shallow_const(tgt_typ):
+                nonconst_typ = tp.safe_realtype_unconst(tgt_typ)
                 tgt_sym = mk_sym('_tmp_' + name, nonconst_typ, True)
                 sym.init = ExpressionInitializer(mkLocalVariable(ident_site,
                                                                  tgt_sym))
@@ -2134,7 +2134,7 @@ def stmt_local(stmt, location, scope):
                 # Corresponds to e.g. 'local int _;'
                 # This would be pointless except for the niche case of
                 # forcing an error if a type is invalid
-                check_named_types(typ)
+                tp.check_named_types(typ)
                 stmts.append(mkNoop(ident_site))
             else:
                 stmts.append(mkExpressionStatement(
@@ -2169,7 +2169,7 @@ def stmt_session(stmt, location, scope):
         (struct_decls, etype) = eval_type(asttype, stmt.site, location,
                                           global_scope)
         etype = etype.resolve()
-        add_late_global_struct_defs(struct_decls)
+        tp.add_late_global_struct_defs(struct_decls)
         if init:
             try:
                 init = eval_initializer(
@@ -2191,7 +2191,7 @@ def make_static_var(site, location, static_sym_type, name, init=None,
     # generate a nested array of variables, indexed into by
     # the dimensions of the method dimensions
     for dimsize in reversed(location.method().dimsizes):
-        static_sym_type = TArray(static_sym_type,
+        static_sym_type = tp.TArray(static_sym_type,
                                  mkIntegerConstant(site, dimsize, False))
         # initializer in methods cannot currently depend on indices
         # so we can replicate the same initializer for all
@@ -2212,7 +2212,7 @@ def make_static_var(site, location, static_sym_type, name, init=None,
         assert isinstance(init, Initializer)
         init_code = output.StrOutput()
         with init_code:
-            if deep_const(static_sym_type):
+            if tp.deep_const(static_sym_type):
                 output.coverity_marker('store_writes_const_field', 'FALSE')
             out(init.assign_to(mkStaticVariable(site, static_sym).read(),
                                static_sym_type) + ';\n')
@@ -2254,7 +2254,7 @@ def stmt_saved(stmt, location, scope):
     for (decl_ast, init) in zip(decls, inits):
         (name, asttype) = decl_ast.args
         (struct_decls, etype) = eval_type(asttype, stmt.site, location, scope)
-        add_late_global_struct_defs(struct_decls)
+        tp.add_late_global_struct_defs(struct_decls)
         etype.resolve()
         if init:
             try:
@@ -2442,7 +2442,7 @@ def stmt_assign(stmt, location, scope):
     tgts = [codegen_expression_maybe_nonvalue(ast, location, scope)
             for ast in tgt_ast.args[0]]
     for tgt in tgts:
-        if not isinstance(tgt, NonValue) and deep_const(tgt.ctype()):
+        if not isinstance(tgt, NonValue) and tp.deep_const(tgt.ctype()):
             raise ECONST(tgt.site)
     if tgt_ast.kind == 'assign_target_chain':
         method_tgts = [tgts[0]]
@@ -2547,7 +2547,7 @@ def stmt_assignop(stmt, location, scope):
         raise EASSIGN(site, tgt)
 
     ttype = tgt.ctype()
-    if deep_const(ttype):
+    if tp.deep_const(ttype):
         raise ECONST(tgt.site)
 
     src = codegen_expression(src_ast, location, scope)
@@ -2555,7 +2555,7 @@ def stmt_assignop(stmt, location, scope):
     if tgt.addressable and not isinstance(tgt, Variable):
         lscope = Symtab(scope)
         tmp_tgt_sym = lscope.add_variable(
-            '_tmp_tgt', type = TPtr(ttype), site = tgt.site,
+            '_tmp_tgt', type = tp.TPtr(ttype), site = tgt.site,
             init = ExpressionInitializer(mkAddressOf(tgt.site, tgt)),
             stmt=True)
         # Side-Effect Free representation of the tgt lvalue
@@ -2815,29 +2815,29 @@ def stmt_log(stmt, location, scope):
         elif not warn_mixup:
             warn_mixup = probable_loggroups_specification(later_level)
         global log_index
-        table_ptr = TPtr(TNamed("ht_int_table_t"))
+        table_ptr = tp.TPtr(tp.TNamed("ht_int_table_t"))
         table = mkLit(site, '&(_dev->_subsequent_log_ht)', table_ptr)
         key = mkApply(site,
                       mkLit(site, "_identity_to_key",
-                            TFunction([TNamed('_identity_t')],
-                                      TInt(64, False))),
+                            tp.TFunction([tp.TNamed('_identity_t')],
+                                      tp.TInt(64, False))),
                       [identity])
 
         once_lookup = mkLit(
             site, "_select_log_level",
-            TFunction([table_ptr, TInt(64, False), TInt(64, False),
-                       TInt(64, False), TInt(64, False)],
-                      TInt(64, False)))
+            tp.TFunction([table_ptr, tp.TInt(64, False), tp.TInt(64, False),
+                       tp.TInt(64, False), tp.TInt(64, False)],
+                      tp.TInt(64, False)))
         level_expr = mkApply(site, once_lookup,
                              [table, key, mkIntegerLiteral(site, log_index),
                               adjusted_level, adjusted_later_level])
         log_index += 1
         pre_statements = [mkDeclaration(site, "_calculated_level",
-                                        TInt(64, False),
+                                        tp.TInt(64, False),
                                         ExpressionInitializer(level_expr))]
         adjusted_level = mkLocalVariable(site, symtab.LocalSymbol("_calculated_level",
                                                            "_calculated_level",
-                                                           TInt(64, False),
+                                                           tp.TInt(64, False),
                                                            site=site))
         if error_logkind:
             log_wrapper = lambda stmt: mkIf(
@@ -2889,15 +2889,15 @@ def stmt_after(stmt, location, scope):
     if unit == 's':
         clock = 'SIM_object_clock(&_dev->obj)'
         api_unit = 'time'
-        unit_type = TFloat('double')
+        unit_type = tp.TFloat('double')
     elif unit == 'cycles':
         clock = 'SIM_object_clock(&_dev->obj)'
         api_unit = 'cycle'
-        unit_type = TInt(64, True)
+        unit_type = tp.TInt(64, True)
     elif unit == 'ps':
         clock = 'SIM_picosecond_clock(&_dev->obj)'
         api_unit = 'cycle'
-        unit_type = TInt(64, True)
+        unit_type = tp.TInt(64, True)
     else:
         raise ICE(site, f"Unsupported unit of time: '{unit}'")
 
@@ -2906,7 +2906,7 @@ def stmt_after(stmt, location, scope):
     except EASTYPE:
         raise EBTYPE(site, old_delay_type, unit_type)
 
-    if unit in {'cycles', 'ps'} and not safe_realtype(old_delay_type).is_int:
+    if unit in {'cycles', 'ps'} and not tp.safe_realtype(old_delay_type).is_int:
         report(WTTYPEC(site, old_delay_type, unit_type, unit))
 
     # TODO after statement should be extended to allow the user to explicitly
@@ -2932,7 +2932,7 @@ def stmt_after(stmt, location, scope):
     elif isinstance(methodref, HookSendNowRef):
         indices = ()
         send_now_hookref = methodref.hookref_expr
-        inp_types = msg_types = safe_realtype_shallow(
+        inp_types = msg_types = tp.safe_realtype_shallow(
             send_now_hookref.ctype()).msg_types
         inp = [(f'comp{i}', typ) for (i, typ) in enumerate(msg_types)]
         kind = 'send_now'
@@ -3004,8 +3004,8 @@ def stmt_afteronhook(stmt, location, scope):
 
     hookref_expr = codegen_expression(hookref, location, scope)
     hooktype = hookref_expr.ctype()
-    real_hooktype = safe_realtype_shallow(hooktype)
-    if not isinstance(real_hooktype, THook):
+    real_hooktype = tp.safe_realtype_shallow(hooktype)
+    if not isinstance(real_hooktype, tp.THook):
         raise EBTYPE(hookref_expr.site, hooktype, 'hook')
 
     real_hooktype.validate(hooktype.declaration_site or hookref_expr.site)
@@ -3033,7 +3033,7 @@ def stmt_afteronhook(stmt, location, scope):
     elif isinstance(methodref, HookSendNowRef):
         indices = ()
         send_now_hookref = methodref.hookref_expr
-        inp_types = msg_types = safe_realtype_shallow(
+        inp_types = msg_types = tp.safe_realtype_shallow(
             send_now_hookref.ctype()).msg_types
         inp = [(f'comp{i}', typ) for (i, typ) in enumerate(msg_types)]
         kind = 'send_now'
@@ -3160,7 +3160,7 @@ def stmt_immediateafter(stmt, location, scope):
     elif isinstance(methodref, HookSendNowRef):
         indices = ()
         send_now_hookref = methodref.hookref_expr
-        msg_types = safe_realtype_shallow(send_now_hookref.ctype()).msg_types
+        msg_types = tp.safe_realtype_shallow(send_now_hookref.ctype()).msg_types
         inp = [(f'comp{i}', typ) for (i, typ) in enumerate(msg_types)]
         kind = 'send_now'
     else:
@@ -3224,7 +3224,7 @@ def stmt_select(stmt, location, scope):
             return [if_chain]
         raise lst.exc()
     elif (not breaking_changes.dml12_remove_misc_quirks.enabled
-          and isinstance(lst.ctype(), TVector)
+          and isinstance(lst.ctype(), tp.TVector)
           and itername is not None):
         itervar = lookup_var(stmt.site, scope, itername)
         if not itervar:
@@ -3238,7 +3238,7 @@ def stmt_select(stmt, location, scope):
 def foreach_each_in(site, itername, trait, each_in,
                     body_ast, location, scope):
     inner_scope = Symtab(scope)
-    trait_type = TTrait(trait)
+    trait_type = tp.TTrait(trait)
     if itername is not None:
         inner_scope.add_variable(
             itername, type=trait_type, site=site,
@@ -3273,8 +3273,8 @@ def stmt_foreach_dml12(stmt, location, scope):
         return foreach_constant_list(stmt.site, itername, lst,
                                      statement, location, scope)
 
-    list_type = safe_realtype(lst.ctype())
-    if isinstance(list_type, TVector):
+    list_type = tp.safe_realtype(lst.ctype())
+    if isinstance(list_type, tp.TVector):
         itervar = lookup_var(stmt.site, scope, itername)
         if not itervar:
             raise EIDENT(lst, itername)
@@ -3290,11 +3290,11 @@ def stmt_foreach(stmt, location, scope):
     [iter_ident, lst, statement] = stmt.args
     itername = iter_ident.args[0] if iter_ident.kind == 'variable' else None
     lst = codegen_expression(lst, location, scope)
-    list_type = safe_realtype(lst.ctype())
-    if isinstance(list_type, TTraitList):
+    list_type = tp.safe_realtype(lst.ctype())
+    if isinstance(list_type, tp.TTraitList):
         return foreach_each_in(
             stmt.site, itername,
-            # .traitname was validated by safe_realtype()
+            # .traitname was validated by tp.safe_realtype()
             dml.globals.traits[list_type.traitname],
             lst, statement, location, scope)
     else:
@@ -3322,7 +3322,7 @@ def foreach_constant_list(site, itername, lst, statement, location, scope):
     with context:
         for items in lst.iter():
             loopvars = tuple(mkLit(site, '_ai%d_%d' % (context.id, dim),
-                                   TInt(32, True))
+                                   tp.TInt(32, True))
                              for dim in range(len(items.dimsizes)))
             loopscope = Symtab(scope)
             if itername is not None:
@@ -3336,7 +3336,7 @@ def foreach_constant_list(site, itername, lst, statement, location, scope):
             decls = []
             for dim in reversed(range(len(items.dimsizes))):
                 decls.append(mkDeclaration(site, loopvars[dim].str,
-                                           TInt(32, True)))
+                                           tp.TInt(32, True)))
                 stmt = mkFor(
                     site,
                     [mkAssignOp(site,
@@ -3489,7 +3489,7 @@ def mkcall_method(site, func, indices):
 
     devarg = ([] if func.independent
               else [mkLit(site, dev(site),
-                          TDevice(crep.structtype(dml.globals.device)))])
+                          tp.TDevice(crep.structtype(dml.globals.device)))])
     return lambda args: mkApply(
         site, func.cfunc_expr(site), devarg + list(indices) + args)
 
@@ -3691,7 +3691,7 @@ def report_pevent_data_arg(meth_node, site, inargs):
             report(PEVENT_NO_ARG(dmlparse.start_site(inargs[-1].site),
                                    dmlparse.end_site(site)))
         elif (isinstance(inargs[-1], ctree.Cast)
-              and safe_realtype(inargs[-1].expr.ctype()).is_int):
+              and tp.safe_realtype(inargs[-1].expr.ctype()).is_int):
             report(PEVENT_UINT64_ARG(
                 inargs[-1].site, dmlparse.end_site(inargs[-1].site),
                 meth_node.parent.site))
@@ -3746,8 +3746,8 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
                 argtype  = arg.ctype()
                 if not argtype:
                     raise ICE(arg.site, "unknown expression type")
-                parmt = safe_realtype(p.typ)
-                argt = safe_realtype(argtype)
+                parmt = tp.safe_realtype(p.typ)
+                argt = tp.safe_realtype(argtype)
                 (ok, trunc, constviol) = parmt.canstore(argt)
                 if not ok:
                     raise EARGT(site, 'inline', meth_node.name,
@@ -3828,21 +3828,21 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
 
 def c_rettype(outp, throws):
     if throws:
-        return TBool()
+        return tp.TBool()
     elif outp:
         (_, rettype) = outp[0]
         return rettype
     else:
-        return TVoid()
+        return tp.TVoid()
 
 def c_extra_inargs(outp, throws):
     '''Return required additional input parameters for a C function
     given output parameters and throws, through the form
     [arg1, ...]) where each arg is a pair (name, type).'''
     if throws:
-        return [(n, TPtr(t)) for (n, t) in outp]
+        return [(n, tp.TPtr(t)) for (n, t) in outp]
     elif outp:
-        return [(n, TPtr(t)) for (n, t) in outp[1:]]
+        return [(n, tp.TPtr(t)) for (n, t) in outp[1:]]
     else:
         return []
 
@@ -3896,7 +3896,7 @@ class MethodFunc(object):
 
     @property
     def cfunc_type(self):
-        return TFunction([t for (_, t, _) in self.cparams], self.rettype)
+        return tp.TFunction([t for (_, t, _) in self.cparams], self.rettype)
 
     def get_name(self):
         '''textual description of method, used in comment'''
@@ -3912,7 +3912,7 @@ class MethodFunc(object):
 def canonicalize_signature(signature):
     "Make a signature hashable"
     # The problem is that the same type can be represented by
-    # different DMLType objects. Use an ugly trick and canonicalize to
+    # different tp.DMLType objects. Use an ugly trick and canonicalize to
     # the string representation.
     (intypes, outtypes) = signature
     return (tuple(t.value if isinstance(t, Expression) and t.constant
@@ -3921,7 +3921,7 @@ def canonicalize_signature(signature):
 
 def implicit_params(method):
     return (crep.maybe_dev_arg(method.independent)
-            + [('_idx%d' % i, TInt(32, False))
+            + [('_idx%d' % i, tp.TInt(32, False))
                for i in range(method.dimensions)])
 
 def untyped_method_instance(method, signature):
@@ -3935,7 +3935,7 @@ def untyped_method_instance(method, signature):
     inp = [(p.with_expr
             if isinstance(stype, Expression) else p.with_type)(stype)
            for stype, p in zip(intypes, method.inp)]
-    assert all(isinstance(t, DMLType) for t in outtypes)
+    assert all(isinstance(t, tp.DMLType) for t in outtypes)
     outp = [(arg, stype)
             for stype, (arg, etype) in zip(outtypes, method.outp)]
 
@@ -3963,7 +3963,7 @@ def codegen_method_func(func):
     specific instance of a method defined directly in the device tree"""
     method = func.method
 
-    indices = tuple(mkLit(method.site, '_idx%d' % i, TInt(32, False),
+    indices = tuple(mkLit(method.site, '_idx%d' % i, tp.TInt(32, False),
                           str=(logging.dollar(method.site)
                                + ("_" if idxvar is None else "")))
                     for (i, idxvar) in enumerate(method.parent.idxvars()))
@@ -4085,7 +4085,7 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
                     for ((name, typ), init) in zip(outp[1:], initializers[1:]):
                         # remaining output arguments pass-by-pointer
                         param = mkDereference(site,
-                                              mkLit(site, name, TPtr(typ)))
+                                              mkLit(site, name, tp.TPtr(typ)))
                         fnscope.add(ExpressionSymbol(name, param, site))
                         code.append(AssignStatement(site, param, init))
                 else:
@@ -4155,9 +4155,9 @@ def methfunc_param(ptype, arg):
     # Special case, normally endian integer inargs or outargs are not allowed,
     # so we pretend its a regular integer here and count on coercion
     # to handle the translation
-    realargtype = realtype(arg.ctype())
+    realargtype = tp.realtype(arg.ctype())
     if realargtype.is_int and realargtype.is_endian:
-        return TInt(realargtype.bits, realargtype.signed,
+        return tp.TInt(realargtype.bits, realargtype.signed,
                     realargtype.members, realargtype.const)
     return arg.ctype()
 
@@ -4204,7 +4204,7 @@ def codegen_call(site, meth_node, indices, inargs, outargs):
 
     if not breaking_changes.dml12_remove_misc_quirks.enabled:
         # For backward compatibility. See bug 21367.
-        inargs = [mkCast(site, arg, TPtr(TNamed('char')))
+        inargs = [mkCast(site, arg, tp.TPtr(tp.TNamed('char')))
                   if isinstance(arg, StringConstant) else arg
                   for arg in inargs]
 
@@ -4244,8 +4244,8 @@ def copy_outarg(arg, var, parmname, parmtype, method_name):
         if not argtype:
             raise ICE(arg.site, "unknown expression type")
         else:
-            ok, trunc, constviol = realtype(parmtype).canstore(
-                realtype(argtype))
+            ok, trunc, constviol = tp.realtype(parmtype).canstore(
+                tp.realtype(argtype))
             if not ok:
                 raise EARGT(arg.site, 'call', method_name,
                              arg.ctype(), parmname, parmtype, 'output')
@@ -4278,7 +4278,7 @@ def codegen_call_stmt(site, name, mkcall, inp, outp, throws, inargs, outargs):
         # broken. See SIMICS-9504.
         # if (isinstance(arg, (
         #         Variable, ctree.Dereference, ctree.ArrayRef, ctree.SubRef))
-        #     and TPtr(parmtype).canstore(TPtr(arg.ctype()))):
+        #     and tp.TPtr(parmtype).canstore(tp.TPtr(arg.ctype()))):
         #     outargs_conv.append(mkAddressOf(arg.site, arg))
         # else:
         var = add_proxy_outvar(site, '_ret_' + parmname, parmtype,

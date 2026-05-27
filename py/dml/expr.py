@@ -8,7 +8,7 @@ from . import logging
 from .logging import ICE
 from .messages import *
 from . import output
-from .types import *
+from . import types as tp
 from .slotsmeta import SlotsMeta, auto_init
 
 
@@ -56,7 +56,7 @@ class Expression(Code):
     the composite expression.'''
     slots = ('context',)
 
-    # An instance of DMLType
+    # An instance of tp.DMLType
     #type = None
 
     # If true, this is a constant, with the value stored in .value, as
@@ -137,7 +137,7 @@ class Expression(Code):
 
     # Produce a C expression but don't worry about the value.
     def discard(self, explicit=False):
-        if not explicit or safe_realtype_shallow(self.ctype()).void:
+        if not explicit or tp.safe_realtype_shallow(self.ctype()).void:
             return self.read()
 
         if self.constant:
@@ -252,7 +252,7 @@ class NullConstant(Expression):
     constant = True
     value = None
     priority = 1000
-    type = TPtr(void, const=True)
+    type = tp.TPtr(tp.void, const=True)
     def __str__(self):
         return 'NULL'
     def read(self):
@@ -274,11 +274,11 @@ def typecheck_inargs(site, args, inp, kind="function", known_arglen=None):
         else:
             (pname, ptype) = p
             logref = f"'{pname}'"
-        argtype = safe_realtype(arg.ctype())
+        argtype = tp.safe_realtype(arg.ctype())
         if not argtype:
             raise ICE(site, "unknown expression type")
 
-        rtype = safe_realtype(ptype)
+        rtype = tp.safe_realtype(ptype)
         assert rtype
         (ok, trunc, constviol) = rtype.canstore(argtype)
         if ok:
@@ -344,11 +344,11 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
             and init.kind == 'initializer_scalar'):
             arg = coerce_if_eint(codegen_expression(init.args[0],
                                                     location, scope))
-            argtype = safe_realtype(arg.ctype())
+            argtype = tp.safe_realtype(arg.ctype())
             if not argtype:
                 raise ICE(site, "unknown expression type")
 
-            rtype = safe_realtype(ptype)
+            rtype = tp.safe_realtype(ptype)
             assert rtype
             (ok, trunc, constviol) = rtype.canstore(argtype)
 
@@ -372,7 +372,7 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
                     raise ECONSTP(site, logref, kind + " call") from e
                 raise
         if (on_ptr_to_stack
-            and isinstance(safe_realtype_shallow(ptype), TPtr)
+            and isinstance(tp.safe_realtype_shallow(ptype), tp.TPtr)
             and arg.is_pointer_to_stack_allocation):
             on_ptr_to_stack(arg)
         args.append(arg)
@@ -410,14 +410,14 @@ def mkApplyInits(site, fun, inits, location, scope):
         raise EAPPLY(fun)
 
     try:
-        funtype = realtype(funtype)
-        if isinstance(funtype, TPtr) and isinstance(funtype.base, TFunction):
+        funtype = tp.realtype(funtype)
+        if isinstance(funtype, tp.TPtr) and isinstance(funtype.base, tp.TFunction):
             # Pointers to functions are the same as the functions
-            funtype = realtype(funtype.base)
-    except DMLUnknownType:
+            funtype = tp.realtype(funtype.base)
+    except tp.DMLUnknownType:
         raise ETYPE(site, funtype)
 
-    if not isinstance(funtype, TFunction):
+    if not isinstance(funtype, tp.TFunction):
         raise EAPPLY(fun)
 
     args = typecheck_inarg_inits(
@@ -435,14 +435,14 @@ def mkApply(site, fun, args):
         raise EAPPLY(fun)
 
     try:
-        funtype = realtype(funtype)
-        if isinstance(funtype, TPtr) and isinstance(funtype.base, TFunction):
+        funtype = tp.realtype(funtype)
+        if isinstance(funtype, tp.TPtr) and isinstance(funtype.base, tp.TFunction):
             # Pointers to functions are the same as the functions
-            funtype = realtype(funtype.base)
-    except DMLUnknownType:
+            funtype = tp.realtype(funtype.base)
+    except tp.DMLUnknownType:
         raise ETYPE(site, funtype)
 
-    if not isinstance(funtype, TFunction):
+    if not isinstance(funtype, tp.TFunction):
         raise EAPPLY(fun)
 
     if funtype.varargs and len(args) > len(funtype.input_types):

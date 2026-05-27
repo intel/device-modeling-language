@@ -4,7 +4,7 @@
 from .ctree import *
 from .expr import mkLit
 from .expr_util import param_bool, param_defined, param_str
-from .types import *
+from . import types as tp
 from .logging import report
 from .messages import WEXPERIMENTAL_UNMAPPED
 from .symtab import global_scope, Symtab
@@ -44,7 +44,7 @@ def unmapped_access(site, bank, idx, scope, isread, overlapping, bigendian,
     scope = Symtab(scope)
     code = []
     success = mkLocalVariable(site, scope.add_variable(
-        'success', type=TBool(), site=site,
+        'success', type=tp.TBool(), site=site,
         init=ExpressionInitializer(mkBoolConstant(site, 0)),
         make_unique=True))
 
@@ -220,7 +220,7 @@ def codegen_access(bank, bank_indices, isread, memop, offset, size, writevalue,
         lines.append(
                 '            %s;' % (
             size2.write(ExpressionInitializer(mkLit(site, 'bytes',
-                                                    TInt(64, False))))))
+                                                    tp.TInt(64, False))))))
         if partial:
             if bigendian:
                 lines.extend([
@@ -246,7 +246,7 @@ def codegen_access(bank, bank_indices, isread, memop, offset, size, writevalue,
                 '            if (ret) return true;',
                 '            %s;' % (
                     value2.write(ExpressionInitializer(
-                        mkLit(site, 'val', TInt(64, False))))),
+                        mkLit(site, 'val', tp.TInt(64, False))))),
                 '            return false;'])
         else:
             # Shifting/masking can normally be skipped in banks with

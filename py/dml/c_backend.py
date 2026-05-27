@@ -30,15 +30,15 @@ from .expr_util import (
 from .symtab import global_scope, LocalSymbol, Symtab
 from . import codegen
 from .codegen import codegen_inline_byname
-from .types import *
+from . import types as tp
 from .set import Set
 
 prototypes = []
 c_split_threshold = None
 
-log_object_t = TNamed("log_object_t")
-conf_object_t = TNamed("conf_object_t")
-attr_value_t = TNamed('attr_value_t')
+log_object_t = tp.TNamed("log_object_t")
+conf_object_t = tp.TNamed("conf_object_t")
+attr_value_t = tp.TNamed('attr_value_t')
 
 structfilename = None
 
@@ -115,7 +115,7 @@ def register_attribute(site, port, name):
     registered_attribute_names[key] = site
 
 # Creating the C struct definition is done in two steps. First, the
-# structure is built up using the DMLType type, with a TStruct as the
+# structure is built up using the tp.DMLType type, with a tp.TStruct as the
 # base.  Then this is printed.
 
 def print_device_substruct(node):
@@ -125,7 +125,7 @@ def print_device_substruct(node):
 
     def arraywrap(node, typ):
         for arraylen in reversed(node.dimsizes):
-            typ = TArray(typ, mkIntegerLiteral(node.site, arraylen))
+            typ = tp.TArray(typ, mkIntegerLiteral(node.site, arraylen))
         return typ
 
     def composite_ctype(node, unfiltered_members, label=None):
@@ -138,7 +138,7 @@ def print_device_substruct(node):
             # mangle names so x_y.z and x.y_z give different idents
             label = '__devstruct_' + '_'.join("%d%s" % (s.count('_'), s)
                                     for s in crep.ancestor_cnames(node))
-        structtype = TStruct(members, label)
+        structtype = tp.TStruct(members, label)
         structtype.print_struct_definition()
         return structtype
 
@@ -147,7 +147,7 @@ def print_device_substruct(node):
         for (v, _) in dml.globals.static_vars:
             members.append((v.value, v.type))
         members.append(('_immediate_after_state',
-                        TPtr(TNamed('_dml_immediate_after_state_t'))))
+                        tp.TPtr(tp.TNamed('_dml_immediate_after_state_t'))))
         return composite_ctype(node,
                                members + [(crep.cname(sub), print_device_substruct(sub))
                                           for sub in node.get_components()],
@@ -158,7 +158,7 @@ def print_device_substruct(node):
               and node.objtype == 'interface')):
         return arraywrap(node, crep.node_storage_type(node, node.site))
     elif node.objtype == 'hook':
-        return arraywrap(node, TNamed('_dml_hook_t'))
+        return arraywrap(node, tp.TNamed('_dml_hook_t'))
     elif (node.objtype in {'register', 'field'}
           and dml.globals.dml_version == (1, 2)):
         allocate = param_bool_fixup(node, 'allocate', True)
@@ -195,7 +195,7 @@ def print_device_substruct(node):
         else:
             # really a _port_object_t* rather than conf_object_t*, but
             # there is no DML type for the former
-            obj = [("_obj", arraywrap(node, TPtr(conf_object_t)))]
+            obj = [("_obj", arraywrap(node, tp.TPtr(conf_object_t)))]
         return composite_ctype(node,
                                obj + [(crep.cname(sub),
                                        print_device_substruct(sub))
@@ -281,7 +281,7 @@ def generate_hfile(device, headers, filename):
     out('#include "'+os.path.basename(structfilename)+'"\n\n')
 
     for name in dml.globals.traits:
-        out(f'typedef _traitref_t {cident(name)};\n')
+        out(f'typedef _traitref_t {tp.cident(name)};\n')
 
     # Constraints from C:
     # - Types must be expr_util.defined before they are referred to
@@ -306,33 +306,33 @@ def generate_hfile(device, headers, filename):
     #   it depends on, except that it may appear before structs it
     #   refers to *indirectly*, i.e. via a pointer.
 
-    # typedefs for named structs come first, because in:
+    # tp.typedefs for named structs come first, because in:
     #   typedef struct { int i; } X;
     #   typedef struct { X *x; } Y;
     # the C declaration of Y may appear before that of X, and the
     # C code for Y currently names the member type 'X' rather than 'struct X'.
-    for tn in global_type_declaration_order:
-        if tn not in typedefs:
+    for tn in tp.global_type_declaration_order:
+        if tn not in tp.typedefs:
             continue
-        t = typedefs[tn]
-        if isinstance(t, TStruct):
+        t = tp.typedefs[tn]
+        if isinstance(t, tp.TStruct):
             out('typedef %sstruct %s %s;\n' % (
-                'const ' if t.const else '', cident(tn), cident(tn)))
+                'const ' if t.const else '', tp.cident(tn), tp.cident(tn)))
 
-    for tn in global_type_declaration_order:
-        if tn in global_anonymous_structs:
-            global_anonymous_structs[tn].print_struct_definition()
+    for tn in tp.global_type_declaration_order:
+        if tn in tp.global_anonymous_structs:
+            tp.global_anonymous_structs[tn].print_struct_definition()
         else:
-            t = typedefs[tn]
-            if isinstance(t, TStruct):
+            t = tp.typedefs[tn]
+            if isinstance(t, tp.TStruct):
                 t.print_struct_definition()
             else:
                 out('typedef ')
-                t.print_declaration(cident(tn))
+                t.print_declaration(tp.cident(tn))
         out('\n')
     out('\n')
 
-    for (_, t) in TStruct.late_global_struct_defs:
+    for (_, t) in tp.TStruct.late_global_struct_defs:
         t.print_struct_definition()
     out('\n')
 
@@ -402,7 +402,7 @@ def generate_attr_setter(fname, node, port, dimsizes, cprefix, loopvars,
         out(crep.structtype(device)+' *_dev UNUSED = ('
             + crep.structtype(device)+'*)_portobj->dev;\n')
         index_array = mkLit(port.site, '_portobj->indices',
-                           TPtr(TInt(32, False, const=True)))
+                           tp.TPtr(tp.TInt(32, False, const=True)))
         port_indices = tuple(mkIndex(port.site, index_array,
                                      mkIntegerLiteral(port.site, i))
                              for i in range(port.dimensions))
@@ -436,8 +436,8 @@ def generate_attr_setter(fname, node, port, dimsizes, cprefix, loopvars,
                 node, port_indices + loopvars,
                 '_set_attribute' if dml.globals.dml_version == (1, 2)
                 else 'set_attribute',
-                [mkLit(node.site, valuevar, TNamed('attr_value_t'))],
-                [mkLit(node.site, '_status', TNamed('set_error_t'))],
+                [mkLit(node.site, valuevar, tp.TNamed('attr_value_t'))],
+                [mkLit(node.site, '_status', tp.TNamed('set_error_t'))],
                 node.site,
                 inhibit_copyin = not loopvars)]
 
@@ -464,7 +464,7 @@ def generate_attr_getter(fname, node, port, dimsizes, cprefix, loopvars):
         out(crep.structtype(device)+' *_dev UNUSED = ('
             + crep.structtype(device)+'*)_portobj->dev;\n')
         index_array = mkLit(port.site, '_portobj->indices',
-                           TPtr(TInt(32, False, const=True)))
+                           tp.TPtr(tp.TInt(32, False, const=True)))
         port_indices = tuple(mkIndex(port.site, index_array,
                                      mkIntegerLiteral(port.site, i))
                              for i in range(port.dimensions))
@@ -536,7 +536,7 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
         return
 
     for _ in node.arraylens():
-        loopvars += (mkLit(None, '_i'+str(len(loopvars)+1), TInt(32, False)),)
+        loopvars += (mkLit(None, '_i'+str(len(loopvars)+1), tp.TInt(32, False)),)
     dimsizes += node.arraylens()
 
     doc = get_long_doc(node)
@@ -611,7 +611,7 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
                 register_attribute(
                     node.site, None, "%s_%s" % (port.name, attrname))
                 member = crep.cref_portobj(
-                    port, (mkLit(port.site, '0', TInt(32, False)),))
+                    port, (mkLit(port.site, '0', tp.TInt(32, False)),))
                 (dimsize,) = port.dimsizes
                 initcode.out(
                     '_register_port_array_attr(class, %s, offsetof(%s, %s),'
@@ -664,7 +664,7 @@ def generate_attributes(initcode, node, port=None,
         prefix += crep.cname(node) + '_'
         for _ in node.arraylens():
             loopvars += (mkLit(None, '_i' + str(len(loopvars) + 1),
-                               TInt(32, False)),)
+                               tp.TInt(32, False)),)
         dimsizes += node.arraylens()
 
         for child in children:
@@ -727,7 +727,7 @@ def wrap_method(meth, wrapper_name, indices=()):
     inparams = [p.declaration() for p in meth.inp]
     if not meth.outp:
         retvar = None
-        rettype = TVoid()
+        rettype = tp.TVoid()
     elif len(meth.outp) == 1:
         retvar, rettype = meth.outp[0]
     else:
@@ -740,7 +740,7 @@ def wrap_method(meth, wrapper_name, indices=()):
         out('_port_object_t *_portobj = (_port_object_t *)_obj;\n')
         out(devstruct+' *_dev UNUSED = (' + devstruct + ' *)_portobj->dev;\n')
         index_array = mkLit(meth.site, '_portobj->indices',
-                           TPtr(TInt(32, False, const=True)))
+                           tp.TPtr(tp.TInt(32, False, const=True)))
         indices = tuple(mkIndex(meth.site, index_array,
                                 mkIntegerLiteral(meth.site, i))
                         for i in range(meth.dimensions))
@@ -785,14 +785,14 @@ def generate_implement_method(device, ifacestruct, meth, indices):
         member_type = ifacestruct.get_member_qualified(meth.name)
         if not member_type:
             raise EMEMBER(meth.site, meth.parent.name, meth.name)
-        member_type = safe_realtype(member_type)
-        if not isinstance(member_type, TPtr):
+        member_type = tp.safe_realtype(member_type)
+        if not isinstance(member_type, tp.TPtr):
             raise EIMPLMEMBER(
                 meth.site,
                 f'{meth.parent.name}_interface_t.{meth.name}',
                 ifacestruct.declaration_site)
         func_type = member_type.base
-        if not isinstance(func_type, TFunction):
+        if not isinstance(func_type, tp.TFunction):
             raise EIMPLMEMBER(meth.site,
                               f'{meth.parent.name}_interface_t.{meth.name}',
                               ifacestruct.declaration_site)
@@ -811,13 +811,13 @@ def generate_implement_method(device, ifacestruct, meth, indices):
             # method in DML
             raise EMETH(meth.site, None, 'interface method is variadic')
         for (mp, it) in zip(meth.inp, iface_input_types):
-            if not safe_realtype_unconst(mp.typ).eq(safe_realtype_unconst(it)):
+            if not tp.safe_realtype_unconst(mp.typ).eq(tp.safe_realtype_unconst(it)):
                 raise EARGT(meth.site, 'implement', meth.name,
                             mp.typ, mp.logref, it, 'method')
         if iface_num_outputs and dml.globals.dml_version != (1, 2):
             [(_, mt)] = meth.outp
-            if not safe_realtype_unconst(mt).eq(
-                    safe_realtype_unconst(func_type.output_type)):
+            if not tp.safe_realtype_unconst(mt).eq(
+                    tp.safe_realtype_unconst(func_type.output_type)):
                 raise EARGT(meth.site, 'implement', meth.name,
                             mt, '<return value>', func_type.output_type,
                             'method')
@@ -863,11 +863,11 @@ def generate_implement(code, device, impl):
     typename = param_str(impl,
                          'c_type' if dml.globals.dml_version == (1, 2)
                          else '_c_type')
-    ifacetype = TNamed(typename)
+    ifacetype = tp.TNamed(typename)
     ifacetype.declaration_site = impl.site
-    ifacestruct = safe_realtype(ifacetype)
+    ifacestruct = tp.safe_realtype(ifacetype)
 
-    if not isinstance(ifacestruct, (TStruct, TExternStruct)):
+    if not isinstance(ifacestruct, (tp.TStruct, tp.TExternStruct)):
         raise EIFTYPE(impl.site, ifacetype)
 
     port = impl.parent
@@ -1059,9 +1059,9 @@ def generate_simple_events(device):
                    % (info.dimensions,)))
 
         if info.args_type:
-            args_decl = TPtr(
-                conv_const(True, info.args_type)).declaration('_args')
-            emergency_args_c_type = TArray(
+            args_decl = tp.TPtr(
+                tp.conv_const(True, info.args_type)).declaration('_args')
+            emergency_args_c_type = tp.TArray(
                 info.args_type,
                 mkIntegerConstant(None, 1, False)).declaration('')
             out('%s = data ? data->args : (%s) { 0 };\n'
@@ -1129,8 +1129,8 @@ def generate_after_on_hooks_artifacts(device):
                 + '= _msg;\n')
 
         if info.args_type:
-            args_decl = TPtr(
-                conv_const(True, info.args_type)).declaration('args')
+            args_decl = tp.TPtr(
+                tp.conv_const(True, info.args_type)).declaration('args')
             out('%s = _args;\n' % (args_decl,))
         indices_lit = 'indices' if info.dimensions else None
         args_lit = 'args' if info.args_type else None
@@ -1145,7 +1145,7 @@ def generate_after_on_hooks_artifacts(device):
                 + 'const void *_args)')
             out('{\n', postindent = 1)
             if info.args_type:
-                args_type_ptr = TPtr(conv_const(True, info.args_type))
+                args_type_ptr = tp.TPtr(tp.conv_const(True, info.args_type))
                 out(f'{args_type_ptr.declaration("args")} = _args;\n')
                 args_expr = mkDereference(site, mkLit(site, 'args', args_type_ptr))
             else:
@@ -1165,9 +1165,9 @@ def generate_after_on_hooks_artifacts(device):
             out('set_error_t _success UNUSED = Sim_Set_Ok;\n')
 
             if info.args_type:
-                out(f'{TPtr(info.args_type).declaration("out")} = _out;\n')
+                out(f'{tp.TPtr(info.args_type).declaration("out")} = _out;\n')
                 out_expr = mkDereference(site, mkLit(site, 'out',
-                                                     TPtr(info.args_type)))
+                                                     tp.TPtr(info.args_type)))
             else:
                 out_expr = None
             def error_out(exc, msg):
@@ -1225,8 +1225,8 @@ def generate_immediate_after_callbacks(device):
             + crep.structtype(device) + '*)_obj;\n')
 
         if info.args_type:
-            args_decl = TPtr(
-                conv_const(True, info.args_type)).declaration('args')
+            args_decl = tp.TPtr(
+                tp.conv_const(True, info.args_type)).declaration('args')
             out('%s = _args;\n' % (args_decl,))
         indices_lit = 'indices' if info.dimensions else None
         args_lit = 'args' if info.args_type else None
@@ -1273,7 +1273,7 @@ def generate_simple_events_control_methods(device):
             out(f'for (uint32 _i{i} = 0; _i{i} < {dims[i]}; _i{i}++) {{\n',
                 postindent=1)
 
-        indices = tuple(mkLit(site, f'_i{i}', TInt(32, False))
+        indices = tuple(mkLit(site, f'_i{i}', tp.TInt(32, False))
                         for i in range(len(dims)))
         for hook in hooks:
             out('_DML_cancel_afters_in_hook_queue('
@@ -1362,7 +1362,7 @@ def generate_reg_callback(meth, name):
     dev_t = crep.structtype(dml.globals.device)
     out('static bool\n')
     params = [p.declaration() for p in meth.inp] + [
-        TPtr(t).declaration(p) for p, t in meth.outp]
+        tp.TPtr(t).declaration(p) for p, t in meth.outp]
     out('%s(void *_obj, const uint16 *indices, ' % (name,)
         + ', '.join(params) + ')\n')
     out('{\n', postindent = 1)
@@ -1373,7 +1373,7 @@ def generate_reg_callback(meth, name):
         outargs = [mkLit(meth.site, "*" + n, t) for n, t in meth.outp]
         code = [codegen.codegen_call(
                 meth.site, meth,
-                tuple(mkLit(meth.site, 'indices[%d]' % i, TInt(32, False))
+                tuple(mkLit(meth.site, 'indices[%d]' % i, tp.TInt(32, False))
                       for i in range(meth.dimensions)),
                 inargs, outargs)]
 
@@ -1542,7 +1542,7 @@ def generate_hook_auxiliary_info_array():
             typeseq_uniq = codegen.get_type_sequence_info(
                 hook.msg_types, create_new=True).uniq
             items.append('{%s, %d, %d}' % (offset, typeseq_uniq, hook.uniq))
-        except DMLUnkeyableType:
+        except tp.DMLUnkeyableType:
             pass # already reported
     if objects.Device.hooks:
         init = '{\n%s\n}' % (',\n'.join(f'    {item}' for item in items),)
@@ -1680,7 +1680,7 @@ def generate_pre_delete(device):
                 out(f'for (uint32 _i{i} = 0; _i{i} < {dims[i]}; _i{i}++) {{\n',
                     postindent=1)
 
-            indices = tuple(mkLit(device.site, f'_i{i}', TInt(32, False))
+            indices = tuple(mkLit(device.site, f'_i{i}', tp.TInt(32, False))
                             for i in range(len(dims)))
             for event in events:
                 method = event.get_component('_cancel_all', 'method')
@@ -1727,7 +1727,7 @@ def generate_deinit(device):
                 out(f'for (uint32 _i{i} = 0; _i{i} < {dims[i]}; _i{i}++) {{\n',
                     postindent=1)
 
-            indices = tuple(mkLit(device.site, f'_i{i}', TInt(32, False))
+            indices = tuple(mkLit(device.site, f'_i{i}', tp.TInt(32, False))
                             for i in range(len(dims)))
             for hook in hooks:
                 out('_DML_free_hook_queue('
@@ -1776,11 +1776,11 @@ def get_index_enumeration(site, dimsizes: tuple):
     lower = dimsizes[1:]
     _index_enumeration_pool[lower] = max(dimsizes[0],
                                       _index_enumeration_pool.get(lower, 0))
-    t = TArray(TInt(32, False, const=True),
+    t = tp.TArray(tp.TInt(32, False, const=True),
                mkIntegerLiteral(site, len(dimsizes)))
     for dim in lower[::-1]:
-        t = TArray(t, mkIntegerLiteral(site, dim))
-    return mkLit(site, '_indices_%s' % ('_'.join(map(str, lower))), TPtr(t))
+        t = tp.TArray(t, mkIntegerLiteral(site, dim))
+    return mkLit(site, '_indices_%s' % ('_'.join(map(str, lower))), tp.TPtr(t))
 
 def generate_index_enumerations():
     def index_enumeration(dimsizes):
@@ -1820,12 +1820,12 @@ def tuple_as_uint32_array(site, numbers, hint):
 
     assert isinstance(numbers, tuple)
     if not numbers:
-        return mkLit(site, 'NULL', TPtr(TVoid()))
+        return mkLit(site, 'NULL', tp.TPtr(tp.TVoid()))
     if numbers not in _int_tuple_pool:
         suffix = '%d_%s' % (len(_int_tuple_pool), hint)
         _int_tuple_pool[numbers] = suffix
     return mkLit(site, '_tuple%s' % (_int_tuple_pool[numbers],),
-                 TArray(TInt(32, False, const=True),
+                 tp.TArray(tp.TInt(32, False, const=True),
                         mkIntegerLiteral(site, len(numbers))))
 
 def generate_tuple_table():
@@ -1856,7 +1856,7 @@ def generate_init_port_objs(device):
             fmtargs = ''.join(f', _i{i}' for i in range(port.dimensions))
             out(f'strbuf_t portname = sb_newf("{portname}"{fmtargs});\n')
             loop_indices = tuple(
-                mkLit(port.site, '_i%d' % i, TInt(32, False))
+                mkLit(port.site, '_i%d' % i, tp.TInt(32, False))
                 for i in range(port.dimensions))
             index_array = "%s%s" % (
                 index_enumeration.read(),
@@ -1923,7 +1923,7 @@ def generate_init_data_objs(device):
                             report(e)
                         else:
                             markers = ([('store_writes_const_field', 'FALSE')]
-                                       if deep_const(node._type) else [])
+                                       if tp.deep_const(node._type) else [])
                             output.coverity_markers(markers, init.site)
                             out(init.assign_to(nref.read(), node._type) + ';\n')
             else:
@@ -1933,11 +1933,11 @@ def generate_init_data_objs(device):
                     out(('for (int %s = 0; %s < %s; ++%s) {\n'
                          % (var, var, sz, var)),
                         postindent=1)
-                    index_exprs += (mkLit(node.site, var, TInt(64, True)),)
+                    index_exprs += (mkLit(node.site, var, tp.TInt(64, True)),)
                 nref = mkNodeRef(node.site, node, index_exprs)
                 with output.allow_linemarks():
                     markers = ([('store_writes_const_field', 'FALSE')]
-                               if deep_const(node._type) else [])
+                               if tp.deep_const(node._type) else [])
                     output.coverity_markers(markers, init.site)
                     out(init.assign_to(nref.read(), node._type) + ';\n')
                 for _ in range(node.dimensions):
@@ -2062,8 +2062,8 @@ def generate_extern_trampoline(exported_name, func):
     cparams = list(func.cparams)
     if not func.independent:
         cparams[0] = (
-            '_obj', TPtr(TNamed("conf_object_t")),
-            TPtr(TNamed("conf_object_t")).declaration('_obj'))
+            '_obj', tp.TPtr(tp.TNamed("conf_object_t")),
+            tp.TPtr(tp.TNamed("conf_object_t")).declaration('_obj'))
     params_string = ('void' if not cparams else ", ".join(
                      decl for (_, _, decl) in cparams))
     out("extern %s\n" % (func.rettype.declaration(
@@ -2098,7 +2098,7 @@ def generate_each_in_table(trait, instances):
             ancestry_path = sub.traits.ancestry_paths[trait][0]
             base = '&%s%s' % (
                 sub.traits.vtable_cname(ancestry_path[0]),
-                ''.join('.' + cident(t.name)
+                ''.join('.' + tp.cident(t.name)
                         for t in ancestry_path[1:]))
             num = reduce(operator.mul, sub.dimsizes, 1)
             uniq = sub.uniq
@@ -2136,15 +2136,15 @@ def generate_trait_deserialization_hashtables(device):
         if trait.empty() or trait is dml.globals.object_trait:
             continue
         add_variable_declaration('ht_int_table_t '
-                                 + f'_{cident(trait.name)}_vtable_ht',
+                                 + f'_{tp.cident(trait.name)}_vtable_ht',
                                  'HT_INT_NULL()')
         for node in dml.globals.trait_instances.get(trait, ()):
             node.traits.mark_referenced(trait)
             ancestry_path = node.traits.ancestry_paths[trait][0]
             structref = node.traits.vtable_cname(ancestry_path[0])
             pointer = '(&%s)' % ('.'.join([structref] + [
-                cident(t.name) for t in ancestry_path[1:]]))
-            inserts.append(f'ht_insert_int(&_{cident(trait.name)}_vtable_ht, '
+                tp.cident(t.name) for t in ancestry_path[1:]]))
+            inserts.append(f'ht_insert_int(&_{tp.cident(trait.name)}_vtable_ht, '
                            + f'{node.uniq}, {pointer});\n')
 
     start_function_definition('void _initialize_vtable_hts(void)')
@@ -2161,7 +2161,7 @@ def generate_object_vtables_array():
             ancestry_path = node.traits.ancestry_paths[dml.globals.object_trait][0]
             structref = node.traits.vtable_cname(ancestry_path[0])
             pointer = '(&%s)' % ('.'.join([structref] + [
-                cident(t.name) for t in ancestry_path[1:]]))
+                tp.cident(t.name) for t in ancestry_path[1:]]))
         else:
             pointer = 'NULL'
         items.append(pointer)
@@ -2224,13 +2224,13 @@ def generate_adjustor_thunk(traitname, name, inp, outp, throws, independent,
     [(vt_name, vtable_trait_type)] = implicit_inargs
     assert vtable_trait_type.trait is vtable_trait
     out('%s.trait = &((struct _%s *) DOWNCAST(%s, %s, %s).trait)->%s;\n' % (
-        vt_name, cident(traitname), vt_name, cident(traitname),
-        '.'.join(cident(t.name) for t in vtable_path),
-        '.'.join(cident(t.name) for t in def_path)))
+        vt_name, tp.cident(traitname), vt_name, tp.cident(traitname),
+        '.'.join(tp.cident(t.name) for t in vtable_path),
+        '.'.join(tp.cident(t.name) for t in def_path)))
     if not rettype.void:
         out('return ')
     fun = hardcoded_impl or ('((struct _%s *) %s.trait)->%s'
-                             % (cident(vtable_trait.name), vt_name, name))
+                             % (tp.cident(vtable_trait.name), vt_name, name))
     out('%s(%s);\n' % (fun, ", ".join(['_dev'] * (not independent) + [vt_name]
                                       + [name for (name, _) in inargs])))
     out('}\n', preindent=-1)
@@ -2366,14 +2366,14 @@ def method_tinit_arg(trait, parent, name, scrambled_name):
             return thunk
 
 def print_vtable_struct_declaration(trait):
-    out('struct _%s {\n' % cident(trait.name), postindent=1)
+    out('struct _%s {\n' % tp.cident(trait.name), postindent=1)
     for p in trait.direct_parents:
-        out("struct _%s %s;\n" % (cident(p.name), cident(p.name)))
+        out("struct _%s %s;\n" % (tp.cident(p.name), tp.cident(p.name)))
     for (name, (_, ptype)) in list(trait.vtable_params.items()):
-        if isinstance(realtype(ptype), TTraitList):
+        if isinstance(tp.realtype(ptype), tp.TTraitList):
             out(f"_each_in_param_t {name};\n")
         else:
-            out(f'{TPtr(ptype).declaration(name)};\n')
+            out(f'{tp.TPtr(ptype).declaration(name)};\n')
     for name in trait.vtable_sessions:
         out(f'uint32 {name};\n') # device struct offset
     for name in trait.vtable_hooks:
@@ -2384,7 +2384,7 @@ def print_vtable_struct_declaration(trait):
         out(f'{t.declaration(name)};\n')
 
     for (name, memo_outs_struct) in trait.vtable_memoized_outs.items():
-        decl = TPtr(memo_outs_struct).declaration(name)
+        decl = tp.TPtr(memo_outs_struct).declaration(name)
         out(f'{decl};\n')
     out('};\n', preindent=-1)
 
@@ -2438,12 +2438,12 @@ fields.
                 args.append(method_tinit_arg(trait, parent,
                                              name, scrambled_name))
         tinit_calls.append("_tinit_%s(%s);\n" % (
-            parent.name, ", ".join(['&_ret->' + cident(parent.name)]
+            parent.name, ", ".join(['&_ret->' + tp.cident(parent.name)]
                                    + args)))
 
     out('static void __attribute__((optimize("O0")))\n')
     out('_tinit_%s(struct _%s *_ret' % (trait.name,
-                                        cident(trait.name)))
+                                        tp.cident(trait.name)))
     inargs = tinit_args(trait)
     for name in inargs:
         scrambled_name = scramble_argname(name)
@@ -2457,10 +2457,10 @@ fields.
             out(', %s' % (mtype.declaration(scrambled_name),))
         elif member_kind == 'parameter':
             (site, typ) = vtable_trait.vtable_params[name]
-            if isinstance(realtype(typ), TTraitList):
+            if isinstance(tp.realtype(typ), tp.TTraitList):
                 out(f', _each_in_param_t {scrambled_name}')
             else:
-                out(f', {TPtr(typ).declaration(scrambled_name)}')
+                out(f', {tp.TPtr(typ).declaration(scrambled_name)}')
         elif member_kind == 'session':
             out(', uint32 %s' % (scrambled_name)) # device struct offset
         elif member_kind == 'hook':
@@ -2468,11 +2468,11 @@ fields.
         else:
             assert member_kind == 'memoized_outs'
             memo_outs_struct = vtable_trait.vtable_memoized_outs[name]
-            out(f', {TPtr(memo_outs_struct).declaration(scrambled_name)}')
+            out(f', {tp.TPtr(memo_outs_struct).declaration(scrambled_name)}')
 
     out(')\n{\n', postindent=1)
     if initializers:
-        out('*_ret = (struct _%s){\n' % (cident(trait.name),),
+        out('*_ret = (struct _%s){\n' % (tp.cident(trait.name),),
             postindent=1)
         for initializer in initializers:
             out("%s,\n" % (initializer,))
@@ -2510,10 +2510,10 @@ class IndexedParamValue(ParamValue):
 class SingleParamValue(ParamValue):
     # evaluates to the parameter value
     value: str
-    ptype: DMLType
+    ptype: tp.DMLType
     def tinit_arg(self):
-        if deep_const(self.ptype):
-            k = TArray(self.ptype,
+        if tp.deep_const(self.ptype):
+            k = tp.TArray(self.ptype,
                        mkIntegerLiteral(logging.SimpleSite(
                            "<SingleParamValue>"), 1)).declaration("")
             size = f'sizeof({self.ptype.declaration("")})'
@@ -2545,21 +2545,21 @@ class SingleEachInParamValue(ParamValue):
 class ArrayParamValue(IndexedParamValue):
     # evaluates to the value in one
     value : str
-    ptype : DMLType
+    ptype : tp.DMLType
     node : objects.DMLObject
     def decl(self, var):
         array_type = self.ptype
         for d in reversed(self.node.dimsizes):
-            array_type = TArray(array_type,
+            array_type = tp.TArray(array_type,
                                 mkIntegerLiteral(self.node.site, d))
-        return (f'{TPtr(array_type).declaration(var)} = malloc('
+        return (f'{tp.TPtr(array_type).declaration(var)} = malloc('
                 f'sizeof(*{var}));\n')
     def init(self, var):
         param_indices = ''.join(f'[{i}]' for i in self.indexvars(self.node))
-        if deep_const(self.ptype):
+        if tp.deep_const(self.ptype):
             # partially const values requires memcpy for
             # initialization
-            k = (TArray(self.ptype, mkIntegerLiteral(self.node.site, 1))
+            k = (tp.TArray(self.ptype, mkIntegerLiteral(self.node.site, 1))
                  .declaration(""))
             target = f'(void *)&(*{var}){param_indices}'
             source = f'({k}) {{ {self.value} }}'
@@ -2645,7 +2645,7 @@ def init_trait_vtable(node, trait, param_overrides):
             typ = trait.vtable_trait(name).vtable_memoized_outs[name]
             if node.dimensions:
                 for d in reversed(node.dimsizes):
-                    typ = TArray(typ, mkIntegerLiteral(node.site, d))
+                    typ = tp.TArray(typ, mkIntegerLiteral(node.site, d))
                 arg = f'calloc(1, sizeof({typ.declaration("")}))'
             else:
                 arg = f'({{static {typ.declaration("_tmp")}; &_tmp; }})'
@@ -2707,7 +2707,7 @@ def generate_init_trait_vtables(node, param_values):
     splitting_point()
 
 def trait_param_value(node, param_type_site, param_type):
-    is_sequence = isinstance(realtype(param_type), TTraitList)
+    is_sequence = isinstance(tp.realtype(param_type), tp.TTraitList)
     try:
         try:
             expr = node.get_expr(static_indices(node))
@@ -2715,7 +2715,7 @@ def trait_param_value(node, param_type_site, param_type):
                 raise expr.exc()
             expr = source_for_assignment(expr.site, param_type, expr)
         except EIDXVAR:
-            indices = tuple(mkLit(node.site, v, TInt(32, False))
+            indices = tuple(mkLit(node.site, v, tp.TInt(32, False))
                             for v in IndexedParamValue.indexvars(node))
             expr = node.get_expr(indices)
             if isinstance(expr, NonValue):
@@ -2783,7 +2783,7 @@ def generate_trait_trampoline(method, vtable_trait):
         indices = [
             mkLit(site, '((_flat_index / %d) %% %d)' % (
                 reduce(operator.mul, obj.dimsizes[dim + 1:], 1),
-                obj.dimsizes[dim]), TInt(32, False))
+                obj.dimsizes[dim]), tp.TInt(32, False))
             for dim in range(obj.dimensions)]
         args = ([mkLit(site, p.c_ident, p.typ) for p in method.inp]
                 + [mkLit(site, n, t) for (n, t) in extra_inargs])
@@ -2812,7 +2812,7 @@ def generate_vtable_instances(devnode):
             for trait in subnode.traits.referenced:
                 add_variable_declaration(
                     'struct _%s %s'
-                     % (cident(trait.name), subnode.traits.vtable_cname(trait)))
+                     % (tp.cident(trait.name), subnode.traits.vtable_cname(trait)))
 
 def calculate_saved_userdata(node, dimsizes, attr_name, sym_spec = None):
     if node.objtype == 'method':
@@ -3166,7 +3166,7 @@ def generate_startup_trait_calls(data, idxvars):
     (node, traits) = data
     site = node.site
 
-    indices = tuple(mkLit(site, idx, TInt(32, False)) for idx in idxvars)
+    indices = tuple(mkLit(site, idx, tp.TInt(32, False)) for idx in idxvars)
 
     out('{\n', postindent=1)
     out('_traitref_t _tref;\n')
@@ -3177,7 +3177,7 @@ def generate_startup_trait_calls(data, idxvars):
             outargs = [mkDiscardRef(method.site) for _ in method.outp]
 
             method_ref = TraitMethodDirect(
-                method.site, mkLit(method.site, '_tref', TTrait(trait)), method)
+                method.site, mkLit(method.site, '_tref', tp.TTrait(trait)), method)
             with codegen.IgnoreFailure(site):
                 codegen.codegen_call_traitmethod(method.site, method_ref, [],
                                          outargs).toc()
@@ -3185,7 +3185,7 @@ def generate_startup_trait_calls(data, idxvars):
 
 def generate_startup_regular_call(method, idxvars):
     site = method.site
-    indices = tuple(mkLit(site, idx, TInt(32, False)) for idx in idxvars)
+    indices = tuple(mkLit(site, idx, tp.TInt(32, False)) for idx in idxvars)
     outargs = [mkDiscardRef(method.site) for _ in method.outp]
     # startup memoized methods can throw, which is ignored during startup.
     # Memoization of the throw then allows for the user to check whether

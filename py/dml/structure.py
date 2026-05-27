@@ -26,7 +26,7 @@ from .expr_util import (
     param_expr_site, param_int, param_str,
     static_indices, undefined)
 from .messages import *
-from .types import *
+from . import types as tp
 import dml.globals
 from . import template
 from .template import Rank, RankDesc, ObjectSpec, InstantiatedTemplateSpec
@@ -133,7 +133,7 @@ def mkglobals(stmts):
     new_symbols = []
     # all non-extern anonymous struct types, str -> type
     anonymous_structs = {}
-    # names of non-extern typedefs
+    # names of non-extern tp.typedefs
     new_typedefs = set()
     # Duplicate extern declarations
     extern_clashes = {}
@@ -182,7 +182,7 @@ def mkglobals(stmts):
                     if (breaking_changes.dml12_remove_misc_quirks.enabled
                         and not site.filename().endswith('simics-api.dml')):
                         report(EEXTERN(stmt.site))
-                    typ = TUnknown()
+                    typ = tp.TUnknown()
                 else:
                     (struct_defs, typ) = eval_type(
                         typ, site, None, global_scope, extern=True,
@@ -197,22 +197,22 @@ def mkglobals(stmts):
 
             elif stmt[0] == 'extern_typedef':
                 (_, site, (_, _, name, typ)) = stmt
-                assert not typedefs.get(name, None)
+                assert not tp.typedefs.get(name, None)
                 (struct_defs, typ) = eval_type(
                     typ, site, None, global_scope, typename=name, extern=True,
                     allow_void=True)
                 # any substructs are converted to anonymous extern structs
                 assert not struct_defs
-                typedefs[name] = typ
+                tp.typedefs[name] = typ
             elif stmt[0] == 'dml_typedef':
                 (_, site, (_, _, name, typ)) = stmt
-                assert not typedefs.get(name, None)
+                assert not tp.typedefs.get(name, None)
                 (struct_defs, typ) = eval_type(typ, site, None, global_scope,
                                                typename=name, allow_void=True)
                 for (_, t) in struct_defs:
                     if t is not typ:
                         anonymous_structs[t.label] = t
-                typedefs[name] = typ
+                tp.typedefs[name] = typ
                 assert name not in new_typedefs
                 new_typedefs.add(name)
             elif stmt[0] == 'loggroup':
@@ -237,37 +237,37 @@ def mkglobals(stmts):
 
     for (tname, tpl) in list(dml.globals.templates.items()):
         if tpl.trait:
-            assert tname not in typedefs
+            assert tname not in tp.typedefs
             trait_type = tpl.trait.type()
             # any name collisions were caught earlier with ENAMECOLL
-            typedefs[tname] = trait_type
+            tp.typedefs[tname] = trait_type
 
     type_declaration_order = sort_type_declarations(new_typedefs,
                                                     anonymous_structs)
-    global_type_declaration_order[:] = type_declaration_order
-    global_anonymous_structs.clear()
-    global_anonymous_structs.update(anonymous_structs)
+    tp.global_type_declaration_order[:] = type_declaration_order
+    tp.global_anonymous_structs.clear()
+    tp.global_anonymous_structs.update(anonymous_structs)
 
     if breaking_changes.forbid_broken_unused_types.enabled:
-        for t in typedefs.values():
+        for t in tp.typedefs.values():
             try:
-                check_named_types(t)
+                tp.check_named_types(t)
             except ETYPE as e:
                 report(e)
         for sym in new_symbols:
             try:
-                check_named_types(sym.type)
+                tp.check_named_types(sym.type)
             except ETYPE as e:
                 report(e)
     elif dml.globals.dml_version != (1, 2):
-        for t in typedefs.values():
+        for t in tp.typedefs.values():
             try:
-                safe_realtype(t)
+                tp.safe_realtype(t)
             except ETYPE as e:
                 report(e)
         for sym in new_symbols:
             try:
-                safe_realtype(sym.type)
+                tp.safe_realtype(sym.type)
             except ETYPE as e:
                 report(e)
 
@@ -277,10 +277,10 @@ def mkglobals(stmts):
     # Resolve duplicate externs
     for (name, clashes) in extern_clashes.items():
         (canonical_site, canonical_t) = externs[name]
-        canonical_rt = safe_realtype(canonical_t)
+        canonical_rt = tp.safe_realtype(canonical_t)
         for (site, typ) in clashes:
             try:
-                if not canonical_rt.eq(safe_realtype(typ)):
+                if not canonical_rt.eq(tp.safe_realtype(typ)):
                     report(EEXTERNINCOMP(site, canonical_site, name, typ,
                                          canonical_t))
             except ETYPE as e:
@@ -288,12 +288,12 @@ def mkglobals(stmts):
 
 def type_deps(t, include_structs, expanded_typedefs):
     '''Given that t appears inside a DML typedef, return the set of DML
-    typedefs that need to appear before this typedef in generated C
+    tp.typedefs that need to appear before this typedef in generated C
     code. The location of a named struct ("typedef struct { ... } t;"
     in DML) in the dependency graph refers to the struct definition in
     C code ("struct t { ... }"); the type definition/struct
     declaration ("typedef struct t t;") appears
-    before all other typedefs in generated C code.
+    before all other tp.typedefs in generated C code.
 
     include_structs controls whether named structs count as
     dependencies. They do count for struct members and array types, since
@@ -301,10 +301,10 @@ def type_deps(t, include_structs, expanded_typedefs):
 
     expanded_typedefs is used to avoid infinite recursion.
     '''
-    if isinstance(t, TNamed):
-        if t.c not in typedefs:
+    if isinstance(t, tp.TNamed):
+        if t.c not in tp.typedefs:
             raise ETYPE(t.declaration_site, t)
-        if isinstance(typedefs[t.c], TStruct):
+        if isinstance(tp.typedefs[t.c], tp.TStruct):
             if include_structs:
                 if t.c in expanded_typedefs:
                     return [t.c]
@@ -315,13 +315,13 @@ def type_deps(t, include_structs, expanded_typedefs):
                 #  typedef struct { B b; } C;
                 # Here, B does not depend on A, but C
                 # depends on A via B.
-                return [t.c] + type_deps(typedefs[t.c], True,
+                return [t.c] + type_deps(tp.typedefs[t.c], True,
                                          expanded_typedefs + [t.c])
             else:
                 return []
         else:
             return [t.c]
-    elif isinstance(t, TStruct):
+    elif isinstance(t, tp.TStruct):
         t.resolve()
         deps = []
         if include_structs:
@@ -329,36 +329,36 @@ def type_deps(t, include_structs, expanded_typedefs):
         for (_, mt) in t.members:
             deps.extend(type_deps(mt, True, expanded_typedefs))
         return deps
-    elif isinstance(t, TArray):
+    elif isinstance(t, tp.TArray):
         return type_deps(t.base, True, expanded_typedefs)
-    elif isinstance(t, (TPtr, TVector)):
+    elif isinstance(t, (tp.TPtr, tp.TVector)):
         return type_deps(t.base, False, expanded_typedefs)
-    elif isinstance(t, TFunction):
+    elif isinstance(t, tp.TFunction):
         return ([dep for pt in t.input_types
                  for dep in type_deps(pt, False, expanded_typedefs)]
                 + type_deps(t.output_type, False, expanded_typedefs))
-    elif isinstance(t, (IntegerType, TVoid, TBool, TFloat, TTrait)):
+    elif isinstance(t, (tp.IntegerType, tp.TVoid, tp.TBool, tp.TFloat, tp.TTrait)):
         return []
-    elif isinstance(t, TExternStruct):
+    elif isinstance(t, tp.TExternStruct):
         # extern structs are assumed to be self-contained
         return []
     else:
         raise ICE(t.declaration_site, "unknown type %r" % t)
 
 def remove_type(name):
-    del typedefs[name]
+    del tp.typedefs[name]
     if name in new_global_types:
         new_global_types.remove(name)
 
 def sort_type_declarations(new_typedefs, anonymous_structs):
     deps = {}
-    for name in typedefs:
+    for name in tp.typedefs:
         if name in new_typedefs:
             try:
-                deplist = type_deps(typedefs[name], False, [])
+                deplist = type_deps(tp.typedefs[name], False, [])
             except DMLError as e:
                 report(e)
-                del typedefs[name]
+                del tp.typedefs[name]
                 return sort_type_declarations(new_typedefs - {name},
                                               anonymous_structs)
             else:
@@ -375,18 +375,18 @@ def sort_type_declarations(new_typedefs, anonymous_structs):
     try:
         type_order = topsort.topsort(deps)
     except topsort.CycleFound as e:
-        report(ETREC([typedefs[n].declaration_site for n in e.cycle
-                      if n in typedefs],
-                     typedefs[e.cycle[0]]))
+        report(ETREC([tp.typedefs[n].declaration_site for n in e.cycle
+                      if n in tp.typedefs],
+                     tp.typedefs[e.cycle[0]]))
         for n in e.cycle:
-            del typedefs[n]
+            del tp.typedefs[n]
         # retry with this cycle removed
         return sort_type_declarations(
             new_typedefs.difference(e.cycle), anonymous_structs)
     # TODO: we could check that no extern typedef depends on a
     # non-extern typedef, SIMICS-9987
     return [n for n in type_order
-            # exclude extern typedefs
+            # exclude extern tp.typedefs
             if n in new_typedefs or n in anonymous_structs]
 
 unused_field_methods = {'after_read',
@@ -762,8 +762,8 @@ def typecheck_method_override(m1, m2, location):
             # TODO move to caller
             (_, type1) = eval_type(t1, a1.site, location, global_scope)
             (_, type2) = eval_type(t2, a2.site, location, global_scope)
-            type1 = safe_realtype_unconst(type1)
-            type2 = safe_realtype_unconst(type2)
+            type1 = tp.safe_realtype_unconst(type1)
+            type2 = tp.safe_realtype_unconst(type2)
 
             ok = (type1.eq_fuzzy(type2)
                   if not breaking_changes.strict_typechecking.enabled
@@ -779,8 +779,8 @@ def typecheck_method_override(m1, m2, location):
             ((n1, t1), (n2, t2)) = (a1.args, a2.args)
             (_, type1) = eval_type(t1, a1.site, location, global_scope)
             (_, type2) = eval_type(t2, a2.site, location, global_scope)
-            type1 = safe_realtype_unconst(type1)
-            type2 = safe_realtype_unconst(type2)
+            type1 = tp.safe_realtype_unconst(type1)
+            type2 = tp.safe_realtype_unconst(type2)
             ok = (type1.eq_fuzzy(type2)
                   if not breaking_changes.strict_typechecking.enabled
                   else type1.eq(type2))
@@ -916,13 +916,13 @@ def mkdata(spec, parent):
     (struct_defs, dtype) = eval_type(
         typ, site, parent_scope, global_scope)
     dtype = dtype.resolve()
-    add_late_global_struct_defs(struct_defs)
+    tp.add_late_global_struct_defs(struct_defs)
     obj = objects.Session(name, dtype, astinit, site, parent)
     if astinit:
         dml.globals.device.add_init_data(obj)
     try:
-        realtype(crep.node_storage_type(obj))
-    except DMLUnknownType as e:
+        tp.realtype(crep.node_storage_type(obj))
+    except tp.DMLUnknownType as e:
         raise ETYPE(obj, e.type)
     return obj
 
@@ -931,17 +931,17 @@ def mksaved(spec, parent):
 
     parent_scope = Location(parent, static_indices(parent))
     (struct_defs, dtype) = eval_type(typ, site, parent_scope, global_scope)
-    add_late_global_struct_defs(struct_defs)
+    tp.add_late_global_struct_defs(struct_defs)
     dtype.resolve()
-    if deep_const(dtype):
+    if tp.deep_const(dtype):
         raise ESAVEDCONST(site, dtype)
     obj = objects.Saved(name, dtype, astinit, site, parent)
     if astinit:
         dml.globals.device.add_init_data(obj)
     typ = crep.node_storage_type(obj)
     try:
-        realtype(typ)
-    except DMLUnknownType as e:
+        tp.realtype(typ)
+    except tp.DMLUnknownType as e:
         raise ETYPE(obj, e.type)
 
     serialize.mark_for_serialization(site, typ)
@@ -955,11 +955,11 @@ def mkhook(spec, parent):
     for type_ast in type_asts:
         (struct_defs, dtype) = eval_type(type_ast, site, parent_scope,
                                          global_scope)
-        add_late_global_struct_defs(struct_defs)
+        tp.add_late_global_struct_defs(struct_defs)
         typ = dtype.resolve()
         try:
-            safe_realtype(typ).key()
-        except DMLUnkeyableType as e:
+            tp.safe_realtype(typ).key()
+        except tp.DMLUnkeyableType as e:
             report(EHOOKTYPE(typ.declaration_site or site, typ,
                              e.clarification))
         types.append(typ)
@@ -1289,7 +1289,7 @@ def eval_precond(cond_ast, obj, global_scope):
         cond = as_bool(cond)
         if cond.constant:
             # guaranteed by as_bool()
-            assert isinstance(cond.ctype(), TBool)
+            assert isinstance(cond.ctype(), tp.TBool)
             return cond.value
         else:
             report(ENCONST(cond, cond))
@@ -2372,11 +2372,11 @@ def mkobj2(obj, obj_specs, params, each_stmts):
     elif obj.objtype == 'interface':
         typename = param_str(obj, 'c_type' if dml.globals.dml_version == (1, 2)
                              else '_c_type')
-        t = TPtr(TNamed(typename, const=True))
+        t = tp.TPtr(tp.TNamed(typename, const=True))
         t.declaration_site = obj.site
         try:
-            realtype(t)
-        except DMLUnknownType:
+            tp.realtype(t)
+        except tp.DMLUnknownType:
             raise EIFTYPE(obj, t)
 
     elif obj.objtype == 'event':
@@ -2463,7 +2463,7 @@ def param_linear_int(param):
     uint64 or int64.
     '''
     class IndexVar(Expression):
-        type = TInt(64, True)
+        type = tp.TInt(64, True)
         @slotsmeta.auto_init
         def __init__(self, site, variables): pass
 
@@ -2729,7 +2729,7 @@ class UninitializedParamExpr(objects.ParamExpr):
 
 class EventClassExpr(ctree.LValue):
     slots = ('node', 'indices')
-    type = TPtr(TNamed('event_class_t'), const=True)
+    type = tp.TPtr(tp.TNamed('event_class_t'), const=True)
     @auto_init
     def __init__(self, site, node, indices): pass
     def __str__(self):
@@ -2889,7 +2889,7 @@ class ConfAttrParentObjectClassParamExpr(objects.ParamExpr):
             lit = f'&{port_class_ident(object_parent)}'
         else:
             lit = 'NULL'
-        self.cached = mkLit(self.site, lit, TPtr(TPtr(TNamed('conf_class_t'))))
+        self.cached = mkLit(self.site, lit, tp.TPtr(tp.TPtr(tp.TNamed('conf_class_t'))))
         return self.cached
 
 def need_port_proxy_attrs(port):
@@ -2926,12 +2926,12 @@ class ConfAttrParentObjectProxyInfoParamExpr(objects.ParamExpr):
                 '(_dml_attr_parent_obj_proxy_info_t) { .valid = true,'
                 + f'.is_bank = {is_bank}, .is_array = {is_array}, '
                 + f'.portname = "{object_parent.name}" }}',
-                TNamed('_dml_attr_parent_obj_proxy_info_t'))
+                tp.TNamed('_dml_attr_parent_obj_proxy_info_t'))
         else:
             self.cached = mkLit(
                 self.site,
                 '(_dml_attr_parent_obj_proxy_info_t) { .valid = false }',
-                TNamed('_dml_attr_parent_obj_proxy_info_t'))
+                tp.TNamed('_dml_attr_parent_obj_proxy_info_t'))
         return self.cached
 
 class InterfacesDocParamExpr(objects.ParamExpr):
@@ -3269,14 +3269,14 @@ def mkmethod(site, rbrace_site, location, parent_obj, name, inp_ast,
 
     for t in [p.typ for p in inp] + [t for (_, t) in outp]:
         if t:
-            check_named_types(t)
-            t = realtype(t)
+            tp.check_named_types(t)
+            t = tp.realtype(t)
             if t.is_int and t.is_endian:
                 raise EEARG(site)
 
     for (n, t) in outp:
         # See SIMICS-19028
-        if t and deep_const(t):
+        if t and tp.deep_const(t):
             raise ICE(site,
                       'Methods with (partially) const output/return '
                       + 'values are not yet supported.')

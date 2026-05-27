@@ -3,33 +3,33 @@
 
 from .expr import Lit, mkApply, mkLit
 from .ctree import *
-from .types import *
+from . import types as tp
 from .symtab import global_scope, Symtab
 from .crep import node_storage_type
 from . import globals
 
-reg_table_type    = TPtr(TNamed('_dml_reg_t', const=True))
-regmap_table_type = TPtr(TNamed('_dml_reg_number_t', const=True))
+reg_table_type    = tp.TPtr(tp.TNamed('_dml_reg_t', const=True))
+regmap_table_type = tp.TPtr(tp.TNamed('_dml_reg_number_t', const=True))
 
 make_regname = mkLit(None, '_DML_make_regname',
-                     TFunction([reg_table_type, regmap_table_type],
-                               TPtr(TNamed('char', const=True))))
+                     tp.TFunction([reg_table_type, regmap_table_type],
+                               tp.TPtr(tp.TNamed('char', const=True))))
 find_regnum = mkLit(None, '_DML_find_regnum',
-                    TFunction([regmap_table_type,
-                               TInt(32, False),
-                               TInt(32, False)],
+                    tp.TFunction([regmap_table_type,
+                               tp.TInt(32, False),
+                               tp.TInt(32, False)],
                               regmap_table_type))
 find_regname = mkLit(None, '_DML_find_regname',
-                    TFunction([regmap_table_type,
-                               TInt(32, False),
-                               TPtr(TNamed('char', const=True)),
+                    tp.TFunction([regmap_table_type,
+                               tp.TInt(32, False),
+                               tp.TPtr(tp.TNamed('char', const=True)),
                                reg_table_type],
                               regmap_table_type))
 
 def return_success(site):
     return mkReturn(site, mkBoolConstant(site, False))
 
-dml_reg_t = TExternStruct({}, '_dml_reg_t', const=True)
+dml_reg_t = tp.TExternStruct({}, '_dml_reg_t', const=True)
 
 def codegen_get_name(impl, indices, inargs, outargs, site):
     bank = impl.parent
@@ -39,16 +39,16 @@ def codegen_get_name(impl, indices, inargs, outargs, site):
 
     if not bank.numbered_registers:
         return mkCompound(
-            site, [mkCopyData(site, Lit(None, 'NULL', TPtr(TVoid()), 1), name),
+            site, [mkCopyData(site, Lit(None, 'NULL', tp.TPtr(tp.TVoid()), 1), name),
                    return_success(site)])
 
-    reg_table = mkLit(None, '_DML_R_' + bank.name, TPtr(dml_reg_t))
+    reg_table = mkLit(None, '_DML_R_' + bank.name, tp.TPtr(dml_reg_t))
     regnum_table = mkLit(None, '_DML_RN_' + bank.name,
                          regmap_table_type)
 
     # name = make_regname(reg_table, find_regnum(regnum_table, num))
     regnum_table_len = mkLit(site, 'ALEN(_DML_RN_%s)' % bank.name,
-                             TInt(32, False))
+                             tp.TInt(32, False))
     reg = mkApply(site, find_regnum, [regnum_table, regnum_table_len, num])
     regname = mkApply(site, make_regname, [reg_table, reg])
     return mkCompound(
@@ -72,13 +72,13 @@ def codegen_get_number(impl, indices, inargs, outargs, site):
             site, [mkCopyData(site, mkIntegerConstant(site, -1, True), num),
                    return_success(site)])
 
-    reg_table = mkLit(None, '_DML_R_' + bank.name, TPtr(dml_reg_t))
+    reg_table = mkLit(None, '_DML_R_' + bank.name, tp.TPtr(dml_reg_t))
     regnum_table = mkLit(None, '_DML_RN_' + bank.name,
                          regmap_table_type)
 
     # num = find_regname(regnum_table, name)->num
     regnum_table_len = mkLit(site, 'ALEN(_DML_RN_%s)' % bank.name,
-                             TInt(32, False))
+                             tp.TInt(32, False))
     reg = ExpressionInitializer(
         mkApply(site, find_regname, [regnum_table, regnum_table_len, name,
                                      reg_table]))
@@ -119,11 +119,11 @@ def codegen_read(impl, indices, inargs, outargs, site):
             site, [mkCopyData(site, mkIntegerLiteral(site, 0), val),
                    return_success(site)])
 
-    reg_table = mkLit(None, '_DML_R_' + bank.name, TPtr(dml_reg_t))
+    reg_table = mkLit(None, '_DML_R_' + bank.name, tp.TPtr(dml_reg_t))
     regmap_table = mkLit(None, '_DML_RN_' + bank.name,
                          regmap_table_type)
     regmap_table_len = mkLit(site, 'ALEN(_DML_RN_%s)' % bank.name,
-                             TInt(32, False))
+                             tp.TInt(32, False))
 
     scope = Symtab(global_scope)
     regvar = mkLocalVariable(site, scope.add_variable(
@@ -137,10 +137,10 @@ def codegen_read(impl, indices, inargs, outargs, site):
 
     devtype = node_storage_type(globals.device)
     read_reg = mkLit(None, '_DML_read_reg',
-                     TFunction([devtype,
+                     tp.TFunction([devtype,
                                 regmap_table_type,
                                 reg_table_type],
-                               TInt(64, False)))
+                               tp.TInt(64, False)))
 
     return mkCompound(
         site,
@@ -165,11 +165,11 @@ def codegen_write(impl, indices, inargs, outargs, site):
     if not bank.numbered_registers:
         return mkCompound(site, [return_success(site)])
 
-    reg_table = mkLit(None, '_DML_R_' + bank.name, TPtr(dml_reg_t))
+    reg_table = mkLit(None, '_DML_R_' + bank.name, tp.TPtr(dml_reg_t))
     regmap_table = mkLit(None, '_DML_RN_' + bank.name,
                          regmap_table_type)
     regmap_table_len = mkLit(site, 'ALEN(_DML_RN_%s)' % bank.name,
-                             TInt(32, False))
+                             tp.TInt(32, False))
 
     scope = Symtab(global_scope)
     regvar = mkLocalVariable(site, scope.add_variable(
@@ -183,11 +183,11 @@ def codegen_write(impl, indices, inargs, outargs, site):
 
     devtype = node_storage_type(globals.device)
     write_reg = mkLit(None, '_DML_write_reg',
-                     TFunction([devtype,
+                     tp.TFunction([devtype,
                                 regmap_table_type,
                                 reg_table_type,
-                                TInt(64, False)],
-                               TVoid()))
+                                tp.TInt(64, False)],
+                               tp.TVoid()))
 
     return mkCompound(
         site,

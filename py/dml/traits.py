@@ -19,7 +19,7 @@ from .expr import mkLit, NonValue
 from .expr_util import defined
 from .messages import *
 from .slotsmeta import auto_init
-from .types import *
+from . import types as tp
 from .set import Set
 import dml.globals
 
@@ -80,7 +80,7 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                     (sname, type_ast) = decl_ast.args
                     (struct_defs, stype) = eval_type(
                         type_ast, ast.site, None, global_scope)
-                    add_late_global_struct_defs(struct_defs)
+                    tp.add_late_global_struct_defs(struct_defs)
                     check_namecoll(sname, ast.site)
                     sessions[sname] = (ast.site, stype)
             elif ast.kind == 'param':
@@ -101,8 +101,8 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                 for type_ast in type_asts:
                     (struct_defs, dtype) = eval_type(type_ast, ast.site, None,
                                                      global_scope)
-                    add_late_global_struct_defs(struct_defs)
-                    # TODO maybe realtype?
+                    tp.add_late_global_struct_defs(struct_defs)
+                    # TODO maybe tp.realtype?
                     msg_types.append(dtype)
                 array_lens = tuple(codegen.eval_arraylen(len_ast, global_scope)
                                    for len_ast in arraylen_asts)
@@ -181,10 +181,10 @@ class TraitMethod(TraitVTableItem):
         assert self.memoized
         if self._memo_outs_struct is None:
             memo_dict = {'p_' + name: typ for (name, typ) in self.outp}
-            memo_dict['ran'] = TInt(8, True)
+            memo_dict['ran'] = tp.TInt(8, True)
             if self.throws:
-                memo_dict['threw'] = TBool()
-            self._memo_outs_struct = TStruct(
+                memo_dict['threw'] = tp.TBool()
+            self._memo_outs_struct = tp.TStruct(
                 memo_dict, label=f'_memo_{self.trait.name}__{self.name}')
         return self._memo_outs_struct
 
@@ -240,7 +240,7 @@ class TraitMethod(TraitVTableItem):
                     'default',
                     TraitMethodDirect(
                         default_method.site,
-                        mkLit(site, cident(name), typ),
+                        mkLit(site, tp.cident(name), typ),
                         default_method),
                     site)
             else:
@@ -248,7 +248,7 @@ class TraitMethod(TraitVTableItem):
 
             for (n, t) in self.outp:
                 # See SIMICS-19028
-                if deep_const(t):
+                if tp.deep_const(t):
                     raise ICE(self.site,
                               'Methods with (partially) const output/return '
                               + 'values are not yet supported.')
@@ -268,10 +268,10 @@ class TraitMethod(TraitVTableItem):
                 trait_decl = mkInline(
                     site,
                     '%s UNUSED = DOWNCAST(%s, %s, %s);' % (
-                        self.trait.type().declaration('_' + cident(self.trait.name)),
-                        '_' + cident(self.vtable_trait.name),
-                        cident(self.trait.name),
-                        '.'.join(cident(t.name) for t in downcast_path)))
+                        self.trait.type().declaration('_' + tp.cident(self.trait.name)),
+                        '_' + tp.cident(self.vtable_trait.name),
+                        tp.cident(self.trait.name),
+                        '.'.join(tp.cident(t.name) for t in downcast_path)))
                 body = mkCompound(site, [trait_decl, body])
             return body
 
@@ -370,7 +370,7 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
                 elif name not in ancestor_vtables:
                     raise ICE(msite,
                               'ancestor is overridable but not in vtable')
-                # Type-checking of overrides is done later, after typedefs
+                # Type-checking of overrides is done later, after tp.typedefs
                 # have been populated with all template types.
                 # See Trait.typecheck_methods()
 
@@ -418,8 +418,8 @@ def typecheck_method_override(left, right):
     if throws0 != throws1:
         raise EMETH(site0, site1, "different 'throws' annotations")
     for (p0, p1) in zip(inp0, inp1):
-        t0 = safe_realtype_unconst(p0.typ)
-        t1 = safe_realtype_unconst(p1.typ)
+        t0 = tp.safe_realtype_unconst(p0.typ)
+        t1 = tp.safe_realtype_unconst(p1.typ)
         ok = (t0.eq_fuzzy(t1)
               if not breaking_changes.strict_typechecking.enabled
               else t0.eq(t1))
@@ -427,8 +427,8 @@ def typecheck_method_override(left, right):
             raise EMETH(site0, site1,
                         f"mismatching types in input argument {p0.logref}")
     for (i, ((_, t0), (_, t1))) in enumerate(zip(outp0, outp1)):
-        t0 = safe_realtype_unconst(t0)
-        t1 = safe_realtype_unconst(t1)
+        t0 = tp.safe_realtype_unconst(t0)
+        t1 = tp.safe_realtype_unconst(t1)
         ok = (t0.eq_fuzzy(t1)
               if not breaking_changes.strict_typechecking.enabled
               else t0.eq(t1))
@@ -762,7 +762,7 @@ class Trait(SubTrait):
             if overridable and name not in ancestor_vtables}
         self.vtable_params = params
         self.vtable_sessions = sessions
-        self.vtable_hooks = {name: (hooks[name], THook(hooks[name][2]))
+        self.vtable_hooks = {name: (hooks[name], tp.THook(hooks[name][2]))
                              for name in hooks}
         self.vtable_memoized_outs = {
             '_memo_outs_' + name: method.memo_outs_struct
@@ -783,7 +783,7 @@ class Trait(SubTrait):
         return self.name < other.name
 
     def type(self):
-        return TTrait(self)
+        return tp.TTrait(self)
 
     def typecheck_members(self):
         self.typecheck_methods()
@@ -792,7 +792,7 @@ class Trait(SubTrait):
             bad_members = []
             for (name, (_, typ)) in table.items():
                 try:
-                    check_named_types(typ)
+                    tp.check_named_types(typ)
                 except DMLError as e:
                     report(e)
                     bad_members.append(name)
@@ -811,7 +811,7 @@ class Trait(SubTrait):
         for (_, inp, outp, _, _, _, _) in self.vtable_methods.values():
             for t in [p.typ for p in inp] + [t for (_, t) in outp]:
                 try:
-                    check_named_types(t)
+                    tp.check_named_types(t)
                 except DMLError as e:
                     report(e)
 
@@ -821,7 +821,7 @@ class Trait(SubTrait):
             if sm.name not in self.vtable_methods:
                 for t in [p.typ for p in sm.inp] + [t for (_, t) in sm.outp]:
                     try:
-                        check_named_types(t)
+                        tp.check_named_types(t)
                     except DMLError as e:
                         bad = True
                         report(e)
@@ -844,7 +844,7 @@ class Trait(SubTrait):
     def scope(self, global_scope):
         '''Return a scope for looking up sibling objects in this trait'''
         s = symtab.Symtab(global_scope)
-        selfref = mkLit(self.site, '_' + cident(self.name), self.type())
+        selfref = mkLit(self.site, '_' + tp.cident(self.name), self.type())
         for name in self.members():
             # This is very hacky, but works well
             try:
@@ -962,10 +962,10 @@ class Trait(SubTrait):
         return None
 
     def implicit_args(self):
-        return [("_" + cident(self.name), self.type())]
+        return [("_" + tp.cident(self.name), self.type())]
 
     def vtable_method_type(self, inp, outp, throws, independent):
-        return TPtr(TFunction(
+        return tp.TPtr(tp.TFunction(
             [t for (_, t) in
              crep.maybe_dev_arg(independent) + self.implicit_args()]
             + [p.typ for p in inp]
