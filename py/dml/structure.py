@@ -345,11 +345,6 @@ def type_deps(t, include_structs, expanded_typedefs):
     else:
         raise ICE(t.declaration_site, "unknown type %r" % t)
 
-def remove_type(name):
-    del tp.typedefs[name]
-    if name in new_global_types:
-        new_global_types.remove(name)
-
 def sort_type_declarations(new_typedefs, anonymous_structs):
     deps = {}
     for name in tp.typedefs:

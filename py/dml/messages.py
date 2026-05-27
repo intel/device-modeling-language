@@ -18,12 +18,6 @@ def binary_dump(lh, rh):
             % (truncate(str(lh), 40), lh.ctype(),
                truncate(str(rh), 40), rh.ctype()))
 
-def unary_dump(rh):
-    """Produce a string to use in warning and error messages describing
-    operands to a binary operation"""
-    return ("RH: '%s' of type '%s'"
-            % (truncate(str(rh), 40), rh.ctype()))
-
 class EAFTER(DMLError):
     """
     An illegal `after` statement was specified. The method callback specified
