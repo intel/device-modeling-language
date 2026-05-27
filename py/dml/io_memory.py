@@ -44,7 +44,7 @@ def unmapped_access(site, bank, idx, scope, isread, overlapping, bigendian,
     scope = Symtab(scope)
     code = []
     success = mkLocalVariable(site, scope.add_variable(
-        'success', type=tp.TBool(), site=site,
+        'success', type=tp.Bool(), site=site,
         init=ExpressionInitializer(mkBoolConstant(site, 0)),
         make_unique=True))
 
@@ -220,7 +220,7 @@ def codegen_access(bank, bank_indices, isread, memop, offset, size, writevalue,
         lines.append(
                 '            %s;' % (
             size2.write(ExpressionInitializer(mkLit(site, 'bytes',
-                                                    tp.TInt(64, False))))))
+                                                    tp.Int(64, False))))))
         if partial:
             if bigendian:
                 lines.extend([
@@ -246,7 +246,7 @@ def codegen_access(bank, bank_indices, isread, memop, offset, size, writevalue,
                 '            if (ret) return true;',
                 '            %s;' % (
                     value2.write(ExpressionInitializer(
-                        mkLit(site, 'val', tp.TInt(64, False))))),
+                        mkLit(site, 'val', tp.Int(64, False))))),
                 '            return false;'])
         else:
             # Shifting/masking can normally be skipped in banks with

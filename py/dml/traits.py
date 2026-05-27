@@ -181,10 +181,10 @@ class TraitMethod(TraitVTableItem):
         assert self.memoized
         if self._memo_outs_struct is None:
             memo_dict = {'p_' + name: typ for (name, typ) in self.outp}
-            memo_dict['ran'] = tp.TInt(8, True)
+            memo_dict['ran'] = tp.Int(8, True)
             if self.throws:
-                memo_dict['threw'] = tp.TBool()
-            self._memo_outs_struct = tp.TStruct(
+                memo_dict['threw'] = tp.Bool()
+            self._memo_outs_struct = tp.Struct(
                 memo_dict, label=f'_memo_{self.trait.name}__{self.name}')
         return self._memo_outs_struct
 
@@ -762,7 +762,7 @@ class Trait(SubTrait):
             if overridable and name not in ancestor_vtables}
         self.vtable_params = params
         self.vtable_sessions = sessions
-        self.vtable_hooks = {name: (hooks[name], tp.THook(hooks[name][2]))
+        self.vtable_hooks = {name: (hooks[name], tp.Hook(hooks[name][2]))
                              for name in hooks}
         self.vtable_memoized_outs = {
             '_memo_outs_' + name: method.memo_outs_struct
@@ -783,7 +783,7 @@ class Trait(SubTrait):
         return self.name < other.name
 
     def type(self):
-        return tp.TTrait(self)
+        return tp.Trait(self)
 
     def typecheck_members(self):
         self.typecheck_methods()
@@ -965,7 +965,7 @@ class Trait(SubTrait):
         return [("_" + tp.cident(self.name), self.type())]
 
     def vtable_method_type(self, inp, outp, throws, independent):
-        return tp.TPtr(tp.TFunction(
+        return tp.Ptr(tp.Function(
             [t for (_, t) in
              crep.maybe_dev_arg(independent) + self.implicit_args()]
             + [p.typ for p in inp]

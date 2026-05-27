@@ -87,8 +87,8 @@ class test_control_flow(unittest.TestCase):
             def __init__(self):
                 logging.SimpleSite.__init__(self, 'nowhere')
             def dml_version(self): return (1, 4)
-        cond = ctree.mkLit(s, '', types.TBool())
-        intval = ctree.mkLit(s, '', types.TInt(8, True))
+        cond = ctree.mkLit(s, '', types.Bool())
+        intval = ctree.mkLit(s, '', types.Int(8, True))
         true_const = ctree.mkBoolConstant(s, True)
         false_const = ctree.mkBoolConstant(s, False)
         break_ = ctree.mkBreak(s)
@@ -225,7 +225,7 @@ def float_const(val):
 
 def variable(name, t):
     return ctree.mkDereference(site, ctree.mkLit(site, '&' + name,
-                                                 types.TPtr(t)))
+                                                 types.Ptr(t)))
 def lit(t):
     return ctree.mkLit(site, '', t)
 
@@ -240,7 +240,7 @@ class ExprTests(GccTests):
         self.assertEqual((type.bits, type.signed), (bits, signed))
 
     def expect_double(self, type):
-        self.assertIsInstance(type, types.TFloat)
+        self.assertIsInstance(type, types.Float)
         self.assertEqual(type.name, 'double')
 
     def expect_assert_error(self, line):
@@ -288,14 +288,14 @@ class ExprTests(GccTests):
             right = t2.eq(t1)
             self.assertEqual(left, right)
             return left
-        u = types.TLong(False)
-        s = types.TLong(True)
-        z = types.TSize(False)
-        sz = types.TSize(True)
-        u64t = types.TInt64_t(False)
-        s64t = types.TInt64_t(True)
+        u = types.Long(False)
+        s = types.Long(True)
+        z = types.Size(False)
+        sz = types.Size(True)
+        u64t = types.Int64_t(False)
+        s64t = types.Int64_t(True)
         int_types = [u, s, z, sz, u64t, s64t,
-                 types.TInt(64, False), types.TInt(32, False)]
+                 types.Int(64, False), types.Int(32, False)]
         # all alternative spellings of integer types are potentially
         # incompatible in C, and therefore defensively considered by DML as
         # incompatible
@@ -368,16 +368,16 @@ class ExprTests(GccTests):
         return ['EXPECT(IS_DOUBLE(%s));' % (expr.read(),),
                 'EXPECT(isnan(%s));' % (expr.read(),)]
 
-    @subtest([(0xdeadbeef, types.TInt(16, False), 0xbeef, 2),
-              (0xaaaaaa,   types.TInt(15, True),  0x2aaa, 2),
-              (0xaaaaaa,   types.TInt(14, True), -0x2000 | 0xaaa, 2),
+    @subtest([(0xdeadbeef, types.Int(16, False), 0xbeef, 2),
+              (0xaaaaaa,   types.Int(15, True),  0x2aaa, 2),
+              (0xaaaaaa,   types.Int(14, True), -0x2000 | 0xaaa, 2),
     ])
     def int_cast(self, value, new_type, trunc_val, new_size):
         const_expr = ctree.mkCast(
             site, ctree.mkIntegerConstant(site, value, True),
             new_type)
         var_expr = ctree.mkCast(
-            site, variable('x', types.TInt(64, True)), new_type)
+            site, variable('x', types.Int(64, True)), new_type)
         self.assertEqual(const_expr.value, trunc_val)
         self.expect_int_type(const_expr.ctype(), new_type.signed, new_type.bits)
         self.expect_int_type(var_expr.ctype(), new_type.signed, new_type.bits)
@@ -389,12 +389,12 @@ class ExprTests(GccTests):
     @subtest()
     def int_cast_sequence(self):
         """Checks that sequences of casts are collapsed correctly"""
-        for cast_sequence in [(types.TInt(64, False), types.TInt(64, False)),
-                             (types.TInt(32, False), types.TInt(32, False)),
-                             (types.TInt(64, False), types.TInt(64, True)),
-                             (types.TInt(64, True), types.TInt(64, False)),
-                             (types.TInt(64, False), types.TInt(32, False))]:
-            base = variable('b', types.TInt(1, True))
+        for cast_sequence in [(types.Int(64, False), types.Int(64, False)),
+                             (types.Int(32, False), types.Int(32, False)),
+                             (types.Int(64, False), types.Int(64, True)),
+                             (types.Int(64, True), types.Int(64, False)),
+                             (types.Int(64, False), types.Int(32, False))]:
+            base = variable('b', types.Int(1, True))
             curr_expr = base
             for t in cast_sequence:
                 curr_expr = ctree.mkCast(site, curr_expr, t)
@@ -403,15 +403,15 @@ class ExprTests(GccTests):
 
     @subtest()
     def int_cast_sequence_bit_increase(self):
-        base = variable('b', types.TInt(1, True))
-        cast1 = ctree.mkCast(site, base, types.TInt(32, True))
-        cast2 = ctree.mkCast(site, cast1, types.TInt(64, False))
+        base = variable('b', types.Int(1, True))
+        cast1 = ctree.mkCast(site, base, types.Int(32, True))
+        cast2 = ctree.mkCast(site, cast1, types.Int(64, False))
         self.assertEqual(cast2.expr, cast1)
 
-    @subtest([(types.TFloat('double'), '1.2', types.TInt(32, False), '1'),
-              (types.TBool(), 'true', types.TInt(32, False), '1'),
-              (types.TFunction([], types.TVoid()),
-               'printf', types.TInt(64, False),
+    @subtest([(types.Float('double'), '1.2', types.Int(32, False), '1'),
+              (types.Bool(), 'true', types.Int(32, False), '1'),
+              (types.Function([], types.Void()),
+               'printf', types.Int(64, False),
                '(uintptr_t)printf')])
     def cast_to_int(self, old_type, old_value, new_type, new_value):
         cast = ctree.mkCast(site, ctree.mkLit(site, old_value, old_type),
@@ -420,7 +420,7 @@ class ExprTests(GccTests):
         return ['EXPECT(%s == %s);' % (cast.read(), new_value)]
 
     def unendianed_type(self, endian_type):
-        return types.TInt(endian_type.bits, endian_type.signed)
+        return types.Int(endian_type.bits, endian_type.signed)
 
     @subtest([(ctree.mkIntegerConstant(site, 5, True), 5),
               (ctree.mkIntegerConstant(site, -5, True), -5),
@@ -429,9 +429,9 @@ class ExprTests(GccTests):
                   ctree.mkIntegerConstant(site, 5, False),
                   ctree.mkIntegerConstant(site, 2, False), 'le'), 0xF),
               (ctree.mkCast(site, ctree.mkIntegerConstant(site, 5, True),
-                            types.TEndianInt(32, True, 'big-endian')), 5),
+                            types.EndianInt(32, True, 'big-endian')), 5),
               (ctree.mkCast(site, ctree.mkIntegerConstant(site, 5, True),
-                            types.TEndianInt(8, False, 'little-endian')), 5),
+                            types.EndianInt(8, False, 'little-endian')), 5),
     ])
     def as_int(self, expr, value):
         """Test that as_int correctly converts various types to integers"""
@@ -452,10 +452,10 @@ class ExprTests(GccTests):
                           ctree.mkIntegerConstant(site, 5, False),
                           ctree.mkIntegerConstant(site, 2, False), 'le'))
               for endiantype in (
-                      types.TEndianInt(8, False, 'little-endian'),
-                      types.TEndianInt(8, True, 'little-endian'),
-                      types.TEndianInt(64, False, 'little-endian'),
-                      types.TEndianInt(64, True, 'big-endian'))
+                      types.EndianInt(8, False, 'little-endian'),
+                      types.EndianInt(8, True, 'little-endian'),
+                      types.EndianInt(64, False, 'little-endian'),
+                      types.EndianInt(64, True, 'big-endian'))
     ])
     def endian_int_cast(self, expr, endiantype):
         """Check that casting to endianint results in the right type"""
@@ -464,17 +464,17 @@ class ExprTests(GccTests):
 
     @subtest([(targettype, endiantype)
               for targettype in (
-                      types.TInt(8, False),
-                      types.TInt(8, False,
-                                 {"a": (types.TInt(4, False), 5, 2)},
-                                 {"b": (types.TInt(2, False), 7, 5)}),
-                      types.TPtr(types.TVoid()),
+                      types.Int(8, False),
+                      types.Int(8, False,
+                                 {"a": (types.Int(4, False), 5, 2)},
+                                 {"b": (types.Int(2, False), 7, 5)}),
+                      types.Ptr(types.Void()),
               )
               for endiantype in (
-                      types.TEndianInt(8, False, 'little-endian'),
-                      types.TEndianInt(8, True, 'little-endian'),
-                      types.TEndianInt(64, False, 'little-endian'),
-                      types.TEndianInt(64, True, 'big-endian'))
+                      types.EndianInt(8, False, 'little-endian'),
+                      types.EndianInt(8, True, 'little-endian'),
+                      types.EndianInt(64, False, 'little-endian'),
+                      types.EndianInt(64, True, 'big-endian'))
     ])
     def endian_int_cast_from(self, targettype, endiantype):
         """Check that casting from an endianint results in the right type"""
@@ -494,7 +494,7 @@ class ExprTests(GccTests):
               )
               for iv in (ctree.mkCast(
                       site, ctree.mkIntegerConstant(site, 5, True),
-                      types.TEndianInt(32, True, 'big-endian')),
+                      types.EndianInt(32, True, 'big-endian')),
                          ctree.mkBitSlice(
                              site, ctree.mkIntegerConstant(site, 0x80FF, False),
                              ctree.mkIntegerConstant(site, 20, False),
@@ -513,27 +513,27 @@ class ExprTests(GccTests):
                          ctree.mkIntegerConstant(site, 1, False), 'le'),
                ctree.mkCast(
                    site, ctree.mkIntegerConstant(site, 3, True),
-                   types.TEndianInt(32, True, 'big-endian')),
-               types.TInt(64, True)),
+                   types.EndianInt(32, True, 'big-endian')),
+               types.Int(64, True)),
               (ctree.mkIntegerConstant(site, 5, True),
                ctree.mkCast(
                    site, ctree.mkIntegerConstant(site, 3, True),
-                   types.TEndianInt(32, True, 'big-endian')),
-               types.TInt(64, True)),
+                   types.EndianInt(32, True, 'big-endian')),
+               types.Int(64, True)),
               (ctree.mkCast(
                    site, ctree.mkIntegerConstant(site, 3, True),
-                   types.TEndianInt(32, True, 'big-endian')),
+                   types.EndianInt(32, True, 'big-endian')),
                ctree.mkIntegerConstant(site, 5, True),
-               types.TInt(64, True)),
+               types.Int(64, True)),
               (ctree.mkCast(
                    site, ctree.mkIntegerConstant(site, 3, True),
-                   types.TEndianInt(32, True, 'big-endian')),
+                   types.EndianInt(32, True, 'big-endian')),
                ctree.mkCast(
                    site, ctree.mkIntegerConstant(site, 5, True),
-                   types.TEndianInt(32, True, 'big-endian')),
-               types.TInt(64, True))])
+                   types.EndianInt(32, True, 'big-endian')),
+               types.Int(64, True))])
     def as_int_ifexpr(self, lh, rh, expected_type):
-        expr = ctree.mkIfExpr(site, variable('b', types.TBool()), lh, rh)
+        expr = ctree.mkIfExpr(site, variable('b', types.Bool()), lh, rh)
         self.assertTrue(expr.type.eq(expected_type))
         return ["bool b = false;",
                 "EXPECT(%s == %s);" % (
@@ -544,11 +544,11 @@ class ExprTests(GccTests):
                          ctree.mkUnaryMinus,
                          ctree.mkUnaryPlus,
                          lambda site, x :
-                         ctree.mkCast(site, x, types.TInt(64, True)))
+                         ctree.mkCast(site, x, types.Int(64, True)))
               for lh in (ctree.mkIntegerConstant(site, 5, True),
                          ctree.mkCast(
                              site, ctree.mkIntegerConstant(site, 5, True),
-                             types.TEndianInt(32, True, 'big-endian')),
+                             types.EndianInt(32, True, 'big-endian')),
                          ctree.mkBitSlice(
                              site, ctree.mkIntegerConstant(site, 0x80FF, False),
                              ctree.mkIntegerConstant(site, 20, False),
@@ -563,15 +563,15 @@ class ExprTests(GccTests):
     @subtest([(ctree.mkIntegerConstant(site, 3, True),),
               (ctree.mkCast(
                   site, ctree.mkIntegerConstant(site, 3, True),
-                  types.TEndianInt(32, True, 'big-endian')),),
+                  types.EndianInt(32, True, 'big-endian')),),
               (ctree.mkBitSlice(
                   site, ctree.mkIntegerConstant(site, 0xF, False),
                   ctree.mkIntegerConstant(site, 2, False),
                   ctree.mkIntegerConstant(site, 1, False), 'le'),)])
     def as_int_new_coverage(self, count):
         """Checks for as_int coverage"""
-        expr = ctree.mkNew(site, types.TInt(8, False), count)
-        self.assertTrue(expr.type.eq(types.TPtr(types.TInt(8, False))))
+        expr = ctree.mkNew(site, types.Int(8, False), count)
+        self.assertTrue(expr.type.eq(types.Ptr(types.Int(8, False))))
         return ["EXPECT(%s == 3);" % expr.count.read()]
 
     def expect_int_unop(self, const, unop, expected):
@@ -584,7 +584,7 @@ class ExprTests(GccTests):
             # value fits in 8 bits, so we can test with 8-bit
             # non-constant operands, to cover sign extension
             var8_op = unop(site, variable(
-                'y', types.TInt(8, const.type.signed)))
+                'y', types.Int(8, const.type.signed)))
             test_8bit = ['%sint8 y = %s;' % ('' if const.type.signed else 'u',
                                              const.read()),
                          'EXPECT(%s == %s);' % (var8_op.read(), expected,)]
@@ -613,7 +613,7 @@ class ExprTests(GccTests):
         of the right type, which generates a C expression of the right
         type'''
         expect_int64 = (bits, signed) != (64, False)
-        t = types.TInt(bits, signed)
+        t = types.Int(bits, signed)
         expr = op(site, variable('i', t))
         self.expect_int_type(expr.ctype(), expect_int64)
         return [t.declaration('i') + ' = 1;',
@@ -651,10 +651,10 @@ class ExprTests(GccTests):
 
     @subtest()
     def unary_plus_rval(self):
-        i = ctree.mkUnaryPlus(site, variable('i', types.TInt(64, False)))
+        i = ctree.mkUnaryPlus(site, variable('i', types.Int(64, False)))
         with self.assertRaises(messages.ERVAL):
             ctree.mkAddressOf(site, i)
-        f = ctree.mkUnaryPlus(site, variable('f', types.TFloat('double')))
+        f = ctree.mkUnaryPlus(site, variable('f', types.Float('double')))
         with self.assertRaises(messages.ERVAL):
             ctree.mkAddressOf(site, f)
         return None
@@ -680,14 +680,14 @@ class ExprTests(GccTests):
     def unray_minus_float(self):
         c = ctree.mkUnaryMinus(site, float_const(0.3))
         self.assertTrue(c.constant)
-        v = ctree.mkUnaryMinus(site, variable('f', types.TFloat('float')))
+        v = ctree.mkUnaryMinus(site, variable('f', types.Float('float')))
         return ['EXPECT(%s == -0.3);' % (c.read(),),
                 'float f = 1234.25;',
                 'EXPECT(%s == -1234.25);' % (v.read(),)]
 
     @subtest([(ctree.mkUnaryPlus,), (ctree.mkUnaryMinus,)])
     def unary_float_promotion(self, op):
-        f = op(site, variable('f', types.TFloat('float')))
+        f = op(site, variable('f', types.Float('float')))
         self.assertEqual(f.ctype().name, 'double')
         return ['float f = 1.0;',
                 'EXPECT(IS_DOUBLE(%s));' % (f.read(),)]
@@ -716,7 +716,7 @@ class ExprTests(GccTests):
         '''test that ++x, --x, x++ and x-- produces correct values'''
         # TODO: today we inherit the undefined behaviour of (a++ - ++a) from C
         # Would be better to make this well-defined
-        t = types.TInt(bits, signed)
+        t = types.Int(bits, signed)
         yield t.declaration('x') + ';'
         for (before, after, pre_op, post_op) in [
                 (less, more, ctree.PreInc, ctree.PostInc),
@@ -758,7 +758,7 @@ class ExprTests(GccTests):
                                 res_expected, var_expected):
         '''test that ++x, --x, x++ and x-- on an endian variable correctly
         modify the variable and return the correct values'''
-        endian_type = types.TEndianInt(size*8, signed, byte_order)
+        endian_type = types.EndianInt(size*8, signed, byte_order)
 
         initializer = ctree.ExpressionInitializer(
             ctree.mkCast(site, ctree.mkIntegerConstant(site, value, True),
@@ -804,8 +804,8 @@ class ExprTests(GccTests):
         C expression of the right type'''
         expect_int64 = ((lbits, lsigned) != (64, False)
                         and (rbits, rsigned) != (64, False))
-        ltype = types.TInt(lbits, lsigned)
-        rtype = types.TInt(rbits, rsigned)
+        ltype = types.Int(lbits, lsigned)
+        rtype = types.Int(rbits, rsigned)
         expr = op(site, variable('l', ltype), variable('r', rtype))
         self.expect_int_type(expr.ctype(), expect_int64)
         const_expr = op(
@@ -829,7 +829,7 @@ class ExprTests(GccTests):
                        variable('y', lhconst.type))
         self.expect_int_type(var_op.ctype(), expect_signed)
         [lh8type, rh8type] = [
-            types.TInt(8, const.value < 0)
+            types.Int(8, const.value < 0)
             if -128 <= const.value < 256 and const.type.signed
             else const.type
             for const in [lhconst, rhconst]]
@@ -1007,13 +1007,13 @@ class ExprTests(GccTests):
                                          expect)
 
     @subtest([
-        (types.TInt(8, True),),
-        (types.TPtr(types.TVoid()),),
+        (types.Int(8, True),),
+        (types.Ptr(types.Void()),),
     ])
     def add_sub_ptr(self, ptype):
-        p = variable('p', types.TPtr(ptype, const=True))
-        a = variable('a', types.TArray(ptype, int_const(10, True), const=True))
-        i = variable('i', types.TInt(64, True))
+        p = variable('p', types.Ptr(ptype, const=True))
+        a = variable('a', types.Array(ptype, int_const(10, True), const=True))
+        i = variable('i', types.Int(64, True))
         stmts = ['%s = {};' % (ptype.declaration('a[8]'),),
                  'int64 i = 5;',
                  '%s = a;' % (ptype.declaration('*p'),),
@@ -1036,8 +1036,8 @@ class ExprTests(GccTests):
 
     @subtest()
     def add_sub_voidptr(self):
-        p = variable('p', types.TPtr(types.TVoid()))
-        i = variable('i', types.TInt(64, True))
+        p = variable('p', types.Ptr(types.Void()))
+        i = variable('i', types.Int(64, True))
         for (op, lh, rh) in [(ctree.mkAdd, p, i),
                          (ctree.mkAdd, i, p),
                          (ctree.mkSubtract, p, i),
@@ -1161,7 +1161,7 @@ class ExprTests(GccTests):
                 (int_const(0, True), int_const(0, True), (0, 1, 0, 1, 0, 1)),
                 (int_const(-1, True), int_const(0, False), (1, 1, 0, 0, 1, 0)),
                 (int_const(0, False), int_const(-1, True), (0, 0, 1, 1, 1, 0)),
-                (ctree.TypedIntegerConstant(site, 0, types.TInt(8, False)),
+                (ctree.TypedIntegerConstant(site, 0, types.Int(8, False)),
                  int_const(-1, True), (0, 0, 1, 1, 1, 0)),
                 (int_const(-1, False), int_const(-1, True), (0, 0, 1, 1, 1, 0)),
                 (int_const(-1, True), int_const(-1, False), (1, 1, 0, 0, 1, 0)),
@@ -1189,8 +1189,8 @@ class ExprTests(GccTests):
         logging.ignore_warning('WNEGCONSTCOMP')
         mix_cond = op(site, lh, rh_var)
         logging.enable_warning('WNEGCONSTCOMP')
-        self.assertIsInstance(var_cond.ctype(), types.TBool)
-        self.assertIsInstance(mix_cond.ctype(), types.TBool)
+        self.assertIsInstance(var_cond.ctype(), types.Bool)
+        self.assertIsInstance(mix_cond.ctype(), types.Bool)
         return ['%s = %s;' % (lh.ctype().declaration('lh'), lh.read()),
                 '%s = %s;' % (rh.ctype().declaration('rh'), rh.read()),
                 'EXPECT(%s(%s));' % ('' if result else '!', var_cond.read()),
@@ -1199,16 +1199,16 @@ class ExprTests(GccTests):
     @subtest([
         (lh, rh, op, bool(result))
         for (lh, rh, results) in [
-                (ctree.mkLit(site, 'arr', types.TArray(types.TInt(32, True),
+                (ctree.mkLit(site, 'arr', types.Array(types.Int(32, True),
                                                    int_const(0, True))),
-                 ctree.mkLit(site, '&arr[1]', types.TPtr(types.TInt(32, True))),
+                 ctree.mkLit(site, '&arr[1]', types.Ptr(types.Int(32, True))),
                  (1, 1, 0, 0, 1, 0)),
-                (ctree.mkLit(site, '&arr[1]', types.TPtr(types.TInt(32, True))),
-                 ctree.mkLit(site, 'arr', types.TArray(types.TInt(32, True),
+                (ctree.mkLit(site, '&arr[1]', types.Ptr(types.Int(32, True))),
+                 ctree.mkLit(site, 'arr', types.Array(types.Int(32, True),
                                                        int_const(0, True))),
                  (0, 0, 1, 1, 1, 0)),
-                (ctree.mkLit(site, '&arr[1]', types.TPtr(types.TInt(32, True))),
-                 ctree.mkLit(site, '&arr[1]', types.TPtr(types.TInt(32, True))),
+                (ctree.mkLit(site, '&arr[1]', types.Ptr(types.Int(32, True))),
+                 ctree.mkLit(site, '&arr[1]', types.Ptr(types.Int(32, True))),
                  (0, 1, 0, 1, 0, 1))]
         for (result, op) in zip(results,
                                 [ctree.mkLessThan,
@@ -1219,7 +1219,7 @@ class ExprTests(GccTests):
                                  ctree.mkEquals])])
     def compare_pointers(self, lh, rh, op, result):
         cond = op(site, lh, rh)
-        self.assertIsInstance(cond.ctype(), types.TBool)
+        self.assertIsInstance(cond.ctype(), types.Bool)
         return ['int32 arr[4] = {};'
                 'EXPECT(%s(%s));' % ('' if result else '!', cond.read())]
 
@@ -1245,8 +1245,8 @@ class ExprTests(GccTests):
             ctree.mkIfExpr(
                 site,
                 ctree.mkBoolConstant(site, True),
-                ctree.mkLit(site, '', types.TPtr(types.TInt(8, False))),
-                ctree.mkLit(site, '', types.TPtr(types.TInt(8, True))))
+                ctree.mkLit(site, '', types.Ptr(types.Int(8, False))),
+                ctree.mkLit(site, '', types.Ptr(types.Int(8, True))))
 
     @subtest([(cond, tbits, tsigned, fbits, fsigned, rsigned)
               for (tbits, tsigned, fbits, fsigned, rsigned) in [
@@ -1256,9 +1256,9 @@ class ExprTests(GccTests):
               ])
     def int_cond(self, cond, tbits, tsigned, fbits, fsigned, rsigned):
         cond_const = ctree.mkBoolConstant(site, cond)
-        cond_var = variable('cond', types.TBool())
-        tconst = ctree.mkCast(site, int_const(-128), types.TInt(tbits, tsigned))
-        fconst = ctree.mkCast(site, int_const(-127), types.TInt(fbits, fsigned))
+        cond_var = variable('cond', types.Bool())
+        tconst = ctree.mkCast(site, int_const(-128), types.Int(tbits, tsigned))
+        fconst = ctree.mkCast(site, int_const(-127), types.Int(fbits, fsigned))
         tvar = variable('t', tconst.ctype())
         fvar = variable('f', fconst.ctype())
         const_const = ctree.mkIfExpr(site, cond_const, tconst, fconst)
@@ -1287,17 +1287,17 @@ class ExprTests(GccTests):
 
     @subtest()
     def ptr_cond(self):
-        cond = lit(types.TBool())
+        cond = lit(types.Bool())
         t = ctree.mkIfExpr(
-            site, cond, lit(types.TPtr(types.TInt(8, True))),
-            lit(types.TPtr(types.TInt(8, True, const=True)))).ctype()
-        self.assertIsInstance(t, types.TPtr)
+            site, cond, lit(types.Ptr(types.Int(8, True))),
+            lit(types.Ptr(types.Int(8, True, const=True)))).ctype()
+        self.assertIsInstance(t, types.Ptr)
         self.expect_int_type(t.base, True, 8)
         self.assertTrue(t.base.const)
         t = ctree.mkIfExpr(
-            site, cond, lit(types.TPtr(types.TVoid())),
-            lit(types.TPtr(types.TInt(8, True, const=True)))).ctype()
-        self.assertIsInstance(t, types.TPtr)
+            site, cond, lit(types.Ptr(types.Void())),
+            lit(types.Ptr(types.Int(8, True, const=True)))).ctype()
+        self.assertIsInstance(t, types.Ptr)
         self.assertTrue(t.base.const)
         self.assertTrue(t.base.void)
         t = ctree.mkIfExpr(
@@ -1332,22 +1332,22 @@ class ExprTests(GccTests):
     def equal_pointers(self):
         for op in [ctree.mkEquals, ctree.mkNotEquals]:
             # a void pointer can be compared to any pointer
-            op(site, lit(types.TPtr(types.TInt(8, True))),
-               lit(types.TPtr(types.TVoid())))
+            op(site, lit(types.Ptr(types.Int(8, True))),
+               lit(types.Ptr(types.Void())))
         for op in [ctree.mkLessThan,
                    ctree.mkLessThanOrEquals,
                    ctree.mkGreaterThan,
                    ctree.mkGreaterThanOrEquals]:
             with self.assertRaises(messages.EILLCOMP):
-                op(site, lit(types.TPtr(types.TInt(8, True))),
-                   lit(types.TPtr(types.TVoid())))
+                op(site, lit(types.Ptr(types.Int(8, True))),
+                   lit(types.Ptr(types.Void())))
 
     @subtest()
     def null_pointers(self):
         null = ctree.mkNullConstant(site)
-        for expr in (lit(types.TPtr(types.TInt(8, True))),
+        for expr in (lit(types.Ptr(types.Int(8, True))),
                      ctree.mkCast(site, null,
-                                  types.TPtr(types.TInt(8, True)))):
+                                  types.Ptr(types.Int(8, True)))):
             for op in [ctree.mkEquals, ctree.mkNotEquals]:
                 # NULL can be compared to any pointer...
                 res = op(site, null, expr)
@@ -1367,7 +1367,7 @@ class ExprTests(GccTests):
 
     @subtest()
     def assign_trunc(self):
-        target_type = types.TInt(5, True)
+        target_type = types.Int(5, True)
         stmt = ctree.mkCopyData(site, int_const(0x5f),
                                 variable('x', target_type))
         code = output.StrOutput()
@@ -1380,30 +1380,30 @@ class ExprTests(GccTests):
     @subtest()
     def const_types(self):
         type_objs = [
-            types.TVoid(),
-            types.TDevice('struct_t'),
-            types.TNamed('struct_t'),
-            types.TBool(),
-            types.TInt(24, True),
-            types.TEndianInt(24, True, 'big-endian'),
-            types.TLong(False),
-            types.TSize(True),
-            types.TInt64_t(True),
-            types.TFloat('double'),
-            types.TArray(types.TBool(), int_const(3)),
-            types.TPtr(types.TBool()),
-            types.TPtr(types.TFunction([], types.TVoid())),
-            types.TPtr(types.TArray(types.TBool(), int_const(3))),
-            types.TTrait(traits.Trait(
+            types.Void(),
+            types.Device('struct_t'),
+            types.Named('struct_t'),
+            types.Bool(),
+            types.Int(24, True),
+            types.EndianInt(24, True, 'big-endian'),
+            types.Long(False),
+            types.Size(True),
+            types.Int64_t(True),
+            types.Float('double'),
+            types.Array(types.Bool(), int_const(3)),
+            types.Ptr(types.Bool()),
+            types.Ptr(types.Function([], types.Void())),
+            types.Ptr(types.Array(types.Bool(), int_const(3))),
+            types.Trait(traits.Trait(
                 site, 'struct_t', set(), {}, {}, {}, {}, {}, {}, {})),
-            types.TTraitList('struct_t'),
-            types.TExternStruct({}, 'struct_t', 'struct_t'),
-            types.TStruct({'x': types.TBool()}, 'struct_label'),
-            types.TLayout(
+            types.TraitList('struct_t'),
+            types.ExternStruct({}, 'struct_t', 'struct_t'),
+            types.Struct({'x': types.Bool()}, 'struct_label'),
+            types.Layout(
                 'big-endian', [(site, 'x',
-                                types.TEndianInt(24, True, 'big-endian'))],
+                                types.EndianInt(24, True, 'big-endian'))],
                 'struct_label'),
-            types.THook([]),
+            types.Hook([]),
         ]
         covered_types = {type(o) for o in type_objs}
         all_types = {t for t in types.__dict__.values()
@@ -1417,11 +1417,11 @@ class ExprTests(GccTests):
             # abstract type
             types.StructType,
             # 1.2, weird
-            types.TUnknown,
+            types.Unknown,
             # known to be broken, hard to fix
-            types.TVector,
+            types.Vector,
             # function types don't allow const qualification
-            types.TFunction,
+            types.Function,
         }
         assert all_types - untested_types <= covered_types, (
             all_types - covered_types)

@@ -51,4 +51,4 @@ class Test_traits(unittest.TestCase):
         self.assertTrue(ref)
         # does not crash
         with crep.DeviceInstanceContext(), self.dev.use_for_codegen():
-            ref.call_expr([], types.TVoid()).read()
+            ref.call_expr([], types.Void()).read()

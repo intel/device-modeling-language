@@ -20,14 +20,14 @@ __all__ = (
     'lookup_deserialize',
     )
 
-attr_value_t = tp.TNamed('attr_value_t')
-set_error_t = tp.TNamed('set_error_t')
-uint64_t = tp.TInt(64, False)
+attr_value_t = tp.Named('attr_value_t')
+set_error_t = tp.Named('set_error_t')
+uint64_t = tp.Int(64, False)
 const_void = tp.void.clone()
 const_void.const = True
 
-serializer_t = tp.TFunction([tp.TPtr(const_void), tp.TPtr(tp.void)], attr_value_t)
-deserializer_t = tp.TFunction([attr_value_t, tp.TPtr(tp.void), tp.TPtr(tp.void)],
+serializer_t = tp.Function([tp.Ptr(const_void), tp.Ptr(tp.void)], attr_value_t)
+deserializer_t = tp.Function([attr_value_t, tp.Ptr(tp.void), tp.Ptr(tp.void)],
                            set_error_t)
 
 # code to insert before body
@@ -85,24 +85,24 @@ def declare_variable(site, name, type, init_expr = None):
                 site, symtab.LocalSymbol(name, name, type, site=site)))
 
 def prepare_array_de_serialization(site, t):
-    assert(isinstance(t, tp.TArray))
+    assert(isinstance(t, tp.Array))
     dims = []
     base = t
-    while isinstance(base, tp.TArray):
+    while isinstance(base, tp.Array):
         dims.append(base.size)
         base = base.base
 
     sizeof_base = expr.mkLit(site, f"sizeof({base.declaration('')})",
-                             tp.TNamed('size_t'))
+                             tp.Named('size_t'))
     dimsizes_lit = ('(const uint32 []) { %s }'
                     % ((', '.join(dim.read() for dim in dims)),))
-    dimsizes_expr = expr.mkLit(site, dimsizes_lit, tp.TPtr(tp.TInt(32, False)))
+    dimsizes_expr = expr.mkLit(site, dimsizes_lit, tp.Ptr(tp.Int(32, False)))
     return (base, dims, sizeof_base, dimsizes_expr)
 
 def mkSubRefLit(site, expr, sub, typ, op):
     real_etype = tp.safe_realtype_shallow(expr.ctype())
 
-    if isinstance(real_etype, tp.TPtr):
+    if isinstance(real_etype, tp.Ptr):
         if op == '.':
             raise ENOSTRUCT(site, expr)
         basetype = real_etype.base
@@ -121,7 +121,7 @@ def mkSubRefLit(site, expr, sub, typ, op):
 # This works on the assumption that args do not need to be hard-cast
 # to fit the actual fun signature
 def apply_c_fun(site, fun, args, rettype):
-    function_type = tp.TFunction([a.ctype() for a in args], rettype)
+    function_type = tp.Function([a.ctype() for a in args], rettype)
     lit = expr.mkLit(site, fun, function_type)
     return expr.mkApply(site, lit, args)
 
@@ -145,7 +145,7 @@ def serialize(real_type, current_expr, target_expr):
             funname = "SIM_make_attr_uint64"
         if real_type.is_endian:
             converted_arg = ctree.as_int(current_expr)
-            function_type = tp.TFunction([converted_arg.ctype], attr_value_t)
+            function_type = tp.Function([converted_arg.ctype], attr_value_t)
             apply_expr = expr.Apply(current_site,
                                     expr.mkLit(current_site,
                                                funname,
@@ -159,11 +159,11 @@ def serialize(real_type, current_expr, target_expr):
                                             apply_expr))])
         else:
             return construct_assign_apply(funname, real_type)
-    elif isinstance(real_type, tp.TBool):
+    elif isinstance(real_type, tp.Bool):
         return construct_assign_apply("SIM_make_attr_boolean", real_type)
-    elif isinstance(real_type, tp.TFloat):
+    elif isinstance(real_type, tp.Float):
         return construct_assign_apply("SIM_make_attr_floating", real_type)
-    elif isinstance(real_type, tp.TArray):
+    elif isinstance(real_type, tp.Array):
         (base, dimsizes, sizeof_base,
          dimsizes_expr) = prepare_array_de_serialization(current_site,
                                                          real_type)
@@ -175,7 +175,7 @@ def serialize(real_type, current_expr, target_expr):
                           else lookup_serialize(base))
 
         elem_serializer = expr.mkLit(current_site, serializer_ptr,
-                                     tp.TPtr(serializer_t))
+                                     tp.Ptr(serializer_t))
         apply_expr = apply_c_fun(current_site, '_serialize_array',
                                  [ctree.mkAddressOf(current_site,
                                                     current_expr),
@@ -187,26 +187,26 @@ def serialize(real_type, current_expr, target_expr):
         return ctree.AssignStatement(current_site, target_expr,
                                      ctree.ExpressionInitializer(apply_expr))
 
-    elif isinstance(real_type, (tp.TStruct, tp.TVector)):
+    elif isinstance(real_type, (tp.Struct, tp.Vector)):
         apply_expr = apply_c_fun(
             current_site, lookup_serialize(real_type),
             [ctree.mkAddressOf(current_site, current_expr)], attr_value_t)
         return ctree.AssignStatement(current_site, target_expr,
                                      ctree.ExpressionInitializer(apply_expr))
-    elif isinstance(real_type, tp.TTrait):
+    elif isinstance(real_type, tp.Trait):
         id_infos = expr.mkLit(current_site, '_id_infos',
-                              tp.TPtr(tp.TNamed('_id_info_t', const = True)))
+                              tp.Ptr(tp.Named('_id_info_t', const = True)))
         identity_expr = ctree.StructMember(current_site, current_expr, "id",
-                                           tp.TNamed("_identity_t"), ".")
+                                           tp.Named("_identity_t"), ".")
         apply_expr = apply_c_fun(current_site, "_serialize_identity",
                                  [id_infos, identity_expr], attr_value_t)
         return ctree.AssignStatement(current_site, target_expr,
                                      ctree.ExpressionInitializer(apply_expr))
-    elif isinstance(real_type, tp.THook):
+    elif isinstance(real_type, tp.Hook):
         id_infos = expr.mkLit(current_site,
                               '_hook_id_infos' if objects.Device.hooks
                               else 'NULL',
-                              tp.TPtr(tp.TNamed('_id_info_t', const = True)))
+                              tp.Ptr(tp.Named('_id_info_t', const = True)))
         apply_expr = apply_c_fun(current_site, "_serialize_identity",
                                  [id_infos, current_expr], attr_value_t)
         return ctree.AssignStatement(current_site, target_expr,
@@ -224,7 +224,7 @@ def deserialize(real_type, current_expr, target_expr, error_out):
     current_site = current_expr.site
     def construct_assign_apply(attr_typ, intype, mod_apply_expr=lambda x: x):
         check_expr = apply_c_fun(current_site, 'SIM_attr_is_' + attr_typ,
-                                 [current_expr], tp.TBool())
+                                 [current_expr], tp.Bool())
         apply_expr = mod_apply_expr(apply_c_fun(current_site,
                                                 'SIM_attr_' + attr_typ,
                                                 [current_expr], intype))
@@ -240,7 +240,7 @@ def deserialize(real_type, current_expr, target_expr, error_out):
                 current_site,
                 ctree.mkCast(current_site,
                              ctree.mkAddressOf(current_site, target_expr),
-                             tp.TPtr(real_type)))
+                             tp.Ptr(real_type)))
 
         return ctree.mkIf(current_site,
                           check_expr,
@@ -252,7 +252,7 @@ def deserialize(real_type, current_expr, target_expr, error_out):
     def addressof_target_unconst():
         base = ctree.mkAddressOf(current_site, target_expr)
         if tp.deep_const(real_type):
-            base = ctree.mkCast(current_site, base, tp.TPtr(tp.void))
+            base = ctree.mkCast(current_site, base, tp.Ptr(tp.void))
         return base
 
     def construct_subcall(apply_expr):
@@ -263,7 +263,7 @@ def deserialize(real_type, current_expr, target_expr, error_out):
             ctree.ExpressionInitializer(apply_expr))
         check_expr = ctree.mkLit(current_site,
                                  f'{sub_success_arg.read()} != Sim_Set_Ok',
-                                 tp.TBool())
+                                 tp.Bool())
         return ctree.mkCompound(current_site,
                                 [sub_success_decl, assign_stmt,
                                  ctree.mkIf(current_site, check_expr,
@@ -279,18 +279,18 @@ def deserialize(real_type, current_expr, target_expr, error_out):
         else:
             def mod_apply_expr(expr):
                 return expr
-        return construct_assign_apply("integer", tp.TInt(64, True),
+        return construct_assign_apply("integer", tp.Int(64, True),
                                       mod_apply_expr)
-    elif isinstance(real_type, tp.TBool):
+    elif isinstance(real_type, tp.Bool):
         return construct_assign_apply("boolean", real_type)
-    elif isinstance(real_type, tp.TFloat):
+    elif isinstance(real_type, tp.Float):
         return construct_assign_apply("floating", real_type)
-    elif isinstance(real_type, tp.TArray):
+    elif isinstance(real_type, tp.Array):
         (base, dimsizes, sizeof_base,
          dimsizes_expr) = prepare_array_de_serialization(current_site,
                                                          real_type)
         elem_deserializer = expr.mkLit(current_site, lookup_deserialize(base),
-                                       tp.TPtr(deserializer_t))
+                                       tp.Ptr(deserializer_t))
         # elems_are_bytes informs if the final dimension may either be
         # deserialized as a list or a data attribute value.
         # This is true for all integer types of width 8 bits
@@ -303,19 +303,19 @@ def deserialize(real_type, current_expr, target_expr, error_out):
              ctree.mkIntegerLiteral(current_site, len(dimsizes)),
              elem_deserializer, elems_are_bytes], set_error_t)
         return construct_subcall(apply_expr)
-    elif isinstance(real_type, (tp.TStruct, tp.TVector)):
+    elif isinstance(real_type, (tp.Struct, tp.Vector)):
         apply_expr = apply_c_fun(
             current_site, lookup_deserialize(real_type),
             [current_expr, addressof_target_unconst()],
             set_error_t)
         return construct_subcall(apply_expr)
-    elif isinstance(real_type, tp.TTrait):
+    elif isinstance(real_type, tp.Trait):
         id_info_ht = expr.mkLit(current_site, '&_id_info_ht',
-                                tp.TPtr(tp.TNamed('ht_str_table_t')))
+                                tp.Ptr(tp.Named('ht_str_table_t')))
         assert dml.globals.object_trait
         if real_type.trait is dml.globals.object_trait:
             object_vtable_array = expr.mkLit(current_site, '_object_vtables',
-                                             tp.TPtr(tp.TPtr(tp.void, const=True)))
+                                             tp.Ptr(tp.Ptr(tp.void, const=True)))
             apply_expr = apply_c_fun(
                 current_site, '_deserialize_object_trait_reference',
                 [id_info_ht, object_vtable_array,
@@ -326,7 +326,7 @@ def deserialize(real_type, current_expr, target_expr, error_out):
             vtable_ht = expr.mkLit(current_site,
                                    'NULL' if real_type.trait.empty()
                                    else f'&_{tp.cident(vtable_name)}_vtable_ht',
-                                   tp.TPtr(tp.TNamed('ht_int_table_t')))
+                                   tp.Ptr(tp.Named('ht_int_table_t')))
             apply_expr = apply_c_fun(
                 current_site, '_deserialize_trait_reference',
                 [id_info_ht, vtable_ht,
@@ -334,15 +334,15 @@ def deserialize(real_type, current_expr, target_expr, error_out):
                  current_expr, addressof_target_unconst()],
                 set_error_t)
         return construct_subcall(apply_expr)
-    elif isinstance(real_type, tp.THook):
+    elif isinstance(real_type, tp.Hook):
         id_info_ht = expr.mkLit(current_site,
                                 '&_hook_id_info_ht'
                                 if objects.Device.hooks else 'NULL',
-                                tp.TPtr(tp.TNamed('ht_str_table_t')))
+                                tp.Ptr(tp.Named('ht_str_table_t')))
         hook_aux_infos = expr.mkLit(current_site,
                                     '_hook_aux_infos'
                                     if objects.Device.hooks else 'NULL',
-                                    tp.TPtr(const_void))
+                                    tp.Ptr(const_void))
         from .codegen import get_type_sequence_info
         expected_typ_uniq = ctree.mkIntegerConstant(
             current_site,
@@ -367,24 +367,24 @@ def map_dmltype_to_attrtype(site, dmltype):
     # stored in integer attributes
     if isinstance(real_type, tp.IntegerType):
         return 'i'
-    if isinstance(real_type, tp.TBool):
+    if isinstance(real_type, tp.Bool):
         return 'b'
-    if isinstance(real_type, tp.TFloat):
+    if isinstance(real_type, tp.Float):
         return 'f'
-    if isinstance(real_type, tp.TStruct):
+    if isinstance(real_type, tp.Struct):
         return '[%s]' % "".join([map_dmltype_to_attrtype(site, mt)
                                  for (_, mt) in real_type.members])
-    if isinstance(real_type, tp.TArray):
+    if isinstance(real_type, tp.Array):
         assert real_type.size.constant
         arr_attr_type = map_dmltype_to_attrtype(site, real_type.base)
         arr_length = expr_intval(real_type.size)
         # Byte arrays may use data values
         or_data = '|d' * (real_type.base.is_int and real_type.base.bits == 8)
         return '[%s{%s}]' % (arr_attr_type, arr_length) + or_data
-    if isinstance(real_type, (tp.TTrait, tp.THook)):
+    if isinstance(real_type, (tp.Trait, tp.Hook)):
         return '[s[i*]]'
     # TODO should be implemented
-    #if isinstance(real_type, tp.TVector):
+    #if isinstance(real_type, tp.Vector):
         # return '[%s*]' % (map_dmltype_to_attrtype(site, real_type.base))
     raise ICE(site, 'unserializable type: %r' % (dmltype,))
 
@@ -393,21 +393,21 @@ def mark_for_serialization(site, dmltype):
     calls of serialize/deserialize to result in valid C are generated
     '''
     real_type = tp.safe_realtype(dmltype)
-    if isinstance(real_type, tp.TStruct):
+    if isinstance(real_type, tp.Struct):
         for (_, mt) in real_type.members:
             mark_for_serialization(site, mt)
-    elif isinstance(real_type, tp.TArray):
+    elif isinstance(real_type, tp.Array):
         # Can only serialize constant-size arrays
         if not real_type.size.constant:
             raise messages.ESERIALIZE(site, dmltype)
         mark_for_serialization(site, real_type.base)
-    elif isinstance(real_type, tp.TTrait):
+    elif isinstance(real_type, tp.Trait):
         dml.globals.serialized_traits.add(real_type.trait)
-    elif isinstance(real_type, tp.THook):
+    elif isinstance(real_type, tp.Hook):
         real_type.validate(dmltype.declaration_site or site)
         from .codegen import get_type_sequence_info
         get_type_sequence_info(real_type.msg_types, create_new=True)
-    elif not isinstance(real_type, (tp.IntegerType, tp.TBool, tp.TFloat)):
+    elif not isinstance(real_type, (tp.IntegerType, tp.Bool, tp.Float)):
         raise messages.ESERIALIZE(site, dmltype)
 
 # generate a part of the function name from a description of the dmltype
@@ -430,31 +430,31 @@ def mark_for_serialization(site, dmltype):
 # Trait references are an example of such a type.
 def type_signature(dmltype, is_for_serialization):
     dmltype = tp.realtype(dmltype)
-    if isinstance(dmltype, tp.TLong):
+    if isinstance(dmltype, tp.Long):
         return f'IL{"s" if dmltype.signed else "u"}'
-    if isinstance(dmltype, tp.TSize):
+    if isinstance(dmltype, tp.Size):
         return f'IS{"s" if dmltype.signed else "u"}'
     if isinstance(dmltype, tp.IntegerType):
         return 'I%d%s%s' % (dmltype.bits,
                             dmltype.byte_order[0] if dmltype.is_endian else "h",
                             "s" if dmltype.signed else "u")
-    if isinstance(dmltype, tp.TBool):
+    if isinstance(dmltype, tp.Bool):
         return 'B'
-    if isinstance(dmltype, tp.TFloat):
+    if isinstance(dmltype, tp.Float):
         return {'double': 'Fd', 'float': 'Fs'}[dmltype.name]
-    if isinstance(dmltype, tp.TStruct):
+    if isinstance(dmltype, tp.Struct):
         return 'S' + dmltype.label
-    if isinstance(dmltype, tp.TArray):
+    if isinstance(dmltype, tp.Array):
         assert dmltype.size.constant
         arr_attr_type = type_signature(dmltype.base, is_for_serialization)
         arr_length = expr_intval(dmltype.size)
         return 'A%d%s' % (arr_length, arr_attr_type)
-    if isinstance(dmltype, tp.TVector):
+    if isinstance(dmltype, tp.Vector):
         return 'V%s' % type_signature(dmltype.base, is_for_serialization)
-    if isinstance(dmltype, tp.TTrait):
+    if isinstance(dmltype, tp.Trait):
         return 'T' + (tp.cident(dmltype.trait.name)
                       if not is_for_serialization else '')
-    if isinstance(dmltype, tp.THook):
+    if isinstance(dmltype, tp.Hook):
         from .codegen import get_type_sequence_info
         suffix = (str(get_type_sequence_info(dmltype.msg_types).uniq)
                   if not is_for_serialization else '')
@@ -498,14 +498,14 @@ def generate_serialize(real_type):
         f"<generated serialization function for {real_type}>")
     function_name = "DML_serialize_%s" % type_signature(real_type, True)
 
-    in_arg_ty = tp.TPtr(real_type)
-    (_, in_arg_uncasted) = declare_variable(site, "_in", tp.TPtr(const_void))
+    in_arg_ty = tp.Ptr(real_type)
+    (_, in_arg_uncasted) = declare_variable(site, "_in", tp.Ptr(const_void))
     (in_arg_decl, in_arg) = declare_variable(
         site, "in", in_arg_ty, ctree.mkCast(site, in_arg_uncasted, in_arg_ty))
     (out_arg_decl, out_arg) = declare_variable(site, "out", attr_value_t)
     function_decl = "attr_value_t %s(%s)" % (
         function_name,
-        tp.TPtr(const_void).declaration("_in"))
+        tp.Ptr(const_void).declaration("_in"))
     serialize_prototypes.append(function_decl)
 
     func_code = output.StrOutput()
@@ -514,18 +514,18 @@ def generate_serialize(real_type):
         # cast void* inarg to the correct type
         in_arg_decl.toc()
         out_arg_decl.toc()
-        if isinstance(real_type, tp.TStruct):
+        if isinstance(real_type, tp.Struct):
             sources = (
                 (mkSubRefLit(
-                    site, in_arg, name or tp.TStruct.anon_member_cident(i),
+                    site, in_arg, name or tp.Struct.anon_member_cident(i),
                     typ, "->"),
                  tp.safe_realtype(typ))
                 for (i, (name, typ)) in enumerate(real_type.members))
             serialize_sources_to_list(site, sources, out_arg)
-        elif isinstance(real_type, tp.TVector):
+        elif isinstance(real_type, tp.Vector):
             raise ICE(site, "TODO: serialize vector")
-        elif isinstance(real_type, (tp.IntegerType, tp.TBool, tp.TFloat, tp.TTrait,
-                                    tp.TArray, tp.THook)):
+        elif isinstance(real_type, (tp.IntegerType, tp.Bool, tp.Float, tp.Trait,
+                                    tp.Array, tp.Hook)):
             serialize(real_type,
                       ctree.mkDereference(site, in_arg),
                       out_arg).toc()
@@ -569,7 +569,7 @@ def deserialize_list_to_targets(site, val_attr, targets, error_out_at_index,
             statements.append(sub_deserialize)
         else:
             is_not_nil_expr = expr.mkLit(site, '!SIM_attr_is_nil(_imm_attr)',
-                                         tp.TBool())
+                                         tp.Bool())
             statements.append(ctree.mkIf(
                 site, is_not_nil_expr,
                 ctree.mkCompound(
@@ -581,10 +581,10 @@ def deserialize_list_to_targets(site, val_attr, targets, error_out_at_index,
                         + f' during {error_context}' * bool(error_context)
                     ))))
     deserialization = ctree.mkCompound(site, statements)
-    attr_is_list = apply_c_fun(site, "SIM_attr_is_list", [val_attr], tp.TBool())
+    attr_is_list = apply_c_fun(site, "SIM_attr_is_list", [val_attr], tp.Bool())
 
     attr_list_size = apply_c_fun(site, "SIM_attr_list_size", [val_attr],
-                                 tp.TInt(32, False))
+                                 tp.Int(32, False))
     attr_list_size_check = ctree.mkEquals(
         site, attr_list_size,
         ctree.mkIntegerConstant(site, len(targets), False))
@@ -607,16 +607,16 @@ def generate_deserialize(real_type):
         f"<generated deserialization function for {real_type}>")
     function_name = "DML_deserialize_%s" % type_signature(real_type, False)
 
-    out_arg_ty = tp.TPtr(real_type)
+    out_arg_ty = tp.Ptr(real_type)
     (_, in_arg) = declare_variable(site, "in", attr_value_t)
-    (_, out_arg_uncasted) = declare_variable(site, "_out", tp.TPtr(tp.void))
+    (_, out_arg_uncasted) = declare_variable(site, "_out", tp.Ptr(tp.void))
     (out_arg_decl, out_arg) = declare_variable(
         site, "out", out_arg_ty,
         ctree.mkCast(site, out_arg_uncasted, out_arg_ty))
     function_decl = "set_error_t %s(%s, %s)" % (
         function_name,
         attr_value_t.declaration("in"),
-        tp.TPtr(tp.void).declaration("_out"))
+        tp.Ptr(tp.void).declaration("_out"))
     serialize_prototypes.append(function_decl)
 
     func_code = output.StrOutput()
@@ -633,18 +633,18 @@ def generate_deserialize(real_type):
                     ctree.mkInline(site, f'SIM_attribute_error("{msg}");'))
             stmts.append(ctree.mkInline(site, 'goto _exit;'))
             return stmts
-        if isinstance(real_type, tp.TStruct):
+        if isinstance(real_type, tp.Struct):
             (tmp_out_decl, tmp_out_ref) = declare_variable(
-                site, "_tmp_out", tp.TPtr(real_type),
+                site, "_tmp_out", tp.Ptr(real_type),
                 ctree.mkNew(site, real_type))
             cleanup_ref = (tmp_out_ref if not tp.deep_const(real_type)
-                           else ctree.mkCast(site, tmp_out_ref, tp.TPtr(tp.void)))
+                           else ctree.mkCast(site, tmp_out_ref, tp.Ptr(tp.void)))
             cleanup.append(ctree.mkDelete(site, cleanup_ref))
             tmp_out_decl.toc()
             targets = tuple(
                 (mkSubRefLit(
                     site, tmp_out_ref,
-                    name or tp.TStruct.anon_member_cident(i), typ, "->"),
+                    name or tp.Struct.anon_member_cident(i), typ, "->"),
                  tp.conv_const(real_type.const, tp.safe_realtype(typ)))
                 for (i, (name, typ)) in enumerate(real_type.members))
             def error_out_at_index(_i, exc, msg):
@@ -658,10 +658,10 @@ def generate_deserialize(real_type):
                                         ctree.mkDereference(
                                             site, tmp_out_ref))).toc()
 
-        elif isinstance(real_type, tp.TVector):
+        elif isinstance(real_type, tp.Vector):
             raise ICE(site, "TODO: serialize vector")
-        elif isinstance(real_type, (tp.IntegerType, tp.TBool, tp.TFloat, tp.TTrait,
-                                    tp.TArray, tp.THook)):
+        elif isinstance(real_type, (tp.IntegerType, tp.Bool, tp.Float, tp.Trait,
+                                    tp.Array, tp.Hook)):
             deserialize(real_type,
                         in_arg,
                         ctree.mkDereference(site, out_arg),

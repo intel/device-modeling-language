@@ -63,7 +63,7 @@ def require_dev(site):
 
 def maybe_dev_arg(independent):
     return ([] if independent
-            else [('_dev', tp.TDevice(structtype(dml.globals.device)))])
+            else [('_dev', tp.Device(structtype(dml.globals.device)))])
 
 
 
@@ -165,7 +165,7 @@ def node_storage_type_dml12(node, site):
         if expr_util.param_defined(node, 'allocate_type'):
             allocate_type = param_str(node, 'allocate_type')
             if allocate_type == "string":
-                return tp.TPtr(tp.TNamed('char'))
+                return tp.Ptr(tp.Named('char'))
             else:
                 return tp.parse_type(allocate_type)
         else:
@@ -179,23 +179,23 @@ def node_storage_type_dml12(node, site):
     elif node.objtype == 'implement':
         if not breaking_changes.dml12_remove_misc_quirks.enabled:
             typename = param_str(node, 'c_type')
-            t = tp.TNamed(typename)
+            t = tp.Named(typename)
             t.declaration_site = node.site
             return t
         else:
             return None
     elif node.objtype == 'interface':
         typename = param_str(node, 'c_type')
-        return tp.TPtr(tp.TNamed(typename, const=True))
+        return tp.Ptr(tp.Named(typename, const=True))
     elif node.objtype == 'device':
-        return tp.TDevice(structtype(node))
+        return tp.Device(structtype(node))
     elif node.objtype == 'register':
         # Preferably, this should never happen.  But unfortunately,
         # we have to handle this case, which is triggered when someone (e.g.
         # method get from template register) writes 'typeof($reg)' where
         # '$reg' is a register with explicit fields.
         signed = expr_util.param_bool(node, 'signed')
-        return tp.TInt(expr_util.param_int(node, 'bitsize'), signed)
+        return tp.Int(expr_util.param_int(node, 'bitsize'), signed)
     elif node.objtype == 'field':
         # TODO: this access to ctree is unholy. We should probably
         # make bitsize a property of the field object instead, but for
@@ -208,7 +208,7 @@ def node_storage_type_dml12(node, site):
         msb = expr_util.expr_intval(param_expr(node, 'msb', indices))
         lsb = expr_util.expr_intval(param_expr(node, 'lsb', indices))
         signed = expr_util.param_bool(node, 'signed')
-        return tp.TInt(msb - lsb + 1, signed)
+        return tp.Int(msb - lsb + 1, signed)
     elif node.objtype in {'bank', 'group', 'event', 'port', 'connect',
                           'subdevice'}:
         return None

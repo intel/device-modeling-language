@@ -252,7 +252,7 @@ class NullConstant(Expression):
     constant = True
     value = None
     priority = 1000
-    type = tp.TPtr(tp.void, const=True)
+    type = tp.Ptr(tp.void, const=True)
     def __str__(self):
         return 'NULL'
     def read(self):
@@ -372,7 +372,7 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
                     raise ECONSTP(site, logref, kind + " call") from e
                 raise
         if (on_ptr_to_stack
-            and isinstance(tp.safe_realtype_shallow(ptype), tp.TPtr)
+            and isinstance(tp.safe_realtype_shallow(ptype), tp.Ptr)
             and arg.is_pointer_to_stack_allocation):
             on_ptr_to_stack(arg)
         args.append(arg)
@@ -411,13 +411,13 @@ def mkApplyInits(site, fun, inits, location, scope):
 
     try:
         funtype = tp.realtype(funtype)
-        if isinstance(funtype, tp.TPtr) and isinstance(funtype.base, tp.TFunction):
+        if isinstance(funtype, tp.Ptr) and isinstance(funtype.base, tp.Function):
             # Pointers to functions are the same as the functions
             funtype = tp.realtype(funtype.base)
     except tp.DMLUnknownType:
         raise ETYPE(site, funtype)
 
-    if not isinstance(funtype, tp.TFunction):
+    if not isinstance(funtype, tp.Function):
         raise EAPPLY(fun)
 
     args = typecheck_inarg_inits(
@@ -436,13 +436,13 @@ def mkApply(site, fun, args):
 
     try:
         funtype = tp.realtype(funtype)
-        if isinstance(funtype, tp.TPtr) and isinstance(funtype.base, tp.TFunction):
+        if isinstance(funtype, tp.Ptr) and isinstance(funtype.base, tp.Function):
             # Pointers to functions are the same as the functions
             funtype = tp.realtype(funtype.base)
     except tp.DMLUnknownType:
         raise ETYPE(site, funtype)
 
-    if not isinstance(funtype, tp.TFunction):
+    if not isinstance(funtype, tp.Function):
         raise EAPPLY(fun)
 
     if funtype.varargs and len(args) > len(funtype.input_types):

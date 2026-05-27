@@ -182,7 +182,7 @@ def mkglobals(stmts):
                     if (breaking_changes.dml12_remove_misc_quirks.enabled
                         and not site.filename().endswith('simics-api.dml')):
                         report(EEXTERN(stmt.site))
-                    typ = tp.TUnknown()
+                    typ = tp.Unknown()
                 else:
                     (struct_defs, typ) = eval_type(
                         typ, site, None, global_scope, extern=True,
@@ -301,10 +301,10 @@ def type_deps(t, include_structs, expanded_typedefs):
 
     expanded_typedefs is used to avoid infinite recursion.
     '''
-    if isinstance(t, tp.TNamed):
+    if isinstance(t, tp.Named):
         if t.c not in tp.typedefs:
             raise ETYPE(t.declaration_site, t)
-        if isinstance(tp.typedefs[t.c], tp.TStruct):
+        if isinstance(tp.typedefs[t.c], tp.Struct):
             if include_structs:
                 if t.c in expanded_typedefs:
                     return [t.c]
@@ -321,7 +321,7 @@ def type_deps(t, include_structs, expanded_typedefs):
                 return []
         else:
             return [t.c]
-    elif isinstance(t, tp.TStruct):
+    elif isinstance(t, tp.Struct):
         t.resolve()
         deps = []
         if include_structs:
@@ -329,17 +329,17 @@ def type_deps(t, include_structs, expanded_typedefs):
         for (_, mt) in t.members:
             deps.extend(type_deps(mt, True, expanded_typedefs))
         return deps
-    elif isinstance(t, tp.TArray):
+    elif isinstance(t, tp.Array):
         return type_deps(t.base, True, expanded_typedefs)
-    elif isinstance(t, (tp.TPtr, tp.TVector)):
+    elif isinstance(t, (tp.Ptr, tp.Vector)):
         return type_deps(t.base, False, expanded_typedefs)
-    elif isinstance(t, tp.TFunction):
+    elif isinstance(t, tp.Function):
         return ([dep for pt in t.input_types
                  for dep in type_deps(pt, False, expanded_typedefs)]
                 + type_deps(t.output_type, False, expanded_typedefs))
-    elif isinstance(t, (tp.IntegerType, tp.TVoid, tp.TBool, tp.TFloat, tp.TTrait)):
+    elif isinstance(t, (tp.IntegerType, tp.Void, tp.Bool, tp.Float, tp.Trait)):
         return []
-    elif isinstance(t, tp.TExternStruct):
+    elif isinstance(t, tp.ExternStruct):
         # extern structs are assumed to be self-contained
         return []
     else:
@@ -1289,7 +1289,7 @@ def eval_precond(cond_ast, obj, global_scope):
         cond = as_bool(cond)
         if cond.constant:
             # guaranteed by as_bool()
-            assert isinstance(cond.ctype(), tp.TBool)
+            assert isinstance(cond.ctype(), tp.Bool)
             return cond.value
         else:
             report(ENCONST(cond, cond))
@@ -2372,7 +2372,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
     elif obj.objtype == 'interface':
         typename = param_str(obj, 'c_type' if dml.globals.dml_version == (1, 2)
                              else '_c_type')
-        t = tp.TPtr(tp.TNamed(typename, const=True))
+        t = tp.Ptr(tp.Named(typename, const=True))
         t.declaration_site = obj.site
         try:
             tp.realtype(t)
@@ -2463,7 +2463,7 @@ def param_linear_int(param):
     uint64 or int64.
     '''
     class IndexVar(Expression):
-        type = tp.TInt(64, True)
+        type = tp.Int(64, True)
         @slotsmeta.auto_init
         def __init__(self, site, variables): pass
 
@@ -2729,7 +2729,7 @@ class UninitializedParamExpr(objects.ParamExpr):
 
 class EventClassExpr(ctree.LValue):
     slots = ('node', 'indices')
-    type = tp.TPtr(tp.TNamed('event_class_t'), const=True)
+    type = tp.Ptr(tp.Named('event_class_t'), const=True)
     @auto_init
     def __init__(self, site, node, indices): pass
     def __str__(self):
@@ -2889,7 +2889,7 @@ class ConfAttrParentObjectClassParamExpr(objects.ParamExpr):
             lit = f'&{port_class_ident(object_parent)}'
         else:
             lit = 'NULL'
-        self.cached = mkLit(self.site, lit, tp.TPtr(tp.TPtr(tp.TNamed('conf_class_t'))))
+        self.cached = mkLit(self.site, lit, tp.Ptr(tp.Ptr(tp.Named('conf_class_t'))))
         return self.cached
 
 def need_port_proxy_attrs(port):
@@ -2926,12 +2926,12 @@ class ConfAttrParentObjectProxyInfoParamExpr(objects.ParamExpr):
                 '(_dml_attr_parent_obj_proxy_info_t) { .valid = true,'
                 + f'.is_bank = {is_bank}, .is_array = {is_array}, '
                 + f'.portname = "{object_parent.name}" }}',
-                tp.TNamed('_dml_attr_parent_obj_proxy_info_t'))
+                tp.Named('_dml_attr_parent_obj_proxy_info_t'))
         else:
             self.cached = mkLit(
                 self.site,
                 '(_dml_attr_parent_obj_proxy_info_t) { .valid = false }',
-                tp.TNamed('_dml_attr_parent_obj_proxy_info_t'))
+                tp.Named('_dml_attr_parent_obj_proxy_info_t'))
         return self.cached
 
 class InterfacesDocParamExpr(objects.ParamExpr):
