@@ -3,6 +3,7 @@
 
 import simics
 import testenv
+import conf
 obj = testenv.instantiate()
 conf.sim.stop_on_error = False
 if not obj.runtest:

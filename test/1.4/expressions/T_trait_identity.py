@@ -4,6 +4,7 @@
 import simics
 import stest
 import testenv
+import conf
 obj = testenv.instantiate()
 conf.sim.stop_on_error = False
 

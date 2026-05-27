@@ -4,6 +4,7 @@
 import pyobj
 import stest
 import simics
+import conf
 
 calls = []
 class signal_stub(pyobj.ConfObject): pass

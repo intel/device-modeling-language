@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 import simics
 import stest
+import conf
 
 obj1 = simics.pre_conf_object('obj1', 'test')
 obj2 = simics.pre_conf_object('obj2', 'test')

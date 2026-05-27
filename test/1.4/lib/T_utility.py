@@ -5,6 +5,7 @@ import stest
 import dev_util
 import sim_commands
 import testenv
+import conf
 obj = testenv.instantiate()
 
 [read_write,

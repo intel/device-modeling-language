@@ -3,6 +3,7 @@
 
 import simics
 import stest
+import conf
 
 simics.run_command("peq")
 conf.obj.cancel_afters = None

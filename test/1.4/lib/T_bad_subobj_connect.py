@@ -3,6 +3,7 @@
 
 import simics
 import stest
+import conf
 conf.sim.stop_on_error = False
 try:
     simics.SIM_load_module('dml-test-bad_subobj_connect')

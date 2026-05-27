@@ -4,6 +4,7 @@
 import sim_commands
 import stest
 import testenv
+import conf
 obj = testenv.instantiate()
 
 class LogCapture(object):

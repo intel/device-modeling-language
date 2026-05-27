@@ -4,6 +4,7 @@
 import simics
 import stest
 import testenv
+import conf
 obj = testenv.instantiate()
 
 # check the initial values where applicable

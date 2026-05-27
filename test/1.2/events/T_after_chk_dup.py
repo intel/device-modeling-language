@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 from simicsutils.host import batch_suffix
 import testenv
+import conf
 obj = testenv.instantiate()
 
 cpu = simics.SIM_create_object("clock", "clock", [["freq_mhz", 1]])

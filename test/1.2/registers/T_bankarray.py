@@ -4,6 +4,7 @@
 import simics
 import dev_util
 from stest import expect_equal
+import conf
 import testenv
 obj = testenv.instantiate()
 

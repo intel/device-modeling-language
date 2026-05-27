@@ -3,6 +3,7 @@
 
 import simics
 import stest
+import conf
 
 simics.SIM_continue(1000000)
 

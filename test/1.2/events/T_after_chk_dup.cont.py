@@ -3,6 +3,7 @@
 
 import simics
 import stest
+import conf
 
 simics.SIM_run_command("peq")
 print("Running 2 s")
