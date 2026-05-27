@@ -14,7 +14,7 @@ from . import breaking_changes, provisional
 from . import logging
 from .logging import ICE, report
 from .codegen import c_extra_inargs, c_rettype, declarations, eval_type
-from .ctree import *
+from . import ctree as c
 from .expr import mkLit, NonValue
 from .expr_util import defined
 from .messages import *
@@ -236,9 +236,9 @@ class TraitMethod(TraitVTableItem):
                 [default_trait] = self.default_traits
                 default_method = default_trait.method_impls[self.name]
                 [(name, typ)] = implicit_inargs
-                default = ExpressionSymbol(
+                default = c.ExpressionSymbol(
                     'default',
-                    TraitMethodDirect(
+                    c.TraitMethodDirect(
                         default_method.site,
                         mkLit(site, tp.cident(name), typ),
                         default_method),
@@ -261,18 +261,18 @@ class TraitMethod(TraitVTableItem):
             body = codegen.codegen_method(
                 self.astbody.site, self.inp, self.outp, self.throws,
                 self.independent, memoization, self.astbody, default,
-                Location(dml.globals.device, ()), scope, self.rbrace_site)
+                c.Location(dml.globals.device, ()), scope, self.rbrace_site)
 
             downcast_path = self.downcast_path()
             if downcast_path:
-                trait_decl = mkInline(
+                trait_decl = c.mkInline(
                     site,
                     '%s UNUSED = DOWNCAST(%s, %s, %s);' % (
                         self.trait.type().declaration('_' + tp.cident(self.trait.name)),
                         '_' + tp.cident(self.vtable_trait.name),
                         tp.cident(self.trait.name),
                         '.'.join(tp.cident(t.name) for t in downcast_path)))
-                body = mkCompound(site, [trait_decl, body])
+                body = c.mkCompound(site, [trait_decl, body])
             return body
 
 def merge_ancestor_vtables(ancestors, site):
@@ -693,7 +693,7 @@ class ObjTraits(SubTrait):
         assert isinstance(indices, tuple)
         for trait in self.direct_parents:
             if name in trait.method_impl_traits:
-                ref = ObjTraitRef(site, self.node, trait, indices)
+                ref = c.ObjTraitRef(site, self.node, trait, indices)
                 method = trait.lookup(name, ref, site)
                 assert method
                 return method
@@ -848,12 +848,12 @@ class Trait(SubTrait):
         for name in self.members():
             # This is very hacky, but works well
             try:
-                expr = mkSubRef(self.site, selfref, name, '.')
+                expr = c.mkSubRef(self.site, selfref, name, '.')
             except EINDEPENDENTVIOL:
-                expr = InvalidSymbol(self.site, name, EINDEPENDENTVIOL)
-            s.add(ExpressionSymbol(name, expr, self.site))
+                expr = c.InvalidSymbol(self.site, name, EINDEPENDENTVIOL)
+            s.add(c.ExpressionSymbol(name, expr, self.site))
         # grammar prohibits name collision on 'this'
-        s.add(ExpressionSymbol('this', selfref, self.site))
+        s.add(c.ExpressionSymbol('this', selfref, self.site))
         return s
 
     def empty(self):
@@ -915,7 +915,7 @@ class Trait(SubTrait):
         '''Look up a member of this trait; return a referencing expression or
         None. expr is an expression referencing this trait.'''
         if name == 'templates':
-            return mkTraitTemplatesRef(site, self, expr)
+            return c.mkTraitTemplatesRef(site, self, expr)
         if name in self.method_impl_traits:
             impl_traits = self.method_impl_traits[name]
             if not all(impl_trait.method_impls[name].overridable
@@ -930,32 +930,32 @@ class Trait(SubTrait):
                 [impl_trait] = impl_traits
                 impl = impl_trait.method_impls[name]
                 if self is not impl_trait:
-                    expr = TraitUpcast(site, expr, impl_trait)
+                    expr = c.TraitUpcast(site, expr, impl_trait)
                 if impl_trait is not impl.vtable_trait:
-                    expr = TraitUpcast(site, expr, impl.vtable_trait)
-                return TraitMethodDirect(site, expr, impl)
+                    expr = c.TraitUpcast(site, expr, impl.vtable_trait)
+                return c.TraitMethodDirect(site, expr, impl)
         if name in self.vtable_methods:
             (_, inp, outp, throws, independent, _, _) = \
                 self.vtable_methods[name]
-            return TraitMethodIndirect(site, expr, name, inp, outp, throws,
+            return c.TraitMethodIndirect(site, expr, name, inp, outp, throws,
                                        independent)
         if name in self.vtable_params:
             (_, ptype) = self.vtable_params[name]
-            return TraitParameter(site, expr, name, ptype)
+            return c.TraitParameter(site, expr, name, ptype)
         if name in self.vtable_sessions:
             (_, ptype) = self.vtable_sessions[name]
-            return mkDereference(site, TraitSessionRef(site, expr, name, ptype))
+            return c.mkDereference(site, c.TraitSessionRef(site, expr, name, ptype))
         if name in self.vtable_hooks:
             ((_, dimsizes, _), hooktyp) = self.vtable_hooks[name]
             if dimsizes:
-                return TraitHookArrayRef(site, dimsizes, hooktyp, expr, name,
+                return c.TraitHookArrayRef(site, dimsizes, hooktyp, expr, name,
                                          ())
             else:
-                return TraitHookRef(site, (), hooktyp, expr, name, ())
+                return c.TraitHookRef(site, (), hooktyp, expr, name, ())
         vtable_trait = self.ancestor_vtables.get(name, None)
         if vtable_trait:
             return vtable_trait.lookup(
-                name, TraitUpcast(site, expr, vtable_trait), site)
+                name, c.TraitUpcast(site, expr, vtable_trait), site)
         if name in self.reserved_symbols:
             (kind, decl_site) = self.reserved_symbols[name]
             return ReservedSymbol(site, name, kind, self.name, decl_site)

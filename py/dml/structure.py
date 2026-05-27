@@ -20,7 +20,7 @@ from . import codegen
 from .codegen import declarations, eval_type
 from .symtab import global_scope
 from .expr import Expression, mkLit, mkNullConstant, NonValue, StaticIndex
-from .ctree import *
+from . import ctree as c
 from .expr_util import (
     defined, param_bool, param_defined, param_expr,
     param_expr_site, param_int, param_str,
@@ -55,7 +55,7 @@ def check_constant_expr(expr):
     proper value, or (recursively) a list of proper values; raise an
     error otherwise.'''
     if isinstance(expr, NonValue):
-        if isinstance(expr, List):
+        if isinstance(expr, c.List):
             for sub in expr.value:
                 check_constant_expr(sub)
         else:
@@ -122,7 +122,7 @@ def mkglobals(stmts):
                     expr, None, global_scope)
                 check_constant_expr(expr)
                 if expr.constant:
-                    global_scope.add(ExpressionSymbol(name, expr, site))
+                    global_scope.add(c.ExpressionSymbol(name, expr, site))
                 else:
                     raise ENCONST(expr, expr)
         except DMLError as e:
@@ -192,7 +192,7 @@ def mkglobals(stmts):
                 if name in externs:
                     extern_clashes.setdefault(name, []).append((site, typ))
                 else:
-                    new_symbols.append(LiteralSymbol(name, typ, site))
+                    new_symbols.append(c.LiteralSymbol(name, typ, site))
                     externs[name] = (site, typ)
 
             elif stmt[0] == 'extern_typedef':
@@ -220,8 +220,8 @@ def mkglobals(stmts):
                 if len(dml.globals.log_groups) >= 63:
                     report(ELOGGROUPS(site))
                 dml.globals.log_groups.append(name)
-                new_symbols.append(ExpressionSymbol(
-                    name, LogGroup(site, name), site))
+                new_symbols.append(c.ExpressionSymbol(
+                    name, c.LogGroup(site, name), site))
             elif stmt.kind != 'constant': # handled above
                 raise ICE(stmt.site, 'bad AST kind: %s' % (stmt.kind,))
         except DMLError as e:
@@ -855,7 +855,7 @@ def merge_subobj_defs(name, defs, parent):
 
     merged_arrayinfo = []
     if arrayinfo:
-        parent_scope = Location(parent, static_indices(parent))
+        parent_scope = c.Location(parent, static_indices(parent))
         for (dim_i, dim) in enumerate(
                 zip(*(arrayinfo for (_, arrayinfo, _, _) in defs))):
             (idxvar_asts, len_asts) = zip(*dim)
@@ -912,7 +912,7 @@ def method_is_std(node, methname):
 def mkdata(spec, parent):
     site, name, typ, astinit = spec
 
-    parent_scope = Location(parent, static_indices(parent))
+    parent_scope = c.Location(parent, static_indices(parent))
     (struct_defs, dtype) = eval_type(
         typ, site, parent_scope, global_scope)
     dtype = dtype.resolve()
@@ -929,7 +929,7 @@ def mkdata(spec, parent):
 def mksaved(spec, parent):
     site, name, typ, astinit = spec
 
-    parent_scope = Location(parent, static_indices(parent))
+    parent_scope = c.Location(parent, static_indices(parent))
     (struct_defs, dtype) = eval_type(typ, site, parent_scope, global_scope)
     tp.add_late_global_struct_defs(struct_defs)
     dtype.resolve()
@@ -950,7 +950,7 @@ def mksaved(spec, parent):
 
 def mkhook(spec, parent):
     (_, site, name, arraylen_asts, type_asts) = spec
-    parent_scope = Location(parent, static_indices(parent))
+    parent_scope = c.Location(parent, static_indices(parent))
     types = []
     for type_ast in type_asts:
         (struct_defs, dtype) = eval_type(type_ast, site, parent_scope,
@@ -988,7 +988,7 @@ def register_fields(reg):
         for fieldi in itertools.product(
                 *(list(range(sz)) for sz in field.dimsizes[reg.dimensions:])):
             indices = static_indices(reg) + tuple(
-                mkIntegerLiteral(field.site, i) for i in fieldi)
+                c.mkIntegerLiteral(field.site, i) for i in fieldi)
             lsb = param_int(field, 'lsb', indices=indices)
             msb = param_int(field, 'msb', indices=indices)
             if msb < lsb:
@@ -997,7 +997,7 @@ def register_fields(reg):
             # bitsize is defined in terms of lsb and msb, so we
             # don't need to evaluate it across register indices
             bitsize = param_expr(field, 'bitsize',
-                tuple(mkIntegerLiteral(field.site, i)
+                tuple(c.mkIntegerLiteral(field.site, i)
                       for i in (0,) * reg.dimensions + fieldi))
             if not bitsize.constant:
                 # guaranteed by dml-builtins.dml
@@ -1104,12 +1104,12 @@ def make_autoparams(obj, index_vars, index_sites):
     autoparams = {}
 
     if dml.globals.dml_version == (1, 2):
-        autoparams['name'] = SimpleParamExpr(
-            mkStringConstant(site, obj.ident) if obj.ident
-            else mkUndefined(site))
+        autoparams['name'] = c.SimpleParamExpr(
+            c.mkStringConstant(site, obj.ident) if obj.ident
+            else c.mkUndefined(site))
     else:
-        autoparams['_ident'] = SimpleParamExpr(
-            mkStringConstant(site, obj.ident))
+        autoparams['_ident'] = c.SimpleParamExpr(
+            c.mkStringConstant(site, obj.ident))
 
     index_params = ()
     # Handle array information
@@ -1138,34 +1138,34 @@ def make_autoparams(obj, index_vars, index_sites):
             # If in a multi-dimensional array, this will be set to undefined
             # So in 1.2 you can verify if you are in a multi-dimensional
             # array by checking if this is defined
-            autoparams['indexvar'] = SimpleParamExpr(
-                mkStringConstant(
+            autoparams['indexvar'] = c.SimpleParamExpr(
+                c.mkStringConstant(
                     # TODO or maybe 'i'?
                     index_site, '' if index_var is None else index_var))
             autoparams['index'] = index_param
         elif index_vars:
-            autoparams['indexvar'] = SimpleParamExpr(mkUndefined(site))
+            autoparams['indexvar'] = c.SimpleParamExpr(c.mkUndefined(site))
             autoparams['index'] = IndexListParamExpr(site, index_params)
         else:
-            autoparams['indexvar'] = SimpleParamExpr(mkUndefined(site))
-            autoparams['index'] = SimpleParamExpr(mkUndefined(site))
+            autoparams['indexvar'] = c.SimpleParamExpr(c.mkUndefined(site))
+            autoparams['index'] = c.SimpleParamExpr(c.mkUndefined(site))
     else:
         autoparams['indices'] = IndexListParamExpr(site, index_params)
 
     if obj.objtype == 'device':
         with crep.DeviceInstanceContext():
-            autoparams['obj'] = SimpleParamExpr(mkDeviceObject(site))
+            autoparams['obj'] = c.SimpleParamExpr(c.mkDeviceObject(site))
         if dml.globals.dml_version == (1, 2):
             autoparams['banks'] = UninitializedParamExpr(site, 'banks')
         else:
             autoparams['NULL'] = NullParamExpr(site)
-            autoparams['_be_bitorder'] = SimpleParamExpr(
-                mkBoolConstant(site, site.bitorder() == 'be'))
-        autoparams['simics_api_version'] = SimpleParamExpr(
-            mkStringConstant(site, dml.globals.api_version.str))
+            autoparams['_be_bitorder'] = c.SimpleParamExpr(
+                c.mkBoolConstant(site, site.bitorder() == 'be'))
+        autoparams['simics_api_version'] = c.SimpleParamExpr(
+            c.mkStringConstant(site, dml.globals.api_version.str))
         for change in breaking_changes.changes.values():
-            autoparams[f'_breaking_change_{change.ident()}'] = SimpleParamExpr(
-                mkBoolConstant(site, change.enabled))
+            autoparams[f'_breaking_change_{change.ident()}'] = c.SimpleParamExpr(
+                c.mkBoolConstant(site, change.enabled))
         dml.globals.device = obj
 
     elif obj.objtype == 'bank':
@@ -1184,13 +1184,13 @@ def make_autoparams(obj, index_vars, index_sites):
             # If this is an automatic field, create msb/lsb parameter from
             # the size of the register
             if obj.ident:
-                autoparams['explicit'] = SimpleParamExpr(
-                    mkBoolConstant(site, True))
+                autoparams['explicit'] = c.SimpleParamExpr(
+                    c.mkBoolConstant(site, True))
             else:
-                autoparams['name'] = SimpleParamExpr(
+                autoparams['name'] = c.SimpleParamExpr(
                     param_expr(obj.parent, 'name'))
-                autoparams['explicit'] = SimpleParamExpr(
-                    mkBoolConstant(site, False))
+                autoparams['explicit'] = c.SimpleParamExpr(
+                    c.mkBoolConstant(site, False))
 
     elif obj.objtype == 'connect':
         if dml.globals.dml_version == (1, 2):
@@ -1217,14 +1217,14 @@ def make_autoparams(obj, index_vars, index_sites):
     if obj.parent:
         autoparams['parent'] = ParentParamExpr(obj)
     else:
-        autoparams['parent'] = SimpleParamExpr(mkUndefined(obj.site))
+        autoparams['parent'] = c.SimpleParamExpr(c.mkUndefined(obj.site))
     if dml.globals.dml_version != (1, 2):
         if obj.nongroup_parent:
             autoparams['_nongroup_parent'] = NongroupParentParamExpr(obj.site,
                                                                      obj)
         else:
-            autoparams['_nongroup_parent'] = SimpleParamExpr(
-                mkUndefined(obj.site))
+            autoparams['_nongroup_parent'] = c.SimpleParamExpr(
+                c.mkUndefined(obj.site))
 
         autoparams['templates'] = TemplatesParamExpr(obj.site, obj)
 
@@ -1280,15 +1280,15 @@ def eval_precond(cond_ast, obj, global_scope):
     try:
         with logging.ErrorContext(obj, cond_ast.site):
             cond = codegen.codegen_expression(
-                cond_ast, Location(obj, static_indices(obj, cond_ast.site)),
+                cond_ast, c.Location(obj, static_indices(obj, cond_ast.site)),
                 global_scope)
     except DMLError as e:
         report(e)
         return False # whatever
     else:
-        cond = as_bool(cond)
+        cond = c.as_bool(cond)
         if cond.constant:
-            # guaranteed by as_bool()
+            # guaranteed by c.as_bool()
             assert isinstance(cond.ctype(), tp.Bool)
             return cond.value
         else:
@@ -1308,9 +1308,9 @@ class DefaultMethodObj(objects.MethodDefault):
     def __init__(self, node):
         self.node = node
     def default_sym(self, indices):
-        return ExpressionSymbol(
+        return c.ExpressionSymbol(
             'default',
-            mkNodeRef(self.node.site, self.node, indices),
+            c.mkNodeRef(self.node.site, self.node, indices),
             self.node.site)
 
 class DefaultTraitMethod(objects.MethodDefault):
@@ -1333,10 +1333,10 @@ class DefaultTraitMethod(objects.MethodDefault):
             # This is safe; ancestry paths are tuples
             ancestry_path += default_def_trait.ancestry_paths[
                 self.trait_method.vtable_trait][0]
-        return ExpressionSymbol(
+        return c.ExpressionSymbol(
             'default',
-            TraitMethodDirect(
-                site, ObjTraitRef(
+            c.TraitMethodDirect(
+                site, c.ObjTraitRef(
                     site, self.trait_node, self.trait_method.vtable_trait,
                     indices,
                     ancestry_path=ancestry_path),
@@ -1546,7 +1546,7 @@ def process_method_declarations(obj, name, declarations,
 
     (default_map, method_order) = traits.sort_method_implementations(impls)
 
-    location = Location(obj, static_indices(obj))
+    location = c.Location(obj, static_indices(obj))
 
     nonshared_impls = []
 
@@ -1712,7 +1712,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
     # to site. For name collision detection.
     symbols = {param.name: param.site for param in params}
     if dml.globals.dml_version == (1, 4):
-        objname = param_str_fixup(obj, 'name', obj.ident)
+        objname = c.param_str_fixup(obj, 'name', obj.ident)
         if not ident_re.match(objname):
             report(ENAMEID(param_expr_site(obj, 'name'), objname))
             objname = obj.ident
@@ -1723,7 +1723,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
         pnode = obj.get_component('_build_confidentiality')
         if pnode and pnode.objtype == 'parameter':
             val = pnode.get_expr(())
-            if isinstance(val, IntegerConstant) and val.value > 0:
+            if isinstance(val, c.IntegerConstant) and val.value > 0:
                 dml.globals.build_confidentiality = val.value
 
     if obj.objtype == 'register':
@@ -1872,7 +1872,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
     trait_method_impls = traits.merge_method_impl_maps(
         obj.site, explicit_traits)
 
-    obj_scope = Location(obj, static_indices(obj))
+    obj_scope = c.Location(obj, static_indices(obj))
     # Create all method nodes
     for name in sorted(method_asts):
         if dml.globals.dml_version == (1, 2):
@@ -2112,7 +2112,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                 obj.site, [(b, (), b.dimsizes) for b in banks]))
 
             for b in banks:
-                for indices in all_index_exprs(b):
+                for indices in c.all_index_exprs(b):
                     funexpr = param_expr(b, 'function', indices)
                     if defined(funexpr):
                         funnum = expr_util.expr_intval(funexpr)
@@ -2136,14 +2136,14 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                         and global_scope.lookup(p.name) is None):
                         try:
                             global_scope.add(
-                                ExpressionSymbol(p.name, p.get_expr(()), p.site))
+                                c.ExpressionSymbol(p.name, p.get_expr(()), p.site))
                         except DMLError:
                             # handled later
                             pass
 
         # Evaluate all parameters once, to early smoke out non-existing
         # identifiers. TODO: perhaps this should not be done?
-        zero_index = (mkIntegerLiteral(obj.site, 0),)
+        zero_index = (c.mkIntegerLiteral(obj.site, 0),)
         for param in obj.get_recursive_components('parameter'):
             with ExitStack() as stack:
                 stack.enter_context(logging.ErrorContext(param, None))
@@ -2185,7 +2185,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             for p in obj.get_components():
                 sym = global_scope.lookup(p.name)
                 if sym and (
-                        # hacky workaround for the ExpressionSymbol
+                        # hacky workaround for the c.ExpressionSymbol
                         # implicitly added above. Needed when importing 1.4
                         # code from 1.2 with --breaking-change=dml12_remove_misc_quirks
                         dml.globals.dml_version != (1, 2)
@@ -2202,7 +2202,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             name_expr = codegen.codegen_expression(name_ast, obj_scope, global_scope)
             # By continuing we can discover more error, since exports
             # have no effect if invalid
-            if not isinstance(method_ref, NodeRef):
+            if not isinstance(method_ref, c.NodeRef):
                 report(ENOBJ(method_ref_ast.site, method_ref))
                 continue
             method, indices = method_ref.get_ref()
@@ -2244,13 +2244,13 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                 register_fields(obj),
                 key = field_msb)
             if obj.wholefield:
-                if not param_bool_fixup(obj, 'allocate', True):
+                if not c.param_bool_fixup(obj, 'allocate', True):
                     if method_is_std(obj, 'set'):
                         obj.writable = False
                     if method_is_std(obj, 'get'):
                         obj.readable = False
             else:
-                if not any(param_bool_fixup(f, 'allocate', True)
+                if not any(c.param_bool_fixup(f, 'allocate', True)
                            for (f, _, _, _) in fields):
                     if all(method_is_std(f, 'set') for (f, _, _, _) in fields):
                         obj.writable = False
@@ -2268,9 +2268,9 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                                                                   fields[:-1]):
                     if lsb <= msb:
                         reg_indices = (0,) * (lsf.dimensions - len(li))
-                        report(EBITRO(lsf, tuple(mkIntegerLiteral(None, i)
+                        report(EBITRO(lsf, tuple(c.mkIntegerLiteral(None, i)
                                                  for i in reg_indices + li),
-                                      msf, tuple(mkIntegerLiteral(None, i)
+                                      msf, tuple(c.mkIntegerLiteral(None, i)
                                                  for i in reg_indices + mi)))
                 (msf, _, _, msb) = fields[-1]
                 if msb >= param_int(obj, 'bitsize'):
@@ -2282,7 +2282,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                 obj.site,
                 # Always expand all indices: the list order is
                 # significant, and two field arrays may be interleaved
-                [(f, tuple(mkIntegerLiteral(f.site, i) for i in indices), ())
+                [(f, tuple(c.mkIntegerLiteral(f.site, i) for i in indices), ())
                  for (f, indices, _, _) in fields]))
         else: # DML version >= 1.4
             if not param_bool(obj, 'writable'):
@@ -2407,25 +2407,25 @@ def set_confidential_object(obj):
     if (val - dml.globals.build_confidentiality) > 0:
         obj._confidential = True
         if obj.objtype in {'register', 'field'} and obj.name:
-            setparam(obj, 'name', SimpleParamExpr(mkHiddenName(
+            setparam(obj, 'name', c.SimpleParamExpr(c.mkHiddenName(
                 obj.site, obj.name, obj)))
             setparam(obj, 'qname', HiddenQNameParamExpr(obj))
 
 def get_register_registers(reg, indexvars):
     # Get a flat list of all individual registers in a potential
-    # register array. Return it as list of NodeRef objects
+    # register array. Return it as list of c.NodeRef objects
     # Obtain all combinations of indices into a potentially
     # multi-dimensional array
     index_crossproduct = itertools.product(*(
-        (mkIntegerLiteral(reg.site, i) for i in range(array_len))
+        (c.mkIntegerLiteral(reg.site, i) for i in range(array_len))
         for array_len in reg.arraylens()))
-    return [mkNodeRef(reg.site, reg,
+    return [c.mkNodeRef(reg.site, reg,
                       indexvars +
                       indices) for indices in index_crossproduct]
 
 def get_group_registers(group, indexvars):
     # Get a flat list of all individual registers in a bank/group.
-    # Return it as list of NodeRef objects
+    # Return it as list of c.NodeRef objects
     subnodes = group.get_components('group', 'register')
 
     regs = []
@@ -2434,7 +2434,7 @@ def get_group_registers(group, indexvars):
         # Obtain all combinations of indices into a potentially
         # multi-dimensional array
         index_crossproduct = itertools.product(*(
-            (mkIntegerLiteral(None, i) for i in range(array_len))
+            (c.mkIntegerLiteral(None, i) for i in range(array_len))
             for array_len in group.arraylens()))
         for indices in index_crossproduct:
             subindexvars = indexvars + indices
@@ -2505,7 +2505,7 @@ def param_linear_int(param):
     except DMLError:
         return None
     try:
-        return tuple(c & ((1 << 64) - 1) for c in expr_linear_int(expr))
+        return tuple(coeff & ((1 << 64) - 1) for coeff in expr_linear_int(expr))
     except NotLinear:
         return None
 
@@ -2554,7 +2554,7 @@ def sort_registers(bank):
                                    indices=bank_indices + reg_indices), coord)
                         for (reg_indices, coord) in zip(
                                 itertools.product(
-                                    *([mkIntegerLiteral(reg.site, i)
+                                    *([c.mkIntegerLiteral(reg.site, i)
                                        for i in range(dimsize)]
                                       for dimsize in reg.dimsizes[
                                               bank.dimensions:])),
@@ -2594,7 +2594,7 @@ def check_register_fields(reg):
         assert param.objtype == 'parameter'
         ranges = []
         for field_indices in itertools.product(
-                *([mkIntegerLiteral(field.site, i) for i in range(dimsize)]
+                *([c.mkIntegerLiteral(field.site, i) for i in range(dimsize)]
                   for dimsize in field.dimsizes[reg.dimensions:])):
             reg_indices = tuple(StaticIndex(field.site, var)
                                 for var in reg.idxvars())
@@ -2641,7 +2641,7 @@ class ParentParamExpr(objects.ParamExpr):
         assert len(indices) == self.obj.dimensions
         if self.obj.isindexed():
             indices = indices[:-self.obj.local_dimensions()]
-        return mkNodeRef(self.obj.site, self.obj.parent, indices)
+        return c.mkNodeRef(self.obj.site, self.obj.parent, indices)
 
 class QNameParamExpr(objects.ParamExpr):
     def __init__(self, node, relative):
@@ -2651,7 +2651,7 @@ class QNameParamExpr(objects.ParamExpr):
     @property
     def site(self): return self.node.site
     def mkexpr(self, indices):
-        return QName(self.node.site, self.node, self.relative, indices)
+        return c.QName(self.node.site, self.node, self.relative, indices)
 
 class HiddenQNameParamExpr(objects.ParamExpr):
     def __init__(self, node):
@@ -2659,16 +2659,16 @@ class HiddenQNameParamExpr(objects.ParamExpr):
     @property
     def site(self): return self.node.site
     def mkexpr(self, indices):
-        return HiddenQName(self.node.site, self.node, indices)
+        return c.HiddenQName(self.node.site, self.node, indices)
 
 class ObjectListParamExpr(objects.ParamExpr):
-    '''List of DML objects, using a common parent'''
+    '''c.List of DML objects, using a common parent'''
     __slots__ = ('site', 'instances')
     def __init__(self, site, instances):
         self.site = site
         self.instances = instances
     def mkexpr(self, indices):
-        return mkObjectList(
+        return c.mkObjectList(
             self.site,
             [(node, indices + parent_relative_indices, dimsizes)
              for (node, parent_relative_indices, dimsizes) in self.instances])
@@ -2686,7 +2686,7 @@ class StaticQNameParamExpr(objects.ParamExpr):
     def mkexpr(self, indices):
         if self.cached is not None:
             return self.cached
-        self.cached = mkStringConstant(
+        self.cached = c.mkStringConstant(
             self.node.site,
             self.node.logname_anonymized(relative=self.relative))
         return self.cached
@@ -2710,7 +2710,7 @@ class ASTParamExpr(objects.ParamExpr):
         self.params_on_stack.append(self)
         try:
             expr = codegen.codegen_expression_maybe_nonvalue(
-                self.ast, Location(self.parent, indices), global_scope)
+                self.ast, c.Location(self.parent, indices), global_scope)
         finally:
             popped = self.params_on_stack.pop()
             assert popped is self
@@ -2778,7 +2778,7 @@ class IndexListParamExpr(objects.ParamExpr):
         self.params = params
         self.site = site
     def mkexpr(self, indices):
-        return mkList(self.site,
+        return c.mkList(self.site,
                       [param.mkexpr(indices) for param in self.params])
 
 class NullParamExpr(objects.ParamExpr):
@@ -2801,7 +2801,7 @@ class NongroupParentParamExpr(objects.ParamExpr):
         self.node = node
 
     def mkexpr(self, indices):
-        return mkNodeRef(self.site, self.node.nongroup_parent,
+        return c.mkNodeRef(self.site, self.node.nongroup_parent,
                          indices[:self.node.nongroup_parent.dimensions])
 
 
@@ -2814,7 +2814,7 @@ class TemplatesParamExpr(objects.ParamExpr):
         self.node = node
 
     def mkexpr(self, indices):
-        return mkTemplatesRef(self.site, self.node, indices)
+        return c.mkTemplatesRef(self.site, self.node, indices)
 
 def port_class_ident(port):
     '''The C identifier used for a port class within the device class
@@ -2865,7 +2865,7 @@ class ConfAttrNameParamExpr(objects.ParamExpr):
             prefix = parent.name + "_" + prefix
             parent = parent.parent
 
-        self.cached = mkStringConstant(self.site,
+        self.cached = c.mkStringConstant(self.site,
                                        get_attr_name(prefix, self.node))
         return self.cached
 
@@ -2960,9 +2960,9 @@ class InterfacesDocParamExpr(objects.ParamExpr):
                     text += (f'\n\n{req} interface{s}: '
                              + ', '.join(f'<tt>{iface}</tt>'
                                          for iface in sorted(ifaces)))
-            self.cached = mkStringConstant(self.site, text)
+            self.cached = c.mkStringConstant(self.site, text)
         else:
-            self.cached = mkUndefined(self.site)
+            self.cached = c.mkUndefined(self.site)
         return self.cached
 
 def mkparam(obj, autoparams, param):

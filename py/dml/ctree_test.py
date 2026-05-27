@@ -13,6 +13,7 @@ from pathlib import Path
 from dml import ctree, expr, types, logging, messages, output, symtab, traits
 from dml.ctree import string_escape, mkCompound, dmldir_macro
 from dml.env import is_windows
+from dml.expr import mkNullConstant
 
 def apply(f):
     return f()
@@ -1344,7 +1345,7 @@ class ExprTests(GccTests):
 
     @subtest()
     def null_pointers(self):
-        null = ctree.mkNullConstant(site)
+        null = mkNullConstant(site)
         for expr in (lit(types.Ptr(types.Int(8, True))),
                      ctree.mkCast(site, null,
                                   types.Ptr(types.Int(8, True)))):
@@ -1356,7 +1357,7 @@ class ExprTests(GccTests):
                 self.assertFalse(res.constant)
         for (invert, op) in ((False, ctree.mkEquals),
                              (True, ctree.mkNotEquals)):
-            res = op(site, null, ctree.mkNullConstant(site));
+            res = op(site, null, mkNullConstant(site));
             self.assertTrue(res.constant)
             self.assertEqual(res.value, True != invert)
             res = op(site, null, ctree.mkStringConstant(site, "non-null"))

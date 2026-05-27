@@ -1,7 +1,7 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
-from .ctree import *
+from . import ctree as c
 from .expr import mkLit
 from .expr_util import param_bool, param_defined, param_str
 from . import types as tp
@@ -31,21 +31,21 @@ def unmapped_access(site, bank, idx, scope, isread, overlapping, bigendian,
         # Only pass the first byte of the access to _unmapped_*_access
         if not isread:
             if bigendian:
-                writevalue = mkShR(
-                    site, writevalue, mkMult(
+                writevalue = c.mkShR(
+                    site, writevalue, c.mkMult(
                         site,
-                        mkSubtract(site, size, mkIntegerLiteral(site, 1)),
-                        mkIntegerLiteral(site, 8)))
+                        c.mkSubtract(site, size, c.mkIntegerLiteral(site, 1)),
+                        c.mkIntegerLiteral(site, 8)))
             else:
-                writevalue = mkBitAnd(
-                    site, writevalue, mkIntegerLiteral(site, 0xff))
-        size = mkIntegerLiteral(site, 1)
+                writevalue = c.mkBitAnd(
+                    site, writevalue, c.mkIntegerLiteral(site, 0xff))
+        size = c.mkIntegerLiteral(site, 1)
 
     scope = Symtab(scope)
     code = []
-    success = mkLocalVariable(site, scope.add_variable(
+    success = c.mkLocalVariable(site, scope.add_variable(
         'success', type=tp.Bool(), site=site,
-        init=ExpressionInitializer(mkBoolConstant(site, 0)),
+        init=c.ExpressionInitializer(c.mkBoolConstant(site, 0)),
         make_unique=True))
 
     if isread:
@@ -66,13 +66,13 @@ def unmapped_access(site, bank, idx, scope, isread, overlapping, bigendian,
                 [success]))
 
     code.extend([
-        mkCopyData(
+        c.mkCopyData(
             site,
-            mkIfExpr(site, success, size, mkIntegerLiteral(site, 0)),
+            c.mkIfExpr(site, success, size, c.mkIntegerLiteral(site, 0)),
             size2),
-        mkReturn(site, mkBoolConstant(site, False))])
+        c.mkReturn(site, c.mkBoolConstant(site, False))])
 
-    return mkCompound(site, declarations(scope) + code)
+    return c.mkCompound(site, declarations(scope) + code)
 
 # The basic idea of the register dispatcher is to statically
 # create a static table with one item for each register instance,
@@ -219,7 +219,7 @@ def codegen_access(bank, bank_indices, isread, memop, offset, size, writevalue,
                 regvar, size.read())])
         lines.append(
                 '            %s;' % (
-            size2.write(ExpressionInitializer(mkLit(site, 'bytes',
+            size2.write(c.ExpressionInitializer(mkLit(site, 'bytes',
                                                     tp.Int(64, False))))))
         if partial:
             if bigendian:
@@ -245,7 +245,7 @@ def codegen_access(bank, bank_indices, isread, memop, offset, size, writevalue,
                     regvar, indices, memop.read(), bytepos_args),
                 '            if (ret) return true;',
                 '            %s;' % (
-                    value2.write(ExpressionInitializer(
+                    value2.write(c.ExpressionInitializer(
                         mkLit(site, 'val', tp.Int(64, False))))),
                 '            return false;'])
         else:
@@ -272,8 +272,8 @@ def codegen_access(bank, bank_indices, isread, memop, offset, size, writevalue,
                 '        if (offset >= %s[last].offset' % (regvar,)
                 + ' && offset < %s[last].offset + %s[last].size) {'
                 % (regvar, regvar),
-                '            %s;' % (size2.write(ExpressionInitializer(
-                    mkIntegerLiteral(site, 0))),),
+                '            %s;' % (size2.write(c.ExpressionInitializer(
+                    c.mkIntegerLiteral(site, 0))),),
                 '            return false;',
                 '        }'])
         lines.extend([
@@ -282,14 +282,14 @@ def codegen_access(bank, bank_indices, isread, memop, offset, size, writevalue,
             '}'])
 
     scope = Symtab(global_scope)
-    code = [mkInline(site, line) for line in lines]
+    code = [c.mkInline(site, line) for line in lines]
     check_unmapped_access_handling(bank, isread)
     with codegen.ReturnFailure(site):
         code.append(unmapped_access(site, bank, bank_indices, scope, isread,
                                     overlapping, bigendian, memop,
                                     offset, size, writevalue, size2, value2))
 
-    return mkCompound(
+    return c.mkCompound(
         site, declarations(scope) + code)
 
 def codegen_write_access(bank, idx, inargs, outargs, site):

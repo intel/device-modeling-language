@@ -6,7 +6,7 @@ import itertools
 from functools import reduce
 import dml.globals
 from . import expr_util, logging
-from .ctree import *
+from . import ctree as c
 from .logging import report
 from .messages import *
 from .expr_util import (
@@ -54,8 +54,8 @@ class RegInfo(object):
         # r1 is a two-dimensional register array, but the partition only
         # contains r1[3][1] and r1[4][5]. Can happen if register offset
         # is undefined for some, but not all, indices.
-        [(r1, (mkIntegerLiteral(3), mkIntegerLiteral(1)), ()),
-         (r1, (mkIntegerLiteral(4), mkIntegerLiteral(5)), ())]
+        [(r1, (c.mkIntegerLiteral(3), c.mkIntegerLiteral(1)), ()),
+         (r1, (c.mkIntegerLiteral(4), c.mkIntegerLiteral(5)), ())]
         # r2 is a two-dimensional register array, and the partition contains
         # all 6 instances
         [(r2, (), (3, 2))]
@@ -64,7 +64,7 @@ class RegInfo(object):
         node.dimensions == bank.dimensions + len(indices) + len(dimsizes).
         '''
         if self.dimsizes is None:
-            return ((self.node, tuple(mkIntegerLiteral(self.node.site, i)
+            return ((self.node, tuple(c.mkIntegerLiteral(self.node.site, i)
                                       for i in instance.coord), ())
                     for instance in self.layout)
         else:
@@ -124,7 +124,7 @@ def explode_register(node):
         except EIDXVAR:
             pass
     for indices in itertools.product(*(
-            (mkIntegerLiteral(node.site, idx) for idx in range(dimsize))
+            (c.mkIntegerLiteral(node.site, idx) for idx in range(dimsize))
             for dimsize in dimsizes)):
         coord = tuple(i.value for i in indices)
         roffset, rsize, regnum = one_register(node, indices, n)

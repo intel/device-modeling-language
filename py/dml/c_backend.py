@@ -22,7 +22,7 @@ from .logging import ICE, report
 from .messages import *
 from . import output
 from .output import out
-from .ctree import *
+from . import ctree as c
 from .expr import Expression, mkLit, NonValue
 from .expr_util import (
     apply, param_defined, param_expr_site, param_str,
@@ -45,7 +45,7 @@ structfilename = None
 def get_attr_flags(obj):
     conf = param_str(obj, 'configuration')
     persist = expr_util.param_bool(obj, 'persistent')
-    internal = (param_bool_fixup(obj, 'internal', True)
+    internal = (c.param_bool_fixup(obj, 'internal', True)
                 or obj.is_confidential())
 
     if conf == 'required':
@@ -78,7 +78,7 @@ def get_short_doc(node):
 def get_long_doc(node):
     doc = None
     if param_defined(node, 'documentation'):
-        doc = param_str_fixup(node, 'documentation', "")
+        doc = c.param_str_fixup(node, 'documentation', "")
     # always check desc to catch EIDXVAR even if it isn't used
     desc = get_short_doc(node)
     if doc != None:
@@ -125,7 +125,7 @@ def print_device_substruct(node):
 
     def arraywrap(node, typ):
         for arraylen in reversed(node.dimsizes):
-            typ = tp.Array(typ, mkIntegerLiteral(node.site, arraylen))
+            typ = tp.Array(typ, c.mkIntegerLiteral(node.site, arraylen))
         return typ
 
     def composite_ctype(node, unfiltered_members, label=None):
@@ -161,7 +161,7 @@ def print_device_substruct(node):
         return arraywrap(node, tp.Named('_dml_hook_t'))
     elif (node.objtype in {'register', 'field'}
           and dml.globals.dml_version == (1, 2)):
-        allocate = param_bool_fixup(node, 'allocate', True)
+        allocate = c.param_bool_fixup(node, 'allocate', True)
         if node.simple_storage:
             return (arraywrap(node, crep.node_storage_type(node))
                     if allocate else None)
@@ -270,8 +270,8 @@ def generate_hfile(device, headers, filename):
     out(f'#define DML_LEGACY_ATTRS {legacy_attrs}\n')
 
     with output.allow_linemarks():
-        for c in headers:
-            c.toc()
+        for chunk in headers:
+            chunk.toc()
             out('\n')
 
     out('\n')
@@ -386,7 +386,7 @@ def generate_protofile(device):
 def get_attr_fname(node, port, group_prefix):
     port_prefix = port.attrname() + '_' if port else ''
     if node.objtype == 'register' and node.is_confidential():
-        return port_prefix + get_anonymized_name(node)
+        return port_prefix + c.get_anonymized_name(node)
     else:
         return port_prefix + group_prefix + crep.cname(node)
 
@@ -403,8 +403,8 @@ def generate_attr_setter(fname, node, port, dimsizes, cprefix, loopvars,
             + crep.structtype(device)+'*)_portobj->dev;\n')
         index_array = mkLit(port.site, '_portobj->indices',
                            tp.Ptr(tp.Int(32, False, const=True)))
-        port_indices = tuple(mkIndex(port.site, index_array,
-                                     mkIntegerLiteral(port.site, i))
+        port_indices = tuple(c.mkIndex(port.site, index_array,
+                                     c.mkIntegerLiteral(port.site, i))
                              for i in range(port.dimensions))
     else:
         out(crep.structtype(device)+' *_dev UNUSED = ('
@@ -441,7 +441,7 @@ def generate_attr_setter(fname, node, port, dimsizes, cprefix, loopvars,
                 node.site,
                 inhibit_copyin = not loopvars)]
 
-    code = mkCompound(None, codegen.declarations(fscope) + setcode)
+    code = c.mkCompound(None, codegen.declarations(fscope) + setcode)
     code.toc_inline()
     if dimsizes:
         # abort on first bad value
@@ -465,8 +465,8 @@ def generate_attr_getter(fname, node, port, dimsizes, cprefix, loopvars):
             + crep.structtype(device)+'*)_portobj->dev;\n')
         index_array = mkLit(port.site, '_portobj->indices',
                            tp.Ptr(tp.Int(32, False, const=True)))
-        port_indices = tuple(mkIndex(port.site, index_array,
-                                     mkIntegerLiteral(port.site, i))
+        port_indices = tuple(c.mkIndex(port.site, index_array,
+                                     c.mkIntegerLiteral(port.site, i))
                              for i in range(port.dimensions))
     else:
         out(crep.structtype(device)+' *_dev UNUSED = ('
@@ -496,7 +496,7 @@ def generate_attr_getter(fname, node, port, dimsizes, cprefix, loopvars):
             '_get_attribute' if dml.globals.dml_version == (1, 2)
             else 'get_attribute',
             [], [valuevar], node.site)
-        code = mkCompound(node.site, codegen.declarations(fscope) + [getcode])
+        code = c.mkCompound(node.site, codegen.declarations(fscope) + [getcode])
         code.toc_inline()
 
     for depth, loopvar in reversed(list(enumerate(loopvars))):
@@ -511,7 +511,7 @@ def generate_attr_getter(fname, node, port, dimsizes, cprefix, loopvars):
 
 # dimsizes, loopvars, prefix are relative to port.
 def check_attribute(node, port, prefix):
-    config_param = param_str_fixup(node, 'configuration', 'none')
+    config_param = c.param_str_fixup(node, 'configuration', 'none')
     if config_param == 'none':
         return
     if not get_long_doc(node):
@@ -531,7 +531,7 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
     assert dml.globals.dml_version == (1, 2)
     attrname = get_attr_name(prefix, node)
 
-    config_param = param_str_fixup(node, 'configuration', 'none')
+    config_param = c.param_str_fixup(node, 'configuration', 'none')
     if config_param == 'none':
         return
 
@@ -561,7 +561,7 @@ def generate_attribute_common(initcode, node, port, dimsizes, prefix,
                 '\n\nRequired interfaces: '
                 + ', '.join('<tt>' + i.name + '</tt>' for i in ifaces)
                 + '.')
-    doc = mkStringConstant(node.site, doc)
+    doc = c.mkStringConstant(node.site, doc)
 
     fname = get_attr_fname(node, port, prefix)
 
@@ -694,9 +694,9 @@ def generate_subobj_connects(init_code, device, prefixes=("",)):
         t = dml.globals.traits['init_as_subobj']
         for (parent, node) in find_connects(device, device):
             if t in node.traits.ancestors:
-                classname = mkStringConstant(
+                classname = c.mkStringConstant(
                     None, param_str(node, 'classname')).quoted
-                desc = (mkStringConstant(None, param_str(node, "desc")).quoted
+                desc = (c.mkStringConstant(None, param_str(node, "desc")).quoted
                         if param_defined(node, 'desc') else 'NULL')
                 cls = port_class_ident(parent)
                 for indices in itertools.product(
@@ -741,16 +741,16 @@ def wrap_method(meth, wrapper_name, indices=()):
         out(devstruct+' *_dev UNUSED = (' + devstruct + ' *)_portobj->dev;\n')
         index_array = mkLit(meth.site, '_portobj->indices',
                            tp.Ptr(tp.Int(32, False, const=True)))
-        indices = tuple(mkIndex(meth.site, index_array,
-                                mkIntegerLiteral(meth.site, i))
+        indices = tuple(c.mkIndex(meth.site, index_array,
+                                c.mkIntegerLiteral(meth.site, i))
                         for i in range(meth.dimensions))
     else:
         assert meth.dimensions == len(indices)
         out(devstruct+' *_dev UNUSED = ('+devstruct+'*)_obj;\n')
-        indices = tuple(mkIntegerLiteral(meth.site, i) for i in indices)
+        indices = tuple(c.mkIntegerLiteral(meth.site, i) for i in indices)
     with crep.DeviceInstanceContext():
         if retvar:
-            mkDeclaration(meth.site, retvar, rettype,
+            c.mkDeclaration(meth.site, retvar, rettype,
                           init = codegen.get_initializer(meth.site, rettype,
                                                  None, None, None)).toc()
 
@@ -971,7 +971,7 @@ def generate_port_class(code, device, port):
         port, ('%d',) * port.dimensions)
     portclass_name_comps = [o.name_anonymized
                             for o in node_ancestors(port, device)]
-    portclass_name_comps.append(param_str_fixup(device, 'classname', ''))
+    portclass_name_comps.append(c.param_str_fixup(device, 'classname', ''))
     portclass_name = '.'.join(reversed(portclass_name_comps))
     desc = string_literal(get_short_doc(port))
     doc = string_literal(get_long_doc(port))
@@ -1063,7 +1063,7 @@ def generate_simple_events(device):
                 tp.conv_const(True, info.args_type)).declaration('_args')
             emergency_args_c_type = tp.Array(
                 info.args_type,
-                mkIntegerConstant(None, 1, False)).declaration('')
+                c.mkIntegerConstant(None, 1, False)).declaration('')
             out('%s = data ? data->args : (%s) { 0 };\n'
                 % (args_decl, emergency_args_c_type))
 
@@ -1147,11 +1147,11 @@ def generate_after_on_hooks_artifacts(device):
             if info.args_type:
                 args_type_ptr = tp.Ptr(tp.conv_const(True, info.args_type))
                 out(f'{args_type_ptr.declaration("args")} = _args;\n')
-                args_expr = mkDereference(site, mkLit(site, 'args', args_type_ptr))
+                args_expr = c.mkDereference(site, mkLit(site, 'args', args_type_ptr))
             else:
                 args_expr = None
             out('attr_value_t out;\n')
-            out_expr = mkLocalVariable(
+            out_expr = c.mkLocalVariable(
                 site, LocalSymbol('out', 'out', attr_value_t, site=site))
             info.generate_args_serializer(site, args_expr, out_expr)
             out('return out;\n')
@@ -1166,17 +1166,17 @@ def generate_after_on_hooks_artifacts(device):
 
             if info.args_type:
                 out(f'{tp.Ptr(info.args_type).declaration("out")} = _out;\n')
-                out_expr = mkDereference(site, mkLit(site, 'out',
+                out_expr = c.mkDereference(site, mkLit(site, 'out',
                                                      tp.Ptr(info.args_type)))
             else:
                 out_expr = None
             def error_out(exc, msg):
                 stmts = []
-                stmts.append(mkInline(site, f'_success = {exc};'))
+                stmts.append(c.mkInline(site, f'_success = {exc};'))
                 if msg is not None:
                     stmts.append(
-                        mkInline(site, f'SIM_attribute_error("{msg}");'))
-                stmts.append(mkInline(site, 'goto _exit;'))
+                        c.mkInline(site, f'SIM_attribute_error("{msg}");'))
+                stmts.append(c.mkInline(site, 'goto _exit;'))
                 return stmts
             val_expr = mkLit(site, 'val', attr_value_t)
 
@@ -1377,7 +1377,7 @@ def generate_reg_callback(meth, name):
                       for i in range(meth.dimensions)),
                 inargs, outargs)]
 
-    mkCompound(meth.site, code + [fail.nofail()]).toc_inline()
+    c.mkCompound(meth.site, code + [fail.nofail()]).toc_inline()
     out('}\n', preindent = -1)
     out('\n')
 
@@ -1535,7 +1535,7 @@ def generate_hook_auxiliary_info_array():
         offset = ('offsetof(%s, %s)'
                   % (crep.structtype(dml.globals.device),
                      crep.cref_hook(
-                         hook, (mkIntegerConstant(hook.site, 0, False),)
+                         hook, (c.mkIntegerConstant(hook.site, 0, False),)
                          * hook.dimensions)))
 
         try:
@@ -1595,7 +1595,7 @@ def generate_initialize(device):
                     stmts.append(codegen.codegen_call_byname(
                         method.site, device, (), method_name, [], []))
 
-            mkCompound(device.site, stmts).toc()
+            c.mkCompound(device.site, stmts).toc()
         else:
             codegen_inline_byname(device, (), '_init', [], [],
                                   device.site).toc()
@@ -1777,9 +1777,9 @@ def get_index_enumeration(site, dimsizes: tuple):
     _index_enumeration_pool[lower] = max(dimsizes[0],
                                       _index_enumeration_pool.get(lower, 0))
     t = tp.Array(tp.Int(32, False, const=True),
-               mkIntegerLiteral(site, len(dimsizes)))
+               c.mkIntegerLiteral(site, len(dimsizes)))
     for dim in lower[::-1]:
-        t = tp.Array(t, mkIntegerLiteral(site, dim))
+        t = tp.Array(t, c.mkIntegerLiteral(site, dim))
     return mkLit(site, '_indices_%s' % ('_'.join(map(str, lower))), tp.Ptr(t))
 
 def generate_index_enumerations():
@@ -1826,7 +1826,7 @@ def tuple_as_uint32_array(site, numbers, hint):
         _int_tuple_pool[numbers] = suffix
     return mkLit(site, '_tuple%s' % (_int_tuple_pool[numbers],),
                  tp.Array(tp.Int(32, False, const=True),
-                        mkIntegerLiteral(site, len(numbers))))
+                        c.mkIntegerLiteral(site, len(numbers))))
 
 def generate_tuple_table():
     global _int_tuple_pool
@@ -1904,20 +1904,20 @@ def generate_init_data_objs(device):
                 assert not node.isindexed()
                 init = codegen.eval_initializer(
                     node.site, node._type, node.astinit,
-                    Location(node.parent, static_indices(node)),
+                    c.Location(node.parent, static_indices(node)),
                     global_scope, True)
             # mainly meant to capture EIDXVAR; for other errors, the error will
             # normally re-appear when evaluating per instance
             except DMLError:
                 with output.allow_linemarks():
                     for indices in node.all_indices():
-                        index_exprs = tuple(mkIntegerLiteral(node.site, i)
+                        index_exprs = tuple(c.mkIntegerLiteral(node.site, i)
                                             for i in indices)
-                        nref = mkNodeRef(node.site, node, index_exprs)
+                        nref = c.mkNodeRef(node.site, node, index_exprs)
                         try:
                             init = codegen.eval_initializer(
                                 node.site, node._type, node.astinit,
-                                Location(node.parent, index_exprs),
+                                c.Location(node.parent, index_exprs),
                                 global_scope, True)
                         except DMLError as e:
                             report(e)
@@ -1934,7 +1934,7 @@ def generate_init_data_objs(device):
                          % (var, var, sz, var)),
                         postindent=1)
                     index_exprs += (mkLit(node.site, var, tp.Int(64, True)),)
-                nref = mkNodeRef(node.site, node, index_exprs)
+                nref = c.mkNodeRef(node.site, node, index_exprs)
                 with output.allow_linemarks():
                     markers = ([('store_writes_const_field', 'FALSE')]
                                if tp.deep_const(node._type) else [])
@@ -1958,11 +1958,11 @@ def generate_init(device, initcode, outprefix):
     doc = get_long_doc(device)
     if doc == None:
         doc = device.name + ' device'
-    doc = mkStringConstant(device.site, doc)
+    doc = c.mkStringConstant(device.site, doc)
 
     sdoc = get_short_doc(device)
     if sdoc:
-        sdoc = mkStringConstant(device.site, sdoc)
+        sdoc = c.mkStringConstant(device.site, sdoc)
 
     #banks = device.get_components('bank')
 
@@ -1988,11 +1988,11 @@ def generate_init(device, initcode, outprefix):
     out('};\n', preindent = -1)
     out('\n')
     out('conf_class_t *class = SIM_create_class("'
-        + param_str_fixup(device, 'classname', '') + '", &funcs);\n')
+        + c.param_str_fixup(device, 'classname', '') + '", &funcs);\n')
     out('_dev_class = class;\n')
     out('if (SIM_clear_exception() != SimExc_No_Exception) {\n', postindent = 1)
     out('fprintf(stderr, "Failed to register class '
-        + param_str_fixup(device, 'classname', '')
+        + c.param_str_fixup(device, 'classname', '')
         + ': %s\\n", SIM_last_error());\n')
     out('return NULL;\n')
     out('}\n', preindent = -1)
@@ -2088,7 +2088,7 @@ def generate_extern_trampoline_dml12(exported_name, func):
 def generate_each_in_table(trait, instances):
     items = []
     for (node, subnodes) in instances:
-        ident = EachIn.index_ident(node, trait)
+        ident = c.EachIn.index_ident(node, trait)
         if subnodes:
             add_variable_declaration(f'const uint32 {ident}', str(len(items)))
 
@@ -2103,7 +2103,7 @@ def generate_each_in_table(trait, instances):
             num = reduce(operator.mul, sub.dimsizes, 1)
             uniq = sub.uniq
             items.append("{%s, %d, %d}" % (base, num, uniq))
-    arrayname = EachIn.array_ident(trait)
+    arrayname = c.EachIn.array_ident(trait)
     if items:
         init = '{\n%s\n}' % (',\n'.join(f'    {item}' for item in items),)
         add_variable_declaration(
@@ -2118,7 +2118,7 @@ def generate_each_in_table(trait, instances):
 
 def generate_each_in_tables():
     by_trait = {}
-    for ((node, trait), subobjs) in list(EachIn.instances.items()):
+    for ((node, trait), subobjs) in list(c.EachIn.instances.items()):
         by_trait.setdefault(trait, []).append((node, subobjs))
     for t in by_trait:
         generate_each_in_table(t, by_trait[t])
@@ -2127,7 +2127,7 @@ def generate_each_in_tables():
         # when dereferencing sequence params, these methods reference
         # the base array.
         add_variable_declaration(
-            f'const _vtable_list_t *const {EachIn.array_ident(t)}', 'NULL')
+            f'const _vtable_list_t *const {c.EachIn.array_ident(t)}', 'NULL')
 
 def generate_trait_deserialization_hashtables(device):
     inserts = []
@@ -2514,7 +2514,7 @@ class SingleParamValue(ParamValue):
     def tinit_arg(self):
         if tp.deep_const(self.ptype):
             k = tp.Array(self.ptype,
-                       mkIntegerLiteral(logging.SimpleSite(
+                       c.mkIntegerLiteral(logging.SimpleSite(
                            "<SingleParamValue>"), 1)).declaration("")
             size = f'sizeof({self.ptype.declaration("")})'
             return f'memcpy(malloc({size}), ({k}) {{ {self.value} }}, {size})'
@@ -2551,7 +2551,7 @@ class ArrayParamValue(IndexedParamValue):
         array_type = self.ptype
         for d in reversed(self.node.dimsizes):
             array_type = tp.Array(array_type,
-                                mkIntegerLiteral(self.node.site, d))
+                                c.mkIntegerLiteral(self.node.site, d))
         return (f'{tp.Ptr(array_type).declaration(var)} = malloc('
                 f'sizeof(*{var}));\n')
     def init(self, var):
@@ -2559,7 +2559,7 @@ class ArrayParamValue(IndexedParamValue):
         if tp.deep_const(self.ptype):
             # partially const values requires memcpy for
             # initialization
-            k = (tp.Array(self.ptype, mkIntegerLiteral(self.node.site, 1))
+            k = (tp.Array(self.ptype, c.mkIntegerLiteral(self.node.site, 1))
                  .declaration(""))
             target = f'(void *)&(*{var}){param_indices}'
             source = f'({k}) {{ {self.value} }}'
@@ -2594,7 +2594,7 @@ class EachInArrayParamValue(IndexedParamValue):
 
 def init_trait_vtable(node, trait, param_overrides):
     method_overrides = node.traits.method_overrides
-    # List of strings with the arguments passed to the _tinit_* function
+    # c.List of strings with the arguments passed to the _tinit_* function
     args = []
     # Sometimes, the vtable of an object array has one or more
     # arguments that must be initialized by evaluating an expression
@@ -2634,7 +2634,7 @@ def init_trait_vtable(node, trait, param_overrides):
                 crep.structtype(dml.globals.device),
                 crep.cref_session(
                     session_node,
-                    (mkIntegerConstant(node.site, 0, False),)
+                    (c.mkIntegerConstant(node.site, 0, False),)
                     * node.dimensions)))
         elif member_kind == 'hook':
             hook_node = node.get_component(name)
@@ -2645,7 +2645,7 @@ def init_trait_vtable(node, trait, param_overrides):
             typ = trait.vtable_trait(name).vtable_memoized_outs[name]
             if node.dimensions:
                 for d in reversed(node.dimsizes):
-                    typ = tp.Array(typ, mkIntegerLiteral(node.site, d))
+                    typ = tp.Array(typ, c.mkIntegerLiteral(node.site, d))
                 arg = f'calloc(1, sizeof({typ.declaration("")}))'
             else:
                 arg = f'({{static {typ.declaration("_tmp")}; &_tmp; }})'
@@ -2713,16 +2713,16 @@ def trait_param_value(node, param_type_site, param_type):
             expr = node.get_expr(static_indices(node))
             if isinstance(expr, NonValue):
                 raise expr.exc()
-            expr = source_for_assignment(expr.site, param_type, expr)
+            expr = c.source_for_assignment(expr.site, param_type, expr)
         except EIDXVAR:
             indices = tuple(mkLit(node.site, v, tp.Int(32, False))
                             for v in IndexedParamValue.indexvars(node))
             expr = node.get_expr(indices)
             if isinstance(expr, NonValue):
                 raise expr.exc()
-            expr = source_for_assignment(expr.site, param_type, expr)
+            expr = c.source_for_assignment(expr.site, param_type, expr)
             if is_sequence:
-                if (isinstance(expr, EachIn)
+                if (isinstance(expr, c.EachIn)
                     and expr.node is node.parent
                     and expr.indices == indices[:node.dimensions]):
                     (subobjs, base_idx, num, array_idx,
@@ -2736,7 +2736,7 @@ def trait_param_value(node, param_type_site, param_type):
                 return ArrayParamValue(expr.read(), param_type, node)
         else:
             if is_sequence:
-                assert isinstance(expr, EachIn), repr(expr)
+                assert isinstance(expr, c.EachIn), repr(expr)
                 (subobjs, base_idx, num, array_idx,
                  array_size) = expr.each_in_t_members()
                 expr.mark_referenced(subobjs)
@@ -2821,18 +2821,18 @@ def calculate_saved_userdata(node, dimsizes, attr_name, sym_spec = None):
         decl_site = sym.site
         # Reference the first index of this
         # static variable
-        var_ref = mkStaticVariable(node.site, sym)
+        var_ref = c.mkStaticVariable(node.site, sym)
         for _ in range(node.dimensions):
-            var_ref = mkIndex(decl_site, var_ref,
-                              mkIntegerConstant(decl_site, 0, False))
+            var_ref = c.mkIndex(decl_site, var_ref,
+                              c.mkIntegerConstant(decl_site, 0, False))
         device_member = sym.value
     elif node.objtype == 'saved':
         assert sym_spec is None
         decl_site = node.site
         # Reference the first struct member of this
         # saved variable
-        loop_vars = (mkIntegerConstant(decl_site, 0, False),) * node.dimensions
-        var_ref = mkNodeRef(node.site, node, loop_vars)
+        loop_vars = (c.mkIntegerConstant(decl_site, 0, False),) * node.dimensions
+        var_ref = c.mkNodeRef(node.site, node, loop_vars)
         device_member = crep.cref_session(node, loop_vars)
     else:
         assert False
@@ -3171,12 +3171,12 @@ def generate_startup_trait_calls(data, idxvars):
     out('{\n', postindent=1)
     out('_traitref_t _tref;\n')
     for (trait, trait_methods) in traits.items():
-        ref = ObjTraitRef(site, node, trait, indices)
+        ref = c.ObjTraitRef(site, node, trait, indices)
         out(f'_tref = {ref.read()};\n')
         for method in trait_methods:
-            outargs = [mkDiscardRef(method.site) for _ in method.outp]
+            outargs = [c.mkDiscardRef(method.site) for _ in method.outp]
 
-            method_ref = TraitMethodDirect(
+            method_ref = c.TraitMethodDirect(
                 method.site, mkLit(method.site, '_tref', tp.Trait(trait)), method)
             with codegen.IgnoreFailure(site):
                 codegen.codegen_call_traitmethod(method.site, method_ref, [],
@@ -3186,7 +3186,7 @@ def generate_startup_trait_calls(data, idxvars):
 def generate_startup_regular_call(method, idxvars):
     site = method.site
     indices = tuple(mkLit(site, idx, tp.Int(32, False)) for idx in idxvars)
-    outargs = [mkDiscardRef(method.site) for _ in method.outp]
+    outargs = [c.mkDiscardRef(method.site) for _ in method.outp]
     # startup memoized methods can throw, which is ignored during startup.
     # Memoization of the throw then allows for the user to check whether
     # or not the method did throw during startup by calling the method
@@ -3476,8 +3476,8 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     generate_tuple_table()
 
     with output.allow_linemarks():
-        for c in footers:
-            c.toc()
+        for chunk in footers:
+            chunk.toc()
             out('\n')
 
     if full_module:

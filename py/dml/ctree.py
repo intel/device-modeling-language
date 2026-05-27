@@ -18,7 +18,7 @@ from .messages import *
 from . import output
 from .output import linemark, out
 from . import types as tp
-from .expr import (Apply, Code, Expression, mkApply, mkLit, mkNullConstant,
+from .expr import (Apply, Code, Expression, mkApply, mkLit,
                    NonValue, NonValueArrayRef, NullConstant,
                    StaticIndex, typecheck_inarg_inits)
 from .expr_util import apply, param_bool, param_str, undefined
