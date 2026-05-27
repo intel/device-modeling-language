@@ -15,5 +15,5 @@ subprocess.check_call(
     [f'{conf.sim.project}/bin/simics{batch_suffix()}'] +
     ["--batch-mode", "--quiet", "--no-copyright", "--dump-core", "--werror",
      '--project', conf.sim.project,
-     "-L", scratchdir,
+     "-L", testenv.scratchdir(),
      join(dirname(__file__), "T_checkpointing.cont.py")])

@@ -676,6 +676,10 @@ class CTestCase(DMLFileTestCase):
         #sc.write("print conf.sim.module_searchpath\n")
         #sc.write("run_command('list-modules')\n")
         sc.write("scratchdir = %r\n" % self.scratchdir)
+        sc.write("import sys\n")
+        sc.write("sys.path.insert(0, %r)\n" % join(os.getcwd(), 'common'))
+        sc.write("import testenv\n")
+        sc.write("testenv._scratchdir = scratchdir\n")
         sc.write("SIM_add_module_dir(scratchdir)\n")
         sc.write("SIM_module_list_refresh()\n")
         if auto_instantiate:
