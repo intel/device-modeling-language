@@ -21,6 +21,7 @@ from .codegen import declarations, eval_type
 from .symtab import global_scope
 from .expr import Expression, mkLit, mkNullConstant, NonValue, StaticIndex
 from . import ctree as c
+from . import porting as P
 from .expr_util import (
     defined, param_bool, param_defined, param_expr,
     param_expr_site, param_int, param_str,
@@ -577,7 +578,7 @@ def add_templates(obj_specs, each_stmts):
         queue.extend(obj_spec.templates)
 
     if logging.show_porting:
-        PWUNUSED.used_templates.update(used_templates)
+        P.WUNUSED.used_templates.update(used_templates)
 
     return (obj_specs, used_templates)
 
@@ -750,7 +751,7 @@ def typecheck_method_override(m1, m2, location):
                         # Not that we really EXPECT the discard identifier here
                         ident = n1.args[0] if n1.kind == 'variable' else '_'
 
-                        report(PINARGTYPE(a1.site, type2.declaration(ident)))
+                        report(P.INARGTYPE(a1.site, type2.declaration(ident)))
             else:
                 raise E.METH(m1.site, m2.site, "different inline args")
         if (t1 and t2
@@ -791,7 +792,7 @@ def typecheck_method_override(m1, m2, location):
         and all(a2.args[1] for a2 in inp2)
         and any(not a1.args[1] for a1 in inp1)):
         # hack to change 'inline method' -> 'method' if needed
-        report(PINARGTYPE(m1.site, 'method'))
+        report(P.INARGTYPE(m1.site, 'method'))
 
     def qualifier_check(qualifier_name, qualifier1, qualifier2):
         if qualifier1 != qualifier2:
@@ -813,9 +814,9 @@ def report_poverride(sup, inf, obj_specs):
     assert sup_objs
     for sup_obj in sup_objs:
         if inf.desc.kind == 'template':
-            report(POVERRIDE(sup_obj.site, inf.desc.text))
+            report(P.OVERRIDE(sup_obj.site, inf.desc.text))
         else:
-            report(POVERRIDE_IMPORT(sup_obj.site, inf.desc.text))
+            report(P.OVERRIDE_IMPORT(sup_obj.site, inf.desc.text))
 
 def merge_subobj_defs(name, defs, parent):
     specs = [spec for (_, _, _, spec) in defs]
@@ -1007,24 +1008,24 @@ def register_fields(reg):
             report(E.FARRSZ(param_expr_site(field, 'msb')))
 
 def report_unused_templates():
-    for tpl in PWUNUSED.used_templates:
+    for tpl in P.WUNUSED.used_templates:
         if not tpl.name.startswith('@'):
-            report(PNO_WUNUSED(tpl.site, 'template', tpl.name))
-    for tpl in set(dml.globals.templates.values()) - PWUNUSED.used_templates:
+            report(P.NO_WUNUSED(tpl.site, 'template', tpl.name))
+    for tpl in set(dml.globals.templates.values()) - P.WUNUSED.used_templates:
         if not tpl.name.startswith('@'):
-            report(PWUNUSED(tpl.site, 'template', tpl.name))
+            report(P.WUNUSED(tpl.site, 'template', tpl.name))
 
 def report_unused_conds():
-    for cond in PWUNUSED.positive_conds:
-        if cond in PWUNUSED.satisfied_conds:
-            report(PNO_WUNUSED(cond.site, 'if', None))
+    for cond in P.WUNUSED.positive_conds:
+        if cond in P.WUNUSED.satisfied_conds:
+            report(P.NO_WUNUSED(cond.site, 'if', None))
         else:
-            report(PWUNUSED(cond.site, 'if', None))
-    for cond in PWUNUSED.negative_conds:
-        if cond in PWUNUSED.satisfied_conds:
-            report(PNO_WUNUSED(cond.site, 'else', None))
+            report(P.WUNUSED(cond.site, 'if', None))
+    for cond in P.WUNUSED.negative_conds:
+        if cond in P.WUNUSED.satisfied_conds:
+            report(P.NO_WUNUSED(cond.site, 'else', None))
         else:
-            report(PWUNUSED(cond.site, 'else', None))
+            report(P.WUNUSED(cond.site, 'else', None))
 
 def mkdev(devname, obj_specs):
     dev = mkobj(devname, 'device', (), obj_specs, None, {})
@@ -1415,23 +1416,23 @@ def report_pbefaft(obj, method_asts):
 
                         method_decl = method_decl.replace('value', value_arg)
                         default_call = default_call.replace('value', value_arg)
-                    report(PBEFAFT(bef.site, dmlparse.start_site(bef_body.site),
+                    report(P.BEFAFT(bef.site, dmlparse.start_site(bef_body.site),
                                    method_decl, default_call, return_stmt,
                                    bef.site, dmlparse.start_site(bef_body.site),
                                    dmlparse.end_site(bef_body.site),
                                    *aft_args))
                 else:
-                    report(PBEFAFT(aft.site, dmlparse.start_site(aft_body.site),
+                    report(P.BEFAFT(aft.site, dmlparse.start_site(aft_body.site),
                                    method_decl, default_call, return_stmt,
                                    None, None, None,
                                    *aft_args))
                 if obj.objtype == 'register':
                     tramp_site = bef.site if bef else aft.site
                     if before_name == 'before_read':
-                        report(PTRAMPOLINE(tramp_site, None,
+                        report(P.TRAMPOLINE(tramp_site, None,
                                            'is dml12_compat_read_register;'))
                     elif before_name == 'before_write':
-                        report(PTRAMPOLINE(tramp_site, None,
+                        report(P.TRAMPOLINE(tramp_site, None,
                                            'is dml12_compat_write_register;'))
 
 
@@ -1743,7 +1744,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             if all(eval_precond(cond, obj, global_scope)
                    for cond in preconds):
                 if logging.show_porting:
-                    PWUNUSED.satisfied_conds.update(preconds)
+                    P.WUNUSED.satisfied_conds.update(preconds)
                 shallow_subobjs.append((shallow, obj_spec))
                 composite_subobjs.append((composite, obj_spec))
                 for (templates, spec) in in_eachs:
@@ -2227,7 +2228,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
         set_confidential_object(obj)
         if logging.show_porting:
             if param_defined(obj, 'function'):
-                report(PABSTRACT_TEMPLATE(symbols['function'],
+                report(P.ABSTRACT_TEMPLATE(symbols['function'],
                                           'function_mapped_bank'))
 
     elif obj.objtype == 'register':
@@ -2348,15 +2349,15 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                     # be enum saved as string. Trust that the getter/setter
                     # works in this case, but remove the allocate_type
                     # (SIMICS-23126).
-                    report(PATTRIBUTE(obj.site, None, param.site, None))
+                    report(P.ATTRIBUTE(obj.site, None, param.site, None))
                 elif atype.startswith('uint'):
-                    report(PATTRIBUTE(obj.site, 'uint64_attr', param.site,
+                    report(P.ATTRIBUTE(obj.site, 'uint64_attr', param.site,
                                       type_site))
                 elif atype.startswith('int'):
-                    report(PATTRIBUTE(obj.site, 'int64_attr', param.site,
+                    report(P.ATTRIBUTE(obj.site, 'int64_attr', param.site,
                                       type_site))
                 elif atype in {'double', 'bool'}:
-                    report(PATTRIBUTE(obj.site, atype + '_attr', param.site,
+                    report(P.ATTRIBUTE(obj.site, atype + '_attr', param.site,
                                       type_site))
 
     elif obj.objtype == 'connect':
@@ -2390,11 +2391,11 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                       else '_cycle_event')
             if method_is_std(obj, 'get_event_info'):
                 prefix = 'simple'
-                report(PCHANGE_INARGS(obj.get_component('event').site,
+                report(P.CHANGE_INARGS(obj.get_component('event').site,
                                       'method event()'))
             else:
                 prefix = 'custom'
-            report(PEVENT(obj.site, f'{prefix}{suffix}', param_site, None))
+            report(P.EVENT(obj.site, f'{prefix}{suffix}', param_site, None))
 
     return obj
 
@@ -2992,7 +2993,7 @@ def port_builtin_method_overrides(name, site, inp_ast, parent_obj):
             and parent_obj.objtype in {'bank', 'device'})):
         tpl_name = {'read_access': 'read_field',
                     'write_access': 'write_field'}.get(name, name)
-        report(PABSTRACT_TEMPLATE(site, tpl_name))
+        report(P.ABSTRACT_TEMPLATE(site, tpl_name))
 
     known_signatures = {
         'bank': {
@@ -3056,7 +3057,7 @@ def port_builtin_method_overrides(name, site, inp_ast, parent_obj):
             else:
                 n = old_idx
             new_inp.append(new_type + n)
-        report(PCHANGE_INARGS(site, 'method %s(%s)%s' % (
+        report(P.CHANGE_INARGS(site, 'method %s(%s)%s' % (
             new_name, ', '.join(new_inp), ' throws' if throws else '')))
     # Mapping objkind -> (1.4 trampoline, 1.2 trampoline)
     # Two cases:
@@ -3224,11 +3225,11 @@ method io_memory_access(generic_transaction_t *memop, uint64 offset, void *aux) 
     if name in trampoline_methods:
         (tramp14, tramp12) = trampoline_methods[name]
         if 'is dml12_compat' in tramp12:
-            report(PIMPORT_DML12COMPAT(site))
+            report(P.IMPORT_DML12COMPAT(site))
         else:
             tramp12 = ('#if (dml_1_2) {\n    %s\n}'
                        % (tramp12.replace('\n', '\n    ')))
-        report(PTRAMPOLINE(site, tramp14, tramp12))
+        report(P.TRAMPOLINE(site, tramp14, tramp12))
 
 
 def mkmethod(site, rbrace_site, location, parent_obj, name, inp_ast,
@@ -3254,12 +3255,12 @@ def mkmethod(site, rbrace_site, location, parent_obj, name, inp_ast,
         # non-integer outputs seem to be rather uncommon.
         for (_, psite, pname, ptype) in outp_ast:
             if not ptype:
-                report(PTYPEDOUTPARAM(psite, 'uint64'))
+                report(P.TYPEDOUTPARAM(psite, 'uint64'))
         if not isinstance(default, InvalidDefault):
             port_builtin_method_overrides(name, site, inp_ast, parent_obj)
             if (default.node and default.node.throws
                 and default.node.site.dml_version() == (1, 4)):
-                report(PTHROWS(body.site))
+                report(P.THROWS(body.site))
 
     inp = codegen.eval_method_inp(inp_ast, location, global_scope)
     outp = codegen.eval_method_outp(outp_ast, location, global_scope)
@@ -3292,7 +3293,7 @@ def mkmethod(site, rbrace_site, location, parent_obj, name, inp_ast,
 
     if logging.show_porting:
         if method.fully_typed:
-            PWUNUSED.typed_methods.add(method)
+            P.WUNUSED.typed_methods.add(method)
         else:
-            PWUNUSED.inline_methods[method.site] = method
+            P.WUNUSED.inline_methods[method.site] = method
     return method

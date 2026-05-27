@@ -10,6 +10,7 @@ from . import breaking_changes
 from .logging import ICE, report
 from .messages import *
 from . import errors as E
+from . import porting as P
 from .set import Set
 import dml.globals
 import dml.traits
@@ -231,9 +232,9 @@ def flatten_ifs(in_each_specs, templates, stmts, preconds):
                                           f, preconds + [neg]))
             if logging.show_porting:
                 if t:
-                    PWUNUSED.positive_conds.add(cond)
+                    P.WUNUSED.positive_conds.add(cond)
                 if f:
-                    PWUNUSED.negative_conds.add(neg)
+                    P.WUNUSED.negative_conds.add(neg)
         elif stmt.kind == 'object':
             composite.append(stmt)
         elif stmt.kind == 'in_each':
@@ -281,7 +282,7 @@ def object_spec_from_asts(site, stmts, templates, inferior, in_each_structure,
                                         '_write_unimplemented': 'write_unimpl',}
                     for (issite, name) in template_refs:
                         if name in template_renames:
-                            report(PRENAME_TEMPLATE(issite, name,
+                            report(P.RENAME_TEMPLATE(issite, name,
                                                     template_renames[name]))
                 is_stmts.extend([(issite, templates[name])
                                  for (issite, name) in template_refs])

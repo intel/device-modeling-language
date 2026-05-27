@@ -252,7 +252,7 @@ class DMLError(Exception, LogMessage):
         report_error()
 
 class PortingMessage(LogMessage):
-    tag_prefix = ''
+    tag_prefix = 'P'
     kind = 'porting'
     fmt = ''
 

@@ -15,6 +15,7 @@ from . import logging
 from .logging import ICE, report
 from .expr import Apply, Expression, Lit, mkApply, mkLit, NonValue, typecheck_inarg_inits
 from . import ctree as c
+from . import porting as P
 from .expr_util import apply, defined, expr_intval, undefined
 from .symtab import global_scope, MethodParamScope, Symtab
 from .messages import *
@@ -1013,8 +1014,8 @@ def expr_conditional(tree, location, scope):
                 except DMLError as e:
                     errors.append(e)
                 if errors or isinstance(live_expr, NonValue):
-                    report(PHASH(tree.site))
-                    report(PHASHELSE(dmlparse.end_site(texpr.site), ':'))
+                    report(P.HASH(tree.site))
+                    report(P.HASHELSE(dmlparse.end_site(texpr.site), ':'))
         return live_expr
     return c.mkIfExpr(tree.site,
                     cond,
@@ -1069,9 +1070,9 @@ def expr_binop(tree, location, scope):
                         c.as_bool(codegen_expression(rh, location, scope))
                     if errors:
                         if op == '||':
-                            report(PANDOR(tree.site, dmlparse.start_site(tree.site), dmlparse.end_site(tree.site), '||', '#? true #:', ''))
+                            report(P.ANDOR(tree.site, dmlparse.start_site(tree.site), dmlparse.end_site(tree.site), '||', '#? true #:', ''))
                         else:
-                            report(PANDOR(tree.site, dmlparse.start_site(tree.site), dmlparse.end_site(tree.site), '&&', '#?', ' #: false'))
+                            report(P.ANDOR(tree.site, dmlparse.start_site(tree.site), dmlparse.end_site(tree.site), '&&', '#?', ' #: false'))
             else:
                 c.as_bool(codegen_expression(rh, location, scope))
             return lh
@@ -1263,7 +1264,7 @@ def expr_objectref(tree, location, scope):
                 prefix = 'dev.%s.' % (node.logname(
                         tuple(e.read() for e in location.indices)),)
             if not tree.site.filename().endswith('dml-builtins.dml'):
-                report(PDOLLAR_QUALIFY(
+                report(P.DOLLAR_QUALIFY(
                     dmlparse.start_site(tree.site), '', prefix))
     return e
 
@@ -2003,7 +2004,7 @@ def stmt_compound(stmt, location, scope):
                 and assign.args[0].kind == 'set'):
                 (lh, rh) = assign.args[0].args
                 if lh.kind == 'variable_dml12' and lh.args[0] == outarg:
-                    report(POUTARGRETURN(lh.site,
+                    report(P.OUTARGRETURN(lh.site,
                                          dmlparse.start_site(rh.site),
                                          ret.site))
     lscope = Symtab(scope)
@@ -2302,16 +2303,16 @@ def stmt_if(stmt, location, scope):
                 elif falsebranch:
                     codegen_statement(falsebranch, location, scope)
             if errors:
-                report(PHASH(stmt.site))
+                report(P.HASH(stmt.site))
                 if falsebranch:
-                    report(PHASHELSE(else_site, 'else'))
+                    report(P.HASHELSE(else_site, 'else'))
             if (not falsebranch and cond_ast.kind == 'binop'
                 and cond_ast.args[1] == '&&'):
                 lh = c.as_bool(codegen_expression(cond_ast.args[0], location, scope))
                 with logging.suppress_errors() as errors:
                     c.as_bool(codegen_expression(cond_ast.args[2], location, scope))
                 if lh.constant and not lh.value and errors:
-                    report(PIFAND(cond_ast.site, stmt.site, dmlparse.end_site(truebranch.site)))
+                    report(P.IFAND(cond_ast.site, stmt.site, dmlparse.end_site(truebranch.site)))
         if cond.value:
             return codegen_statements([truebranch], location, scope)
         elif falsebranch:
@@ -2615,7 +2616,7 @@ def stmt_return_dml12(stmt, location, scope):
     if logging.show_porting:
         m = location.method()
         if m and m.outp:
-            report(PRETURNARGS(stmt.site, [name for (name, _) in m.outp]))
+            report(P.RETURNARGS(stmt.site, [name for (name, _) in m.outp]))
     [args] = stmt.args
     assert not args # ensured by parser
     return [codegen_exit(stmt.site, None)]
@@ -3690,26 +3691,26 @@ def report_pevent_data_arg(meth_node, site, inargs):
         and meth_node.name in {'post', 'posted', 'next', 'remove'}):
         from . import structure
         if structure.method_is_std(meth_node.parent, 'get_event_info'):
-            report(PEVENT_NO_ARG(dmlparse.start_site(inargs[-1].site),
+            report(P.EVENT_NO_ARG(dmlparse.start_site(inargs[-1].site),
                                    dmlparse.end_site(site)))
         elif (isinstance(inargs[-1], ctree.Cast)
               and tp.safe_realtype(inargs[-1].expr.ctype()).is_int):
-            report(PEVENT_UINT64_ARG(
+            report(P.EVENT_UINT64_ARG(
                 inargs[-1].site, dmlparse.end_site(inargs[-1].site),
                 meth_node.parent.site))
             event_meth_node = meth_node.parent.get_component('event')
             argname = event_meth_node.inp[0].ident
             assert argname is not None
-            report(PCHANGE_INARGS(event_meth_node.site,
+            report(P.CHANGE_INARGS(event_meth_node.site,
                                   f'method event(uint64 {argname})'))
             for methname in ['get_event_info', 'set_event_info']:
                 meth = meth_node.parent.get_component(methname)
-                report(PEVENT_REMOVE_INFO(meth.site, dmlparse.end_site(meth.site)))
+                report(P.EVENT_REMOVE_INFO(meth.site, dmlparse.end_site(meth.site)))
 
 def codegen_inline(site, meth_node, indices, inargs, outargs,
                    inhibit_copyin = False):
     assert isinstance(meth_node, objects.DMLObject)
-    PWUNUSED.inlined_methods.add(meth_node.site)
+    P.WUNUSED.inlined_methods.add(meth_node.site)
 
     if len(inargs) != len(meth_node.inp):
         raise ICE(meth_node, "wrong number of inargs")

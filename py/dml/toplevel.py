@@ -20,6 +20,7 @@ from . import symtab
 from .messages import *
 from . import warnings as W
 from . import errors as E
+from . import porting as P
 from .logging import ICE, report
 import dml.globals
 import dml.dmlparse
@@ -108,7 +109,7 @@ def determine_version(filestr, filename):
                          ", ".join(map(fmt_version, supported_versions))))
 
     if logging.show_porting and version == (1, 2):
-        report(PVERSION(logging.SimpleSite(f"{filename}:{lineno}:{column}")))
+        report(P.VERSION(logging.SimpleSite(f"{filename}:{lineno}:{column}")))
 
     return (version, filestr)
 
@@ -276,7 +277,7 @@ def parse_file(dml_filename):
     if version == (1, 2) and logging.show_porting:
         with open(dml_filename, 'rb') as f:
             sha1 = hashlib.sha1(f.read()).hexdigest()  # nosec
-        report(PSHA1(logging.SimpleSite(f'{dml_filename}:1:0'), sha1))
+        report(P.SHA1(logging.SimpleSite(f'{dml_filename}:1:0'), sha1))
     ast = parse(contents, file_info, dml_filename, version)
     return ast
 

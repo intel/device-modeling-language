@@ -17,6 +17,7 @@ from .logging import ICE, report, binary_dump
 from .messages import *
 from . import warnings as W
 from . import errors as E
+from . import porting as P
 from . import output
 from .output import linemark, out
 from . import types as tp
@@ -1171,7 +1172,7 @@ def as_bool(e):
     elif t.is_int and t.bits == 1:
         if logging.show_porting and (isinstance(e, NodeRef)
                                      or isinstance(e, LocalVariable)):
-            report(PBITNEQ(dmlparse.start_site(e.site),
+            report(P.BITNEQ(dmlparse.start_site(e.site),
                            dmlparse.end_site(e.site)))
         return mkFlag(e.site, e)
     elif isinstance(t, tp.Ptr):
@@ -4094,7 +4095,7 @@ class NodeRefWithStorage(NodeRef, LValue):
             # some DML-generated expressions, like 'parent', use
             # object's site
             and self.site is not self.node.site):
-            report(PVAL(dmlparse.end_site(self.site)))
+            report(P.VAL(dmlparse.end_site(self.site)))
         node = self.node
 
         if node.objtype == 'method':

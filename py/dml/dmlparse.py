@@ -11,6 +11,7 @@ from .logging import report
 from .messages import *
 from . import warnings as W
 from . import errors as E
+from . import porting as P
 from . import ast, logging
 import dml.globals
 from . import dmllex12
@@ -437,7 +438,7 @@ def bitrange_2(t):
 def object_field_1_dml12(t):
     'object : maybe_extension FIELD objident bitrange maybe_istemplate object_spec'
     if logging.show_porting:
-        report(PFIELDRANGE(site(t, 4)))
+        report(P.FIELDRANGE(site(t, 4)))
     t[0] = ast.object_(site(t), t[3], 'field', [], None, t[4] + t[5] + t[6])
 
 @prod_dml12
@@ -460,7 +461,7 @@ def field_array_size_dml12(t):
         # standard PARRAY, because it's seldom used.
         remove_from = site(t, 7)
         new = ' + 1'
-        report(PARRAY(site(t, 3), site(t, 5), remove_from,
+        report(P.ARRAY(site(t, 3), site(t, 5), remove_from,
                       end_site(t[6].site), new))
 
 @prod_dml12
@@ -477,7 +478,7 @@ def session(t):
 def session_dml12(t):
     'session : DATA'
     if logging.show_porting:
-        report(PSESSION(site(t), 'data', 'session'))
+        report(P.SESSION(site(t), 'data', 'session'))
     t[0] = t[1]
 
 @prod
@@ -591,17 +592,17 @@ def report_pretval(site, file_info, start, end, rparen, outp, stmts):
         and stmts[-1].args[0].kind == 'set'):
         (lh, rh) = stmts[-1].args[0].args
         if lh.kind == 'variable_dml12' and lh.args[0] == outp[0][2]:
-            report(POUTARGRETURN(lh.site, start_site(rh.site), None))
+            report(P.OUTARGRETURN(lh.site, start_site(rh.site), None))
             # suppress PRETVAL's insertion of return statement
             ends_with_return = True
-    report(PRETVAL(
+    report(P.RETVAL(
         site,
         logging.DumpableSite(file_info, start),
         logging.DumpableSite(file_info, end),
         logging.DumpableSite(file_info, rparen),
         [(psite.loc(), pname) for (_, psite, pname, _) in outp]))
     if not ends_with_return:
-        report(PRETVAL_END(
+        report(P.RETVAL_END(
             site,
             logging.DumpableSite(file_info, end),
             [pname for (_, psite, pname, _) in outp]))
@@ -613,7 +614,7 @@ def object_method_noinparams_dml12(t):
     name = t[3]
     (inp, outp, throws) = ([], t[4], True)
     if logging.show_porting:
-        report(PINPARAMLIST(site(t, 4)))
+        report(P.INPARAMLIST(site(t, 4)))
     if logging.show_porting and outp:
         (start, end) = t.lexspan(6)
         [stmts, _] = t[6].args
@@ -637,10 +638,10 @@ def object_method_dml12(t):
     if logging.show_porting and any(not typ for (_, _, name, typ) in inp):
         # some standard methods are assigned a type later on
         if name not in {'set', 'write'}:
-            report(PINLINEDECL(site(t), 'method', 'inline method'))
+            report(P.INLINEDECL(site(t), 'method', 'inline method'))
         for (_, decl_site, (_, _, argname), typ) in inp:
             if not typ:
-                report(PINLINEDECL(decl_site, argname, 'inline ' + argname))
+                report(P.INLINEDECL(decl_site, argname, 'inline ' + argname))
     if logging.show_porting and outp:
         (start, end) = t.lexspan(10)
         [stmts, _] = t[10].args
@@ -736,7 +737,7 @@ def arraydef1_dml12(t):
     '''arraydef : expression'''
     t[0] = (ast.variable(site(t), 'i'), t[1])
     if logging.show_porting:
-        report(PARRAY_I(site(t)))
+        report(P.ARRAY_I(site(t)))
 
 @prod_dml12
 def arraydef2_dml12(t):
@@ -762,7 +763,7 @@ def arraydef2_dml12(t):
                     # j in 0..expr-1 => j < expr
                     remove_from = t[5].site
                     new = ''
-        report(PARRAY(site(t, 2), site(t, 4), remove_from,
+        report(P.ARRAY(site(t, 2), site(t, 4), remove_from,
                       end_site(t[5].site), new))
 
 @prod_dml14
@@ -942,7 +943,7 @@ def constant(t):
     'toplevel : CONSTANT ident EQUALS expression SEMI'
     t[0] = ast.constant(site(t), t[2], t[4])
     if logging.show_porting:
-        report(PCONSTANT(site(t)))
+        report(P.CONSTANT(site(t)))
 
 @prod_dml12
 def extern_dml12(t):
@@ -968,7 +969,7 @@ def extern_typedef(t):
 def top_struct_dml12(t):
     'toplevel : STRUCT ident LBRACE struct_decls RBRACE'
     if logging.show_porting:
-        report(PSTRUCTDECL(site(t, 1), site(t, 2), site(t, 5)))
+        report(P.STRUCTDECL(site(t, 1), site(t, 2), site(t, 5)))
     t[0] = ast.dml_typedef(site(t), ast.cdecl(site(t), t[2],
                                               [('struct', t[4])]))
 
@@ -1150,7 +1151,7 @@ def validate_if_body(stmts):
 def hashif_dml12(t):
     '''hashif : IF'''
     if logging.show_porting:
-        report(PHASH(site(t)))
+        report(P.HASH(site(t)))
 
 @prod_dml14
 def hashif(t):
@@ -1165,7 +1166,7 @@ def hashif_nohash(t):
 def hashelse_dml12(t):
     '''hashelse : ELSE'''
     if logging.show_porting:
-        report(PHASH(site(t)))
+        report(P.HASH(site(t)))
 
 @prod_dml14
 def hashelse(t):
@@ -1205,14 +1206,14 @@ def object_else_if(t):
 def object_parameter_dml12(t):
     '''param : PARAMETER objident paramspec_maybe_empty'''
     if logging.show_porting:
-        report(PPARAMETER(site(t)))
+        report(P.PARAMETER(site(t)))
     if logging.show_porting:
         if t[2] == 'hard_reset_value':
-            report(PHARD_RESET_VALUE(site(t, 2)))
+            report(P.HARD_RESET_VALUE(site(t, 2)))
         if t[2] == 'soft_reset_value' and not t[3][0]:
-            report(PSOFT_RESET_VALUE(site(t)))
+            report(P.SOFT_RESET_VALUE(site(t)))
         if t[2] == 'miss_pattern':
-            report(PMISS_PATTERN(site(t, 2)))
+            report(P.MISS_PATTERN(site(t, 2)))
     t[0] = ast.param(site(t), t[2], None, *t[3])
 
 @prod_dml12
@@ -1356,7 +1357,7 @@ def maybe_nothrow_throws_dml12(t):
 def maybe_nothrow_nothrow_dml12(t):
     'maybe_nothrow : NOTHROW'
     if logging.show_porting:
-        report(PNOTHROW(site(t)))
+        report(P.NOTHROW(site(t)))
     t[0] = False
 
 @prod
@@ -1517,7 +1518,7 @@ def basetype_dml12(t):
                 | bitfields
                 | typeof'''
     if logging.show_porting and t[1] == 'int1':
-        report(PINT1(site(t)))
+        report(P.INT1(site(t)))
     t[0] = t[1]
 
 @prod_dml14
@@ -1950,7 +1951,7 @@ def expression_unary_operator(t):
 def expression_hash_dml12(t):
     '''expression : HASH expression'''
     if logging.show_porting:
-        report(PSTRINGIFY(site(t, 1), end_site(site(t, 2))))
+        report(P.STRINGIFY(site(t, 1), end_site(site(t, 2))))
     t[0] = ast.unop(site(t), "stringify", t[2])
 
 @prod_dml14
@@ -2027,7 +2028,7 @@ def expression_objectref_dml12(t):
     'expression : DOLLAR objident'
     t[0] = ast.objectref(site(t, 2), t[2])
     if logging.show_porting:
-        report(PNODOLLAR(site(t, 1)))
+        report(P.NODOLLAR(site(t, 1)))
 
 @prod_dml12
 def expression_ident_dml12(t):
@@ -2476,8 +2477,8 @@ def statement_delay_dml12(t):
     'statement_except_hashif : AFTER LPAREN expression RPAREN CALL expression SEMI'
     if logging.show_porting:
         if t[6].kind != 'apply':
-            report(PINPARAMLIST(site(t, 7)))
-        report(PAFTER(site(t, 5), site(t, 6), site(t, 2), site(t, 4)))
+            report(P.INPARAMLIST(site(t, 7)))
+        report(P.AFTER(site(t, 5), site(t, 6), site(t, 2), site(t, 4)))
     t[0] = ast.after(site(t), 's', t[3], t[6])
 
 @prod_dml14
@@ -2577,12 +2578,12 @@ def call_dml12(t):
             inargs.append(init_ast.args[0])
     else:
         if logging.show_porting:
-            report(PINPARAMLIST(site(t, 3)))
+            report(P.INPARAMLIST(site(t, 3)))
         method_ast = t[2]
         inargs = []
 
     if logging.show_porting:
-        report(PINVOKE(site(t, 1), site(t, 2), site(t, 3), site(t, 4),
+        report(P.INVOKE(site(t, 1), site(t, 2), site(t, 3), site(t, 4),
                        len(t[3])))
 
     t[0] = ast.get(t[1])(site(t), method_ast, inargs, t[3])
@@ -2625,7 +2626,7 @@ def log_kind_old_dml12(t):
         lt = 'info'
     if logging.show_porting:
         [newkind] = [k for k in log_types if log_types[k] == lt]
-        report(PLOGKIND(site(t, 1), '"%s"' % lt, newkind))
+        report(P.LOGKIND(site(t, 1), '"%s"' % lt, newkind))
     t[0] = lt
 
 @prod
@@ -2663,7 +2664,7 @@ def statement_log_3(t):
 def hashselect_dml12(t):
     '''hashselect : SELECT'''
     if logging.show_porting:
-        report(PHASH(site(t)))
+        report(P.HASH(site(t)))
 
 @prod_dml14
 def hashselect(t):
@@ -2679,7 +2680,7 @@ def foreach_dml12(t):
     'statement_except_hashif : FOREACH ident IN LPAREN expression RPAREN statement'
     t[0] = ast.foreach_dml12(site(t), t[2], t[5], t[7])
     if logging.show_porting:
-        report(PHASH(site(t)))
+        report(P.HASH(site(t)))
 
 @prod_dml14
 def foreach(t):
@@ -2818,7 +2819,7 @@ def statement_list_2(t):
 def local_keyword_auto_dml12(t):
     '''local_keyword : AUTO'''
     if logging.show_porting:
-        report(PAUTO(site(t)))
+        report(P.AUTO(site(t)))
     t[0] = 'local'
 
 @prod
@@ -2835,7 +2836,7 @@ def static(t):
 def static_dml12(t):
     'static : STATIC'
     if logging.show_porting:
-        report(PSESSION(site(t), 'static', 'session'))
+        report(P.SESSION(site(t), 'static', 'session'))
     t[0] = 'session'
 
 @prod

@@ -38,6 +38,7 @@ PYFILES := dml/__init__.py			\
           dml/messages.py			\
           dml/objects.py			\
           dml/output.py				\
+          dml/porting.py			\
           dml/provisional.py			\
           dml/reginfo.py			\
           dml/serialize.py			\

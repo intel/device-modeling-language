@@ -22,6 +22,7 @@ from .logging import ICE, report
 from .messages import *
 from . import warnings as W
 from . import errors as E
+from . import porting as P
 from . import output
 from .output import out
 from . import ctree as c
@@ -3503,7 +3504,7 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
 
     if logging.show_porting:
         with output.NoOutput():
-            for method in PWUNUSED.typed_methods:
+            for method in P.WUNUSED.typed_methods:
                 if method.site.filename().endswith('dml-builtins.dml'):
                     # don't waste time on generating methods from dml-builtins
                     continue
@@ -3516,11 +3517,11 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
                     with logging.suppress_errors():
                         codegen.codegen_method_func(func).toc_inline()
 
-        for (site, method) in list(PWUNUSED.inline_methods.items()):
-            if site in PWUNUSED.inlined_methods:
-                report(PNO_WUNUSED(method.site, 'method', method.logname()))
+        for (site, method) in list(P.WUNUSED.inline_methods.items()):
+            if site in P.WUNUSED.inlined_methods:
+                report(P.NO_WUNUSED(method.site, 'method', method.logname()))
             else:
-                report(PWUNUSED(method.site, 'method', method.logname()))
+                report(P.WUNUSED(method.site, 'method', method.logname()))
 
 def tmprename(base):
     try:

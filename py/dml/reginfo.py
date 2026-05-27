@@ -7,6 +7,7 @@ from functools import reduce
 import dml.globals
 from . import expr_util, logging
 from . import ctree as c
+from . import porting as P
 from .logging import report
 from .messages import *
 from . import warnings as W
@@ -122,7 +123,7 @@ def explode_register(node):
             indices = static_indices(node, param_expr_site(node, 'offset'))
             offset = param_expr(node, 'offset', indices)
             if offset.undefined:
-                report(PUNDEFOFFS(offset.site))
+                report(P.UNDEFOFFS(offset.site))
         except E.IDXVAR:
             pass
     for indices in itertools.product(*(
