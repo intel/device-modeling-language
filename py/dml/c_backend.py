@@ -706,8 +706,6 @@ def generate_subobj_connects(init_code, device, prefixes=("",)):
                         f'_DML_register_subobj_connect({cls}, '
                         + f'{classname}, "{name}", {desc});\n')
 
-def apply(f):
-    return f()
 @apply
 class PORTOBJ(object):
     """Marker that indicates that a method is wrapped for a port object,
