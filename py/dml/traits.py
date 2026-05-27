@@ -62,7 +62,7 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                 startup = 'startup' in qualifiers
                 memoized = 'memoized' in qualifiers
                 if (startup and not independent) or (memoized and not startup):
-                    raise ICE(impl.site,
+                    raise ICE(ast.site,
                               'Invalid qualifier combination: '
                               + ' '.join(['independent']*independent
                                          + ['startup']*startup
