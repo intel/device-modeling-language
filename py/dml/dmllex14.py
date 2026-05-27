@@ -12,7 +12,7 @@ hashids = {'#' + kw: 'HASH' + kw.upper()
                    'select',
            ]}
 
-tokens = (common_tokens
+tokens = (common_tokens  # noqa: F405
           + ('HASHCONDOP', 'HASHCOLON')
           + ('DISCARD',)
           + tuple(hashids.values()))
@@ -21,7 +21,7 @@ t_HASHCONDOP = r'\#\?'
 t_HASHCOLON = r'\#:'
 t_DISCARD = r'_'
 
-keywords_dml14 = dict(keywords_common)
+keywords_dml14 = dict(keywords_common)  # noqa: F405
 for kw in ['param', 'saved', 'async', 'await', 'with', 'shared', 'stringify',
            'export', 'as', 'independent', 'startup', 'memoized', 'hook']:
     keywords_dml14[kw] = kw.upper()
@@ -29,7 +29,7 @@ for kw in ['param', 'saved', 'async', 'await', 'with', 'shared', 'stringify',
 
 keywords_dml14['_'] = 'DISCARD'
 
-reserved_idents = reserved_idents_common + (
+reserved_idents = reserved_idents_common + (  # noqa: F405
     'PARAM', 'SAVED', 'INDEPENDENT', 'STARTUP', 'MEMOIZED')
 
 def t_ID(t):
