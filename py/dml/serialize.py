@@ -102,17 +102,9 @@ def prepare_array_de_serialization(site, t):
 def mkSubRefLit(site, expr, sub, typ, op):
     real_etype = tp.safe_realtype_shallow(expr.ctype())
 
-    if isinstance(real_etype, tp.Ptr):
-        if op == '.':
-            raise E.NOSTRUCT(site, expr)
-        basetype = real_etype.base
-        real_basetype = tp.safe_realtype(basetype)
-    else:
-        if op == '->':
-            raise E.NOPTR(site, expr)
-        real_basetype = tp.safe_realtype(etype)
-
-    real_basetype = real_basetype.resolve()
+    assert isinstance(real_etype, tp.Ptr), (site, expr)
+    assert op == '->', (site, expr)
+    real_basetype = tp.safe_realtype(real_etype.base).resolve()
 
     return ctree.StructMember(site, expr, sub,
                               tp.conv_const(real_basetype.const, typ), op)
