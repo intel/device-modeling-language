@@ -6,7 +6,8 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import dml.globals
-from .logging import ICE, SimpleSite
+from . import logging
+from .logging import ICE
 
 __all__ = (
     'NoOutput',
@@ -117,7 +118,7 @@ class FileOutput(Output):
 
     def commit(self):
         if self.indent:
-            raise ICE(SimpleSite(f"{self.filename}:0"), 'Unbalanced indent')
+            raise ICE(logging.SimpleSite(f"{self.filename}:0"), 'Unbalanced indent')
         try:
             os.remove(self.filename)
         except OSError:
@@ -164,7 +165,7 @@ def quote_filename(filename):
 
 def site_linemark_nocoverity(site, adjust=0):
     if dml.globals.linemarks:
-        if site is not None and not isinstance(site, SimpleSite):
+        if site is not None and not isinstance(site, logging.SimpleSite):
             filename = site.filename()
             lineno = site.lineno
             if lineno + adjust < 0:
@@ -183,7 +184,7 @@ def coverity_marker(event, classification=None, site=None):
     coverity_markers([(event, classification)], site)
 
 def coverity_markers(markers, site=None):
-    site_with_loc = site is not None and not isinstance(site, SimpleSite)
+    site_with_loc = site is not None and not isinstance(site, logging.SimpleSite)
     if dml.globals.coverity and site_with_loc:
         custom_markers = []
         filename = site.filename()

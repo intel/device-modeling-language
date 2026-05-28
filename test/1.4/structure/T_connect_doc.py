@@ -1,6 +1,8 @@
 # © 2026 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 import stest
+import testenv
+obj = testenv.instantiate()
 
 attr_doc = {name: doc for (name, _, doc, _) in obj.attributes}
 

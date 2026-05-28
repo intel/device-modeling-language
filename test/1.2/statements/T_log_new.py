@@ -1,9 +1,13 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import simics
+import testenv
+import conf
+obj = testenv.instantiate()
 conf.sim.stop_on_error = False
 if not obj.runtest:
     print('test attribute returned false')
-    SIM_quit(1)
+    simics.SIM_quit(1)
 
 

@@ -1,16 +1,17 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
-from collections import namedtuple
 import operator
 import itertools
 from functools import reduce
 import dml.globals
-from . import logging
-from .ctree import *
-from .logging import *
-from .messages import *
-from .expr_util import *
+from . import expr_util, logging
+from . import ctree as c
+from . import porting as P
+from .logging import report, DMLError
+from . import errors as E, warnings as W
+from .expr_util import (
+    defined, param_expr, param_expr_site, param_int, static_indices)
 
 __all__ = ('explode_registers',)
 
@@ -54,8 +55,8 @@ class RegInfo(object):
         # r1 is a two-dimensional register array, but the partition only
         # contains r1[3][1] and r1[4][5]. Can happen if register offset
         # is undefined for some, but not all, indices.
-        [(r1, (mkIntegerLiteral(3), mkIntegerLiteral(1)), ()),
-         (r1, (mkIntegerLiteral(4), mkIntegerLiteral(5)), ())]
+        [(r1, (c.mkIntegerLiteral(3), c.mkIntegerLiteral(1)), ()),
+         (r1, (c.mkIntegerLiteral(4), c.mkIntegerLiteral(5)), ())]
         # r2 is a two-dimensional register array, and the partition contains
         # all 6 instances
         [(r2, (), (3, 2))]
@@ -64,7 +65,7 @@ class RegInfo(object):
         node.dimensions == bank.dimensions + len(indices) + len(dimsizes).
         '''
         if self.dimsizes is None:
-            return ((self.node, tuple(mkIntegerLiteral(self.node.site, i)
+            return ((self.node, tuple(c.mkIntegerLiteral(self.node.site, i)
                                       for i in instance.coord), ())
                     for instance in self.layout)
         else:
@@ -120,11 +121,11 @@ def explode_register(node):
             indices = static_indices(node, param_expr_site(node, 'offset'))
             offset = param_expr(node, 'offset', indices)
             if offset.undefined:
-                report(PUNDEFOFFS(offset.site))
-        except EIDXVAR:
+                report(P.UNDEFOFFS(offset.site))
+        except E.IDXVAR:
             pass
     for indices in itertools.product(*(
-            (mkIntegerLiteral(node.site, idx) for idx in range(dimsize))
+            (c.mkIntegerLiteral(node.site, idx) for idx in range(dimsize))
             for dimsize in dimsizes)):
         coord = tuple(i.value for i in indices)
         roffset, rsize, regnum = one_register(node, indices, n)
@@ -158,9 +159,9 @@ def one_register(node, indices, bank):
     try:
         if dml.globals.dml_version == (1, 2):
             roffset = param_expr(node, 'offset', bank_indices + indices)
-            roffset = expr_intval(roffset) if defined(roffset) else None
+            roffset = expr_util.expr_intval(roffset) if defined(roffset) else None
             regnum = param_expr(node, 'regnum', bank_indices + indices)
-            regnum = expr_intval(regnum) if defined(regnum) else None
+            regnum = expr_util.expr_intval(regnum) if defined(regnum) else None
         else:
             roffset = param_int(node, 'offset', indices=bank_indices + indices)
             # in 1.4, we use the magic constant unmapped_offset to denote
@@ -174,7 +175,7 @@ def one_register(node, indices, bank):
 
         # roffset is undefined for unmapped registers
         if roffset and roffset < 0:
-            report(WNEGOFFS(param_expr_site(node, 'offset'), roffset))
+            report(W.NEGOFFS(param_expr_site(node, 'offset'), roffset))
             roffset &= 0xffffffffffffffff
 
         return (roffset, rsize, regnum)
@@ -190,7 +191,7 @@ def check_overlap(regs):
             [[node1], [node2]] = [
                 [reg.node for reg in regs if ri in reg.layout]
                 for ri in [ri1, ri2]]
-            report(EREGOL(node1, node2, ri1.coord, ri2.coord))
+            report(E.REGOL(node1, node2, ri1.coord, ri2.coord))
 
 def explode_registers(bank):
     """Expand all registers of a bank, and calculate the offsets of every

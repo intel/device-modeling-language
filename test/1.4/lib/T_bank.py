@@ -1,7 +1,11 @@
 # © 2026 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import sim_commands
 import stest
+import testenv
+import conf
+obj = testenv.instantiate()
 
 class LogCapture(object):
     def __init__(self, kind='error'):

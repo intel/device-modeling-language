@@ -5,6 +5,8 @@ import stest
 import simics
 from dev_util import Register_LE
 import re
+import testenv
+obj = testenv.instantiate()
 
 stest.expect_equal(obj.y_value, 42)
 

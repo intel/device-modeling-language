@@ -78,12 +78,12 @@ class test_param_linear_int(unittest.TestCase):
             self.assertEqual(
                 param_linear_int(self.p(
                     lambda indices:
-                    ctree.mkCast(site, indices[0], types.TInt(64, signed)),
+                    ctree.mkCast(site, indices[0], types.Int(64, signed)),
                     (2,))),
                 (1, 0))
             self.assertEqual(
                 param_linear_int(self.p(
                     lambda indices:
-                    ctree.mkCast(site, indices[0], types.TInt(63, signed)),
+                    ctree.mkCast(site, indices[0], types.Int(63, signed)),
                     (2,))),
                 None)

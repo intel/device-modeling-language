@@ -4,6 +4,8 @@
 import contextlib
 import stest, dev_util
 from stest import expect_equal
+import testenv
+obj = testenv.instantiate()
 
 mkR = dev_util.Register_LE
 
@@ -132,8 +134,6 @@ def test_partial():
     expect_equal(ru.read(), 0x31ab)
     r5.write(0xabcd)
     expect_equal(ru.read(), 0xcdab)
-
-#conf.obj.log_level = 4
 
 test_overlap()
 test_partial()

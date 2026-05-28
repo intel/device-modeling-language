@@ -21,30 +21,15 @@ def fmt_message(err):
 
 def extract_messages(sys_path):
     sys.path.append(sys_path)
-    from dml import messages
-    from dml.messages import DMLError, DMLWarning
+    from dml import warnings, errors
 
-    errors = []
-    warnings = []
-
-    for n in dir(messages):
-        o = getattr(messages, n)
-        #sys.stderr.write("%s: %r\n" % (n, o))
-        if isinstance(o, type):
-            if issubclass(o, DMLError) and o is not DMLError:
-                errors.append(o)
-            elif issubclass(o, DMLWarning) and o is not DMLWarning:
-                warnings.append(o)
-
-    errors.sort(key=lambda x: x.fmt)
-    warnings.sort(key=lambda x: x.fmt)
-    return (warnings, errors)
+    return (warnings.all_warnings, errors.all_errors)
 
 def print_message_table(f, messages):
     f.write("<dl>\n")
-    for m in messages:
-        assert m.__doc__
-        f.write(f"  <dt><b>\n\n{fmt_message(m)} [{m.__name__}]</b></dt>\n")
+    for (tag, m) in sorted(messages.items()):
+        assert m.__doc__, m
+        f.write(f"  <dt><b>\n\n{fmt_message(m)} [{tag}]</b></dt>\n")
         doc = '\n'.join(line[4:] if line.startswith('    ') else line
                         for line in m.__doc__.strip().splitlines())
         f.write(f"  <dd>\n\n{doc}\n</dd>\n")
@@ -94,5 +79,8 @@ if __name__ == "__main__":
     (warnings, errors) = extract_messages(args.path)
     with open(args.outfile, 'w') as f:
         print_messages(
-            f, [w for w in warnings if matches_version(w, args.version)],
-            [e for e in errors if matches_version(e, args.version)])
+            f,
+            {tag: w for (tag, w) in warnings.items()
+             if matches_version(w, args.version)},
+            {tag: e for (tag, e) in errors.items()
+             if matches_version(e, args.version)})

@@ -1,22 +1,20 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
-import operator
-from .ctree import *
-from .expr import *
-from .expr_util import *
-from .types import *
+from . import ctree as c
+from .expr import mkLit
+from .expr_util import param_bool, param_defined, param_str
+from . import types as tp
 from .logging import report
-from .messages import WEXPERIMENTAL_UNMAPPED
-from .symtab import *
-from .codegen import (require_fully_typed, mark_method_referenced,
-                      method_instance, codegen_call_byname, declarations,
-                      ReturnFailure)
+from . import warnings as W
+from .symtab import global_scope, Symtab
+from .codegen import codegen_call_byname, declarations
+from . import codegen
 from . import crep
 import dml.globals
 
 # Emit a warning if the hook methods are overridden, as they are
-# introduced as an experimental feature, at the moment.   
+# introduced as an experimental feature, at the moment.
 def check_unmapped_access_handling(bank, isread):
     if isread:
         meth_node = bank.get_component('_unmapped_read_access', 'method')
@@ -25,7 +23,7 @@ def check_unmapped_access_handling(bank, isread):
 
     overridden = meth_node and meth_node.default_method.node
     if overridden:
-        report(WEXPERIMENTAL_UNMAPPED(meth_node, meth_node.name))
+        report(W.EXPERIMENTAL_UNMAPPED(meth_node, meth_node.name))
 
 def unmapped_access(site, bank, idx, scope, isread, overlapping, bigendian,
                     memop, offset, size, writevalue, size2, value2):
@@ -33,21 +31,21 @@ def unmapped_access(site, bank, idx, scope, isread, overlapping, bigendian,
         # Only pass the first byte of the access to _unmapped_*_access
         if not isread:
             if bigendian:
-                writevalue = mkShR(
-                    site, writevalue, mkMult(
+                writevalue = c.mkShR(
+                    site, writevalue, c.mkMult(
                         site,
-                        mkSubtract(site, size, mkIntegerLiteral(site, 1)),
-                        mkIntegerLiteral(site, 8)))
+                        c.mkSubtract(site, size, c.mkIntegerLiteral(site, 1)),
+                        c.mkIntegerLiteral(site, 8)))
             else:
-                writevalue = mkBitAnd(
-                    site, writevalue, mkIntegerLiteral(site, 0xff))
-        size = mkIntegerLiteral(site, 1)
+                writevalue = c.mkBitAnd(
+                    site, writevalue, c.mkIntegerLiteral(site, 0xff))
+        size = c.mkIntegerLiteral(site, 1)
 
     scope = Symtab(scope)
     code = []
-    success = mkLocalVariable(site, scope.add_variable(
-        'success', type=TBool(), site=site,
-        init=ExpressionInitializer(mkBoolConstant(site, 0)),
+    success = c.mkLocalVariable(site, scope.add_variable(
+        'success', type=tp.Bool(), site=site,
+        init=c.ExpressionInitializer(c.mkBoolConstant(site, 0)),
         make_unique=True))
 
     if isread:
@@ -68,13 +66,13 @@ def unmapped_access(site, bank, idx, scope, isread, overlapping, bigendian,
                 [success]))
 
     code.extend([
-        mkCopyData(
+        c.mkCopyData(
             site,
-            mkIfExpr(site, success, size, mkIntegerLiteral(site, 0)),
+            c.mkIfExpr(site, success, size, c.mkIntegerLiteral(site, 0)),
             size2),
-        mkReturn(site, mkBoolConstant(site, False))])
+        c.mkReturn(site, c.mkBoolConstant(site, False))])
 
-    return mkCompound(site, declarations(scope) + code)
+    return c.mkCompound(site, declarations(scope) + code)
 
 # The basic idea of the register dispatcher is to statically
 # create a static table with one item for each register instance,
@@ -147,9 +145,9 @@ def codegen_access(bank, bank_indices, isread, memop, offset, size, writevalue,
 
     for reg in bank.mapped_registers:
         meth_node = reg.node.get_component(method_name, 'method')
-        require_fully_typed(site, meth_node)
-        func = method_instance(meth_node)
-        mark_method_referenced(func)
+        codegen.require_fully_typed(site, meth_node)
+        func = codegen.method_instance(meth_node)
+        codegen.mark_method_referenced(func)
         cname = func.get_cname()
         by_dims.setdefault(len(reg.layout[0].coord), []).extend(
             (instance, cname) for instance in reg.layout)
@@ -221,8 +219,8 @@ def codegen_access(bank, bank_indices, isread, memop, offset, size, writevalue,
                 regvar, size.read())])
         lines.append(
                 '            %s;' % (
-            size2.write(ExpressionInitializer(mkLit(site, 'bytes',
-                                                    TInt(64, False))))))
+            size2.write(c.ExpressionInitializer(mkLit(site, 'bytes',
+                                                    tp.Int(64, False))))))
         if partial:
             if bigendian:
                 lines.extend([
@@ -247,8 +245,8 @@ def codegen_access(bank, bank_indices, isread, memop, offset, size, writevalue,
                     regvar, indices, memop.read(), bytepos_args),
                 '            if (ret) return true;',
                 '            %s;' % (
-                    value2.write(ExpressionInitializer(
-                        mkLit(site, 'val', TInt(64, False))))),
+                    value2.write(c.ExpressionInitializer(
+                        mkLit(site, 'val', tp.Int(64, False))))),
                 '            return false;'])
         else:
             # Shifting/masking can normally be skipped in banks with
@@ -274,8 +272,8 @@ def codegen_access(bank, bank_indices, isread, memop, offset, size, writevalue,
                 '        if (offset >= %s[last].offset' % (regvar,)
                 + ' && offset < %s[last].offset + %s[last].size) {'
                 % (regvar, regvar),
-                '            %s;' % (size2.write(ExpressionInitializer(
-                    mkIntegerLiteral(site, 0))),),
+                '            %s;' % (size2.write(c.ExpressionInitializer(
+                    c.mkIntegerLiteral(site, 0))),),
                 '            return false;',
                 '        }'])
         lines.extend([
@@ -284,14 +282,14 @@ def codegen_access(bank, bank_indices, isread, memop, offset, size, writevalue,
             '}'])
 
     scope = Symtab(global_scope)
-    code = [mkInline(site, line) for line in lines]
+    code = [c.mkInline(site, line) for line in lines]
     check_unmapped_access_handling(bank, isread)
-    with ReturnFailure(site):
+    with codegen.ReturnFailure(site):
         code.append(unmapped_access(site, bank, bank_indices, scope, isread,
                                     overlapping, bigendian, memop,
                                     offset, size, writevalue, size2, value2))
 
-    return mkCompound(
+    return c.mkCompound(
         site, declarations(scope) + code)
 
 def codegen_write_access(bank, idx, inargs, outargs, site):

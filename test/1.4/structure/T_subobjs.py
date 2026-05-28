@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import stest
+import testenv
+obj = testenv.instantiate()
 
 with stest.expect_log_mgr(obj.port.p[1], 'info'):
     obj.port.p[1].pa = 3

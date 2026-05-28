@@ -1,9 +1,12 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import simics
 import stest
+import testenv
+obj = testenv.instantiate()
 
-cpu = SIM_create_object("clock", "clock", [["freq_mhz", 1]])
+cpu = simics.SIM_create_object("clock", "clock", [["freq_mhz", 1]])
 obj.queue = cpu
 
 obj.post_all = None
