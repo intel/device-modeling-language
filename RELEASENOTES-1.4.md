@@ -449,3 +449,4 @@
   instantiates the `objects_finalized` template.
   The device object always instantiates this template.
 - `release 6 6464`
+- `release 7 7160`
