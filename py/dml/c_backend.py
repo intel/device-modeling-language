@@ -3094,10 +3094,11 @@ def generate_hook_attribute_funs():
         dimension_strides, info.dimsizes, info.dimensions,
         sizeof(_dml_hook_t));
     char *ptr = (char *)obj + acc->device_offset;
+
+    ASSERT(portobj->ndims <= info.dimensions);
     for (int i = 0; i < portobj->ndims; ++i) {
             ptr += portobj->indices[i] * dimension_strides[i];
     }
-
 
     attr_value_t val = _get_device_member(ptr,
                                           info.dimsizes + portobj->ndims,
@@ -3126,9 +3127,12 @@ def generate_hook_attribute_funs():
         dimension_strides, info.dimsizes, info.dimensions,
         sizeof(_dml_hook_t));
     char *ptr = (char *)obj + acc->device_offset;
+
+    ASSERT(portobj->ndims <= info.dimensions);
     for (int i = 0; i < portobj->ndims; ++i) {
             ptr += portobj->indices[i] * dimension_strides[i];
     }
+
     set_error_t error = _set_device_member(*val,
                                            ptr,
                                            info.dimsizes + portobj->ndims,
