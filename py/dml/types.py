@@ -24,40 +24,38 @@ __all__ = (
     'add_late_global_struct_defs',
     'TypeSequence',
     'DMLType',
-    'TVoid',
-    'TUnknown',
-    'TDevice',
-    'TNamed',
+    'Void',
+    'Unknown',
+    'Device',
+    'Named',
     'IntegerType',
-    'TBool',
-    'TInt',
-    'TEndianInt',
-    'TLong',
-    'TSize',
-    'TFloat',
-    'TArray',
-    'TPtr',
-    'TVector',
-    'TTrait',
-    'TTraitList',
+    'Bool',
+    'Int',
+    'EndianInt',
+    'Long',
+    'Size',
+    'Float',
+    'Array',
+    'Ptr',
+    'Vector',
+    'Trait',
+    'TraitList',
     'StructType',
-    'TExternStruct',
-    'TStruct',
-    'TLayout',
-    'TFunction',
-    'THook',
+    'ExternStruct',
+    'Struct',
+    'Layout',
+    'Function',
+    'Hook',
     'cident',
     'void',
 )
 
-import sys
 import re
-from itertools import *
 
 from .env import is_windows
 from .output import out
-from .messages import *
-from .logging import *
+from . import errors as E
+from .logging import ICE, report, DMLError
 from . import breaking_changes
 from . import output
 import dml .globals
@@ -91,28 +89,28 @@ global_anonymous_structs = {}
 
 def check_named_types(t):
     '''Checks that a type does not reference a non-existing type'''
-    if isinstance(t, TNamed):
+    if isinstance(t, Named):
         if t.c not in typedefs:
-            raise ETYPE(t.declaration_site, t)
+            raise E.TYPE(t.declaration_site, t)
     elif isinstance(t, StructType):
         t.resolve()
         for (mn, mt) in t.members:
             check_named_types(mt)
-    elif isinstance(t, (TPtr, TVector, TArray)):
+    elif isinstance(t, (Ptr, Vector, Array)):
         check_named_types(t.base)
-    elif isinstance(t, TFunction):
+    elif isinstance(t, Function):
         for pt in t.input_types:
             check_named_types(pt)
         check_named_types(t.output_type)
-    elif isinstance(t, TTraitList):
+    elif isinstance(t, TraitList):
         if t.traitname not in dml.globals.traits:
-            raise ETYPE(t.declaration_site, t)
-    elif isinstance(t, THook):
+            raise E.TYPE(t.declaration_site, t)
+    elif isinstance(t, Hook):
         for msg_t in t.msg_types:
             check_named_types(msg_t)
-    elif isinstance(t, (TVoid, IntegerType, TBool, TFloat, TTrait)):
+    elif isinstance(t, (Void, IntegerType, Bool, Float, Trait)):
         pass
-    elif dml.globals.dml_version == (1, 2) and isinstance(t, TUnknown):
+    elif dml.globals.dml_version == (1, 2) and isinstance(t, Unknown):
         pass
     else:
         raise ICE(t.declaration_site, "unknown type %r" % t)
@@ -122,7 +120,7 @@ def realtype_shallow(t):
     "Lookup a named type"
     #assert isinstance(t, DMLType)
     seen = set()
-    while isinstance(t, TNamed):
+    while isinstance(t, Named):
         if t in seen:
             raise ICE(t.declaration_site,
                        "recursive type definition of %r" % t)
@@ -132,8 +130,8 @@ def realtype_shallow(t):
         if not t2:
             raise DMLUnknownType(t)
         if t.const and not t2.const:
-            if isinstance(t2, TFunction):
-                raise ECONSTFUN(t.declaration_site)
+            if isinstance(t2, Function):
+                raise E.CONSTFUN(t.declaration_site)
             t = t2.clone()
             t.const = True
         else:
@@ -143,11 +141,11 @@ def realtype_shallow(t):
 def realtype(t):
     t = realtype_shallow(t)
 
-    if isinstance(t, TPtr):
+    if isinstance(t, Ptr):
         t2 = realtype(t.base)
         if t2 != t:
-            return TPtr(t2, t.const)
-    if isinstance(t, TTraitList):
+            return Ptr(t2, t.const)
+    if isinstance(t, TraitList):
         # in 'sequence(t)' and 'each t in (...)', t refers to the
         # template name rather than the type; this is a misplaced check
         # that there is a template named t.
@@ -157,23 +155,23 @@ def realtype(t):
         if (t.traitname not in dml.globals.templates
             or not dml.globals.templates[t.traitname].trait):
             raise DMLUnknownType(t)
-    elif isinstance(t, TArray):
+    elif isinstance(t, Array):
         t2 = realtype(t.base)
         if t2 != t:
-            return TArray(t2, t.size, t.const)
-    elif isinstance(t, TVector):
+            return Array(t2, t.size, t.const)
+    elif isinstance(t, Vector):
         t2 = realtype(t.base)
         if t2 != t:
-            return TVector(t2, t.const, t.uniq)
-    elif isinstance(t, TFunction):
+            return Vector(t2, t.const, t.uniq)
+    elif isinstance(t, Function):
         input_types = tuple(realtype(sub) for sub in t.input_types)
         output_type = realtype(t.output_type)
         if input_types != t.input_types or output_type != t.output_type:
-            return TFunction(input_types, output_type, t.varargs, t.const)
-    elif isinstance(t, THook):
+            return Function(input_types, output_type, t.varargs, t.const)
+    elif isinstance(t, Hook):
         msg_types = tuple(realtype(sub) for sub in t.msg_types)
         if msg_types != t.msg_types:
-            return THook(msg_types, t.validated, t.const)
+            return Hook(msg_types, t.validated, t.const)
 
     return t
 
@@ -181,19 +179,19 @@ def safe_realtype(t):
     try:
         return realtype(t)
     except DMLUnknownType as e:
-        raise ETYPE(e.type.declaration_site or None, e.type)
+        raise E.TYPE(e.type.declaration_site or None, e.type)
 
 def safe_realtype_shallow(t):
     try:
         return realtype_shallow(t)
     except DMLUnknownType as e:
-        raise ETYPE(e.type.declaration_site or None, e.type)
+        raise E.TYPE(e.type.declaration_site or None, e.type)
 
 def conv_const(const, t):
     # Functions cannot be const. Usually function types cannot happen
     # where conv_const is called, but if they can, then that deserves
     # that the caller handles it explicitly.
-    assert not isinstance(t, TFunction)
+    assert not isinstance(t, Function)
     if const and not t.const:
         t = t.clone()
         t.const = True
@@ -201,7 +199,7 @@ def conv_const(const, t):
 
 def safe_realtype_unconst(t0):
     def sub(t):
-        if isinstance(t, TArray):
+        if isinstance(t, Array):
             base = sub(t.base)
             if t.const or base is not t.base:
                 t = t.clone()
@@ -215,7 +213,7 @@ def safe_realtype_unconst(t0):
 
 def shallow_const(t):
     t = safe_realtype_shallow(t)
-    while not t.const and isinstance(t, TArray):
+    while not t.const and isinstance(t, Array):
         t = safe_realtype_shallow(t.base)
 
     return t.const
@@ -226,7 +224,7 @@ def deep_const(origt):
         st = safe_realtype_shallow(subtypes.pop())
         if st.const:
             return True
-        if isinstance(st, TArray):
+        if isinstance(st, Array):
             subtypes.append(st.base)
         elif isinstance(st, StructType):
             subtypes.extend(t for (_, t) in st.members)
@@ -262,7 +260,7 @@ class DMLType(metaclass=abc.ABCMeta):
     void = False
     # shorthand for isinstance(x, IntegerType)
     is_int = False
-    # shorthand for isinstance(x, TFloat)
+    # shorthand for isinstance(x, Float)
     is_float = False
     # shorthand for (is_int or is_float)
     is_arith = False
@@ -322,8 +320,8 @@ class DMLType(metaclass=abc.ABCMeta):
         (1) and (2) of 'eq', and does away with criteria (3) entirely.
         For example, using eq_fuzzy to compare any bitfields with its base
         integer type will return True, but also,
-        TPtr(void).eq_fuzzy(TPtr(TBool())) is allowed to return True, as is
-        TPtr(TBool()).eq_fuzzy(TArray(TBool())).
+        Ptr(void).eq_fuzzy(Ptr(Bool())) is allowed to return True, as is
+        Ptr(Bool()).eq_fuzzy(Array(Bool())).
 
         Most notably, cmp_fuzzy does not take const-qualification into account.
 
@@ -390,19 +388,19 @@ class DMLType(metaclass=abc.ABCMeta):
            return self"""
         return self
 
-class TVoid(DMLType):
+class Void(DMLType):
     __slots__ = ()
     void = True
     def __repr__(self):
-        return 'TVoid()'
+        return 'Void()'
     def describe(self):
         return 'void'
     def declaration(self, var):
         return 'void ' + self.const_str + ' ' + var
     def clone(self):
-        return TVoid(self.const)
+        return Void(self.const)
 
-class TUnknown(DMLType):
+class Unknown(DMLType):
     '''A type unknown to DML. Typically used for a generic C macro
     imported to DML with an untyped 'extern' declaration, where some
     argument or return value cannot be simply expressed as a C type.
@@ -417,7 +415,7 @@ class TUnknown(DMLType):
     def clone(self):
         raise ICE(self.declaration_site, "cannot clone unknown type")
 
-class TDevice(DMLType):
+class Device(DMLType):
     """The type of the device object
 
     This is the type of $dev. No other values have this type.
@@ -427,7 +425,7 @@ class TDevice(DMLType):
         DMLType.__init__(self, const)
         self.name = name
     def __repr__(self):
-        return 'TDevice(%s)' % repr(self.name)
+        return 'Device(%s)' % repr(self.name)
     def c_name(self):
         return f'{self.name} *'
     def describe(self):
@@ -438,11 +436,11 @@ class TDevice(DMLType):
         constviol = False
         if not self.const and other.const:
             constviol = True
-        if isinstance(other, TDevice):
+        if isinstance(other, Device):
             return (True, False, constviol)
         return (False, False, constviol)
     def clone(self):
-        return TDevice(self.name, self.const)
+        return Device(self.name, self.const)
     def declaration(self, var):
         return f'{self.c_name()}{self.const_str}{var}'
 
@@ -472,7 +470,7 @@ def cident(name):
     # Extern typedefs would have to be excluded, though.
     return cident_renames.get(name, name)
 
-class TNamed(DMLType):
+class Named(DMLType):
     __slots__ = ('c',)
     def __init__(self, name, const = False):
         DMLType.__init__(self, const)
@@ -494,15 +492,15 @@ class TNamed(DMLType):
         assert False, 'need realtype before hashed'
 
     def clone(self):
-        return TNamed(self.c, self.const)
+        return Named(self.c, self.const)
 
     def declaration(self, var):
         return cident(self.c) + ' ' + self.const_str + var
 
-class TBool(DMLType):
+class Bool(DMLType):
     __slots__ = ()
     def __repr__(self):
-        return 'TBool(%r)' % self.const
+        return 'Bool(%r)' % self.const
     def describe(self):
         return 'bool'
     def declaration(self, var):
@@ -510,14 +508,14 @@ class TBool(DMLType):
 
     def canstore(self, other):
         constviol = False
-        if type(other) is TBool:
+        if type(other) is Bool:
             return (True, False, constviol)
         if (other.is_int
             and other.bits == 1 and not other.signed):
             return (True, False, constviol)
         return (False, False, constviol)
     def clone(self):
-        return TBool(self.const)
+        return Bool(self.const)
 
 class IntegerType(DMLType):
     '''Type that can contain an integer value
@@ -531,7 +529,7 @@ class IntegerType(DMLType):
         self.bits = bits
         assert isinstance(signed, bool)
         if members is not None:
-            assert all(isinstance(m, TInt) for (m, _, _) in members.values())
+            assert all(isinstance(m, Int) for (m, _, _) in members.values())
             assert not signed
         self.signed = signed
         self.members = members
@@ -641,18 +639,18 @@ class IntegerType(DMLType):
         else:
             return (False, False, False)
 
-class TInt(IntegerType):
+class Int(IntegerType):
     '''An integer. In a declaration, the corresponding C type is the
     smallest type with the same sign, in which the type fits.
 
     When looking at the types of rvalues, it is slightly unclear how
-    TInt maps to C integers. It seems that the bitsize of the TInt of
+    Int maps to C integers. It seems that the bitsize of the Int of
     an expression maintains an approximate upper bound of the possible
     values of the expression, and that the corresponding C type is (often)
     the first of [int32, uint32, int64, uint64] in which the DML type fits.
 
     DMLC does not seem to maintain consistency between signedness of
-    TInt and the corresponding C type. This seldom makes a difference,
+    Int and the corresponding C type. This seldom makes a difference,
     because it means that C's operational semantics is what's used in
     practice.
     '''
@@ -667,7 +665,7 @@ class TInt(IntegerType):
     def describe_backing_type(self):
         return f'{"u"*(not self.signed)}int{self.bits}'
     def __repr__(self):
-        return 'TInt(%r,%r,%r,%r)' % (self.bits, self.signed,
+        return 'Int(%r,%r,%r,%r)' % (self.bits, self.signed,
                                       self.members, self.const)
 
     def apitype(self):
@@ -697,7 +695,7 @@ class TInt(IntegerType):
         if other.is_int:
             trunc = (other.bits > self.bits)
             if (not breaking_changes.dml12_remove_misc_quirks.enabled
-                and isinstance(other, TBool)):
+                and isinstance(other, Bool)):
                 return (False, False, constviol)
             return (True, trunc, constviol)
         if other.is_float and not self.is_bitfields:
@@ -705,7 +703,7 @@ class TInt(IntegerType):
         return (False, False, constviol)
 
     def clone(self):
-        return TInt(self.bits, self.signed, self.members, self.label,
+        return Int(self.bits, self.signed, self.members, self.label,
                     self.const)
 
     def declaration(self, var):
@@ -716,7 +714,7 @@ class TInt(IntegerType):
         else:
             return 'uint8 ' + self.const_str + var + '[' + str(self.bytes) + ']'
 
-class TLong(IntegerType):
+class Long(IntegerType):
     '''The 'long' type from C'''
     __slots__ = ()
     def __init__(self, signed, const=False):
@@ -730,15 +728,15 @@ class TLong(IntegerType):
         return self.c_name()
 
     def __repr__(self):
-        return 'TLong(%r, %r)' % (self.signed, self.const)
+        return 'Long(%r, %r)' % (self.signed, self.const)
 
     def clone(self):
-        return TLong(self.signed, self.const)
+        return Long(self.signed, self.const)
 
     def declaration(self, var):
         return f'{self.const_str}{self.c_name()} {var}'
 
-class TSize(IntegerType):
+class Size(IntegerType):
     '''The 'size_t' type from C'''
     __slots__ = ()
     def __init__(self, signed, const=False):
@@ -751,15 +749,15 @@ class TSize(IntegerType):
         return self.c_name()
 
     def __repr__(self):
-        return 'TSize(%r, %r)' % (self.signed, self.const)
+        return 'Size(%r, %r)' % (self.signed, self.const)
 
     def clone(self):
-        return TSize(self.signed, self.const)
+        return Size(self.signed, self.const)
 
     def declaration(self, var):
         return f'{self.const_str}{self.c_name()} {var}'
 
-class TInt64_t(IntegerType):
+class Int64_t(IntegerType):
     '''The '[u]int64_t' type from ISO C. For compatibility with C
     APIs, e.g., calling an externally defined C function that takes a
     `uint64_t *` arg. We find `uint64` a generally more useful type
@@ -777,15 +775,15 @@ class TInt64_t(IntegerType):
         return self.c_name()
 
     def __repr__(self):
-        return 'TInt64_t(%r, %r)' % (self.signed, self.const)
+        return 'Int64_t(%r, %r)' % (self.signed, self.const)
 
     def clone(self):
-        return TInt64_t(self.signed, self.const)
+        return Int64_t(self.signed, self.const)
 
     def declaration(self, var):
         return f'{self.const_str}{self.c_name()} {var}'
 
-class TEndianInt(IntegerType):
+class EndianInt(IntegerType):
     '''An integer where the byte storage order is defined.
     Corresponds to the (u)?intX_[be|le] family of types defined in
     dmllib.h
@@ -813,13 +811,13 @@ class TEndianInt(IntegerType):
         return self.c_name()
 
     def __repr__(self):
-        return 'TEndianInt(%r,%r,%r,%r,%r)' % (
+        return 'EndianInt(%r,%r,%r,%r,%r)' % (
             self.bits, self.signed, self.byte_order, self.members, self.const)
 
     @property
     def access_type(self):
         """Integer type used for read/write access"""
-        return TInt(64, self.signed or self.bits != 64)
+        return Int(64, self.signed or self.bits != 64)
 
     def dmllib_fun(self, fun):
         """translate a function name to the c dmllib function"""
@@ -848,22 +846,22 @@ class TEndianInt(IntegerType):
         """function reference to dmllib function used to store values to an
         endianint"""
         return (self.dmllib_store,
-                TFunction([self.access_type], self))
+                Function([self.access_type], self))
 
     def get_load_fun(self):
         """function reference to dmllib function used to load values from an
         endianint"""
         return (self.dmllib_load,
-                TFunction([self], self.access_type))
+                Function([self], self.access_type))
 
     def clone(self):
-        return TEndianInt(self.bits, self.signed,
+        return EndianInt(self.bits, self.signed,
                           self.byte_order, self.members, self.const)
 
     def declaration(self, var):
         return f'{self.const_str}{self.c_name()} {var}'
 
-class TFloat(DMLType):
+class Float(DMLType):
     __slots__ = ('name',)
     is_float = True
     is_arith = True
@@ -879,22 +877,22 @@ class TFloat(DMLType):
                 and other.is_float and self.name == other.name)
 
     def hashed(self):
-        return hash((TFloat, self.const, self.name))
+        return hash((Float, self.const, self.name))
 
     def canstore(self, other):
         constviol = False
         if other.is_float:
             return (True, False, constviol)
-        if isinstance(other, TInt):
+        if isinstance(other, Int):
             return (True, True, constviol)
         return (False, False, constviol)
 
     def declaration(self, var):
         return self.name + ' ' + self.const_str + var
     def clone(self):
-        return TFloat(self.name, self.const)
+        return Float(self.name, self.const)
 
-class TArray(DMLType):
+class Array(DMLType):
     __slots__ = ('base', 'size')
     def __init__(self, base, size, const = False):
         DMLType.__init__(self, const)
@@ -903,7 +901,7 @@ class TArray(DMLType):
         self.base = base
         self.size = size
     def __repr__(self):
-        return "TArray(%r,%r,%r)" % (self.base, self.size, self.const)
+        return "Array(%r,%r,%r)" % (self.base, self.size, self.const)
     def key(self):
         if not self.size.constant:
             raise DMLUnkeyableType(self, "array of non-constant size")
@@ -934,7 +932,7 @@ class TArray(DMLType):
         return self.size.value * elt_size
 
     def eq(self, other):
-        if not isinstance(other, TArray):
+        if not isinstance(other, Array):
             return False
         if not (self.size is other.size
                 or (self.size.constant and other.size.constant
@@ -944,25 +942,25 @@ class TArray(DMLType):
             conv_const(other.const, other.base))
 
     def eq_fuzzy(self, other):
-        if isinstance(other, (TArray, TPtr)):
+        if isinstance(other, (Array, Ptr)):
             return other.base.void or self.base.eq_fuzzy(other.base)
         return False
 
     def hashed(self):
         size = self.size.value if self.size.constant else self.size
-        return hash((TArray,
+        return hash((Array,
                      size,
                      conv_const(self.const, self.base).hashed()))
 
     def canstore(self, other):
         return (False, False, False)
     def clone(self):
-        return TArray(self.base, self.size, self.const)
+        return Array(self.base, self.size, self.const)
     def resolve(self):
         self.base.resolve()
         return self
 
-class TPtr(DMLType):
+class Ptr(DMLType):
     __slots__ = ('base',)
     def __init__(self, base, const = False):
         DMLType.__init__(self, const)
@@ -970,7 +968,7 @@ class TPtr(DMLType):
             raise DMLTypeError("base is not a type: %r" % (base,))
         self.base = base
     def __repr__(self):
-        return "TPtr(%r,%r)" % (self.base, self.const)
+        return "Ptr(%r,%r)" % (self.base, self.const)
     def key(self):
         return f'{self.const_str}pointer({self.base.key()})'
     def describe(self):
@@ -980,20 +978,20 @@ class TPtr(DMLType):
         return DMLType.eq(self, other) and self.base.eq(other.base)
 
     def eq_fuzzy(self, other):
-        if isinstance(other, (TPtr, TArray)):
+        if isinstance(other, (Ptr, Array)):
             if self.base.void or other.base.void:
                 return True
             return self.base.eq_fuzzy(other.base)
         return False
 
     def hashed(self):
-        return hash((TPtr, self.const, self.base.hashed()))
+        return hash((Ptr, self.const, self.base.hashed()))
 
     def canstore(self, other):
         ok = False
         trunc = False
         constviol = False
-        if isinstance(other, (TPtr, TArray)):
+        if isinstance(other, (Ptr, Array)):
             constviol = (not shallow_const(self.base)
                          and shallow_const(other.base))
             if self.base.void or other.base.void:
@@ -1010,21 +1008,21 @@ class TPtr(DMLType):
                           and unconst_other_base.is_int)
                       else unconst_self_base.eq)(unconst_other_base)
 
-        elif isinstance(other, TFunction):
+        elif isinstance(other, Function):
             ok = (not breaking_changes.strict_typechecking.enabled
                   or safe_realtype_unconst(self.base).eq(other))
         # TODO gate this behind dml.globals.dml_version == (1, 2) or
         # remove_misc_quirks?
-        if self.base.void and isinstance(other, TDevice):
+        if self.base.void and isinstance(other, Device):
             ok = True
-        #dbg('TPtr.canstore %r %r => %r' % (self, other, ok))
+        #dbg('Ptr.canstore %r %r => %r' % (self, other, ok))
         return (ok, trunc, constviol)
 
     def clone(self):
-        return TPtr(self.base, self.const)
+        return Ptr(self.base, self.const)
 
     def declaration(self, var):
-        if isinstance(self.base, (TFunction, TArray)):
+        if isinstance(self.base, (Function, Array)):
             var = f'(*{self.const_str}{var})'
         else:
             var = f'*{self.const_str}{var}'
@@ -1033,20 +1031,20 @@ class TPtr(DMLType):
         self.base.resolve()
         return self
 
-class TVector(DMLType):
+class Vector(DMLType):
     count = 0
     __slots__ = ('base', 'uniq',)
     def __init__(self, base, const=False, uniq=None):
         DMLType.__init__(self, const)
         if uniq is None:
-            uniq = TVector.count
-            TVector.count += 1
+            uniq = Vector.count
+            Vector.count += 1
         self.uniq = uniq
         if not base:
             raise DMLTypeError("Null base")
         self.base = base
     def __repr__(self):
-        return "TVector(%r,%r)" % (self.base, self.const)
+        return "Vector(%r,%r)" % (self.base, self.const)
     def key(self):
         raise DMLUnkeyableType(self)
     def describe(self):
@@ -1054,21 +1052,21 @@ class TVector(DMLType):
     def eq(self, other):
         return DMLType.eq(self, other) and self.uniq == other.uniq
     def eq_fuzzy(self, other):
-        if isinstance(other, TVector):
+        if isinstance(other, Vector):
             # Can only compare for voidness or equality
             if self.base.void or other.base.void:
                 return True
             return self.base.eq_fuzzy(other.base)
         return False
     def hashed(self):
-        return hash((TVector, self.const, self.uniq))
+        return hash((Vector, self.const, self.uniq))
     def clone(self):
-        return TVector(self.base, self.const, self.uniq)
+        return Vector(self.base, self.const, self.uniq)
     def declaration(self, var):
         s = self.base.declaration('')
         return 'VECT(%s) %s%s' % (s, self.const_str, var)
 
-class TTrait(DMLType):
+class Trait(DMLType):
     '''A run-time reference to a trait. Represented in C as a pointer
     to a trait vtable struct, together with an object identity'''
     __slots__ = ('trait',)
@@ -1078,10 +1076,10 @@ class TTrait(DMLType):
         self.trait = trait
 
     def __repr__(self):
-        return "TTrait(%s)" % (self.trait.name,)
+        return "Trait(%s)" % (self.trait.name,)
 
     def clone(self):
-        return TTrait(self.trait, self.const)
+        return Trait(self.trait, self.const)
 
     def eq(self, other):
         return DMLType.eq(self, other) and self.trait is other.trait
@@ -1090,7 +1088,7 @@ class TTrait(DMLType):
         return f'{self.const_str}trait({self.trait.name})'
 
     def hashed(self):
-        return hash((TTrait, self.const, self.trait))
+        return hash((Trait, self.const, self.trait))
 
     def c_name(self):
         return cident(self.trait.name)
@@ -1101,7 +1099,7 @@ class TTrait(DMLType):
     def declaration(self, var):
         return f'{self.const_str}{self.c_name()} {var}'
 
-class TTraitList(DMLType):
+class TraitList(DMLType):
     __slots__ = ('traitname')
 
     def __init__(self, traitname, const=False):
@@ -1109,10 +1107,10 @@ class TTraitList(DMLType):
         self.traitname = traitname
 
     def __repr__(self):
-        return "TTraitList(%s)" % (self.traitname,)
+        return "TraitList(%s)" % (self.traitname,)
 
     def clone(self):
-        return TTraitList(self.traitname, self.const)
+        return TraitList(self.traitname, self.const)
 
     def eq(self, other):
         return DMLType.eq(self, other) and self.traitname == other.traitname
@@ -1121,7 +1119,7 @@ class TTraitList(DMLType):
         return f'{self.const_str}sequence({self.traitname})'
 
     def hashed(self):
-        return hash((TTraitList, self.const, self.traitname))
+        return hash((TraitList, self.const, self.traitname))
 
     def c_type(self):
         return f'{self.const_str}_each_in_t'
@@ -1156,7 +1154,7 @@ class StructType(DMLType):
         t = self.named_members.get(member)
         return t if t is None else conv_const(self.const, t)
 
-class TExternStruct(StructType):
+class ExternStruct(StructType):
     '''A struct-like type defined by code outside DMLC's control.
     'members' is the potential right operands of binary '.',
     and 'label' is the typedef:ed type name.'''
@@ -1164,7 +1162,7 @@ class TExternStruct(StructType):
     count = 0
 
     def __init__(self, named_members, id, typename=None, const=False):
-        super(TExternStruct, self).__init__(named_members, const)
+        super(ExternStruct, self).__init__(named_members, const)
         # unique object (wrt ==) representing this type in type comparisons
         # integer for anonymous structs, string for named types
         self.id = id
@@ -1172,13 +1170,13 @@ class TExternStruct(StructType):
         self.typename = typename
 
     def __repr__(self):
-        return 'TExternStruct(%r,%r,%r,%r)' % (
+        return 'ExternStruct(%r,%r,%r,%r)' % (
             self.named_members, self.id, self.typename, self.const)
 
     @staticmethod
     def unique_id():
-        TExternStruct.count += 1
-        return TExternStruct.count
+        ExternStruct.count += 1
+        return ExternStruct.count
 
     def key(self):
         if not self.typename:
@@ -1191,24 +1189,24 @@ class TExternStruct(StructType):
 
     def declaration(self, var):
         if not self.typename:
-            raise EANONEXT(self.declaration_site)
+            raise ICE(self.declaration_site, 'no typename')
         return "%s %s%s" % (self.typename, self.const_str, var)
 
     def eq(self, other):
         return DMLType.eq(self, other) and self.id == other.id
 
     def hashed(self):
-        return hash((TExternStruct, self.const, self.id))
+        return hash((ExternStruct, self.const, self.id))
 
     def clone(self):
-        return TExternStruct(self.named_members,
+        return ExternStruct(self.named_members,
                              self.id, self.typename, self.const)
 
 def add_late_global_struct_defs(decls):
-    TStruct.late_global_struct_defs.extend((site, t.resolve())
+    Struct.late_global_struct_defs.extend((site, t.resolve())
                                            for (site, t) in decls)
 
-class TStruct(StructType):
+class Struct(StructType):
     __slots__ = ('label', 'anonymous')
     # Anonymous struct types defined in global scope, but outside typedef
     # declarations, e.g. 'session struct { int x; } y;'.
@@ -1219,13 +1217,13 @@ class TStruct(StructType):
         assert members is None or members
         self.anonymous = label is None
         if self.anonymous:
-            label = '_anon_struct_%d' % (TStruct.num_anon_structs,)
-            TStruct.num_anon_structs += 1
+            label = '_anon_struct_%d' % (Struct.num_anon_structs,)
+            Struct.num_anon_structs += 1
         self.label = label
         super().__init__(members, const)
 
     def __repr__(self):
-        return 'TStruct(%r,%r,%r)' % (self.named_members, self.label,
+        return 'Struct(%r,%r,%r)' % (self.named_members, self.label,
                                       self.const)
 
     def key(self):
@@ -1255,7 +1253,7 @@ class TStruct(StructType):
             output.site_linemark(t.declaration_site)
             t.print_declaration(n
                                 if n is not None else
-                                TStruct.anon_member_cident(i))
+                                Struct.anon_member_cident(i))
         output.site_linemark(self.declaration_site)
         out("};\n", preindent = -1)
 
@@ -1263,25 +1261,25 @@ class TStruct(StructType):
         return DMLType.eq(self, other) and self.label == other.label
 
     def hashed(self):
-        return hash((TStruct, self.const, self.label))
+        return hash((Struct, self.const, self.label))
 
     def clone(self):
-        return TStruct(self.named_members, self.label, self.const)
+        return Struct(self.named_members, self.label, self.const)
 
-class TLayout(TStruct):
+class Layout(Struct):
     __slots__= ('endian', 'member_decls', 'size', 'discarded')
 
     def __init__(self, endian, member_decls, label=None, const=False):
         # Intentionally wait with setting member types until
         # resolve is finished
-        super(TLayout, self).__init__(None, label, const)
+        super(Layout, self).__init__(None, label, const)
         self.member_decls = member_decls
         self.endian = endian
         self.size = None
         self.discarded = None
 
     def __repr__(self):
-        return 'TLayout(%r, %r, %r, %r)' % (self.endian, self.member_decls,
+        return 'Layout(%r, %r, %r, %r)' % (self.endian, self.member_decls,
                                             self.label, self.const)
     def key(self):
         if self.anonymous:
@@ -1315,34 +1313,34 @@ class TLayout(TStruct):
             rt = t
             # We cannot use non-shallow instead of this loop because we need
             # to keep track of when we move through arrays
-            while isinstance(rt, TNamed):
+            while isinstance(rt, Named):
                 rt = safe_realtype_shallow(rt)
             rt.resolve()
-            if isinstance(rt, TLayout):
+            if isinstance(rt, Layout):
                 # In the case of a layout, we need to keep the member type as
                 # the original declared type to prevent dis-aliasing a typedef.
                 return t, rt
             if rt.is_int:
                 if (rt.bits % 8) != 0:
-                    raise ELAYOUT(site,
+                    raise E.LAYOUT(site,
                                   f"size of {memberref} is not a whole byte")
-            if (isinstance(rt, TInt)
+            if (isinstance(rt, Int)
                 or (dml.globals.compat_dml12_int(site)
-                    and isinstance(rt, TSize))):
-                toret = TEndianInt(rt.bits, rt.signed,
+                    and isinstance(rt, Size))):
+                toret = EndianInt(rt.bits, rt.signed,
                                    self.endian, rt.members, rt.const)
                 return (toret, toret)
-            if isinstance(rt, TEndianInt):
+            if isinstance(rt, EndianInt):
                 return (rt, rt)
-            if isinstance(rt, TArray):
+            if isinstance(rt, Array):
                 # In the case of an array, we return one array that respects
                 # the original declaration when necessary, and one array
                 # that is the fully resolved type
                 new_base, real_base = check_layout_member_type(
                     site, rt.base, memberref)
-                return (TArray(new_base, rt.size, rt.const),
-                        TArray(real_base, rt.size, rt.const),)
-            raise ELAYOUT(site, "illegal layout member type: %s" % t)
+                return (Array(new_base, rt.size, rt.const),
+                        Array(real_base, rt.size, rt.const),)
+            raise E.LAYOUT(site, "illegal layout member type: %s" % t)
 
         self.size = 0
         self.named_members = {}
@@ -1365,7 +1363,7 @@ class TLayout(TStruct):
                 size = rt.sizeof()
                 if size is None:
                     # variable-sized array
-                    raise ELAYOUT(site, "unknown layout size")
+                    raise E.LAYOUT(site, "unknown layout size")
                 else:
                     self.size += size
             except DMLError as e:
@@ -1380,7 +1378,7 @@ class TLayout(TStruct):
         return self.size
 
     def clone(self):
-        cloned = TLayout(self.endian, self.member_decls, self.label,
+        cloned = Layout(self.endian, self.member_decls, self.label,
                          self.const)
         if self.named_members is not None:
             cloned.named_members = self.named_members
@@ -1390,7 +1388,7 @@ class TLayout(TStruct):
 
 
 
-class TFunction(DMLType):
+class Function(DMLType):
     __slots__ = ('input_types', 'output_type', 'varargs')
     def __init__(self, input_types, output_type,
                  varargs = False, const = False):
@@ -1400,7 +1398,7 @@ class TFunction(DMLType):
         self.output_type = output_type
         self.varargs = varargs
     def __repr__(self):
-        return "TFunction(%r,%r)" % (self.input_types, self.output_type)
+        return "Function(%r,%r)" % (self.input_types, self.output_type)
 
     @property
     def const(self): return False
@@ -1426,7 +1424,7 @@ class TFunction(DMLType):
                 % (inparams, self.output_type.describe()))
 
     def eq(self, other):
-        return (isinstance(other, TFunction)
+        return (isinstance(other, Function)
                 and len(self.input_types) == len(other.input_types)
                 and all(
                     safe_realtype_unconst(arg1).eq(safe_realtype_unconst(arg2))
@@ -1437,7 +1435,7 @@ class TFunction(DMLType):
                 and self.varargs == other.varargs)
 
     def eq_fuzzy(self, other):
-        return (isinstance(other, TFunction)
+        return (isinstance(other, Function)
                 and len(self.input_types) == len(other.input_types)
                 and all(arg1.eq_fuzzy(arg2)
                         for (arg1, arg2)
@@ -1446,7 +1444,7 @@ class TFunction(DMLType):
                 and self.varargs == other.varargs)
 
     def hashed(self):
-        return hash((TFunction,
+        return hash((Function,
                      tuple(safe_realtype_unconst(typ).hashed()
                            for typ in self.input_types),
                      safe_realtype_unconst(self.output_type).hashed(),
@@ -1456,7 +1454,7 @@ class TFunction(DMLType):
         return (False, False, False)
 
     def clone(self):
-        return TFunction(self.input_types, self.output_type, self.varargs,
+        return Function(self.input_types, self.output_type, self.varargs,
                          self.const)
 
     def declaration(self, var):
@@ -1466,7 +1464,7 @@ class TFunction(DMLType):
             arglist += ", ..."
         return self.output_type.declaration(f'{var}({arglist})')
 
-class THook(DMLType):
+class Hook(DMLType):
     __slots__ = ('msg_types', 'validated')
 
     def __init__(self, msg_types, validated=False, const=False):
@@ -1475,10 +1473,10 @@ class THook(DMLType):
         self.validated = validated
 
     def __repr__(self):
-        return 'THook(%s)' % (', '.join(repr(typ) for typ in self.msg_types),)
+        return 'Hook(%s)' % (', '.join(repr(typ) for typ in self.msg_types),)
 
     def clone(self):
-        return THook(self.msg_types, self.validated, self.const)
+        return Hook(self.msg_types, self.validated, self.const)
 
     def eq(self, other):
         return (DMLType.eq(self, other)
@@ -1488,7 +1486,7 @@ class THook(DMLType):
                                                           other.msg_types)))
 
     def hashed(self):
-        return hash((THook,
+        return hash((Hook,
                      self.const,
                      tuple(comp.hashed() for comp in self.msg_types)))
 
@@ -1510,7 +1508,7 @@ class THook(DMLType):
                 try:
                     safe_realtype(typ).key()
                 except DMLUnkeyableType as e:
-                    raise EHOOKTYPE(self.declaration_site or fallback_site,
+                    raise E.HOOKTYPE(self.declaration_site or fallback_site,
                                     typ, e.clarification) from e
 
 
@@ -1523,47 +1521,47 @@ def parse_type(typename):
         bits = int(m.group(2))
         byte_order = m.group(3)
         if byte_order:
-            return TEndianInt(
+            return EndianInt(
                 bits, signed,
                 "big-endian" if byte_order == "_be_t" else "little-endian")
         else:
-            return TInt(bits, signed)
+            return Int(bits, signed)
     elif typename in {'double', 'float'}:
-        return TFloat(typename)
+        return Float(typename)
     elif typename == 'bool':
-        return TBool()
+        return Bool()
     elif typename == 'void':
-        return TVoid()
+        return Void()
     elif typename == 'integer_t' and dml.globals.api_version < breaking_changes.api_7:
-        return TInt(64, True)
+        return Int(64, True)
     elif typename == 'uinteger_t' and dml.globals.api_version < breaking_changes.api_7:
-        return TInt(64, False)
+        return Int(64, False)
     else:
-        return TNamed(typename)
+        return Named(typename)
 
 def type_union(type1, type2):
     "Return the greater of two types"
-    if (type1.is_float or isinstance(type1, TUnknown)
+    if (type1.is_float or isinstance(type1, Unknown)
         or (type1.is_int and type2.is_int
             and type1.bits > type2.bits)):
         return type1
     return type2
 
-void = TVoid()
+void = Void()
 # These are the named types used.  This includes both "imported"
 # typedefs for types declared in C header files, and types defined in
 # the DML file.
 typedefs = {}
 for (name, typ) in [
         ('void', void),
-        ('int', TInt(32, True)),
-        ('char', TInt(8, True)),
-        ('long', TLong(True)),
-        ('ulong', TLong(False)),
-        ('ssize_t', TSize(True)),
-        ('size_t', TSize(False)),
-        ('int64_t', TInt64_t(True)),
-        ('uint64_t', TInt64_t(False))]:
+        ('int', Int(32, True)),
+        ('char', Int(8, True)),
+        ('long', Long(True)),
+        ('ulong', Long(False)),
+        ('ssize_t', Size(True)),
+        ('size_t', Size(False)),
+        ('int64_t', Int64_t(True)),
+        ('uint64_t', Int64_t(False))]:
     typedefs[name] = typ
 
 for sym in __all__:

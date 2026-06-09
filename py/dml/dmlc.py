@@ -8,7 +8,7 @@ import shutil
 import time
 from pathlib import Path
 
-from . import structure, logging, messages, ctree, ast, expr_util, toplevel
+from . import structure, logging, ctree, ast, expr_util, toplevel
 from . import serialize
 from . import dmlparse
 from . import output
@@ -18,9 +18,8 @@ import dml.c_backend
 import dml.info_backend
 import dml.g_backend
 import dml.globals
-import dml.dmlparse
-from .logging import *
-from .messages import *
+from .logging import ICE, dbg, report
+from . import errors as E, warnings as W
 from .env import api_versions, default_api_version
 import tarfile
 
@@ -36,11 +35,11 @@ output_c = True
 
 
 # Ignore some warnings by default
-ignore_warning('WASSERT')
-ignore_warning('WNDOC')
-ignore_warning('WSHALL')
-ignore_warning('WUNUSED')
-ignore_warning('WNSHORTDESC')
+logging.ignore_warning('WASSERT')
+logging.ignore_warning('WNDOC')
+logging.ignore_warning('WSHALL')
+logging.ignore_warning('WUNUSED')
+logging.ignore_warning('WNSHORTDESC')
 
 if os.getenv('DMLC_DEBUG'):
     debug_mode = True
@@ -75,9 +74,9 @@ def process(devname, global_defs, top_tpl, extra_params):
         # inheriting the main file, thereby overriding any default
         # declarations from there
         param_tpl = '@<command-line>'
-        param_site = SimpleSite("<command-line>:0",
+        param_site = logging.SimpleSite("<command-line>:0",
                                 dml_version=dml.globals.dml_version)
-        top_site = SimpleSite(top_tpl[1:] + ':1',
+        top_site = logging.SimpleSite(top_tpl[1:] + ':1',
                               dml_version=dml.globals.dml_version)
         global_defs.append(ast.template_dml12(
             top_site, param_tpl, [
@@ -115,7 +114,7 @@ def mytrace(frame, event, arg):
 
 def parse_define(arg):
     "Parse a parameter assignment given as a -D option"
-    define_site = SimpleSite('<command-line>:0',
+    define_site = logging.SimpleSite('<command-line>:0',
                              dml_version=dml.globals.dml_version)
     (lexer, _) = toplevel.get_parser((1, 4))
     lexer.filename = filename = "<command-line>"
@@ -123,10 +122,10 @@ def parse_define(arg):
     lexer.input(arg)
     tokens = list(lexer)
     if len(tokens) < 3 or tokens[1].type != 'EQUALS':
-        raise ESYNTAX(define_site, '-D' + arg, "expected name=value")
+        raise E.SYNTAX(define_site, '-D' + arg, "expected name=value")
     (ident, _, literal) = tokens[:3]
     if ident.type != 'ID':
-        raise ESYNTAX(define_site, '-D' + arg,
+        raise E.SYNTAX(define_site, '-D' + arg,
                       "invalid identifier: %s" % (ident.value,))
 
     if literal.type == 'FCONST':
@@ -138,10 +137,10 @@ def parse_define(arg):
     elif literal.type == 'ID' and literal.value in {'true', 'false'}:
         value = ast.variable(define_site, literal.value)
     else:
-        raise ESYNTAX(define_site, '-D' + arg,
+        raise E.SYNTAX(define_site, '-D' + arg,
                       "Invalid literal %s" % (literal.value,))
     if len(tokens) > 3:
-        raise ESYNTAX(define_site, '-D' + arg,
+        raise E.SYNTAX(define_site, '-D' + arg,
                       "garbage after literal: " + str(tokens[3].value))
 
     return (ident.value, value)
@@ -274,8 +273,8 @@ class WarnHelpAction(HelpAction):
     def print_help(self):
         print('''Tags accepted by --warn and --nowarn:''')
         by_ignored = {True: [], False: []}
-        for tag in sorted(messages.warnings):
-            by_ignored[warning_is_ignored(tag)].append(tag)
+        for tag in sorted(W.all_warnings):
+            by_ignored[logging.warning_is_ignored(tag)].append(tag)
         print('  Enabled by default:')
         for tag in by_ignored[False]:
             print(f'    {tag}')
@@ -514,7 +513,7 @@ def main(argv):
     global outputbase, output_c
 
     if options.include_tag:
-        set_include_tag(True)
+        logging.set_include_tag(True)
 
     if options.debuggable:
         dml.globals.debuggable = True
@@ -523,7 +522,7 @@ def main(argv):
     for d in options.defines:
         try:
             (name, value) = parse_define(d)
-        except ESYNTAX as e:
+        except E.SYNTAX as e:
             report(e)
         else:
             defs[name] = value
@@ -538,7 +537,7 @@ def main(argv):
                      " or older")
 
     if options.werror:
-        DMLWarning.enable_werror()
+        logging.DMLWarning.enable_werror()
 
     try:
         logging.max_errors = int(options.max_errors)
@@ -634,19 +633,19 @@ def main(argv):
         changes.values())
 
     if not breaking_changes.enable_WLOGMIXUP.enabled:
-        ignore_warning('WLOGMIXUP')
+        logging.ignore_warning('WLOGMIXUP')
 
     for w in options.disabled_warnings:
-        if not is_warning_tag(w):
+        if w not in W.all_warnings:
             prerr("dmlc: the tag '%s' is not a valid warning tag" % w)
             sys.exit(1)
-        ignore_warning(w)
+        logging.ignore_warning(w)
 
     for w in options.enabled_warnings:
-        if not is_warning_tag(w):
+        if w not in W.all_warnings:
             prerr("dmlc: the tag '%s' is not a valid warning tag" % w)
             sys.exit(1)
-        enable_warning(w)
+        logging.enable_warning(w)
 
     inputfilename = options.input_filename
 
@@ -764,7 +763,7 @@ def main(argv):
             # if there's already a hard error somewhere, because if the
             # parameter was actually used, then the WREF is a duplicate
             # of an already reported error.
-            for wref in messages.WREF.instances:
+            for wref in W.REF.instances:
                 report(wref)
 
         logtime("total")
@@ -790,7 +789,7 @@ def main(argv):
         return 3
 
     except (RuntimeError, Exception) as e:
-        ctx = ErrorContext.last_entered
+        ctx = logging.ErrorContext.last_entered
         if ctx:
             report(ICE(ctx.node,
                        "Unexpected exception '%s' in %s"

@@ -3,7 +3,7 @@
 
 import unittest
 
-from dml.slotsmeta import *
+from dml.slotsmeta import auto_init, SlotsMeta
 
 # Silence 'unused' warnings from fisketur
 def use(o): pass
@@ -88,4 +88,3 @@ class test_auto_init(unittest.TestCase):
             def __init__(self, x, y):
                 self.x += self.y
         self.assertEqual(Sub1(4, 1).x, 9)
-

@@ -2,10 +2,9 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import unittest
-import operator
 import itertools
 
-from dml.reginfo import RegInstance, RegInfo, explode_register
+from dml.reginfo import RegInstance, RegInfo
 from dml.objects import Device, Bank, Group, Register
 
 class TestRegInfo(unittest.TestCase):

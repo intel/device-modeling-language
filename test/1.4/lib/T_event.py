@@ -1,9 +1,13 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import simics
+import sim_commands
 import stest
+import testenv
+obj = testenv.instantiate()
 
-cpu = SIM_create_object("clock", "clock", [["freq_mhz", 1]])
+cpu = simics.SIM_create_object("clock", "clock", [["freq_mhz", 1]])
 obj.queue = cpu
 
 def get_posted_attrs(obj):
@@ -93,10 +97,10 @@ now = 0
 for cycle in sorted(cycles):
     left = cycle - now
     assert left > 1
-    SIM_continue(left - 1)
+    simics.SIM_continue(left - 1)
     stest.expect_equal(set(read_happened_attrs(obj).values()), {0},
                        'cycle %d' % (cycle - 1,))
-    SIM_continue(1)
+    simics.SIM_continue(1)
     now = cycle
     happened_attrs = read_happened_attrs(obj)
     # side-effect of a single event() call
@@ -148,6 +152,6 @@ msgs = []
 def callback(o, kind, msg):
     msgs.append(msg)
 with sim_commands.logger.filter(callback):
-    SIM_delete_object(obj)
+    simics.SIM_delete_object(obj)
 stest.expect_equal(len(msgs), 2)
 stest.expect_equal(set(msgs), {'DESTROY CYCLE -1', 'DESTROY TIME 1750'})

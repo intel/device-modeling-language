@@ -1,6 +1,7 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import simics
 import instrumentation_access_inquire
 import instrumentation_access_set_missed
 import instrumentation_access_set_offset
@@ -22,16 +23,18 @@ import instrumentation_range
 import instrumentation_remove_callback
 import instrumentation_remove_connection_callbacks
 import instrumentation_subscribe_multiple
+import testenv
+obj = testenv.instantiate()
 
-subscribe_b1 = SIM_get_port_interface(
+subscribe_b1 = simics.SIM_get_port_interface(
     obj, 'bank_instrumentation_subscribe', 'b1')
-subscribe_b2 = SIM_get_port_interface(
+subscribe_b2 = simics.SIM_get_port_interface(
     obj, 'bank_instrumentation_subscribe', 'b2')
-order_b1 = SIM_get_port_interface(obj, 'instrumentation_order', 'b1')
+order_b1 = simics.SIM_get_port_interface(obj, 'instrumentation_order', 'b1')
 
 subscribe_ba = [
-    SIM_get_port_interface(obj, 'bank_instrumentation_subscribe', 'ba[0]'),
-    SIM_get_port_interface(obj, 'bank_instrumentation_subscribe', 'ba[1]')]
+    simics.SIM_get_port_interface(obj, 'bank_instrumentation_subscribe', 'ba[0]'),
+    simics.SIM_get_port_interface(obj, 'bank_instrumentation_subscribe', 'ba[1]')]
 
 # The tests don't clean up created connections, so run the connection
 # order test first

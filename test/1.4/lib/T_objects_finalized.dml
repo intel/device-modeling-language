@@ -6,8 +6,6 @@ dml 1.4;
 
 device test;
 
-/// INSTANTIATE-MANUALLY
-
 saved bool objects_finalized_done;
 
 connect partner;

@@ -1,16 +1,19 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import simics
 import stest
+import testenv
+obj = testenv.instantiate()
 
-cpu = SIM_create_object("clock", "clock", [["freq_mhz", 1]])
+cpu = simics.SIM_create_object("clock", "clock", [["freq_mhz", 1]])
 obj.queue = cpu
 
 # event happens if you don't remove it. Should be caught by other test.
 obj.last_ev = -1
 obj.last_destroy = 0
 obj.post = [5, 42]
-SIM_continue(5)
+simics.SIM_continue(5)
 assert obj.last_ev == 42
 assert obj.last_destroy == 0
 
@@ -18,19 +21,19 @@ assert obj.last_destroy == 0
 obj.last_ev = 0
 obj.last_destroy = 0
 obj.post = [5, 42]
-SIM_continue(4)
+simics.SIM_continue(4)
 obj.remove = 42
 stest.expect_equal(obj.last_destroy, 42)
-SIM_continue(1)
+simics.SIM_continue(1)
 stest.expect_equal(obj.last_ev, 0)
 
 # event happens if you remove it with mismatching event data.
 obj.last_ev = 0
 obj.last_destroy = 0
 obj.post = [5, 42]
-SIM_continue(4)
+simics.SIM_continue(4)
 obj.remove = 43
-SIM_continue(1)
+simics.SIM_continue(1)
 stest.expect_equal(obj.last_destroy, 0)
 stest.expect_equal(obj.last_ev, 42)
 
@@ -48,7 +51,7 @@ def set_pattr_array(attrname, valarray):
 set_pattr_array('last_ev', [[-1, -1], [-1, -1]])
 set_pattr_array('last_destroy', [[0, 0], [0, 0]])
 set_pattr_array('post', [[[5, 42], [5, 42]], [[5, 42], [5, 42]]])
-SIM_continue(5)
+simics.SIM_continue(5)
 stest.expect_equal(get_pattr_array('last_ev'), [[42, 42], [42, 42]])
 stest.expect_equal(get_pattr_array('last_destroy'), [[0, 0], [0, 0]])
 
@@ -56,19 +59,19 @@ stest.expect_equal(get_pattr_array('last_destroy'), [[0, 0], [0, 0]])
 set_pattr_array('last_ev', [[0, 0], [0, 0]])
 set_pattr_array('last_destroy', [[0, 0], [0, 0]])
 set_pattr_array('post', [[[5, 42], [5, 42]], [[5, 42], [5, 42]]])
-SIM_continue(4)
+simics.SIM_continue(4)
 set_pattr_array('remove', [[42, 42], [42, 42]])
 stest.expect_equal(get_pattr_array('last_destroy'), [[42, 42], [42, 42]])
-SIM_continue(1)
+simics.SIM_continue(1)
 set_pattr_array('last_ev', [[0, 0], [0, 0]])
 
 # event happens if you remove it with mismatching event data.
 set_pattr_array('last_ev', [[0, 0], [0, 0]])
 set_pattr_array('last_destroy', [[0, 0], [0, 0]])
 set_pattr_array('post', [[[5, 42], [5, 42]], [[5, 42], [5, 42]]])
-SIM_continue(4)
+simics.SIM_continue(4)
 set_pattr_array('remove', [[43, 43], [43, 43]])
-SIM_continue(1)
+simics.SIM_continue(1)
 stest.expect_equal(get_pattr_array('last_ev'), [[42, 42], [42, 42]])
 stest.expect_equal(get_pattr_array('last_destroy'), [[0, 0], [0, 0]])
 

@@ -3,7 +3,8 @@
 
 import abc
 from . import logging
-from . import messages
+from .logging import Site
+from . import errors as E
 
 class ProvisionalFeature(abc.ABC):
     def tag(self) -> str:
@@ -214,6 +215,6 @@ def parse_provisional(
         if name in features:
             ret[features[name]] = site
         else:
-            logging.report(messages.ENOPROV(
+            logging.report(E.NOPROV(
                 site, name, ', '.join(sorted(features))))
     return ret

@@ -4,13 +4,13 @@
 import abc
 
 import dml.globals
-from .logging import *
-from .messages import *
-from .output import *
-from .types import *
-from .slotsmeta import *
-
+from . import logging
+from .logging import ICE
+from . import errors as E
 from . import output
+from . import types as tp
+from .slotsmeta import SlotsMeta, auto_init
+
 
 __all__ = (
     'Code',
@@ -36,7 +36,7 @@ class Code(object, metaclass=SlotsMeta):
                                     for name in self.init_args[2:]))
 
     def linemark(self):
-        site_linemark(self.site)
+        output.site_linemark(self.site)
 
 class Expression(Code):
     '''An Expression can represent either:
@@ -56,7 +56,7 @@ class Expression(Code):
     the composite expression.'''
     slots = ('context',)
 
-    # An instance of DMLType
+    # An instance of tp.DMLType
     #type = None
 
     # If true, this is a constant, with the value stored in .value, as
@@ -123,9 +123,9 @@ class Expression(Code):
     c_lval = False
 
     def __init__(self, site):
-        assert not site or isinstance(site, Site)
+        assert not site or isinstance(site, logging.Site)
         self.site = site
-        self.context = ErrorContext.current()
+        self.context = logging.ErrorContext.current()
 
     def __str__(self):
         "Format the expression in DML form"
@@ -137,7 +137,7 @@ class Expression(Code):
 
     # Produce a C expression but don't worry about the value.
     def discard(self, explicit=False):
-        if not explicit or safe_realtype_shallow(self.ctype()).void:
+        if not explicit or tp.safe_realtype_shallow(self.ctype()).void:
             return self.read()
 
         if self.constant:
@@ -202,7 +202,7 @@ class NonValue(Expression):
         raise self.exc()
     def exc(self):
         '''Exception to raise when expression appears in an incorrect context'''
-        return ENVAL(self.site, self)
+        return E.NVAL(self.site, self)
 
 class NonValueArrayRef(NonValue):
     '''Reference to an array node before it's indexed. Indexing is the
@@ -215,7 +215,7 @@ class NonValueArrayRef(NonValue):
     def local_dimsizes(self): pass
 
     def exc(self):
-        return EARRAY(self.site, self)
+        return E.ARRAY(self.site, self)
 
 class Lit(Expression):
     "A literal C expression"
@@ -252,7 +252,7 @@ class NullConstant(Expression):
     constant = True
     value = None
     priority = 1000
-    type = TPtr(void, const=True)
+    type = tp.Ptr(tp.void, const=True)
     def __str__(self):
         return 'NULL'
     def read(self):
@@ -265,7 +265,7 @@ mkNullConstant = NullConstant
 def typecheck_inargs(site, args, inp, kind="function", known_arglen=None):
     arglen = len(args) if known_arglen is None else known_arglen
     if arglen != len(inp):
-        raise EARG(site, kind)
+        raise E.ARG(site, kind)
 
     for (i, (arg, p)) in enumerate(zip(args, inp)):
         if kind == 'method':
@@ -274,18 +274,18 @@ def typecheck_inargs(site, args, inp, kind="function", known_arglen=None):
         else:
             (pname, ptype) = p
             logref = f"'{pname}'"
-        argtype = safe_realtype(arg.ctype())
+        argtype = tp.safe_realtype(arg.ctype())
         if not argtype:
             raise ICE(site, "unknown expression type")
 
-        rtype = safe_realtype(ptype)
+        rtype = tp.safe_realtype(ptype)
         assert rtype
         (ok, trunc, constviol) = rtype.canstore(argtype)
         if ok:
             if constviol:
-                raise ECONSTP(site, logref, kind + " call")
+                raise E.CONSTP(site, logref, kind + " call")
         else:
-            raise EPTYPE(site, arg, rtype, logref, kind)
+            raise E.PTYPE(site, arg, rtype, logref, kind)
 
 # Typecheck a DML method application, where the arguments are given as a list
 # where each element is either an AST of an initializer, or an initializer
@@ -296,7 +296,7 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
                           allow_undefined_args=False,
                           on_ptr_to_stack=None):
     if (not variadic and len(inits) != len(inp)) or len(inits) < len(inp):
-        raise EARG(site, kind)
+        raise E.ARG(site, kind)
 
     from .expr_util import coerce_if_eint
     from .codegen import eval_initializer, codegen_expression, \
@@ -319,19 +319,19 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
             else:
                 try:
                     arg = init.as_expr(ptype)
-                except EASTYPE as e:
+                except E.ASTYPE as e:
                     if e.site is init.site:
-                        raise EPTYPE(site, e.source, e.target_type, logref,
+                        raise E.PTYPE(site, e.source, e.target_type, logref,
                                      kind) from e
                     raise
                 # better error message
-                except EDISCONST as e:
+                except E.DISCONST as e:
                     if e.site is init.site:
-                        raise ECONSTP(site, logref, kind + " call") from e
+                        raise E.CONSTP(site, logref, kind + " call") from e
                     raise
         elif ptype is None:
             if init.kind != 'initializer_scalar':
-                raise ESYNTAX(init.site, '{',
+                raise E.SYNTAX(init.site, '{',
                               'the argument for an untyped parameter must be '
                               + 'a simple expression')
             arg = codegen_expression_maybe_nonvalue(init.args[0], location,
@@ -344,35 +344,35 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
             and init.kind == 'initializer_scalar'):
             arg = coerce_if_eint(codegen_expression(init.args[0],
                                                     location, scope))
-            argtype = safe_realtype(arg.ctype())
+            argtype = tp.safe_realtype(arg.ctype())
             if not argtype:
                 raise ICE(site, "unknown expression type")
 
-            rtype = safe_realtype(ptype)
+            rtype = tp.safe_realtype(ptype)
             assert rtype
             (ok, trunc, constviol) = rtype.canstore(argtype)
 
             if ok:
                 if constviol:
-                    raise ECONSTP(site, logref, kind + " call")
+                    raise E.CONSTP(site, logref, kind + " call")
             else:
-                raise EPTYPE(site, arg, rtype, logref, kind)
+                raise E.PTYPE(site, arg, rtype, logref, kind)
         else:
             try:
                 arg = eval_initializer(init.site, ptype, init, location,
                                        scope, False).as_expr(ptype)
-            except EASTYPE as e:
+            except E.ASTYPE as e:
                 if e.site is init.site:
-                    raise EPTYPE(site, e.source, e.target_type, logref,
+                    raise E.PTYPE(site, e.source, e.target_type, logref,
                                  kind) from e
                 raise
             # better error message
-            except EDISCONST as e:
+            except E.DISCONST as e:
                 if e.site is init.site:
-                    raise ECONSTP(site, logref, kind + " call") from e
+                    raise E.CONSTP(site, logref, kind + " call") from e
                 raise
         if (on_ptr_to_stack
-            and isinstance(safe_realtype_shallow(ptype), TPtr)
+            and isinstance(tp.safe_realtype_shallow(ptype), tp.Ptr)
             and arg.is_pointer_to_stack_allocation):
             on_ptr_to_stack(arg)
         args.append(arg)
@@ -380,7 +380,7 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
     if variadic and len(inits) > len(inp):
         for init in inits[len(inp):]:
             if init.kind != 'initializer_scalar':
-                raise ESYNTAX(init.site, '{',
+                raise E.SYNTAX(init.site, '{',
                               'variadic arguments must be simple expressions')
             args.append(coerce_if_eint(codegen_expression(init.args[0],
                                                           location, scope)))
@@ -407,18 +407,18 @@ def mkApplyInits(site, fun, inits, location, scope):
     funtype = fun.ctype()
 
     if not funtype:
-        raise EAPPLY(fun)
+        raise E.APPLY(fun)
 
     try:
-        funtype = realtype(funtype)
-        if isinstance(funtype, TPtr) and isinstance(funtype.base, TFunction):
+        funtype = tp.realtype(funtype)
+        if isinstance(funtype, tp.Ptr) and isinstance(funtype.base, tp.Function):
             # Pointers to functions are the same as the functions
-            funtype = realtype(funtype.base)
-    except DMLUnknownType:
-        raise ETYPE(site, funtype)
+            funtype = tp.realtype(funtype.base)
+    except tp.DMLUnknownType:
+        raise E.TYPE(site, funtype)
 
-    if not isinstance(funtype, TFunction):
-        raise EAPPLY(fun)
+    if not isinstance(funtype, tp.Function):
+        raise E.APPLY(fun)
 
     args = typecheck_inarg_inits(
         site, inits,
@@ -432,18 +432,18 @@ def mkApply(site, fun, args):
     funtype = fun.ctype()
 
     if not funtype:
-        raise EAPPLY(fun)
+        raise E.APPLY(fun)
 
     try:
-        funtype = realtype(funtype)
-        if isinstance(funtype, TPtr) and isinstance(funtype.base, TFunction):
+        funtype = tp.realtype(funtype)
+        if isinstance(funtype, tp.Ptr) and isinstance(funtype.base, tp.Function):
             # Pointers to functions are the same as the functions
-            funtype = realtype(funtype.base)
-    except DMLUnknownType:
-        raise ETYPE(site, funtype)
+            funtype = tp.realtype(funtype.base)
+    except tp.DMLUnknownType:
+        raise E.TYPE(site, funtype)
 
-    if not isinstance(funtype, TFunction):
-        raise EAPPLY(fun)
+    if not isinstance(funtype, tp.Function):
+        raise E.APPLY(fun)
 
     if funtype.varargs and len(args) > len(funtype.input_types):
         known_arglen = len(funtype.input_types)
@@ -480,6 +480,6 @@ class StaticIndex(NonValue):
     def __init__(self, site, var):
         pass
     def __str__(self):
-        return dollar(self.site) + ("_" if self.var is None else self.var)
+        return logging.dollar(self.site) + ("_" if self.var is None else self.var)
     def exc(self):
-        return EIDXVAR(self.site, str(self))
+        return E.IDXVAR(self.site, str(self))

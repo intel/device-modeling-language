@@ -6,8 +6,6 @@ dml 1.4;
 
 device test;
 
-/// INSTANTIATE-MANUALLY
-
 connect x is init_as_subobj {
     param classname = "garbage";
 }

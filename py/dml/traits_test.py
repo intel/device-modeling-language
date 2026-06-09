@@ -11,7 +11,6 @@ import dml.ast
 import dml.ctree
 from dml import crep
 from dml import types
-from dml import traits
 from dml import serialize
 
 class Test_traits(unittest.TestCase):
@@ -52,4 +51,4 @@ class Test_traits(unittest.TestCase):
         self.assertTrue(ref)
         # does not crash
         with crep.DeviceInstanceContext(), self.dev.use_for_codegen():
-            ref.call_expr([], types.TVoid()).read()
+            ref.call_expr([], types.Void()).read()

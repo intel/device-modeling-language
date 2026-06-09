@@ -10,7 +10,6 @@ import "simics/devs/signal.dml";
 import "simics/devs/ethernet.dml";
 
 // must define class 'signal_stub' before instantiating
-/// INSTANTIATE-MANUALLY
 
 connect validate {
     method validate(conf_object_t *obj) -> (bool) {

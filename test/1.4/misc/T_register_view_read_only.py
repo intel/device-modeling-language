@@ -3,6 +3,8 @@
 
 from simics import SIM_get_port_interface
 from stest import expect_equal
+import testenv
+obj = testenv.instantiate()
 
 b = SIM_get_port_interface(obj, 'register_view_read_only', 'b')
 expect_equal(b.is_read_only(0), False)
