@@ -3449,13 +3449,13 @@ UNUSED static uint64 _select_log_level(ht_int_table_t *ht,
 
 UNUSED static int _free_sub_table(ht_int_table_t *table,
                                   uint64 key, void *val, void *_) {
-        ht_clear_int_table(table, false);
+        ht_delete_int_table((ht_int_table_t*)val, false);
         return 0;
 }
 
 UNUSED static void _free_table(ht_int_table_t *table) {
         ht_for_each_entry_int(table, _free_sub_table, NULL);
-        ht_clear_int_table(table, true);
+        ht_delete_int_table(table, true);
 }
 
 UNUSED static void _memoized_recursion(const char *name) {
