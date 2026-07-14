@@ -2262,6 +2262,15 @@ __qname(dml_qname_cache_t *cache, const char *fmt, ...)
         return (const char *)s;
 }
 
+UNUSED static void
+_DML_free_qname_cache(dml_qname_cache_t *cache)
+{
+        for (int i = 0; i < 4; i++) {
+                MM_FREE(cache->bufs[i]);
+                cache->bufs[i] = NULL;
+        }
+}
+
 UNUSED static const char *
 __static_qname(_identity_t id, const _id_info_t *id_infos,
                const char *dev_name)
