@@ -452,3 +452,4 @@
 - `release 7 7160`
 - `note 6` The `map_target` template from `utility.dml` now frees the internally
  created map target upon device deletion.
+- `release 7 7178`
