@@ -1547,14 +1547,14 @@ def cdecl2_ptr(t):
 def cdecl2_vect(t):
     'cdecl2 : VECT cdecl2'
     if provisional.simics_util_vect not in t.parser.file_info.provisional:
-        if not breaking_changes.vect_needs_provisional.enabled:
-            vsite = site(t)
-            if vsite.dml_version() != (1, 2):
-                # defensively suppress warning in 1.2, for
-                # compatibility
-                report(WEXPERIMENTAL(site(t), 'vect types'))
-        else:
-            report(EOLDVECT(site(t)))
+        # defensively suppress warning in 1.2, for
+        # compatibility
+        vsite = site(t)
+        if vsite.dml_version() != (1, 2):
+            if not breaking_changes.vect_needs_provisional.enabled:
+                report(WEXPERIMENTAL(vsite, 'vect types'))
+            else:
+                report(EOLDVECT(vsite))
     t[0] = ['vect'] + t[2]
 
 @prod_dml12
