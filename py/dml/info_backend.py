@@ -181,3 +181,193 @@ def generate(device, filename):
     classname = param_str_fixup(device, 'classname', '-')
     with XMLWriter(filename) as outfile:
         dev_info(outfile, device, classname)
+
+import json
+from dml.types import *
+from . import crep
+from .expr import mkLit
+from .expr_util import *
+from .structure import get_attr_name
+import os 
+import sys 
+
+
+def gen_params(config, node, type):
+    d = {}
+    for a in config[type]:
+        p = a['param']
+        if node.get_component(p) != None and param_defined(node, p):
+            # not sure about types, maybe param_expr() is the best options
+            if p == "init_val":
+                a = param_expr(node, p)
+                d[p] = str(a)
+                continue
+            type = a['type']
+            if type == "str":
+                d[p] = param_str(node, p)
+            elif type == "bool":
+                d[p] = param_bool(node, p)
+            elif type == "int":
+                d[p] = param_int(node, p)
+    return d
+
+def gen_attribute(config, node, port, prefix):
+    d = gen_params(config, node, 'attribute')
+    d['name'] = param_str(node, 'name')
+    d['full_name'] = get_attr_name(prefix, node)
+    return d
+
+def gen_interface(config, node):
+    d = gen_params(config, node, 'interface')
+    d['name'] = param_str(node, 'name')
+    return d
+
+def gen_connect(config, node, port, prefix):
+    d = gen_params(config, node, 'connect')
+    d['name'] = param_str(node, 'name')
+    d['full_name'] = get_attr_name(prefix, node)
+    i = []
+    children = sorted(node.get_components(), key=lambda o: o.name or '')
+    for child in children:
+        if child.objtype == 'interface':
+             i.append(gen_interface(config, child))
+    if i:
+        d['interface'] = i
+    return d
+
+def gen_implement(config, node):
+    d = gen_params(config, node, 'implement')
+    d['name'] = param_str(node, 'name')
+    return d
+
+def gen_objects(config, node, port=None, dimsizes=(), prefix='', loopvars=()):
+
+    if node.objtype in {'parameter', 'method', 'session', 'saved',
+                        'hook', 'register', 'event'}:
+        return
+
+    if node.objtype == 'attribute':
+        return gen_attribute(config, node, port, prefix)
+    if node.objtype == 'connect':
+        return gen_connect(config, node, port, prefix)
+    if node.objtype == 'implement':
+        return gen_implement(config, node)
+
+    # Registration order is undefined but has significance, so
+    # register attributes of subobjects in an order that is deterministic,
+    # platform-independent, and unaffected by adding or removing objects.
+    if node.objtype == 'group':
+        prefix += crep.cname(node) + '_'
+        for _ in node.arraylens():
+            loopvars += (mkLit(None, '_i' + str(len(loopvars) + 1),
+                               TInt(32, False)),)
+        dimsizes += node.arraylens()
+    elif node.objtype in {'device', 'bank', 'port', 'subdevice'}:
+        if node.objtype in {'bank', 'port', 'subdevice'} and (
+                # anonymous bank
+                dml.globals.dml_version != (1, 2) or node.name != None):
+            port = node
+    else:
+        raise ICE(node, f"unknown object type {node.objtype}")
+
+    d = {}
+    d['name'] = param_str(node, 'name')
+    children = sorted(node.get_components(), key=lambda o: o.name or '')
+    for child in children:
+        cd = gen_objects(config, child, port, dimsizes, prefix, loopvars)
+        if cd:
+            l = []
+            if child.objtype in d.keys():
+                l = d[child.objtype]
+            l.append(cd)
+            d[child.objtype] = l
+
+    return d
+
+
+def load_config(filename):
+    script_directory = os.path.dirname(os.path.abspath(sys.argv[0])) 
+    print(script_directory)
+    with open(filename) as config_file:
+        d = json.loads(config_file)
+        config_file.close()
+
+
+def save_objects(filename, data):
+    with open(filename, mode="w", encoding="utf-8") as write_file:
+        json.dump(data, write_file, sort_keys=False, indent=2, separators=(',', ': '))
+        write_file.close()
+
+default_config = {
+    "attribute": [
+        {
+            "param": "desc",
+            "type": "str"
+        },
+        { 
+            "param": "documentation",
+            "type": "str"
+        },
+        { 
+            "param": "limitations",
+            "type": "str"
+        },
+        { 
+            "param": "type",
+            "type": "str"
+        },
+        { 
+            "param": "internal",
+            "type": "bool"
+        },
+        { 
+            "param": "init_val",
+            "type": "str"
+        }
+    ],
+    "interface": [
+        {
+            "param": "required",
+            "type": "bool"
+        }
+    ],
+    "implement": [
+        {
+            "param": "desc",
+            "type": "str"
+        },
+        { 
+            "param": "documentation",
+            "type": "str"
+        },
+        { 
+            "param": "limitations",
+            "type": "str"
+        }
+    ],
+    "connect": [
+        {
+            "param": "desc",
+            "type": "str"
+        },
+        { 
+            "param": "documentation",
+            "type": "str"
+        },
+        { 
+            "param": "limitations",
+            "type": "str"
+        },
+        { 
+            "param": "type",
+            "type": "str"
+        }
+    ],
+}
+
+def generate_json(device, filename):
+#TODO add an user config file option
+#    config = load_config(".json")
+    config = default_config
+    data = gen_objects(config, device)
+    save_objects(filename, data)
