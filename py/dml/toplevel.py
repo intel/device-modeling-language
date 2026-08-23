@@ -196,8 +196,10 @@ bidi_re = re.compile(
 # For the moment, we ban usages of * inside pragmas to not make multiple usages
 # of pragmas ruin everything. In the future if we introduce pragmas that may
 # want to contain * we need to be smarter about this.
-pragma_re = re.compile(r'/\*%\s*([^\s*]+)\s*(?:\s([^*\s][^*]*))?%\*/')
+pragma_re = re.compile(r'/\*%\s*([^\s*]+)\s*(?:\s([^*\s][^*]*?))?\s*%\*/')
+
 pragma_coverity_data_re = re.compile(r'^(\S+)\s*(?:\s(\S[\s\S]*))?$')
+warning_coverity_data_re = re.compile(r'^(\S+)$')
 
 def check_bidi(filename, filestr):
     for m in bidi_re.finditer(filestr):
@@ -226,25 +228,32 @@ def parse_pragma(filename, start_lineno, end_lineno, pragma, data):
                            None,
                            "COVERITY pragma must specify event to suppress, "
                            + "and optionally classification"))
-        else:
-            return ('COVERITY',
-                    (filename, start_lineno, end_lineno + 1, data.groups()))
+            return None
+        data = data.groups()
+    elif pragma == 'WARNING':
+        data = data and warning_coverity_data_re.match(data)
+        if data is None:
+            report(ESYNTAX(SimpleSite(f"{filename}:{start_lineno}"),
+                           None,
+                           "WARNING pragma must specify warning to suppress"))
+            return None
+        data = data.group(1)
     else:
         report(EPRAGMA(SimpleSite(f"{filename}:{start_lineno}"), pragma))
         return None
 
-def process_pragma(t):
-    (pragma, data) = t
-    if pragma == 'COVERITY':
-        (filename, start_lineno, end_lineno, data) = data
-        # The first COVERITY pragma we encounter for a given end_lineno is
-        # the only one whose starting line may differ.
-        (dml.globals.coverity_pragmas
-         .setdefault((filename, end_lineno), (start_lineno, []))
-         [1].append(data))
-    else:
-        raise ICE(f'unknown pragma: {pragma}')
+    return (pragma, filename, start_lineno, end_lineno + 1, data)
 
+def process_pragma(t):
+    (pragma, filename, start_lineno, tgt_lineno, data) = t
+    if pragma == 'WARNING':
+        if not is_warning_tag(data):
+            report(EWARNING(SimpleSite(f'{filename}:{start_lineno}:1'), data))
+            return None
+
+    (dml.globals.line_pragmas
+     .setdefault((filename, tgt_lineno), (start_lineno, []))
+     [1].append((pragma, data)))
 
 def parse_file(dml_filename):
     try:

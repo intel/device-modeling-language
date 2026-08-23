@@ -101,8 +101,8 @@ Output makefile rules describing dependencies.
 Don't display the tag associated with each warning or error message.
 The tag identifies the particular kind of warning/error of the message,
 which can be used to look up its documentation in Appendix
-[Messages](messages.html). The `--nowarn` and `--warn` options also operate
-on warning tags.
+[Messages](messages.html). The `--nowarn` and `--warn` options as well as the
+[`WARNING` pragma](language.html#warning-pragma) also operate on warning tags.
 </dd><dt>
 
 -g
