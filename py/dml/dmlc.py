@@ -364,12 +364,16 @@ def main(argv):
         + ' dependency generation. Specify multiple times to have multiple'
         + ' targets.')
 
-    # <dt>-T</dt>
-    # <dd>Show tags on warning messages. The tags can be used with
-    # the <tt>-\-nowarn</tt> and <tt>-\-warn</tt> options.</dd>
+    # <dt>-\-no-tags</dt>
+    # <dd>Disables showing the tag associated with each error or warning
+    # message.</dd>
     parser.add_argument(
-        '-T', dest='include_tag', action='store_true',
-        help='show tags on warning messages')
+        '--no-tags', dest='include_tag', action='store_false',
+        help='disable tags on error and warning messages')
+
+    # Purely for backwards compatibility
+    parser.add_argument('-T', action='store_true', dest=argparse.SUPPRESS,
+                        help=argparse.SUPPRESS)
 
     # Deprecated with SIMICS_API > 4.8
     parser.add_argument(
@@ -385,8 +389,7 @@ def main(argv):
         help='generate artifacts and C code that allow for easier debugging')
 
     # <dt>-\-warn=<i>tag</i></dt>
-    # <dd>Enable selected warnings. The tags can be found using
-    # the <tt>-T</tt> option.</dd>
+    # <dd>Enable selected warnings.</dd>
     parser.add_argument(
         '--warn', dest='enabled_warnings', action='append',
         metavar='TAG',
@@ -394,8 +397,7 @@ def main(argv):
         help='enable warning TAG')
 
     # <dt>-\-nowarn=<i>tag</i></dt>
-    # <dd>Suppress selected warnings. The tags can be found using
-    # the <tt>-T</tt> option.</dd>
+    # <dd>Suppress selected warnings.</dd>
     parser.add_argument(
         '--nowarn', dest='disabled_warnings', action='append',
         metavar='TAG',

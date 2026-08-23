@@ -95,11 +95,14 @@ constant. The parameter will appear in the top-level scope.
 Output makefile rules describing dependencies.
 </dd><dt>
 
--T
+--no-tags
 </dt><dd>
 
-Show tags on warning messages. The tags can be used with
-the `--nowarn` and `--warn` options.
+Don't display the tag associated with each warning or error message.
+The tag identifies the particular kind of warning/error of the message,
+which can be used to look up its documentation in Appendix
+[Messages](messages.html). The `--nowarn` and `--warn` options also operate
+on warning tags.
 </dd><dt>
 
 -g
@@ -127,15 +130,15 @@ only used when needed.
 -\-warn=*tag*
 </dt><dd>
 
-Enable selected warnings. The tags can be found using
-the `-T` option.
+Enable selected warnings. The tag of a warning will be displayed before the
+message body, unless `--no-tags` has been passed to DMLC.
 </dd><dt>
 
 -\-nowarn=*tag*
 </dt><dd>
 
-Suppress selected warnings. The tags can be found using
-the `-T` option.
+Suppress selected warnings. The tag of a warning will be displayed before the
+message body, unless `--no-tags` has been passed to DMLC.
 </dd><dt>
 
 -\-werror
