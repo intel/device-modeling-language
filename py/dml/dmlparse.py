@@ -1552,7 +1552,12 @@ def cdecl2_vect(t):
         vsite = site(t)
         if vsite.dml_version() != (1, 2):
             if not breaking_changes.vect_needs_provisional.enabled:
-                report(WEXPERIMENTAL(vsite, 'vect types'))
+                report(WEXPERIMENTAL(vsite,
+                                     "vect types\nTo suppress this "
+                                     + "warning, specify "
+                                     + "'provisional simics_util_vect;' at "
+                                     + "the top of the file, after "
+                                     + "'dml 1.4;'"))
             else:
                 report(EOLDVECT(vsite))
     t[0] = ['vect'] + t[2]
