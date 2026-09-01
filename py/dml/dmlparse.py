@@ -15,7 +15,7 @@ from . import dmllex14
 from . import provisional
 from . import breaking_changes
 
-assert lex.__version__ == yacc.__version__ == "3.4"
+assert lex.__version__ == yacc.__version__ == "3.11"
 
 class UnexpectedEOF(Exception): pass
 
@@ -2965,18 +2965,21 @@ def discard(t):
     t[0] = ast.discard(site(t, 1))
 
 def ident_rule(idents):
-    return 'ident : ' +  "\n| ".join(idents)
+    def wrapper(rule):
+        rule.__doc__ = 'ident : ' +  "\n| ".join(idents)
+        return rule
+    return wrapper
 
 # Most DML top-level keywords are also allowed as identifiers.
 
 @prod_dml12
-@lex.TOKEN(ident_rule(dmllex12.reserved_idents + (
-    'ID', 'EACH', 'SESSION', 'SEQUENCE')))
+@ident_rule(dmllex12.reserved_idents + (
+    'ID', 'EACH', 'SESSION', 'SEQUENCE'))
 def ident(t):
     t[0] = t[1]
 
 @prod_dml14
-@lex.TOKEN(ident_rule(dmllex14.reserved_idents + ('ID',)))
+@ident_rule(dmllex14.reserved_idents + ('ID',))
 def ident(t):
     t[0] = t[1]
 
@@ -2989,12 +2992,12 @@ reserved_words_14 = reserved_words_12 + ['CALL', 'AUTO',
                                          'ASYNC', 'AWAIT', 'WITH']
 
 @prod_dml12
-@lex.TOKEN(ident_rule(reserved_words_12))
+@ident_rule(reserved_words_12)
 def reserved(t):
     raise ESYNTAX(site(t, 1), str(t[1]), "reserved word")
 
 @prod_dml14
-@lex.TOKEN(ident_rule(reserved_words_14))
+@ident_rule(reserved_words_14)
 def reserved(t):
     raise ESYNTAX(site(t, 1), str(t[1]), "reserved word")
 

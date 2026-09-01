@@ -25,9 +25,6 @@ import dml.dmlparse
 
 __all__ = ('produce_dmlast', 'get_parser', 'parse_main_file')
 
-# Add the current directory to the search path, to find the parsetab module
-sys.path.append('.')
-
 version_warning = True
 supported_versions = [(1, 2), (1, 4)]
 
@@ -50,7 +47,8 @@ def get_parser(version, tabmodule=None, debugfile=None):
         return parsers[version]
 
     lexer = lex.lex(module = dml.dmlparse.lexers[version],
-                    optimize = 0)#not debug_mode)
+                    optimize = 0,
+                    outputdir = '.')
     parser = yacc.yacc(
         module = dml.dmlparse.grammars[version],
         method='LALR',
@@ -58,7 +56,8 @@ def get_parser(version, tabmodule=None, debugfile=None):
                    or 'dml.dml%s_parsetab' % (''.join(map(str, version)),)),
         debug = debugfile is not None,
         debugfile = debugfile,
-        optimize = 0)#not debug_mode)
+        optimize = 0,
+        outputdir = '.')
 
     parsers[version] = (lexer, parser)
     return (lexer, parser)
