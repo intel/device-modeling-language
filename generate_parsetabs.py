@@ -12,13 +12,16 @@ def generate_parsetabs(dml_package, version, parsetab, debugfile):
     # only available operation is something like "try to load Python
     # module X, and if that fails, create X.py". We want to
     # unconditionally create the parsetab, so we must remove
-    # previously built parsetabs.  Note that the parsetab used by dmlc
-    # is stored in a .pyc file in the dml package, while the .py file
-    # is in the build directory. This way we deprave ply the
-    # possibility to carry out any caching logic.
+    # previously built parsetabs. Since ply qualifies the tabmodule
+    # name with the caller's package (here, 'dml'), the table it may
+    # find and reuse as a cache is the previously installed
+    # dml.<parsetab> module under dml_package/dml. Remove it and any .pyc
+    # variant of it to deprive ply of the possibility to carry out any caching
+    # logic.
     for suff in ['.py', '.pyc']:
-        if os.path.lexists(parsetab + suff):
-            os.remove(parsetab + suff)
+        installed = os.path.join(dml_package, 'dml', parsetab + suff)
+        if os.path.lexists(installed):
+            os.remove(installed)
     toplevel.get_parser(tuple(map(int, version)), parsetab, debugfile)
     # Some shift/reduce conflicts are expected. There is no clean
     # way to capture s/r conflicts, so we just parse a log manually.
@@ -28,7 +31,7 @@ def generate_parsetabs(dml_package, version, parsetab, debugfile):
                  if line.startswith(prefix)]
     assert lines[0:3] == ['', 'Conflicts:', ''], lines
     conflicts = lines[3:]
-    assert len(conflicts) == 10, conflicts
+    assert len(conflicts) == (10 if version == '12' else 12), conflicts
     assert all(conflict.startswith('shift/reduce conflict')
                for conflict in conflicts)
 
