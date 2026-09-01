@@ -3450,7 +3450,7 @@ UNUSED static uint64 _select_log_level(ht_int_table_t *ht,
 UNUSED static int _free_sub_table(ht_int_table_t *table,
                                   uint64 key, void *val, void *_) {
         ht_delete_int_table((ht_int_table_t*)val, false);
-        return 0;
+        return 1;
 }
 
 UNUSED static void _free_table(ht_int_table_t *table) {
