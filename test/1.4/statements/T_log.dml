@@ -31,6 +31,10 @@ method init() {
     /// GREP .*arg 8 <    5>
     log info: "arg 8 <%*d>", j, j;
 
+    local (bool t, bool f) = (true, false);
+    /// GREP .*bool format specifier, true, false
+    log info: "bool format specifier, %b, %b", t, f;
+
     local int side_effect = 0;
     local int two = 2;
     // filtered on log level: not logged, side effect does not happen
