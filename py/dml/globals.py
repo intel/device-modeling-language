@@ -66,7 +66,9 @@ debuggable = False
 
 coverity = False
 
-coverity_pragmas = {}
+# the specified pragmas in the model that operate on a subsequent line.
+# For the moment, all pragmas are of that sort
+line_pragmas = {}
 
 # all warnings are disabled by the --dep flag
 ignore_all_warnings = False
