@@ -4,6 +4,7 @@
 # Parser for DML 1.2
 
 import os, sys, re, itertools
+from functools import wraps
 from ply import lex, yacc
 
 from .logging import *
@@ -15,7 +16,7 @@ from . import dmllex14
 from . import provisional
 from . import breaking_changes
 
-assert lex.__version__ == yacc.__version__ == "3.4"
+assert lex.__version__ == yacc.__version__ == "3.11"
 
 class UnexpectedEOF(Exception): pass
 
@@ -162,12 +163,43 @@ def mk_get_token(lexer):
         return tok
     return get_token
 
+emptyprod_re = re.compile(r'[:|]\s*(?:$|\|)')
+
+assert emptyprod_re.search('foo : \n')
+assert emptyprod_re.search('foo : something |\n |more')
+assert not emptyprod_re.search('foo : something\n')
+
+
+def with_fixup_emptyprod_lexpos(rule):
+    '''
+    A decorator that checks if the grammar rule could yield an empty
+    production, and, if so, will augment it with code guaranteeing a sane
+    lexpos for empty productions. See 'fixup_emptyprod_lexpos'.
+
+    Applied to every grammar rule as part of prod/prod_dml12/prod_dml14
+    '''
+    if (rule.__name__ != 'error'
+        and emptyprod_re.search(rule.__doc__)):
+        if '|' in rule.__doc__:
+            @wraps(rule)
+            def wrapped(t):
+                if len(t) == 1:
+                    fixup_emptyprod_lexpos(t)
+                return rule(t)
+        else:
+            @wraps(rule)
+            def wrapped(t):
+                fixup_emptyprod_lexpos(t)
+                return rule(t)
+
+        # Otherwise Ply breaks
+        setattr(wrapped, 'co_firstlineno', rule.__code__.co_firstlineno)
+        return wrapped
+
+    return rule
+
 def fixup_emptyprod_lexpos(t):
     '''
-    Must be called in every empty production rule to guarantee a sane lexpos
-    for it, and subsequently to guarantee sane sites for any production rules
-    that may rely on it.
-
     Ply has *exceedingly* stupid behavior in that the lexpos it assigns to a
     symbol yielded by an empty production is just wherever the lexer
     happens to be at the time. Typically, that means it gets a lexpos
@@ -187,44 +219,38 @@ def fixup_emptyprod_lexpos(t):
     (conveniently, Ply actually has an option for that) to stash the most
     recently lexed token, and then we can use that token's lexpos to fix up the
     lexpos of every empty production, fixing the problem at the source.
-
-    Ideally instead of peppering fixup_emptyprod_lexpos(t) all over the place
-    we'd have a check in the prod decorators such as to automatically augment
-    it onto any production rule that could yield empty. Unfortunately, that
-    breaks Ply completely. Y'see, Ply does not only rely on `.__doc__` and
-    `.__name__` of functions... but also `.__code__.co_firstlineno`. Brilliant.
     '''
     latest_tok = t.lexer.latest_token
     if latest_tok is not None:
-        # HACK set_lexpos not available in Ply 3.4, so internals to the rescue.
-        # No matter; since Ply is unmaintained I can *definitively say* that
-        # this code is guaranteed to be compatible with all future versions of
-        # Ply!
-        # Haha...
+        # HACK technically internal but speed is nice and by the *virtue* --
+        # yes, the VIRTUE of Ply being unmaintained -- this is guaranteed to
+        # never break!
         sym = t.slice[0]
         sym.lexpos = latest_tok.lexpos
         sym.lineno = latest_tok.lineno
 
-def prod_dml12(f):
-    '''Decorator for functions that should be used as production rules
-    in the DML 1.2 grammar'''
+def prod_rule_for(f, production_rules):
     name = 'p_' + f.__name__
-    assert name not in production_rules_dml12, f.__name__
-    production_rules_dml12[name] = f
+    assert name not in production_rules, f.__name__
+    production_rules[name] = f
     return f
+
+def prod_dml12(f):
+    return prod_rule_for(with_fixup_emptyprod_lexpos(f),
+                         production_rules_dml12)
 
 def prod_dml14(f):
     '''Decorator for functions that should be used as production rules
     in the DML 1.4 grammar'''
-    name = 'p_' + f.__name__
-    assert name not in production_rules_dml14, f.__name__
-    production_rules_dml14[name] = f
-    return f
+    return prod_rule_for(with_fixup_emptyprod_lexpos(f),
+                         production_rules_dml14)
 
 def prod(f):
     '''Decorator for functions that should be used as production rules
     in all DML grammars'''
-    return prod_dml12(prod_dml14(f))
+    return prod_rule_for(prod_rule_for(with_fixup_emptyprod_lexpos(f),
+                                       production_rules_dml12),
+                         production_rules_dml14)
 
 
 @prod
@@ -243,7 +269,7 @@ def maybe_provisional_yes(t):
 @prod
 def maybe_provisional_no(t):
     'maybe_provisional : '
-    fixup_emptyprod_lexpos(t)
+    pass
 
 
 @prod
@@ -255,13 +281,11 @@ def maybe_device_yes(t):
 @prod
 def maybe_device_no(t):
     'maybe_device : '
-    fixup_emptyprod_lexpos(t)
     t[0] = None
 
 @prod
 def maybe_bitorder_no(t):
     'maybe_bitorder : '
-    fixup_emptyprod_lexpos(t)
     t.parser.file_info.bitorder = 'le'
 
 @prod
@@ -278,7 +302,6 @@ def device_statements(t):
 @prod
 def device_statements_empty(t):
     'device_statements : '
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml12
@@ -341,7 +364,6 @@ def toplevel_if(t):
 @prod_dml14
 def toplevel_else_no(t):
     '''toplevel_else :'''
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml14
@@ -365,7 +387,6 @@ def object_anonymous_bank(t):
 @prod
 def array_list_empty(t):
     'array_list : '
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -387,7 +408,6 @@ def bitrangespec(t):
 @prod
 def bitrangespec_empty(t):
     'bitrangespec :'
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml14
@@ -440,7 +460,6 @@ def object_field_1(t):
 @prod_dml12
 def field_array_size_no(t):
     'fieldarraysize : '
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml12
@@ -564,7 +583,6 @@ def maybe_extern_yes(t):
 @prod_dml12
 def maybe_extern_no(t):
     '''maybe_extern :'''
-    fixup_emptyprod_lexpos(t)
     t[0] = False
 
 @prod
@@ -575,7 +593,6 @@ def maybe_default_yes(t):
 @prod
 def maybe_default_no(t):
     '''maybe_default :'''
-    fixup_emptyprod_lexpos(t)
     t[0] = False
 
 
@@ -685,7 +702,6 @@ def maybe_colon_yes(t):
 @prod
 def maybe_colon_no(t):
     '''maybe_colon : '''
-    fixup_emptyprod_lexpos(t)
     t[0] = False
 
 @prod_dml14
@@ -783,7 +799,6 @@ def toplevel_trait(t):
 @prod_dml12
 def trait_stmts_none(t):
     '''trait_stmts : '''
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml12
@@ -812,7 +827,6 @@ def trait_session(t):
 @prod_dml14
 def template_stmts_none(t):
     '''template_stmts : '''
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml14
@@ -859,8 +873,6 @@ def method_qualifiers(t):
                          | INDEPENDENT
                          | INDEPENDENT STARTUP
                          | INDEPENDENT STARTUP MEMOIZED'''
-    if len(t) == 1:
-        fixup_emptyprod_lexpos(t)
     t[0] = list(itertools.islice(t, 1, None))
 
 @prod_dml12
@@ -985,7 +997,6 @@ def object_desc(t):
 @prod
 def object_desc_none(t):
     'object_desc :'
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml14
@@ -1001,7 +1012,6 @@ def maybe_extension_yes(t):
 @prod_dml14
 def maybe_extension_no(t):
     'maybe_extension : '
-    fixup_emptyprod_lexpos(t)
     enabled = (provisional.explicit_object_extensions
                in t.parser.file_info.provisional)
     t[0] = False if enabled else None
@@ -1012,7 +1022,6 @@ def maybe_extension_no(t):
 @prod_dml12
 def maybe_extension(t):
     'maybe_extension : '
-    fixup_emptyprod_lexpos(t)
     t[0] = None
 
 @prod
@@ -1034,7 +1043,6 @@ def object_statements(t):
 @prod
 def object_statements_empty(t):
     'object_statements : '
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 def stray_is_check(body):
@@ -1183,7 +1191,6 @@ def object_if(t):
 @prod
 def object_else_no(t):
     '''object_else :'''
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -1273,7 +1280,6 @@ def paramspec_default(t):
 @prod
 def method_outparams_none(t):
     'method_outparams : '
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml12
@@ -1346,7 +1352,6 @@ def method_params_typed(t):
 @prod_dml12
 def maybe_nothrow_throws(t):
     'maybe_nothrow : '
-    fixup_emptyprod_lexpos(t)
     t[0] = True
 
 @prod_dml12
@@ -1364,7 +1369,6 @@ def throws(t):
 @prod
 def throws_not(t):
     'throws : '
-    fixup_emptyprod_lexpos(t)
     t[0] = False
 
 # Method arguments
@@ -1372,7 +1376,6 @@ def throws_not(t):
 @prod_dml12
 def returnargs_empty(t):
     'returnargs : '
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml12
@@ -1384,7 +1387,6 @@ def returnargs(t):
 @prod
 def maybe_istemplate_no(t):
     'maybe_istemplate : '
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -1416,7 +1418,6 @@ def sizespec(t):
 @prod
 def sizespec_empty(t):
     'sizespec : '
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 # The shorthand offset of a register
@@ -1428,7 +1429,6 @@ def offsetspec(t):
 @prod
 def offsetspec_empty(t):
     'offsetspec : '
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 # A C-like declaration, or a simple name
@@ -1573,7 +1573,6 @@ def cdecl3(t):
 @prod
 def cdecl3_empty(t):
     'cdecl3 : '
-    fixup_emptyprod_lexpos(t)
     t[0] = [None]
 
 @prod
@@ -1595,7 +1594,6 @@ def cdecl3_par(t):
 @prod
 def cdecl_maybe_discarded_list_empty(t):
     'cdecl_maybe_discarded_list : '
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -1633,7 +1631,6 @@ def cdecl_maybe_discarded_list_opt_tellipsis_last(t):
 @prod
 def cdecl_maybe_discarded_or_ident_list_empty(t):
     'cdecl_maybe_discarded_or_ident_list : '
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -1685,7 +1682,6 @@ def struct_decls(t):
 @prod
 def struct_decls_empty(t):
     'struct_decls : '
-    fixup_emptyprod_lexpos(t)
     t[0] = ()
 
 @prod
@@ -1733,7 +1729,6 @@ def layout_decls(t):
 @prod
 def layout_decls_empty(t):
     'layout_decls : '
-    fixup_emptyprod_lexpos(t)
     t[0] = ()
 
 @prod
@@ -1779,24 +1774,17 @@ def bitfield_range_2(t):
 @prod
 def bitfields_decls_empty(t):
     'bitfields_decls : '
-    fixup_emptyprod_lexpos(t)
     t[0] = ()
 
 # ctypedecl is a type without any declared variable
 @prod
 def ctypedecl(t):
-    'ctypedecl : const_opt basetype ctypedecl_ptr'
+    'ctypedecl : const_opt basetype stars'
     t[0] = [t[2]] + t[1] + t[3]
-
-@prod
-def ctypedecl_ptr(t):
-    'ctypedecl_ptr : stars ctypedecl_array'
-    t[0] = t[2] + t[1]
 
 @prod
 def stars_empty(t):
     'stars : '
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -1809,29 +1797,12 @@ def stars(t):
     'stars : TIMES stars'
     t[0] = t[2] + ['pointer']
 
-# This rule is in conflict with p_expression_new_array, so leave it
-# out for now
-#
-#@prod
-#def ctypedecl_array(t):
-#    'ctypedecl_array : ctypedecl_array LBRACKET RBRACKET'
-#    t[0] = t[1] + ['array', None]
-
-@prod
-def ctypedecl_array_simple(t):
-    'ctypedecl_array : ctypedecl_simple'
-    t[0] = t[1]
-
-@prod
-def ctypedecl_simple_par(t):
-    'ctypedecl_simple : LPAREN ctypedecl_ptr RPAREN'
-    t[0] = t[2]
-
-@prod
-def ctypedecl_simple_none(t):
-    'ctypedecl_simple : ' # no variable here
-    fixup_emptyprod_lexpos(t)
-    t[0] = []
+# TODO We'd like rules to have ctypedecl be able to handle function pointers
+# and array types. Doing so naively would result in grammar conflicts, however.
+# Putting in the work to solve that *would* be worth the effort -- *if* you're
+# doing it in an effort to unify ctypedecl with cdecl. Any work poured into
+# ctypedecl that still has it remain entirely seperate from cdecl is likely not
+# worth it.
 
 @prod
 def const_opt(t):
@@ -1841,7 +1812,6 @@ def const_opt(t):
 @prod
 def const_opt_empty(t):
     'const_opt :'
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -2117,7 +2087,6 @@ def endianflag(t):
 @prod
 def endianflag_none(t):
     'endianflag : '
-    fixup_emptyprod_lexpos(t)
     t[0] = None
 
 # expression-opt
@@ -2130,7 +2099,6 @@ def expression_opt_1(t):
 @prod
 def expression_opt_2(t):
     'expression_opt : '
-    fixup_emptyprod_lexpos(t)
     t[0] = None
 
 # A comma-separated expression list.  A trailing comma is allowed
@@ -2138,7 +2106,6 @@ def expression_opt_2(t):
 @prod
 def expression_list(t):
     'expression_list : '
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -2156,7 +2123,6 @@ def expression_list_many(t):
 @prod_dml12
 def expression_list_ntc_empty(t):
     'expression_list_ntc : '
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml12
@@ -2364,7 +2330,6 @@ def statement_for(t):
 @prod_dml14
 def for_post_empty(t):
     'for_post : '
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml14
@@ -2449,7 +2414,6 @@ def switch_hashifelse(t):
 @prod_dml14
 def stmt_or_case_list_empty(t):
     'stmt_or_case_list : '
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml14
@@ -2492,7 +2456,6 @@ def statement_delay(t):
 @prod
 def ident_list_empty(t):
     'ident_list : '
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -2513,7 +2476,6 @@ def ident_list_many(t):
 @prod_dml14
 def ident_or_discard_list_empty(t):
     'ident_or_discard_list : '
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml14
@@ -2781,7 +2743,6 @@ def warning_stmt(t):
 @prod
 def log_args_empty(t):
     'log_args : '
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -2801,7 +2762,6 @@ def compound_statement_2(t):
 @prod
 def statement_list_1(t):
     'statement_list : '
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod
@@ -2897,7 +2857,6 @@ def local_one_multiple_init(t):
 @prod_dml14
 def simple_array_list_empty(t):
     'simple_array_list : '
-    fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml14
@@ -2987,18 +2946,21 @@ def discard(t):
     t[0] = ast.discard(site(t, 1))
 
 def ident_rule(idents):
-    return 'ident : ' +  "\n| ".join(idents)
+    def wrapper(rule):
+        rule.__doc__ = 'ident : ' +  "\n| ".join(idents)
+        return rule
+    return wrapper
 
 # Most DML top-level keywords are also allowed as identifiers.
 
 @prod_dml12
-@lex.TOKEN(ident_rule(dmllex12.reserved_idents + (
-    'ID', 'EACH', 'SESSION', 'SEQUENCE')))
+@ident_rule(dmllex12.reserved_idents + (
+    'ID', 'EACH', 'SESSION', 'SEQUENCE'))
 def ident(t):
     t[0] = t[1]
 
 @prod_dml14
-@lex.TOKEN(ident_rule(dmllex14.reserved_idents + ('ID',)))
+@ident_rule(dmllex14.reserved_idents + ('ID',))
 def ident(t):
     t[0] = t[1]
 
@@ -3011,12 +2973,12 @@ reserved_words_14 = reserved_words_12 + ['CALL', 'AUTO',
                                          'ASYNC', 'AWAIT', 'WITH']
 
 @prod_dml12
-@lex.TOKEN(ident_rule(reserved_words_12))
+@ident_rule(reserved_words_12)
 def reserved(t):
     raise ESYNTAX(site(t, 1), str(t[1]), "reserved word")
 
 @prod_dml14
-@lex.TOKEN(ident_rule(reserved_words_14))
+@ident_rule(reserved_words_14)
 def reserved(t):
     raise ESYNTAX(site(t, 1), str(t[1]), "reserved word")
 
