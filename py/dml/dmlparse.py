@@ -1785,13 +1785,8 @@ def bitfields_decls_empty(t):
 # ctypedecl is a type without any declared variable
 @prod
 def ctypedecl(t):
-    'ctypedecl : const_opt basetype ctypedecl_ptr'
+    'ctypedecl : const_opt basetype stars'
     t[0] = [t[2]] + t[1] + t[3]
-
-@prod
-def ctypedecl_ptr(t):
-    'ctypedecl_ptr : stars ctypedecl_array'
-    t[0] = t[2] + t[1]
 
 @prod
 def stars_empty(t):
@@ -1809,29 +1804,12 @@ def stars(t):
     'stars : TIMES stars'
     t[0] = t[2] + ['pointer']
 
-# This rule is in conflict with p_expression_new_array, so leave it
-# out for now
-#
-#@prod
-#def ctypedecl_array(t):
-#    'ctypedecl_array : ctypedecl_array LBRACKET RBRACKET'
-#    t[0] = t[1] + ['array', None]
-
-@prod
-def ctypedecl_array_simple(t):
-    'ctypedecl_array : ctypedecl_simple'
-    t[0] = t[1]
-
-@prod
-def ctypedecl_simple_par(t):
-    'ctypedecl_simple : LPAREN ctypedecl_ptr RPAREN'
-    t[0] = t[2]
-
-@prod
-def ctypedecl_simple_none(t):
-    'ctypedecl_simple : ' # no variable here
-    fixup_emptyprod_lexpos(t)
-    t[0] = []
+# TODO We'd like rules to have ctypedecl be able to handle function pointers
+# and array types. Doing so naively would result in grammar conflicts, however.
+# Putting in the work to solve that *would* be worth the effort -- *if* you're
+# doing it in an effort to unify ctypedecl with cdecl. Any work poured into
+# ctypedecl that still has it remain entirely seperate from cdecl is likely not
+# worth it.
 
 @prod
 def const_opt(t):
