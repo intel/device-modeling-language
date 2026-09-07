@@ -31,7 +31,9 @@ def generate_parsetabs(dml_package, version, parsetab, debugfile):
                  if line.startswith(prefix)]
     assert lines[0:3] == ['', 'Conflicts:', ''], lines
     conflicts = lines[3:]
-    assert len(conflicts) == (10 if version == '12' else 12), conflicts
+    from ply import lex
+    assert lex.__version__ == "3.4"
+    assert len(conflicts) == 10, conflicts
     assert all(conflict.startswith('shift/reduce conflict')
                for conflict in conflicts)
 
