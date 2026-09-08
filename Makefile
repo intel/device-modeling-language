@@ -27,6 +27,7 @@ PYFILES := dml/__init__.py			\
           dml/dmllex14.py			\
           dml/dmlparse.py			\
           dml/dmlc.py				\
+          dml/errors.py				\
           dml/expr.py				\
           dml/expr_util.py			\
 	  dml/globals.py			\
@@ -34,9 +35,9 @@ PYFILES := dml/__init__.py			\
           dml/io_memory.py			\
           dml/int_register.py			\
           dml/logging.py			\
-          dml/messages.py			\
           dml/objects.py			\
           dml/output.py				\
+          dml/porting.py			\
           dml/provisional.py			\
           dml/reginfo.py			\
           dml/serialize.py			\
@@ -44,6 +45,7 @@ PYFILES := dml/__init__.py			\
           dml/slotsmeta.py			\
           dml/structure.py			\
           dml/symtab.py				\
+          dml/warnings.py			\
 	  __main__.py
 
 PYUNIT_FILES := $(wildcard $(DMLC_DIR)/py/dml/*_test.py)

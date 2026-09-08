@@ -6,13 +6,11 @@ __all__ = ['generate']
 import dml.globals
 from itertools import product
 from collections import OrderedDict
+from . import expr_util
 from .ctree import (StringConstant, IntegerConstant, mkIntegerLiteral,
                     all_index_exprs, param_str_fixup)
-from .expr_util import (
-    defined, undefined, param_int, param_defined,
-    static_indices)
-from .messages import *
-from .logging import *
+from .expr_util import defined
+from .logging import report, DMLError
 
 class XMLWriter(object):
     def __init__(self, filename):
@@ -50,7 +48,7 @@ def string_param(node, pname, dimsizes):
     # Allowing index variables to appear in the expression,
     # but requires them all evaluated to the same value.
     try:
-        val = pnode.get_expr(static_indices(node))
+        val = pnode.get_expr(expr_util.static_indices(node))
     except DMLError as e:
         report(e)
         return None
@@ -116,7 +114,7 @@ def reg_info(fmt, node, name, dimsizes):
         attrs = common_attrs(node, name, dimsizes)
         xml_offs = ' '.join([str(o) if offset_defined(o)
                              else '-1' for o in all_offs])
-        attrs.update(offset=xml_offs, size=param_int(node, 'size'))
+        attrs.update(offset=xml_offs, size=expr_util.param_int(node, 'size'))
         fmt.open_element('register', attrs)
         for n in node.get_components('field'):
             if not n.ident:

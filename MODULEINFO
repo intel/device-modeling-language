@@ -42,6 +42,7 @@ Make: dmlc
     $(HOST)/bin/dml/python/dml/dmllex14.py
     $(HOST)/bin/dml/python/dml/dmlparse.py
     $(HOST)/bin/dml/python/dml/dmlc.py
+    $(HOST)/bin/dml/python/dml/errors.py
     $(HOST)/bin/dml/python/dml/expr.py
     $(HOST)/bin/dml/python/dml/expr_util.py
     $(HOST)/bin/dml/python/dml/globals.py
@@ -50,9 +51,9 @@ Make: dmlc
     $(HOST)/bin/dml/python/dml/int_register.py
     $(HOST)/bin/dml/python/dml/io_memory.py
     $(HOST)/bin/dml/python/dml/logging.py
-    $(HOST)/bin/dml/python/dml/messages.py
     $(HOST)/bin/dml/python/dml/objects.py
     $(HOST)/bin/dml/python/dml/output.py
+    $(HOST)/bin/dml/python/dml/porting.py
     $(HOST)/bin/dml/python/dml/provisional.py
     $(HOST)/bin/dml/python/dml/reginfo.py
     $(HOST)/bin/dml/python/dml/serialize.py
@@ -65,6 +66,7 @@ Make: dmlc
     $(HOST)/bin/dml/python/dml/topsort.py
     $(HOST)/bin/dml/python/dml/traits.py
     $(HOST)/bin/dml/python/dml/types.py
+    $(HOST)/bin/dml/python/dml/warnings.py
     $(HOST)/bin/dml/python/dml/dml12_parsetab.py
     $(HOST)/bin/dml/python/dml/dml14_parsetab.py
     $(HOST)/bin/dml/python/LICENSE

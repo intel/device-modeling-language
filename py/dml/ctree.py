@@ -11,16 +11,19 @@ import itertools
 import math
 from functools import reduce
 
-from dml import objects, symtab, logging, crep
-from .logging import *
-from .messages import *
-from .output import *
-from .types import *
-from .expr import *
-from .expr_util import *
+from dml import objects, symtab, expr, logging, crep
+from .logging import ICE, DMLError, report, binary_dump
+from . import errors as E, warnings as W, porting as P
+from . import output
+from .output import linemark, out
+from . import types as tp
+from .expr import (Apply, Code, Expression, mkApply, mkLit,
+                   NonValue, NonValueArrayRef, NullConstant,
+                   StaticIndex, typecheck_inarg_inits)
+from .expr_util import param_bool, param_str, undefined
 from .set import Set
 from .slotsmeta import auto_init
-from . import dmlparse, output
+from . import expr_util, dmlparse
 from . import breaking_changes
 import dml.globals
 # set from codegen.py
@@ -194,14 +197,14 @@ def assert_type(site, expr, type):
 
 def comparable_types(expr1, expr2, equality):
     "Check if two expressions can be compared"
-    typ1 = realtype(expr1.ctype())
-    typ2 = realtype(expr2.ctype())
+    typ1 = tp.realtype(expr1.ctype())
+    typ2 = tp.realtype(expr2.ctype())
 
     if typ1.is_arith and typ2.is_arith:
         return True
-    if isinstance(typ1, (TPtr, TArray)) and isinstance(typ2, (TPtr, TArray)):
+    if isinstance(typ1, (tp.Ptr, tp.Array)) and isinstance(typ2, (tp.Ptr, tp.Array)):
         return True
-    if equality and isinstance(typ1, TBool) and isinstance(typ2, TBool):
+    if equality and isinstance(typ1, tp.Bool) and isinstance(typ2, tp.Bool):
         return True
 
     return False
@@ -209,9 +212,9 @@ def comparable_types(expr1, expr2, equality):
 def assert_comparable_types(site, expr1, expr2, equality):
     "Assert that two expressions can be compared"
     if not comparable_types(expr1, expr2, equality):
-        typ1 = realtype(expr1.ctype())
-        typ2 = realtype(expr2.ctype())
-        raise EILLCOMP(site, expr1, typ1, expr2, typ2)
+        typ1 = tp.realtype(expr1.ctype())
+        typ2 = tp.realtype(expr2.ctype())
+        raise E.ILLCOMP(site, expr1, typ1, expr2, typ2)
 
 
 class SimpleParamExpr(objects.ParamExpr):
@@ -282,9 +285,9 @@ class Location(object):
         self.node = node
         # Many functions take an 'indices' arg derived from
         # Location.indices; we generally allow such functions to assume
-        # that indices are either TInt or StaticIndex.
+        # that indices are either tp.Int or StaticIndex.
         assert all(isinstance(e, StaticIndex)
-                   or isinstance(realtype(e.ctype()), TInt)
+                   or isinstance(tp.realtype(e.ctype()), tp.Int)
                    for e in indices)
         self.indices = indices
     def __repr__(self):
@@ -345,7 +348,7 @@ class Statement(Code):
     is_empty = False
     def __init__(self, site):
         self.site = site
-        self.context = ErrorContext.current()
+        self.context = logging.ErrorContext.current()
 
     # Emit a single (labeled) C statement.
     @abc.abstractmethod
@@ -392,7 +395,7 @@ class Compound(Statement):
         self.linemark()
         out('{\n', postindent=1)
         self.toc_inline()
-        site_linemark(self.rbrace_site)
+        output.site_linemark(self.rbrace_site)
         out('}\n', preindent=-1)
 
     @property
@@ -544,12 +547,12 @@ class TryCatch(Statement):
 
         if (dml.globals.dml_version != (1, 2)
             and not self.tryblock.control_flow().fallthrough):
-            site_linemark(self.catchblock.site)
+            output.site_linemark(self.catchblock.site)
             out(f'{self.label}:;\n')
             self.catchblock.toc()
         else:
             # Our fallthrough analysis is more conservative than Coverity's
-            coverity_marker('unreachable', site=self.catchblock.site)
+            output.coverity_marker('unreachable', site=self.catchblock.site)
             out(f'if (false) {self.label}:\n')
             toc_under_if(self.catchblock)
 
@@ -595,7 +598,7 @@ class InlinedMethod(Statement):
     def toc_inline(self):
         for stmt in self.pre:
             stmt.toc()
-        with allow_linemarks():
+        with output.allow_linemarks():
             for stmt in self.body:
                 stmt.toc()
         for stmt in self.post:
@@ -639,7 +642,7 @@ class Assert(Statement):
     def toc_stmt(self):
         self.linemark()
         out('DML_ASSERT("%s", %d, %s);\n'
-            % (quote_filename(self.site.filename()),
+            % (output.quote_filename(self.site.filename()),
                self.site.lineno, self.expr.read()))
     def control_flow(self):
         return ControlFlow(
@@ -687,7 +690,7 @@ def mkExpressionStatement(site, expr, explicit_discard=False):
 
 def toc_constsafe_pointer_assignment(site, source, target, typ):
     target_val = mkDereference(site,
-        Cast(site, mkLit(site, target, TPtr(void)), TPtr(typ)))
+        Cast(site, mkLit(site, target, tp.Ptr(tp.void)), tp.Ptr(typ)))
 
     init = ExpressionInitializer(
         source_for_assignment(site, typ, mkLit(site, source, typ)))
@@ -773,7 +776,7 @@ class AfterOnHook(Statement):
                    % (', '.join(i.read() for i in self.indices),)
                    if self.indices else 'NULL')
         args = ('(%s){%s}'
-                % (TArray(self.info.args_type,
+                % (tp.Array(self.info.args_type,
                           mkIntegerLiteral(self.site, 1)).declaration(''),
                    self.args_init.args_init())
                 if self.info.args_type else 'NULL')
@@ -799,7 +802,7 @@ class ImmediateAfter(Statement):
                    if self.indices else 'NULL')
         if self.info.args_type is not None:
             args = ('(%s){%s}'
-                    % (TArray(self.info.args_type,
+                    % (tp.Array(self.info.args_type,
                               mkIntegerLiteral(self.site, 1)).declaration(''),
                        self.args_init.args_init()))
             args_size = f'sizeof({self.info.args_type.declaration("")})'
@@ -834,7 +837,7 @@ def toc_under_if(stmt):
 class If(Statement):
     @auto_init
     def __init__(self, site, cond, truebranch, falsebranch, else_site):
-        assert_type(site, cond.ctype(), TBool)
+        assert_type(site, cond.ctype(), tp.Bool)
         assert_type(site, truebranch, Statement)
         assert_type(site, falsebranch, (Statement, type(None)))
     def toc_stmt(self):
@@ -843,7 +846,7 @@ class If(Statement):
         toc_under_if(self.truebranch)
 
         if self.falsebranch:
-            site_linemark(self.else_site)
+            output.site_linemark(self.else_site)
             out('else\n')
             self.falsebranch.toc_stmt()
 
@@ -854,7 +857,7 @@ class If(Statement):
         return a.union(b)
 
 def mkIf(site, cond, truebranch, falsebranch = None, else_site=None):
-    assert isinstance(cond.ctype(), TBool)
+    assert isinstance(cond.ctype(), tp.Bool)
     if cond.constant:
         if cond.value:
             return truebranch
@@ -867,7 +870,7 @@ def mkIf(site, cond, truebranch, falsebranch = None, else_site=None):
 class While(Statement):
     @auto_init
     def __init__(self, site, cond, stmt):
-        assert_type(site, cond.ctype(), TBool)
+        assert_type(site, cond.ctype(), tp.Bool)
         assert_type(site, stmt, Statement)
     def toc_stmt(self):
         self.linemark()
@@ -893,13 +896,13 @@ def mkWhile(site, expr, stmt):
 class DoWhile(Statement):
     @auto_init
     def __init__(self, site, cond, stmt):
-        assert_type(site, cond.ctype(), TBool)
+        assert_type(site, cond.ctype(), tp.Bool)
         assert_type(site, stmt, Statement)
     def toc_stmt(self):
         self.linemark()
         out('do\n')
         self.stmt.toc_stmt()
-        site_linemark(self.cond.site)
+        output.site_linemark(self.cond.site)
         out(f'while ({self.cond.read()});\n')
     def control_flow(self):
         bodyflow = self.stmt.control_flow()
@@ -916,7 +919,7 @@ def mkDoWhile(site, expr, stmt):
 class For(Statement):
     @auto_init
     def __init__(self, site, pres, cond, posts, stmt):
-        assert_type(site, cond.ctype(), TBool)
+        assert_type(site, cond.ctype(), tp.Bool)
         assert_type(site, stmt, Statement)
     def toc_stmt(self):
         self.linemark()
@@ -959,14 +962,14 @@ def mkFor(site, pres, expr, posts, stmt):
 class ForeachSequence(Statement):
     @staticmethod
     def itervar_initializer(site, trait):
-        trait_type = TTrait(trait)
+        trait_type = tp.Trait(trait)
         vtable_init = ExpressionInitializer(mkLit(site, '_list.vtable',
                                                   trait_type))
 
         list_id_init = ExpressionInitializer(mkLit(site, '_list.id',
-                                                   TInt(32, False)))
+                                                   tp.Int(32, False)))
         inner_idx_init = ExpressionInitializer(mkLit(site, '_inner_idx',
-                                                     TInt(32, False)))
+                                                     tp.Int(32, False)))
         obj_ref_init = CompoundInitializer(site,
                                            [list_id_init, inner_idx_init])
 
@@ -986,14 +989,14 @@ class ForeachSequence(Statement):
             self.linemark()
             out(*args, **kwargs)
         lm_out(f'_each_in_t __each_in_expr = {self.each_in_expr.read()};\n')
-        coverity_marker('unreachable', site=self.site)
+        output.coverity_marker('unreachable', site=self.site)
         out('for (uint32 _outer_idx = 0; _outer_idx < __each_in_expr.num; '
             + '++_outer_idx) {\n', postindent=1)
         lm_out(f'_vtable_list_t _list = {EachIn.array_ident(self.trait)}'
                + '[__each_in_expr.base_idx + _outer_idx];\n')
         lm_out('uint32 _num = _list.num / __each_in_expr.array_size;\n')
         lm_out('uint32 _start = _num * __each_in_expr.array_idx;\n')
-        coverity_marker('unreachable', site=self.site)
+        output.coverity_marker('unreachable', site=self.site)
         out('for (uint32 _inner_idx = _start; _inner_idx < _start + _num; '
             + '++_inner_idx)\n')
         self.body.toc_stmt()
@@ -1052,7 +1055,7 @@ class SubsequentCases(Statement):
     def toc_stmt(self):
         for (i, case) in enumerate(self.cases):
             assert isinstance(case, (Case, Default))
-            site_linemark(case.site)
+            output.site_linemark(case.site)
             semi = ';' * (i == len(self.cases) - 1)
             if isinstance(case, Case):
                 out(f'case {case.expr.read()}:{semi}\n', preindent = -1,
@@ -1125,9 +1128,9 @@ class AssignStatement(Statement):
 
 def mkAssignStatement(site, target, init):
     if isinstance(target, InlinedParam):
-        raise EASSINL(target.site, target.name)
+        raise E.ASSINL(target.site, target.name)
     if not target.writable:
-        raise EASSIGN(site, target)
+        raise E.ASSIGN(site, target)
 
     if isinstance(target, NonValue):
         target_type = target.type if target.explicit_type else None
@@ -1135,8 +1138,8 @@ def mkAssignStatement(site, target, init):
         target_type = target.ctype()
 
 
-    if target_type is not None and deep_const(target_type):
-        raise ECONST(site)
+    if target_type is not None and tp.deep_const(target_type):
+        raise E.CONST(site)
 
     return AssignStatement(site, target, init)
 
@@ -1160,42 +1163,42 @@ def mkCopyData(site, source, target):
 def as_bool(e):
     "Change this expression to a boolean expression, if possible"
     t = e.ctype()
-    if isinstance(t, TBool):
+    if isinstance(t, tp.Bool):
         return e
     elif t.is_int and t.bits == 1:
         if logging.show_porting and (isinstance(e, NodeRef)
                                      or isinstance(e, LocalVariable)):
-            report(PBITNEQ(dmlparse.start_site(e.site),
+            report(P.BITNEQ(dmlparse.start_site(e.site),
                            dmlparse.end_site(e.site)))
         return mkFlag(e.site, e)
-    elif isinstance(t, TPtr):
+    elif isinstance(t, tp.Ptr):
         return mkNotEquals(e.site, e,
-                           Lit(None, 'NULL', TPtr(TVoid()), 1))
+                           expr.Lit(None, 'NULL', tp.Ptr(tp.Void()), 1))
     else:
-        report(ENBOOL(e))
+        report(E.NBOOL(e))
         return mkBoolConstant(e.site, False)
 
 def as_int(e):
-    """Change this expression to a TInt type, if possible
+    """Change this expression to a tp.Int type, if possible
 
-    In dml 1.2-compat, TInt typed expressions are returned as-is
+    In dml 1.2-compat, tp.Int typed expressions are returned as-is
     Otherwise: Returns an unsigned 64-bit integer if the integer type of the
     expression is also unsigned 64-bit, for smaller or signed integer types
     returns a signed 64-bit integer
     """
-    t = realtype(e.ctype())
-    if isinstance(t, TInt) and dml.globals.compat_dml12_int(e.site):
+    t = tp.realtype(e.ctype())
+    if isinstance(t, tp.Int) and dml.globals.compat_dml12_int(e.site):
         return e
     if not t.is_int:
-        raise EBTYPE(e.site, e.ctype(), "integer type")
+        raise E.BTYPE(e.site, e.ctype(), "integer type")
     if t.bits == 64 and not t.signed:
-        target_type = TInt(64, False)
+        target_type = tp.Int(64, False)
     else:
-        target_type = TInt(64, True)
+        target_type = tp.Int(64, True)
     if t.is_endian:
         (fun, funtype) = t.get_load_fun()
         e = dml.expr.Apply(e.site, mkLit(e.site, fun, funtype), (e,), funtype)
-        if not realtype(e.ctype()).eq(target_type):
+        if not tp.realtype(e.ctype()).eq(target_type):
             e = mkCast(e.site, e, target_type)
         return e
     else:
@@ -1249,7 +1252,7 @@ def mkIfExpr(site, cond, texpr, fexpr):
         if ftype.is_int and ftype.is_endian:
             fexpr = as_int(fexpr)
             ftype = texpr.ctype()
-        utype = type_union(ttype, ftype)
+        utype = tp.type_union(ttype, ftype)
         if cond.constant:
             # Normally handled by expr_conditional; this only happens
             # in DMLC-internal mkIfExpr calls
@@ -1259,8 +1262,8 @@ def mkIfExpr(site, cond, texpr, fexpr):
         return IfExpr(site, cond, texpr, fexpr, utype)
     else:
         cond = as_bool(cond)
-        ttype = safe_realtype(texpr.ctype())
-        ftype = safe_realtype(fexpr.ctype())
+        ttype = tp.safe_realtype(texpr.ctype())
+        ftype = tp.safe_realtype(fexpr.ctype())
         if ttype.is_arith or ftype.is_arith:
             ttype, texpr = arith_argument_conv(texpr)
             ftype, fexpr = arith_argument_conv(fexpr)
@@ -1268,28 +1271,28 @@ def mkIfExpr(site, cond, texpr, fexpr):
             if ttype.is_float or ftype.is_float:
                 texpr = promote_float(texpr, ttype)
                 fexpr = promote_float(fexpr, ftype)
-                utype = TFloat('double')
+                utype = tp.Float('double')
             else:
                 (texpr, fexpr, utype) = usual_int_conv(
                     texpr, ttype, fexpr, ftype)
         else:
-            if (isinstance(ttype, (TPtr, TArray))
-                and isinstance(ftype, (TPtr, TArray))
+            if (isinstance(ttype, (tp.Ptr, tp.Array))
+                and isinstance(ftype, (tp.Ptr, tp.Array))
                 and (ttype.base.void or ftype.base.void
-                     or safe_realtype_unconst(ttype.base).eq(
-                         safe_realtype_unconst(ftype.base)))):
+                     or tp.safe_realtype_unconst(ttype.base).eq(
+                         tp.safe_realtype_unconst(ftype.base)))):
                 # if any branch is void, then the union is too
                 base = (ftype if ftype.base.void else ttype).base.clone()
                 # if any branch is const *, then the union is too
-                base.const = ((isinstance(ttype, TArray) and ttype.const)
-                              or (isinstance(ftype, TArray) and ftype.const)
-                              or shallow_const(ttype.base)
-                              or shallow_const(ftype.base))
-                utype = TPtr(base)
-            elif safe_realtype_unconst(ttype).eq(safe_realtype_unconst(ftype)):
+                base.const = ((isinstance(ttype, tp.Array) and ttype.const)
+                              or (isinstance(ftype, tp.Array) and ftype.const)
+                              or tp.shallow_const(ttype.base)
+                              or tp.shallow_const(ftype.base))
+                utype = tp.Ptr(base)
+            elif tp.safe_realtype_unconst(ttype).eq(tp.safe_realtype_unconst(ftype)):
                 utype = ttype
             else:
-                raise EBINOP(site, ':', texpr, fexpr)
+                raise E.BINOP(site, ':', texpr, fexpr)
         if cond.constant:
             # should be safe: texpr and fexpr now have compatible types
             return texpr if cond.value else fexpr
@@ -1326,10 +1329,10 @@ class BinOp(Expression):
         lhtype = lh.ctype()
         rhtype = rh.ctype()
         if (dml.globals.dml_version == (1, 2)
-            and (isinstance(lhtype, TUnknown) or isinstance(rhtype, TUnknown))):
+            and (isinstance(lhtype, tp.Unknown) or isinstance(rhtype, tp.Unknown))):
             # urgh, some classes take an extra constructor arg
             if issubclass(cls, (ArithBinOp, BitBinOp, BitShift)):
-                return cls(site, lh, rh, TUnknown)
+                return cls(site, lh, rh, tp.Unknown)
             else:
                 return cls(site, lh, rh)
 
@@ -1337,7 +1340,7 @@ class BinOp(Expression):
 
 class Test(Expression):
     "a boolean expression"
-    type = TBool()
+    type = tp.Bool()
 
 class Flag(Test):
     "a bit"
@@ -1358,12 +1361,12 @@ def mkFlag(site, expr):
         return Flag(site, as_int(expr))
 
 class Logical(BinOp):
-    type = TBool()
+    type = tp.Bool()
 
     @auto_init
     def __init__(self, site, lh, rh):
-        assert_type(site, lh.ctype(), TBool)
-        assert_type(site, rh.ctype(), TBool)
+        assert_type(site, lh.ctype(), tp.Bool)
+        assert_type(site, rh.ctype(), tp.Bool)
 
 class And(Logical):
     # gcc warns for priority = 50
@@ -1401,7 +1404,7 @@ def mkOr(site, lh, rh):
     return Or(site, lh, rh)
 
 class Compare(BinOp):
-    type = TBool()
+    type = tp.Bool()
 
     @abc.abstractproperty
     def cmp_functions(self):
@@ -1416,8 +1419,8 @@ class Compare(BinOp):
 
     @classmethod
     def make(cls, site, lh, rh):
-        lhtype = realtype(lh.ctype())
-        rhtype = realtype(rh.ctype())
+        lhtype = tp.realtype(lh.ctype())
+        rhtype = tp.realtype(rh.ctype())
 
         if (lhtype.is_arith and rhtype.is_arith
             and lh.constant and rh.constant):
@@ -1425,18 +1428,18 @@ class Compare(BinOp):
         if lhtype.is_int:
             lh_maybe_negative = lhtype.signed
             lh = as_int(lh)
-            lhtype = realtype(lh.ctype())
+            lhtype = tp.realtype(lh.ctype())
         if rhtype.is_int:
             rh_maybe_negative = rhtype.signed
             rh = as_int(rh)
-            rhtype = realtype(rh.ctype())
-        if (isinstance(lhtype, TInt)
-            and isinstance(rhtype, TInt)
+            rhtype = tp.realtype(rh.ctype())
+        if (isinstance(lhtype, tp.Int)
+            and isinstance(rhtype, tp.Int)
             and lh_maybe_negative != rh_maybe_negative):
             (signed_expr, unsigned_expr) = ((lh, rh) if lh_maybe_negative
                                             else (rh, lh))
             if signed_expr.constant and signed_expr.value < 0:
-                report(WNEGCONSTCOMP(site, signed_expr,
+                report(W.NEGCONSTCOMP(site, signed_expr,
                                      unsigned_expr.ctype()))
             # we must convert (uint64)x < (int64)y to DML_lt(x, y), because
             # C:'s < would do an unsigned comparison. No need to do this if y
@@ -1446,17 +1449,17 @@ class Compare(BinOp):
                 return mkApply(
                     site, mkLit(
                         site, cls.cmp_functions[rh_maybe_negative],
-                        TFunction([TInt(64, lh_maybe_negative),
-                                   TInt(64, rh_maybe_negative)],
-                                  TBool())),
+                        tp.Function([tp.Int(64, lh_maybe_negative),
+                                   tp.Int(64, rh_maybe_negative)],
+                                  tp.Bool())),
                     [lh, rh])
         if ((lhtype.is_arith and rhtype.is_arith)
-            or (isinstance(lhtype, (TPtr, TArray))
-                and isinstance(rhtype, (TPtr, TArray))
-                and safe_realtype_unconst(lhtype.base).eq(
-                    safe_realtype_unconst(rhtype.base)))):
+            or (isinstance(lhtype, (tp.Ptr, tp.Array))
+                and isinstance(rhtype, (tp.Ptr, tp.Array))
+                and tp.safe_realtype_unconst(lhtype.base).eq(
+                    tp.safe_realtype_unconst(rhtype.base)))):
             return cls.make_simple(site, lh, rh)
-        raise EILLCOMP(site, lh, lhtype, rh, rhtype)
+        raise E.ILLCOMP(site, lh, lhtype, rh, rhtype)
 
     @classmethod
     def make_simple(cls, site, lh, rh):
@@ -1486,9 +1489,9 @@ class Compare_dml12(Test):
 
     @classmethod
     def make(cls, site, lh, rh):
-        if isinstance(realtype(lh.ctype()), IntegerType):
+        if isinstance(tp.realtype(lh.ctype()), tp.IntegerType):
             lh = as_int(lh)
-        if isinstance(realtype(rh.ctype()), IntegerType):
+        if isinstance(tp.realtype(rh.ctype()), tp.IntegerType):
             rh = as_int(rh)
         assert_comparable_types(site, lh, rh, cls.equality)
         # The assumption when calling Compare_dml12.make_simple is that lh
@@ -1589,13 +1592,13 @@ class Equals_dml12(Compare_dml12):
 
 class Equals(BinOp):
     priority = 70
-    type = TBool()
+    type = tp.Bool()
     op = '=='
 
     @classmethod
     def make(cls, site, lh, rh):
-        lhtype = realtype(lh.ctype())
-        rhtype = realtype(rh.ctype())
+        lhtype = tp.realtype(lh.ctype())
+        rhtype = tp.realtype(rh.ctype())
 
         if lh.constant and rh.constant:
             (lhc, rhc) = tuple(e.expr if isinstance(e, InlinedParam) else e
@@ -1626,8 +1629,8 @@ class Equals(BinOp):
                 if (isinstance(lhc, NullConstant)
                     and isinstance(rhc, NullConstant)):
                     return mkBoolConstant(site, True)
-                elif (isinstance(lhtype, (TPtr, TArray))
-                      and isinstance(rhtype, (TPtr, TArray))):
+                elif (isinstance(lhtype, (tp.Ptr, tp.Array))
+                      and isinstance(rhtype, (tp.Ptr, tp.Array))):
                     for expr in (lhc, rhc):
                         assert isinstance(expr, (NullConstant, StringConstant,
                                                  AddressOfMethod))
@@ -1635,13 +1638,13 @@ class Equals(BinOp):
         if lhtype.is_int:
             lh_maybe_negative = lhtype.signed
             lh = as_int(lh)
-            lhtype = realtype(lh.ctype())
+            lhtype = tp.realtype(lh.ctype())
         if rhtype.is_int:
             rh_maybe_negative = rhtype.signed
             rh = as_int(rh)
-            rhtype = realtype(rh.ctype())
+            rhtype = tp.realtype(rh.ctype())
 
-        if (isinstance(lhtype, TInt) and isinstance(rhtype, TInt)
+        if (isinstance(lhtype, tp.Int) and isinstance(rhtype, tp.Int)
             and lh_maybe_negative != rh_maybe_negative):
             # There is no primitive for signed/unsigned compare in C,
             # so use a lib function for it. However, we can fall back
@@ -1650,32 +1653,32 @@ class Equals(BinOp):
             (signed_expr, unsigned_expr) = ((lh, rh) if lh_maybe_negative
                                             else (rh, lh))
             if signed_expr.constant and signed_expr.value < 0:
-                report(WNEGCONSTCOMP(site, signed_expr, unsigned_expr.ctype()))
+                report(W.NEGCONSTCOMP(site, signed_expr, unsigned_expr.ctype()))
             if not (signed_expr.constant and 0 <= signed_expr.value < 1 << 63):
                 return mkApply(
                     site, mkLit(
                         site, 'DML_eq',
-                        TFunction([TInt(64, False), TInt(64, False)], TBool())),
+                        tp.Function([tp.Int(64, False), tp.Int(64, False)], tp.Bool())),
                     [lh, rh])
 
         if ((lhtype.is_arith and rhtype.is_arith)
-            or (isinstance(lhtype, (TPtr, TArray))
-                and isinstance(rhtype, (TPtr, TArray))
+            or (isinstance(lhtype, (tp.Ptr, tp.Array))
+                and isinstance(rhtype, (tp.Ptr, tp.Array))
                 and (lhtype.base.void or rhtype.base.void
-                     or safe_realtype_unconst(lhtype.base).eq(
-                         safe_realtype_unconst(rhtype.base))))
-            or (isinstance(lhtype, TBool) and isinstance(rhtype, TBool))):
+                     or tp.safe_realtype_unconst(lhtype.base).eq(
+                         tp.safe_realtype_unconst(rhtype.base))))
+            or (isinstance(lhtype, tp.Bool) and isinstance(rhtype, tp.Bool))):
             return Equals(site, lh, rh)
 
-        if (isinstance(lhtype, TTrait) and isinstance(rhtype, TTrait)
+        if (isinstance(lhtype, tp.Trait) and isinstance(rhtype, tp.Trait)
             and lhtype.trait is rhtype.trait):
             return IdentityEq(site, TraitObjIdentity(lh.site, lh),
                               TraitObjIdentity(rh.site, rh))
-        if (isinstance(lhtype, THook) and isinstance(rhtype, THook)
+        if (isinstance(lhtype, tp.Hook) and isinstance(rhtype, tp.Hook)
             and lhtype.eq(rhtype)):
             return IdentityEq(site, lh, rh)
 
-        raise EILLCOMP(site, lh, lhtype, rh, rhtype)
+        raise E.ILLCOMP(site, lh, lhtype, rh, rhtype)
 
 def mkEquals(site, lh, rh):
     if dml.globals.compat_dml12_int(site):
@@ -1685,7 +1688,7 @@ def mkEquals(site, lh, rh):
 
 class IdentityEq(Expression):
     priority = dml.expr.Apply.priority
-    type = TBool()
+    type = tp.Bool()
 
     @auto_init
     def __init__(self, site, lh, rh): pass
@@ -1704,7 +1707,7 @@ class IdentityEq(Expression):
             return f'_identity_eq({self.lh.read()}, {self.rh.read()})'
         else:
             return (f'_identity_eq_at_site({self.lh.read()}, {self.rh.read()}'
-                    + f', "{quote_filename(self.site.filename())}", '
+                    + f', "{output.quote_filename(self.site.filename())}", '
                     + f'{self.site.lineno})')
 
 
@@ -1739,7 +1742,7 @@ def usual_int_conv(lh, lhtype, rh, rhtype):
         return (lh, mkCast(rh.site, rh, lhtype), lhtype)
     if rh_is_uint64:
         return (mkCast(lh.site, lh, rhtype), rh, rhtype)
-    int64 = TInt(64, True)
+    int64 = tp.Int(64, True)
     if lhtype.bits != 64:
         lh = mkCast(lh.site, lh, int64)
     if rhtype.bits != 64:
@@ -1756,7 +1759,7 @@ class BitBinOp_dml12(BinOp):
     def detect_type(lh, rh):
         ltype = lh.ctype()
         rtype = rh.ctype()
-        return type_union(ltype, rtype)
+        return tp.type_union(ltype, rtype)
     def __str__(self):
         lh = str(self.lh)
         rh = str(self.rh)
@@ -1820,14 +1823,14 @@ class BitAnd_dml12(BitBinOp_dml12):
     def make_simple(site, lh, rh):
         lh = as_int(lh)
         rh = as_int(rh)
-        ltype = realtype(lh.ctype())
-        rtype = realtype(rh.ctype())
+        ltype = tp.realtype(lh.ctype())
+        rtype = tp.realtype(rh.ctype())
 
         if lh.constant and rh.constant:
             return IntegerConstant_dml12(site, lh.value & rh.value)
 
         expr = BitAnd_dml12(site, lh, rh)
-        etype = realtype(expr.ctype())
+        etype = tp.realtype(expr.ctype())
         if not etype.is_int:
             raise ICE(site,
                        "Strange! ANDed to non-integer ('%s' & '%s' -> '%s')"
@@ -1922,7 +1925,7 @@ class ShL_dml12(BitShift_dml12):
 
     @staticmethod
     def detect_type(lh, rh):
-        return TInt(64, False)
+        return tp.Int(64, False)
 
     @staticmethod
     def make_simple(site, lh, rh):
@@ -1933,7 +1936,7 @@ class ShL_dml12(BitShift_dml12):
             if rh.value < 0:
                 # it's an error in Python to shift a negative number of bits
                 # (better raise an error instead of e.g. substituting 0)
-                raise ESHNEG(site, rh)
+                raise E.SHNEG(site, rh)
             elif rh.value == 0:
                 return lh
 
@@ -1966,9 +1969,9 @@ class ShL_dml12(BitShift_dml12):
                 shiftval.value = -shiftval.value
                 return mkShR(site, lh, shiftval)
 
-        lhtype = safe_realtype(lh.ctype())
+        lhtype = tp.safe_realtype(lh.ctype())
         if lhtype.bits < 64 or lhtype.signed:
-            lh = mkCast(site, lh, TInt(64, False))
+            lh = mkCast(site, lh, tp.Int(64, False))
 
         return ShL_dml12(site, lh, rh)
 
@@ -1989,7 +1992,7 @@ class BitShift(BinOp):
 
         (lh, rh, common_type) = usual_int_conv(lh, ltype, rh, rtype)
         if rh.constant and rh.value < 0:
-            raise ESHNEG(site, rh)
+            raise E.SHNEG(site, rh)
         if lh.constant and rh.constant:
             return mkIntegerConstant(site, cls.eval_const(lh.value, rh.value),
                                      common_type.signed)
@@ -2008,7 +2011,7 @@ class ShL(BitShift):
         if self.type.signed:
             return ('DML_shl(%s, %s, "%s", %s)'
                     % (self.lh.read(), self.rh.read(),
-                       quote_filename(self.site.filename()),
+                       output.quote_filename(self.site.filename()),
                        self.site.lineno))
         else:
             return 'DML_shlu(%s, %s)' % (self.lh.read(), self.rh.read())
@@ -2024,7 +2027,7 @@ class ShR_dml12(BitShift_dml12):
 
     @staticmethod
     def type_shift(site, etype, shift):
-        etype = realtype(etype)
+        etype = tp.realtype(etype)
         if not etype.is_int:
             raise ICE(site, "Shifting a non-integer")
         bits = etype.bits + shift
@@ -2032,17 +2035,17 @@ class ShR_dml12(BitShift_dml12):
             bits = 0
         if bits > 64:
             bits = 64
-        return TInt(bits, etype.signed if etype.is_int else False)
+        return tp.Int(bits, etype.signed if etype.is_int else False)
 
     @staticmethod
     def detect_type(lh, rh):
         if rh.constant:
             ltype = lh.ctype()
-            if isinstance(ltype, TUnknown):
+            if isinstance(ltype, tp.Unknown):
                 return ltype
             return ShR_dml12.type_shift(lh.site, ltype, -rh.value)
         else:
-            return TInt(64, False)
+            return tp.Int(64, False)
 
     @staticmethod
     def make_simple(site, lh, rh):
@@ -2053,7 +2056,7 @@ class ShR_dml12(BitShift_dml12):
             if rh.value < 0:
                 # it's an error in Python to shift a negative number of bits
                 # (better raise an error instead of e.g. substituting 0)
-                raise ESHNEG(site, rh)
+                raise E.SHNEG(site, rh)
             elif rh.value == 0:
                 return lh
 
@@ -2061,11 +2064,11 @@ class ShR_dml12(BitShift_dml12):
                 return IntegerConstant_dml12(site, lh.value >> rh.value)
 
         expr = ShR_dml12(site, lh, rh)
-        etype = realtype(expr.ctype())
+        etype = tp.realtype(expr.ctype())
         assert etype.is_int
-        ltype = realtype(lh.ctype())
+        ltype = tp.realtype(lh.ctype())
         if etype.bits < 1:
-            report(WSHALL(site, lh, rh))
+            report(W.SHALL(site, lh, rh))
         elif ltype.bits > 32 and etype.bits <= 32:
             expr = mkCast(site, expr, etype)
         return expr
@@ -2083,7 +2086,7 @@ class ShR(BitShift):
         if self.type.signed:
             return ('DML_shr(%s, %s, "%s", %s)'
                     % (self.lh.read(), self.rh.read(),
-                       quote_filename(self.site.filename()),
+                       output.quote_filename(self.site.filename()),
                        self.site.lineno))
         else:
             return 'DML_shru(%s, %s)' % (self.lh.read(), self.rh.read())
@@ -2103,23 +2106,23 @@ class ArithBinOp_dml12(BinOp):
 
     @staticmethod
     def detect_type(lh, rh):
-        ltype = safe_realtype(lh.ctype())
-        rtype = safe_realtype(rh.ctype())
-        if isinstance(ltype, TUnknown) or isinstance(rtype, TUnknown):
-            return TUnknown()
+        ltype = tp.safe_realtype(lh.ctype())
+        rtype = tp.safe_realtype(rh.ctype())
+        if isinstance(ltype, tp.Unknown) or isinstance(rtype, tp.Unknown):
+            return tp.Unknown()
 
         # This is actually only valid for add/sub, but put it here for
         # convenience
-        if (isinstance(ltype, (TPtr, TArray))
-            and isinstance(rtype, (TPtr, TArray))):
-            return TNamed('int') # actually ptrdiff_t
-        if isinstance(ltype, (TPtr, TArray)) and rtype.is_int:
+        if (isinstance(ltype, (tp.Ptr, tp.Array))
+            and isinstance(rtype, (tp.Ptr, tp.Array))):
+            return tp.Named('int') # actually ptrdiff_t
+        if isinstance(ltype, (tp.Ptr, tp.Array)) and rtype.is_int:
             return ltype
-        if isinstance(rtype, (TPtr, TArray)) and ltype.is_int:
+        if isinstance(rtype, (tp.Ptr, tp.Array)) and ltype.is_int:
             return rtype
 
         if ltype.is_float or rtype.is_float:
-            return TFloat('double')
+            return tp.Float('double')
         assert ltype.is_int and rtype.is_int
         if ltype.bits > rtype.bits:
             return ltype
@@ -2173,23 +2176,23 @@ class ArithBinOp(BinOp):
         if ltype.is_float or rtype.is_float:
             lh = promote_float(lh, ltype)
             rh = promote_float(rh, rtype)
-            return cls(site, lh, rh, TFloat('double'))
+            return cls(site, lh, rh, tp.Float('double'))
 
         int64_result = ((ltype.bits < 64 or ltype.signed)
                         and (rtype.bits < 64 or rtype.signed))
         if lh.constant and rh.constant:
             return mkIntegerConstant(site, cls.eval_const(lh.value, rh.value),
                                      int64_result)
-        uint64 = TInt(64, False)
+        uint64 = tp.Int(64, False)
         result = cls(site, mkCast(site, lh, uint64),
                      mkCast(site, rh, uint64), uint64)
         if int64_result:
-            result = mkCast(site, result, TInt(64, True))
+            result = mkCast(site, result, tp.Int(64, True))
         return result
 
     @property
     def is_pointer_to_stack_allocation(self):
-        return (isinstance(safe_realtype_shallow(self.ctype()), (TPtr, TArray))
+        return (isinstance(tp.safe_realtype_shallow(self.ctype()), (tp.Ptr, tp.Array))
                 and (self.lh.is_pointer_to_stack_allocation
                      or self.rh.is_pointer_to_stack_allocation))
 
@@ -2244,7 +2247,7 @@ class Div_dml12(ArithBinOp_dml12):
 
         if rh.constant and rhtype.is_int:
             if rh.value == 0:
-                raise EDIVZ(rh, '/')
+                raise E.DIVZ(rh, '/')
             elif rh.value == 1:
                 return lh
             elif lh.constant and lhtype.is_int:
@@ -2260,7 +2263,7 @@ class DivModOp(ArithBinOp):
         if lhtype.is_float or rhtype.is_float:
             lh = promote_float(lh, lhtype)
             rh = promote_float(rh, rhtype)
-            return cls(site, lh, rh, TFloat('double'))
+            return cls(site, lh, rh, tp.Float('double'))
 
         (lh, rh, common_type) = usual_int_conv(lh, lhtype, rh, rhtype)
         if lh.constant and rh.constant:
@@ -2274,7 +2277,7 @@ class Div(DivModOp):
     @staticmethod
     def eval_const(left, right):
         if right == 0:
-            raise EDIVZ(right, '/')
+            raise E.DIVZ(right, '/')
         if (left < 0) == (right < 0):
             return left // right
         else:
@@ -2285,7 +2288,7 @@ class Div(DivModOp):
         return ('%s(%s, %s, "%s", %s)'
                     % ('DML_div' if self.type.signed else 'DML_divu',
                        self.lh.read(), self.rh.read(),
-                       quote_filename(self.site.filename()),
+                       output.quote_filename(self.site.filename()),
                        self.site.lineno))
 
 def mkDiv(site, lh, rh):
@@ -2305,7 +2308,7 @@ class Mod_dml12(ArithBinOp_dml12):
 
         if rh.constant:
             if rh.value == 0:
-                raise EDIVZ(rh, '%')
+                raise E.DIVZ(rh, '%')
             elif lh.constant:
                 return IntegerConstant_dml12(site, lh.value % rh.value)
 
@@ -2318,7 +2321,7 @@ class Mod(DivModOp):
     @staticmethod
     def eval_const(lh, rh):
         if rh == 0:
-            raise EDIVZ(rh, '%')
+            raise E.DIVZ(rh, '%')
         if lh < 0:
             return -(abs(lh) % abs(rh))
         else:
@@ -2328,7 +2331,7 @@ class Mod(DivModOp):
         return ('%s(%s, %s, "%s", %s)'
                     % ('DML_mod' if self.type.signed else 'DML_modu',
                        self.lh.read(), self.rh.read(),
-                       quote_filename(self.site.filename()),
+                       output.quote_filename(self.site.filename()),
                        self.site.lineno))
 
 def mkMod(site, lh, rh):
@@ -2349,18 +2352,18 @@ class Add_dml12(ArithBinOp_dml12):
         if (isinstance(lh, StringConstant) and isinstance(rh, StringConstant)):
             return mkStringConstant(site, lh.value + rh.value)
 
-        lhtype = realtype(lh.ctype())
-        rhtype = realtype(rh.ctype())
+        lhtype = tp.realtype(lh.ctype())
+        rhtype = tp.realtype(rh.ctype())
 
         # Type check
         if lhtype.is_arith and rhtype.is_arith:
             pass
-        elif lhtype.is_int and isinstance(rhtype, (TPtr, TArray)):
+        elif lhtype.is_int and isinstance(rhtype, (tp.Ptr, tp.Array)):
             pass
-        elif isinstance(lhtype, (TPtr, TArray)) and rhtype.is_int:
+        elif isinstance(lhtype, (tp.Ptr, tp.Array)) and rhtype.is_int:
             pass
         else:
-            raise EBINOP(site, '+', lh, rh)
+            raise E.BINOP(site, '+', lh, rh)
 
         # Constant folding
         if lh.constant and rh.constant and lhtype.is_int and rhtype.is_int:
@@ -2381,9 +2384,9 @@ class Add_dml12(ArithBinOp_dml12):
         if rh.constant and isinstance(lh, Subtract) and lh.rh.constant:
             return mkAdd(site, lh.lh, mkSubtract(site, rh, lh.rh))
 
-        if not isinstance(lhtype, (TPtr, TArray)):
+        if not isinstance(lhtype, (tp.Ptr, tp.Array)):
             _, lh = arith_argument_conv(lh)
-        if not isinstance(rhtype, (TPtr, TArray)):
+        if not isinstance(rhtype, (tp.Ptr, tp.Array)):
             _, rh = arith_argument_conv(rh)
 
         return Add_dml12(site, lh, rh)
@@ -2400,22 +2403,22 @@ class Add(ArithBinOp):
     def make_simple(site, lh, rh):
         if isinstance(lh, StringConstant) and isinstance(rh, StringConstant):
             return StringConstant(site, lh.value + rh.value)
-        lhtype = realtype(lh.ctype())
-        rhtype = realtype(rh.ctype())
+        lhtype = tp.realtype(lh.ctype())
+        rhtype = tp.realtype(rh.ctype())
         # ECSADD should always be emitted when the operand types are equivalent
         # to char pointers/arrays -- even including when the operands are
         # explicitly typed as int8 pointers/arrays
-        if (isinstance(lhtype, (TArray, TPtr))
-            and isinstance(rhtype, (TArray, TPtr))
-            and isinstance(lhtype.base, TInt) and isinstance(rhtype.base, TInt)
+        if (isinstance(lhtype, (tp.Array, tp.Ptr))
+            and isinstance(rhtype, (tp.Array, tp.Ptr))
+            and isinstance(lhtype.base, tp.Int) and isinstance(rhtype.base, tp.Int)
             and lhtype.base.bits == 8 and rhtype.base.bits == 8
             and lhtype.base.signed and rhtype.base.signed):
-            raise ECSADD(site)
-        if (isinstance(lhtype, (TArray, TPtr))
+            raise E.CSADD(site)
+        if (isinstance(lhtype, (tp.Array, tp.Ptr))
             and not lhtype.base.void):
             rtype, rh = arith_argument_conv(rh)
             return Add(site, lh, rh, lhtype)
-        elif (isinstance(rhtype, (TArray, TPtr))
+        elif (isinstance(rhtype, (tp.Array, tp.Ptr))
               and not rhtype.base.void):
             ltype, lh = arith_argument_conv(lh)
             return Add(site, lh, rh, rhtype)
@@ -2434,19 +2437,19 @@ class Subtract_dml12(ArithBinOp_dml12):
 
     @staticmethod
     def make_simple(site, lh, rh):
-        lhtype = realtype(lh.ctype())
-        rhtype = realtype(rh.ctype())
+        lhtype = tp.realtype(lh.ctype())
+        rhtype = tp.realtype(rh.ctype())
 
         # Type check
-        if (isinstance(lhtype, (TPtr, TArray))
-            and isinstance(rhtype, (TPtr, TArray, IntegerType))):
+        if (isinstance(lhtype, (tp.Ptr, tp.Array))
+            and isinstance(rhtype, (tp.Ptr, tp.Array, tp.IntegerType))):
             pass
-        elif lhtype.is_int and isinstance(rhtype, (TPtr, TArray)):
+        elif lhtype.is_int and isinstance(rhtype, (tp.Ptr, tp.Array)):
             pass
         elif lhtype.is_arith and rhtype.is_arith:
             pass
         else:
-            raise EBINOP(site, '-', lh, rh)
+            raise E.BINOP(site, '-', lh, rh)
 
         # Constant folding
         if (lh.constant and rh.constant
@@ -2474,9 +2477,9 @@ class Subtract_dml12(ArithBinOp_dml12):
         if isinstance(lh, Subtract) and lh.rh.constant:
             return mkSubtract(site, mkSubtract(site, lh.lh, rh), lh.rh)
 
-        if not isinstance(lhtype, (TPtr, TArray)):
+        if not isinstance(lhtype, (tp.Ptr, tp.Array)):
             _, lh = arith_argument_conv(lh)
-        if not isinstance(rhtype, (TPtr, TArray)):
+        if not isinstance(rhtype, (tp.Ptr, tp.Array)):
             _, rh = arith_argument_conv(rh)
 
         return Subtract_dml12(site, lh, rh)
@@ -2489,18 +2492,18 @@ class Subtract(ArithBinOp):
         return left - right
     @staticmethod
     def make_simple(site, lh, rh):
-        lhtype = realtype(lh.ctype())
-        rhtype = realtype(rh.ctype())
-        if (isinstance(lhtype, (TArray, TPtr))
+        lhtype = tp.realtype(lh.ctype())
+        rhtype = tp.realtype(rh.ctype())
+        if (isinstance(lhtype, (tp.Array, tp.Ptr))
             and not lhtype.base.void):
-            if (isinstance(rhtype, (TArray, TPtr))
+            if (isinstance(rhtype, (tp.Array, tp.Ptr))
                 and not rhtype.base.void):
                 # ptrdiff case
-                return Subtract(site, lh, rh, TInt(64, True))
+                return Subtract(site, lh, rh, tp.Int(64, True))
             else:
                 rh = as_int(rh)
                 return Subtract(site, lh, rh, lhtype)
-        elif (isinstance(rhtype, (TArray, TPtr))
+        elif (isinstance(rhtype, (tp.Array, tp.Ptr))
               and not rhtype.base.void):
             lh = as_int(lh)
             return Subtract(site, lh, rh, rhtype)
@@ -2519,18 +2522,18 @@ def source_for_assignment(site, target_type, source):
     and return the source expression, maybe updated."""
     try:
         source_type = source.ctype()
-        if isinstance(source_type, TUnknown):
-            raise ENTYPE(site)
-        real_target_type = realtype(target_type)
-        real_source_type = realtype(source_type)
+        if isinstance(source_type, tp.Unknown):
+            raise E.NTYPE(site)
+        real_target_type = tp.realtype(target_type)
+        real_source_type = tp.realtype(source_type)
         ok, trunc, constviol = real_target_type.canstore(real_source_type)
         if constviol:
-            raise EDISCONST(site)
+            raise E.DISCONST(site)
         if not ok:
             # Assigning boolean values to one-bit targets is ok
-            if (isinstance(real_target_type, TInt)
+            if (isinstance(real_target_type, tp.Int)
                 and real_target_type.bits == 1
-                and isinstance(real_source_type, TBool)):
+                and isinstance(real_source_type, tp.Bool)):
                 # Using IfExpr is a little overhead, but probably
                 # not a problem
                 if isinstance(source, Not):
@@ -2542,17 +2545,17 @@ def source_for_assignment(site, target_type, source):
                                       mkIntegerLiteral(site, 1),
                                       mkIntegerLiteral(site, 0))
             else:
-                raise EASTYPE(site, target_type, source)
-        if ((isinstance(real_target_type, TInt)
+                raise E.ASTYPE(site, target_type, source)
+        if ((isinstance(real_target_type, tp.Int)
              and not dml.globals.compat_dml12_int(site))
             or (real_target_type.is_int and real_target_type.is_endian)
             or (real_source_type.is_int and real_source_type.is_endian)):
-            # For TInt, possibly truncate upper bits or coerce to endianint
+            # For tp.Int, possibly truncate upper bits or coerce to endianint
             # For endian type, coerce to endianint struct
             source = mkCast(site, source, target_type)
 
-    except DMLUnknownType as e:
-        raise ETYPE(site, e.type)
+    except tp.DMLUnknownType as e:
+        raise E.TYPE(site, e.type)
     return source
 
 class AssignOp(BinOp):
@@ -2577,15 +2580,15 @@ class AssignOp(BinOp):
 
 def mkAssignOp(site, target, source):
     if isinstance(target, InlinedParam):
-        raise EASSINL(target.site, target.name)
+        raise E.ASSINL(target.site, target.name)
     if not target.writable:
-        raise EASSIGN(site, target)
+        raise E.ASSIGN(site, target)
 
     target_type = target.ctype()
 
     source = source_for_assignment(site, target_type, source)
-    if deep_const(target_type):
-        raise ECONST(site)
+    if tp.deep_const(target_type):
+        raise E.CONST(site)
     return AssignOp(site, target, source)
 
 class UnaryOp(Expression):
@@ -2622,7 +2625,7 @@ class AddressOf(UnaryOp):
     op = '&'
     @auto_init
     def __init__(self, site, rh):
-        self.type = TPtr(rh.ctype())
+        self.type = tp.Ptr(rh.ctype())
     def read(self):
         if hasattr(self.rh, 'read_pointer'):
             return self.rh.read_pointer()
@@ -2638,12 +2641,12 @@ class AddressOf(UnaryOp):
                and node.parent.objtype == 'event':
                 return AddressOf(site, mkLit(
                     site, '_DML_EV_'+crep.cref_method(node),
-                    TFunction([TPtr(TNamed('conf_object_t')),
-                               TPtr(TVoid())],
-                              TVoid())))
+                    tp.Function([tp.Ptr(tp.Named('conf_object_t')),
+                               tp.Ptr(tp.Void())],
+                              tp.Void())))
         if (breaking_changes.dml12_remove_misc_quirks.enabled
             and not rh.addressable):
-            raise ERVAL(rh.site, '&')
+            raise E.RVAL(rh.site, '&')
         return AddressOf(site, rh)
 
     @property
@@ -2652,10 +2655,10 @@ class AddressOf(UnaryOp):
 
 def mkAddressOf(site, rh):
     if dml.globals.compat_dml12_int(site):
-        t = safe_realtype(rh.ctype())
+        t = tp.safe_realtype(rh.ctype())
         if t.is_int and t.is_endian:
             return mkCast(site, AddressOf.make(site, rh),
-                          TPtr(TInt(t.bits, t.signed, t.members)))
+                          tp.Ptr(tp.Int(t.bits, t.signed, t.members)))
     return AddressOf.make(site, rh)
 
 class Dereference(UnaryOp, LValue):
@@ -2664,20 +2667,20 @@ class Dereference(UnaryOp, LValue):
     explicit_type = True
     def __init__(self, site, rh):
         super(Dereference, self).__init__(site, rh)
-        typ = realtype_shallow(self.rh.ctype())
-        if isinstance(typ, TPtr):
+        typ = tp.realtype_shallow(self.rh.ctype())
+        if isinstance(typ, tp.Ptr):
             self.type = typ.base
-        elif isinstance(typ, TUnknown):
+        elif isinstance(typ, tp.Unknown):
             self.type = typ
         else:
             raise ICE(self.site, "unknown expression type")
 
     @staticmethod
     def make_simple(site, rh):
-        etype = realtype(rh.ctype())
+        etype = tp.realtype(rh.ctype())
 
-        if etype and not isinstance(etype, TPtr):
-            raise ENOPTR(site, rh)
+        if etype and not isinstance(etype, tp.Ptr):
+            raise E.NOPTR(site, rh)
         return Dereference(site, rh)
 
     @property
@@ -2686,14 +2689,14 @@ class Dereference(UnaryOp, LValue):
 
     @property
     def is_pointer_to_stack_allocation(self):
-        return (isinstance(safe_realtype_shallow(self.type), TArray)
+        return (isinstance(tp.safe_realtype_shallow(self.type), tp.Array)
                 and self.is_stack_allocated)
 
 mkDereference = Dereference.make
 
 class Not(UnaryOp):
     op = '!'
-    type = TBool()
+    type = tp.Bool()
 
     @staticmethod
     def make_simple(site, rh):
@@ -2718,12 +2721,12 @@ class BitNot(ArithUnaryOp):
     def __init__(self, site, rh, signed): pass
 
     def ctype(self):
-        return TInt(64, self.signed)
+        return tp.Int(64, self.signed)
 
     @staticmethod
     def make_simple(site, rh):
         rh = as_int(rh)
-        rhtype = realtype(rh.ctype())
+        rhtype = tp.realtype(rh.ctype())
         if rh.constant:
             return mkIntegerConstant(site, ~rh.value, rhtype.signed)
         return BitNot(site, rh, rhtype.signed)
@@ -2737,21 +2740,21 @@ def mkBitNot(site, rh):
 def arith_argument_conv(expr):
     """Expect argument to be an integer, float, or double
     return (type, expr) where expr is potentially modified"""
-    etype = safe_realtype(expr.ctype())
+    etype = tp.safe_realtype(expr.ctype())
     if etype.is_float:
         return (etype, expr)
     else:
         try:
             new_expr = as_int(expr)
-        except EBTYPE:
+        except E.BTYPE:
             # This translation result in slightly more informative errors
-            raise EBTYPE(expr.site, expr.ctype(), "float or integer")
-        return (safe_realtype(new_expr.ctype()), new_expr)
+            raise E.BTYPE(expr.site, expr.ctype(), "float or integer")
+        return (tp.safe_realtype(new_expr.ctype()), new_expr)
 
 def promote_integer(expr, etype):
     assert etype.is_int
     signed = etype.bits < 64 or etype.signed
-    return (mkCast(expr.site, expr, TInt(64, signed)), signed)
+    return (mkCast(expr.site, expr, tp.Int(64, signed)), signed)
 
 def promote_float(expr, etype):
     assert etype.is_arith
@@ -2760,16 +2763,16 @@ def promote_float(expr, etype):
     if expr.constant:
         return FloatConstant(expr.site, float(expr.value))
     else:
-        return mkCast(expr.site, expr, TFloat('double'))
+        return mkCast(expr.site, expr, tp.Float('double'))
 
 class UnaryMinus(ArithUnaryOp):
     op = '-'
     def ctype(self):
         origtype = self.rh.ctype()
-        t = safe_realtype(origtype)
+        t = tp.safe_realtype(origtype)
         if t.is_int:
             if dml.globals.compat_dml12_int(self.site):
-                return TInt(t.bits, True)
+                return tp.Int(t.bits, True)
             else:
                 assert t.bits == 64
                 return t
@@ -2779,12 +2782,12 @@ class UnaryMinus(ArithUnaryOp):
 
     @staticmethod
     def make_simple(site, rh):
-        rhtype = safe_realtype(rh.ctype())
+        rhtype = tp.safe_realtype(rh.ctype())
 
         if rhtype.is_float:
             if not dml.globals.compat_dml12_int(site):
                 rh = promote_float(rh, rhtype)
-        elif not isinstance(rhtype, TInt):
+        elif not isinstance(rhtype, tp.Int):
             raise ICE(site, "Unexpected wrong type of argument to unary minus")
 
         if rh.constant:
@@ -2819,30 +2822,30 @@ class IncDec(UnaryOp):
     def read(self):
         raise ICE(self, "unimplemented operation")
     def ctype(self):
-        t = realtype(self.rh.ctype())
+        t = tp.realtype(self.rh.ctype())
         if t.is_int:
             if t.is_endian:
                 return t.access_type
             elif dml.globals.compat_dml12_int(self.site):
-                return TInt(t.bits, True)
+                return tp.Int(t.bits, True)
             else:
                 return t
         else:
-            assert isinstance(t, TPtr)
+            assert isinstance(t, tp.Ptr)
             return t
     @classmethod
     def make_simple(cls, site, rh):
-        rhtype = safe_realtype(rh.ctype())
-        if not isinstance(rhtype, (IntegerType, TPtr)):
-            raise EINCTYPE(site, cls.op)
+        rhtype = tp.safe_realtype(rh.ctype())
+        if not isinstance(rhtype, (tp.IntegerType, tp.Ptr)):
+            raise E.INCTYPE(site, cls.op)
         if not rh.addressable:
             if isinstance(rh, BitSlice):
                 hint = 'try %s= 1' % (cls.base_op[0],)
             else:
                 hint = None
-            raise EINC(site, hint)
+            raise E.INC(site, hint)
         result = cls(site, rh)
-        if dml.globals.compat_dml12_int(site) or isinstance(rhtype, TPtr):
+        if dml.globals.compat_dml12_int(site) or isinstance(rhtype, tp.Ptr):
             return result
         else:
             (result, signed) = promote_integer(result, rhtype)
@@ -2860,7 +2863,7 @@ class PreIncDec(IncDec):
     def __str__(self):
         return '%s(%s)' % (self.base_op, self.rh)
     def read(self):
-        rh_type = safe_realtype(self.rh.ctype())
+        rh_type = tp.safe_realtype(self.rh.ctype())
         if rh_type.is_int and rh_type.is_endian:
             return '%s(%s, %s, false)' % (
                 rh_type.dmllib_fun("prechange"),
@@ -2883,7 +2886,7 @@ class PostIncDec(IncDec):
     def __str__(self):
         return '(%s)%s' % (self.rh, self.base_op)
     def read(self):
-        rh_type = safe_realtype(self.rh.ctype())
+        rh_type = tp.safe_realtype(self.rh.ctype())
         if rh_type.is_int and rh_type.is_endian:
             return '%s(%s, %s, true)' % (
                 rh_type.dmllib_fun("prechange"),
@@ -2923,11 +2926,11 @@ def read_iface_struct(iface_noderef):
             return mkCast(iface_noderef.site,
                           mkSubRef(iface_noderef.site, iface_noderef, 'val',
                                    '.'),
-                          TPtr(TNamed(struct_name, const=True))).read()
+                          tp.Ptr(tp.Named(struct_name, const=True))).read()
 
 class MethodPresent(Expression):
     '''Whether a method in an interface object is NULL'''
-    type = TBool()
+    type = tp.Bool()
     @auto_init
     def __init__(self, site, expr):
         assert isinstance(expr, InterfaceMethodRef)
@@ -2972,33 +2975,33 @@ class InterfaceMethodRef(NonValue):
             self.site, self.node_expr,
             self.method_name, [self.obj_arg] + args, self.ftype.output_type)
     def exc(self):
-        return EIFREF(self.site, self)
+        return E.IFREF(self.site, self)
 
 def mkInterfaceMethodRef(site, iface_node, indices, method_name):
     struct_name = param_str(iface_node,
                             'c_type' if dml.globals.dml_version == (1, 2)
                             else '_c_type')
-    stype = typedefs.get(struct_name)
+    stype = tp.typedefs.get(struct_name)
     if not stype:
         # should never happen: If interface does not exist,
         # then EIFTYPE is signalled and creation of interface
         # node is suppressed
         raise ICE(site, "unknown type %r" % (struct_name,))
-    stype = safe_realtype(stype)
-    if not isinstance(stype, StructType):
-        raise ENOSTRUCT(site, mkNodeRef(site, iface_node, indices), stype)
+    stype = tp.safe_realtype(stype)
+    if not isinstance(stype, tp.StructType):
+        raise E.NOSTRUCT(site, mkNodeRef(site, iface_node, indices), stype)
     ftype = stype.get_member_qualified(method_name)
     if not ftype:
-        raise EMEMBER(site, struct_name, method_name)
-    ftype = safe_realtype(ftype)
+        raise E.MEMBER(site, struct_name, method_name)
+    ftype = tp.safe_realtype(ftype)
 
-    if (not isinstance(ftype, TPtr)
-        or not isinstance(ftype.base, TFunction)
+    if (not isinstance(ftype, tp.Ptr)
+        or not isinstance(ftype.base, tp.Function)
         or not ftype.base.input_types
-        or not TPtr(safe_realtype_unconst(TNamed('conf_object_t'))).eq(
-            safe_realtype_unconst(ftype.base.input_types[0]))):
+        or not tp.Ptr(tp.safe_realtype_unconst(tp.Named('conf_object_t'))).eq(
+            tp.safe_realtype_unconst(ftype.base.input_types[0]))):
         # non-method members are not accessible
-        raise EMEMBER(site, struct_name, method_name)
+        raise E.MEMBER(site, struct_name, method_name)
 
     obj_node = iface_node.parent.get_component('obj')
     if not obj_node or not obj_node.objtype == 'session':
@@ -3017,11 +3020,11 @@ class BitSlice(Expression):
     def __init__(self, site, expr, msb, lsb, size, mask):
         # lsb is None if i[bitnum] (as opposed to i[msb:lsb]) notation was used
         if size:
-            const = deep_const(self.expr.ctype())
+            const = tp.deep_const(self.expr.ctype())
             if size.constant:
-                self.type = TInt(size.value, False, const=const)
+                self.type = tp.Int(size.value, False, const=const)
             else:
-                self.type = TInt(64, False, const=const)
+                self.type = tp.Int(64, False, const=const)
 
         self.read_expr = mkBitAnd(site, mkShR(site, expr, lsb or msb), mask)
 
@@ -3057,11 +3060,11 @@ class BitSlice(Expression):
 
         expr = mkApply(self.site,
                        mkLit(self.site, 'DML_combine_bits',
-                             TFunction([TInt(64, False), TInt(64, False),
-                                        TInt(64, False)],
-                                       TInt(64, False))),
+                             tp.Function([tp.Int(64, False), tp.Int(64, False),
+                                        tp.Int(64, False)],
+                                       tp.Int(64, False))),
                        (self.expr, source_expr, mask))
-        target_type = realtype(self.expr.ctype())
+        target_type = tp.realtype(self.expr.ctype())
         if target_type.is_int and target_type.is_endian:
             expr = mkCast(self.site, expr, target_type)
         return self.expr.write(ExpressionInitializer(expr))
@@ -3072,9 +3075,9 @@ def mkBitSlice(site, expr, msb, lsb, bitorder):
     # that the expression may be used as a bool even if the bit number
     # is not a constant.
 
-    t = realtype(expr.ctype())
+    t = tp.realtype(expr.ctype())
     if not t.is_int:
-        report(EBSLICE(site))
+        report(E.BSLICE(site))
         return expr
 
     if not bitorder:
@@ -3083,7 +3086,7 @@ def mkBitSlice(site, expr, msb, lsb, bitorder):
     if bitorder != 'le':
         if not expr.explicit_type:
             #dbg('BITSLICE %r : %r' % (expr, t))
-            raise EBSBE(site)
+            raise E.BSBE(site)
 
         # Normalize to le bitorder
         expr_bits = mkIntegerLiteral(site, t.bits)
@@ -3100,7 +3103,7 @@ def mkBitSlice(site, expr, msb, lsb, bitorder):
 
     if size.constant:
         if size.value <= 0 or size.value > 64:
-            raise EBSSIZE(site, size)
+            raise E.BSSIZE(site, size)
         mask = mkIntegerConstant(site, (1 << size.value) - 1, False)
     else:
         mask = mkSubtract(site,
@@ -3126,7 +3129,7 @@ class TraitMethodApplyIndirect(Expression):
         macro = f'CALL_{infix_independent}TRAIT_METHOD{suffix_noarg}'
         args = (['_dev'] * (not self.independent)
                 + [arg.read() for arg in [self.traitref] + self.inargs])
-        trait_name = cident(realtype(self.traitref.ctype()).trait.name)
+        trait_name = tp.cident(tp.realtype(self.traitref.ctype()).trait.name)
         return f"{macro}({trait_name}, {self.methname}, {', '.join(args)})"
 
 class TraitMethodApplyDirect(Expression):
@@ -3134,7 +3137,7 @@ class TraitMethodApplyDirect(Expression):
     @auto_init
     def __init__(self, site, traitref, methodref, inargs, type):
         # traitref is a reference to method's vtable trait
-        assert realtype(traitref.ctype()).trait == methodref.vtable_trait
+        assert tp.realtype(traitref.ctype()).trait == methodref.vtable_trait
         assert methodref.__class__.__name__ == 'TraitMethod'
         if not methodref.independent:
             crep.require_dev(site)
@@ -3153,7 +3156,7 @@ class New(Expression):
     slots = ('type',)
     @auto_init
     def __init__(self, site, newtype, count):
-        self.type = TPtr(newtype)
+        self.type = tp.Ptr(newtype)
     def __str__(self):
         if self.count:
             return 'new %s[%s]' % (self.newtype, self.count)
@@ -3285,7 +3288,7 @@ class EachIn(Expression):
             self.trait.name, self.node.logname(self.indices))
 
     def ctype(self):
-        return TTraitList(self.trait.name)
+        return tp.TraitList(self.trait.name)
 
     @staticmethod
     def index_ident(node, trait):
@@ -3346,7 +3349,7 @@ mkEachIn = EachIn
 
 class SequenceLength(Expression):
     '''The length of a sequence'''
-    type = TInt(64, False)
+    type = tp.Int(64, False)
     @auto_init
     def __init__(self, site, expr, trait): pass
 
@@ -3408,7 +3411,7 @@ def mkIntegerConstant(site, value, signed):
     if dml.globals.compat_dml12_int(site):
         return IntegerConstant_dml12(site, value)
     return IntegerConstant(site, truncate_int_bits(value, signed),
-                           TInt(64, signed))
+                           tp.Int(64, signed))
 
 def mkIntegerLiteral(site, value):
     '''Convenience for a nonnegative integer constant with natural sign'''
@@ -3470,26 +3473,26 @@ class IntegerConstant_dml12(IntegerConstant):
     def _detect_ctype(value):
         if value < 0:
             if value >= -128:
-                return TInt(8, True)
+                return tp.Int(8, True)
             elif value >= -(2**15):
-                return TInt(16, True)
+                return tp.Int(16, True)
             elif value >= -(2**31):
-                return TInt(32, True)
+                return tp.Int(32, True)
             elif value >= -(2**63):
-                return TInt(64, True)
+                return tp.Int(64, True)
         else:
             if value < 2:
-                return TInt(1, False)
+                return tp.Int(1, False)
             if value < 256:
-                return TInt(8, False)
+                return tp.Int(8, False)
             elif value < (2**16):
-                return TInt(16, False)
+                return tp.Int(16, False)
             elif value < (2**32):
-                return TInt(32, False)
+                return tp.Int(32, False)
             elif value < (2**64):
-                return TInt(64, False)
+                return tp.Int(64, False)
             elif value < (2**128):
-                return TInt(128, False)
+                return tp.Int(128, False)
         return None
 
 def all_index_exprs(node):
@@ -3498,7 +3501,7 @@ def all_index_exprs(node):
           for dimsize in node.dimsizes))
 
 class FloatConstant(Constant):
-    type = TFloat('double')
+    type = tp.Float('double')
     def __init__(self, site, value):
         assert_type(site, value, float)
         Constant.__init__(self, site, value)
@@ -3521,8 +3524,8 @@ class AddressOfMethod(Constant):
     def ctype(self):
         types = [t for (_, t, _) in self.value.cparams]
         if not self.value.independent:
-            types[0] = TPtr(TNamed("conf_object_t"))
-        return TPtr(TFunction(types, self.value.rettype))
+            types[0] = tp.Ptr(tp.Named("conf_object_t"))
+        return tp.Ptr(tp.Function(types, self.value.rettype))
 
     def read(self):
         prefix = '_trampoline' * (not self.value.independent)
@@ -3541,7 +3544,7 @@ def string_escape(s):
     return char_escape_re.sub(char_escape, s).decode('utf-8')
 
 class StringConstant(Constant):
-    type = TPtr(TNamed('char', const=True))
+    type = tp.Ptr(tp.Named('char', const=True))
     def __init__(self, site, value):
         # Store the value in UTF-8 (to permit both unicode and byte strings)
         if isinstance(value, str):
@@ -3561,7 +3564,7 @@ class StringConstant(Constant):
 mkStringConstant = StringConstant
 
 class BoolConstant(Constant):
-    type = TBool()
+    type = tp.Bool()
     def __str__(self):
         if self.value:
             return 'true'
@@ -3582,7 +3585,7 @@ class Undefined(NonValue):
     def __str__(self):
         return 'undefined'
     def exc(self):
-        return EUNDEF(self)
+        return E.UNDEF(self)
 
 mkUndefined = Undefined
 
@@ -3598,7 +3601,7 @@ class DiscardRef(NonValue):
         return '_'
 
     def exc(self):
-        return EDISCARDREF(self.site)
+        return E.DISCARDREF(self.site)
 
     def write(self, source):
         if self.explicit_type:
@@ -3658,7 +3661,7 @@ class ObjTraitRef(Expression):
         return "%s.%s" % (self.node.logname(self.indices), self.trait.name)
 
     def ctype(self):
-        return TTrait(self.trait)
+        return tp.Trait(self.trait)
 
     def read(self):
         self.node.traits.mark_referenced(self.trait)
@@ -3671,14 +3674,14 @@ class ObjTraitRef(Expression):
             indices_decl = ('uint32 __indices[] = {%s}'
                             % (', '.join(i.read() for i in self.indices)))
             indices = tuple(mkLit(self.site, '__indices[%d]' % (i,),
-                                  TInt(32, False))
+                                  tp.Int(32, False))
                             for i in range(self.node.dimensions))
         structref = self.node.traits.vtable_cname(self.ancestry_path[0])
         pointer = '(&%s)' % ('.'.join([structref] + [
-            cident(t.name) for t in self.ancestry_path[1:]]))
+            tp.cident(t.name) for t in self.ancestry_path[1:]]))
         id = ObjIdentity(self.site, self.node, indices).read()
         traitref_expr = ('((%s) {%s, %s})'
-                         % (cident(self.trait.name), pointer, id))
+                         % (tp.cident(self.trait.name), pointer, id))
         if indices_decl:
             return '({%s; %s;})' % (indices_decl, traitref_expr)
         else:
@@ -3707,7 +3710,7 @@ class ObjIdentity(Expression):
         return "%s" % (self.node.logname(self.indices),)
 
     def ctype(self):
-        return TNamed('_identity_t')
+        return tp.Named('_identity_t')
 
     def read(self):
         if self.constant:
@@ -3734,7 +3737,7 @@ class TraitObjIdentity(Expression):
         return "%s" % (self.traitref,)
 
     def ctype(self):
-        return TNamed('_identity_t')
+        return tp.Named('_identity_t')
 
     def read(self):
         return "(%s).id" % (self.traitref.read(),)
@@ -3746,7 +3749,7 @@ class PortObjectFromObjIdentity(Expression):
         crep.require_dev(site)
 
     def ctype(self):
-        return TNamed('conf_object_t *')
+        return tp.Named('conf_object_t *')
 
     def read(self):
         return ('_identity_to_portobj(_port_object_assocs, &_dev->obj, '
@@ -3760,18 +3763,18 @@ class TraitUpcast(Expression):
         return "cast(%s, %s)" % (self.sub, self.parent.name)
 
     def ctype(self):
-        return TTrait(self.parent)
+        return tp.Trait(self.parent)
 
     def read(self):
-        typ = safe_realtype(self.sub.ctype())
-        assert isinstance(typ, TTrait)
+        typ = tp.safe_realtype(self.sub.ctype())
+        assert isinstance(typ, tp.Trait)
         if self.parent not in typ.trait.ancestors:
             raise ICE(self.site, 'cannot upcast %s to %s'
                       % (typ.trait.name, self.parent.name))
 
         return ("UPCAST(%s, %s, %s)"
-                % (self.sub.read(), cident(typ.trait.name),
-                   ".".join(cident(t.name) for t in
+                % (self.sub.read(), tp.cident(typ.trait.name),
+                   ".".join(tp.cident(t.name) for t in
                             typ.trait.ancestry_paths[self.parent][0])))
 
 class TraitObjectCast(Expression):
@@ -3782,7 +3785,7 @@ class TraitObjectCast(Expression):
         return f'cast({self.sub}, object)'
 
     def ctype(self):
-        return TTrait(dml.globals.object_trait)
+        return tp.Trait(dml.globals.object_trait)
 
     def read(self):
         return (f'({{_identity_t __id = ({self.sub.read()}).id; '
@@ -3791,21 +3794,21 @@ class TraitObjectCast(Expression):
 def mkTraitUpcast(site, sub, parent):
     if isinstance(sub, NonValue):
         raise sub.exc()
-    typ = safe_realtype(sub.ctype())
+    typ = tp.safe_realtype(sub.ctype())
     assert dml.globals.object_trait
-    if isinstance(typ, TTrait):
+    if isinstance(typ, tp.Trait):
         if typ.trait is parent:
             return sub
         elif parent in typ.trait.ancestors:
             return TraitUpcast(site, sub, parent)
         elif parent is dml.globals.object_trait:
             return TraitObjectCast(site, sub)
-    raise ETEMPLATEUPCAST(site, typ, parent.type())
+    raise E.TEMPLATEUPCAST(site, typ, parent.type())
 
 def vtable_read(expr):
-    typ = realtype(expr.ctype())
-    assert isinstance(typ, TTrait)
-    return '((struct _%s *) (%s).trait)' % (cident(typ.trait.name),
+    typ = tp.realtype(expr.ctype())
+    assert isinstance(typ, tp.Trait)
+    return '((struct _%s *) (%s).trait)' % (tp.cident(typ.trait.name),
                                             expr.read())
 
 class TraitParameter(Expression):
@@ -3817,10 +3820,10 @@ class TraitParameter(Expression):
         return "%s.%s" % (self.traitref, self.name)
 
     def read(self):
-        t = realtype(self.traitref.ctype())
-        assert isinstance(t, TTrait)
-        vtable_type = f'struct _{cident(t.trait.name)}'
-        if isinstance(realtype(self.type), TTraitList):
+        t = tp.realtype(self.traitref.ctype())
+        assert isinstance(t, tp.Trait)
+        vtable_type = f'struct _{tp.cident(t.trait.name)}'
+        if isinstance(tp.realtype(self.type), tp.TraitList):
             return (f'_vtable_sequence_param({self.traitref.read()},'
                     f' offsetof({vtable_type}, {self.name}))')
         else:
@@ -3842,12 +3845,12 @@ class TraitSessionRef(Expression):
         return "&%s.%s" % (self.traitref, self.name)
 
     def ctype(self):
-        return TPtr(self.type_)
+        return tp.Ptr(self.type_)
 
     def read(self):
-        t = realtype(self.traitref.ctype())
-        assert isinstance(t, TTrait)
-        vtable_type = f'struct _{cident(t.trait.name)}'
+        t = tp.realtype(self.traitref.ctype())
+        assert isinstance(t, tp.Trait)
+        vtable_type = f'struct _{tp.cident(t.trait.name)}'
         return (f'VTABLE_SESSION(_dev, {self.traitref.read()}, {vtable_type}'
                 f', {self.name}, {self.ctype().declaration("")})')
 
@@ -3877,15 +3880,15 @@ class TraitMethodRef(NonValue):
     def apply(self, inits, location, scope):
         '''Return expression for application as a function'''
         if self.throws or len(self.outp) > 1:
-            raise EAPPLYMETH(self.site, self)
+            raise E.APPLYMETH(self.site, self)
         if crep.TypedParamContext.active and self.independent:
-            raise ETYPEDPARAMVIOL(self.site)
+            raise E.TYPEDPARAMVIOL(self.site)
         args = typecheck_inarg_inits(self.site, inits, self.inp,
                                      location, scope, 'method')
         if self.outp:
             [(_, rettype)] = self.outp
         else:
-            rettype = TVoid()
+            rettype = tp.Void()
         return self.call_expr(args, rettype)
 
 class TraitMethodDirect(TraitMethodRef):
@@ -3899,7 +3902,7 @@ class TraitMethodDirect(TraitMethodRef):
 
     def __str__(self):
         return "%s.templates.%s.%s" % (
-            self.traitref, str(realtype(self.traitref.ctype()).trait.name),
+            self.traitref, str(tp.realtype(self.traitref.ctype()).trait.name),
             self.methodref.name)
 
     @property
@@ -3970,9 +3973,9 @@ class TraitHookRef(Expression):
         return self.hooktyp
 
     def read(self):
-        t = realtype(self.traitref.ctype())
-        assert isinstance(t, TTrait)
-        vtable_type = f'struct _{cident(t.trait.name)}'
+        t = tp.realtype(self.traitref.ctype())
+        assert isinstance(t, tp.Trait)
+        vtable_type = f'struct _{tp.cident(t.trait.name)}'
 
         coeff = math.prod(self.dimsizes)
         if all(idx.constant for idx in self.indices):
@@ -4051,7 +4054,7 @@ class NodeRef(Expression):
     def __str__(self):
         name = self.node.logname(self.indices)
         if name:
-            return dollar(self.site)+name
+            return logging.dollar(self.site)+name
         else:
             assert dml.globals.dml_version == (1, 2)
             return '$<anonymous %s>' % self.node.objtype
@@ -4061,10 +4064,10 @@ class NodeRef(Expression):
         '''Apply as an expression'''
         if self.node.objtype == 'method':
             if self.node.throws or len(self.node.outp) > 1:
-                raise EAPPLYMETH(self.site, self.node.name)
+                raise E.APPLYMETH(self.site, self.node.name)
             return codegen_call_expr(self.site, self.node, self.indices, inits,
                                      location, scope)
-        raise EAPPLY(self, self.node.objtype + " object")
+        raise E.APPLY(self, self.node.objtype + " object")
 
 class NodeRefWithStorage(NodeRef, LValue):
     '''Reference to node that also contains storage, such as allocated
@@ -4088,7 +4091,7 @@ class NodeRefWithStorage(NodeRef, LValue):
             # some DML-generated expressions, like 'parent', use
             # object's site
             and self.site is not self.node.site):
-            report(PVAL(dmlparse.end_site(self.site)))
+            report(P.VAL(dmlparse.end_site(self.site)))
         node = self.node
 
         if node.objtype == 'method':
@@ -4108,9 +4111,9 @@ class NodeRefWithStorage(NodeRef, LValue):
     def apply(self, inits, location, scope):
         if self.node.objtype == 'method':
             assert dml.globals.dml_version == (1, 2)
-            raise EAPPLYMETH(self.site, self.node.name)
+            raise E.APPLYMETH(self.site, self.node.name)
         # storage might be a function pointer
-        return mkApplyInits(self.site, self, inits, location, scope)
+        return expr.mkApplyInits(self.site, self, inits, location, scope)
 
 class SessionVariableRef(LValue):
     "A reference to a session variable"
@@ -4140,7 +4143,7 @@ class HookRef(Expression):
         assert isinstance(hook, objects.DMLObject)
         assert isinstance(indices, tuple)
         assert hook.objtype == 'hook'
-        self.type = THook(hook.msg_types, validated=True)
+        self.type = tp.Hook(hook.msg_types, validated=True)
 
         if all(idx.constant for idx in indices):
             self.constant = True
@@ -4172,17 +4175,17 @@ class NoallocNodeRef(PlainNodeRef):
     @auto_init
     def __init__(self, site, node, indices, node_type): pass
     def exc(self):
-        return ENALLOC(self.site, self.node)
+        return E.NALLOC(self.site, self.node)
 
 class RegisterWithFields(PlainNodeRef):
     @auto_init
     def __init__(self, site, node, indices, node_type): pass
     def exc(self):
-        return EREGVAL(self.site, self.node)
+        return E.REGVAL(self.site, self.node)
 
 # This one can happen in both 1.2 and 1.4, for data members.
 class IncompleteNodeRefWithStorage(PlainNodeRef):
-    '''NodeRefWithStorage where not all indices are defined'''
+    '''NodeRefWithStorage where not all indices are expr_util.defined'''
     @auto_init
     def __init__(self, site, node, indices, node_type, static_index):
         assert isinstance(static_index, NonValue)
@@ -4276,15 +4279,15 @@ class NodeArrayRef(NonValueArrayRef):
 
     def __str__(self):
         name = self.node.logname(self.indices)
-        return dollar(self.site) + name
+        return logging.dollar(self.site) + name
 
     def exc(self):
-        return EARRAY(self.site, self.node.identity())
+        return E.ARRAY(self.site, self.node.identity())
 
 class HookSuspended(Expression):
     '''Reference to the suspended member of a hook'''
     priority = 160
-    type = TInt(64, False)
+    type = tp.Int(64, False)
 
     @auto_init
     def __init__(self, site, hookref_expr): pass
@@ -4306,7 +4309,7 @@ class HookSendNowRef(NonValue):
     def __str__(self):
         return "%s.send_now" % (self.hookref_expr,)
     def apply(self, inits, location, scope):
-        msg_types = safe_realtype_shallow(self.hookref_expr.ctype()).msg_types
+        msg_types = tp.safe_realtype_shallow(self.hookref_expr.ctype()).msg_types
         args = typecheck_inarg_inits(
             self.site, inits,
             [(f'comp{i}', t)
@@ -4319,12 +4322,12 @@ mkHookSendNowRef = HookSendNowRef
 class HookSendNowApply(Expression):
     '''Application of the send_now pseudomethod with valid arguments'''
     slots = ('msg_struct',)
-    type = TInt(64, False)
+    type = tp.Int(64, False)
     priority = dml.expr.Apply.priority
     @auto_init
     def __init__(self, site, hookref_expr, args):
         crep.require_dev(site)
-        msg_types = safe_realtype(hookref_expr.ctype()).msg_types
+        msg_types = tp.safe_realtype(hookref_expr.ctype()).msg_types
         from .codegen import get_type_sequence_info
         self.msg_struct = get_type_sequence_info(msg_types,
                                                  create_new=True).struct
@@ -4352,13 +4355,13 @@ class HookSendRef(NonValue):
     def __str__(self):
         return "%s.send" % (self.hookref_expr,)
     def apply(self, inits, location, scope):
-        msg_types = safe_realtype_shallow(self.hookref_expr.ctype()).msg_types
+        msg_types = tp.safe_realtype_shallow(self.hookref_expr.ctype()).msg_types
         args = typecheck_inarg_inits(
             self.site, inits,
             [(f'comp{i}', t)
              for (i, t) in enumerate(msg_types)],
             location, scope, 'send',
-            on_ptr_to_stack=(lambda x: report(WHOOKSEND(x.site, x))))
+            on_ptr_to_stack=(lambda x: report(W.HOOKSEND(x.site, x))))
         from .codegen import get_type_sequence_info, get_immediate_after
         typeseq_info = get_type_sequence_info(msg_types, create_new=True)
         after_info = get_immediate_after(typeseq_info)
@@ -4368,7 +4371,7 @@ mkHookSendRef = HookSendRef
 
 class HookSendApply(Expression):
     '''Application of the send pseudomethod with valid arguments'''
-    type = void
+    type = tp.void
     priority = dml.expr.Apply.priority
     @auto_init
     def __init__(self, site, hookref_expr, args, info):
@@ -4385,7 +4388,7 @@ class HookSendApply(Expression):
                        ', '.join(arg.read() for arg in self.args)))
         else:
             args = ('(%s){%s}'
-                    % (TArray(self.info.args_type,
+                    % (tp.Array(self.info.args_type,
                               mkIntegerLiteral(self.site, 1)).declaration(''),
                        self.hookref_expr.read()))
         args_size = f'sizeof({self.info.args_type.declaration("")})'
@@ -4419,9 +4422,9 @@ class TemplatesSubRef(NonValue):
 def mkTemplatesSubRef(site, templates_ref, template_name):
     tmpl = dml.globals.templates.get(template_name)
     if tmpl is None:
-        raise ENTMPL(site, template_name)
+        raise E.NTMPL(site, template_name)
     if tmpl not in templates_ref.node.templates:
-        raise ETQMIC(site, templates_ref.node.identity(), template_name)
+        raise E.TQMIC(site, templates_ref.node.identity(), template_name)
     return TemplatesSubRef(site, templates_ref, template_name)
 
 def mkTemplateQualifiedMethodRef(site, templates_subref, method_name):
@@ -4485,11 +4488,11 @@ def mkTemplateQualifiedMethodRef(site, templates_subref, method_name):
         abstract = (trait is not None
                     and trait.member_declaration(method_name) is not None
                     and trait.member_kind(method_name) == 'method')
-        raise EMEMBERTQMIC(site, template, method_name, abstract,
+        raise E.MEMBERTQMIC(site, template, method_name, abstract,
                            node if some_spec_eliminated else None)
 
     if len(candidates) > 1:
-        raise EAMBTQMIC(site, template_name, method_name, some_spec_eliminated,
+        raise E.AMBTQMIC(site, template_name, method_name, some_spec_eliminated,
                         candidates)
 
     (tmpl, method) = candidates[0]
@@ -4529,10 +4532,10 @@ class TraitTemplatesSubRef(NonValue):
 def mkTraitTemplatesSubRef(site, templates_ref, template_name):
     trait = dml.globals.traits.get(template_name)
     if trait is None:
-        raise ENTMPL(site, template_name)
+        raise E.NTMPL(site, template_name)
     if not (templates_ref.trait.implements(trait)
             or trait is dml.globals.object_trait):
-        raise ETTQMIC(site, trait.name, templates_ref.trait.name)
+        raise E.TTQMIC(site, trait.name, templates_ref.trait.name)
 
     return TraitTemplatesSubRef(site, templates_ref, trait)
 
@@ -4547,11 +4550,11 @@ def mkTraitTemplateQualifiedMethodRef(site, templates_subref, method_name):
     impl_traits = trait.method_impl_traits.get(method_name)
     if not impl_traits:
         if impl_tmpls:
-            raise ENSHAREDTQMIC(site, trait, method_name)
+            raise E.NSHAREDTQMIC(site, trait, method_name)
         else:
             abstract = (trait.member_declaration(method_name) is not None
                         and trait.member_kind(method_name) == 'method')
-            raise EMEMBERTQMIC(site, trait, method_name, abstract, None)
+            raise E.MEMBERTQMIC(site, trait, method_name, abstract, None)
 
     # If there is any non-shared method specification not lower in rank than
     # some shared method implementation, then it could be a potential
@@ -4560,10 +4563,10 @@ def mkTraitTemplateQualifiedMethodRef(site, templates_subref, method_name):
         if all(impl_tmpl.spec.rank
                not in dml.globals.templates[impl_trait.name].spec.rank.inferior
                for impl_trait in impl_traits):
-            raise ENSHAREDTQMIC(site, trait, method_name)
+            raise E.NSHAREDTQMIC(site, trait, method_name)
 
     if len(impl_traits) > 1:
-        raise EAMBTQMIC(site, trait.name, method_name, False,
+        raise E.AMBTQMIC(site, trait.name, method_name, False,
                         [(impl_trait, impl_trait.method_impls[method_name])
                          for impl_trait in impl_traits])
 
@@ -4612,7 +4615,7 @@ class LocalVariable(Variable):
 
     @property
     def is_pointer_to_stack_allocation(self):
-        return isinstance(safe_realtype_shallow(self.ctype()), TArray)
+        return isinstance(tp.safe_realtype_shallow(self.ctype()), tp.Array)
 
 mkLocalVariable = LocalVariable
 
@@ -4667,7 +4670,7 @@ class StructMember(Expression):
 
     @property
     def is_pointer_to_stack_allocation(self):
-        return (isinstance(safe_realtype_shallow(self.type), TArray)
+        return (isinstance(tp.safe_realtype_shallow(self.type), tp.Array)
                 and self.is_stack_allocated)
 
 def try_resolve_len(site, lh):
@@ -4693,10 +4696,10 @@ def mkSubRef(site, expr, sub, op):
         (node, indices) = expr.get_ref()
         if node.objtype == 'interface':
             if op == "->":
-                raise ENOPTR(site, expr)
+                raise E.NOPTR(site, expr)
             return mkInterfaceMethodRef(site, node, indices, sub)
         else:
-            raise EREF(site, sub, expr)
+            raise E.REF(site, sub, expr)
 
     if isinstance(expr, NonValue):
         if op == '.':
@@ -4724,55 +4727,55 @@ def mkSubRef(site, expr, sub, op):
         op = '->'
 
     etype = expr.ctype()
-    real_etype = safe_realtype_shallow(etype)
+    real_etype = tp.safe_realtype_shallow(etype)
 
-    if isinstance(real_etype, TPtr):
+    if isinstance(real_etype, tp.Ptr):
         if op == '.':
-            raise ENOSTRUCT(site, expr)
+            raise E.NOSTRUCT(site, expr)
         basetype = real_etype.base
-        real_basetype = safe_realtype(basetype)
+        real_basetype = tp.safe_realtype(basetype)
         baseexpr = mkDereference(site, expr)
     else:
         if op == '->':
-            raise ENOPTR(site, expr)
+            raise E.NOPTR(site, expr)
         basetype = etype
-        real_basetype = safe_realtype(etype)
+        real_basetype = tp.safe_realtype(etype)
         baseexpr = expr
 
     real_basetype = real_basetype.resolve()
 
-    if isinstance(real_basetype, StructType):
+    if isinstance(real_basetype, tp.StructType):
         typ = real_basetype.get_member_qualified(sub)
         if not typ:
-            raise EMEMBER(site, baseexpr, sub)
+            raise E.MEMBER(site, baseexpr, sub)
         return StructMember(site, expr, sub, typ, op)
     elif real_basetype.is_int and real_basetype.is_bitfields:
         member = real_basetype.members.get(sub)
         if member is None:
-            raise EMEMBER(site, expr, sub)
+            raise E.MEMBER(site, expr, sub)
         (_, msb, lsb) = member
         return mkBitSlice(site,
                           baseexpr,
                           mkIntegerLiteral(site, msb),
                           mkIntegerLiteral(site, lsb),
                           'le')
-    elif isinstance(real_basetype, TTrait):
+    elif isinstance(real_basetype, tp.Trait):
         m = real_basetype.trait.lookup(sub, baseexpr, site)
         if not m:
-            raise EMEMBER(site, expr, sub)
+            raise E.MEMBER(site, expr, sub)
         return m
-    elif isinstance(real_basetype, TArray) and sub == 'len':
+    elif isinstance(real_basetype, tp.Array) and sub == 'len':
         if real_basetype.size.constant:
             return mkIntegerConstant(site, real_basetype.size.value, False)
         else:
-            raise EVLALEN(site)
-    elif isinstance(real_basetype, TTraitList) and sub == 'len':
+            raise E.VLALEN(site)
+    elif isinstance(real_basetype, tp.TraitList) and sub == 'len':
         try:
             trait = dml.globals.traits[real_basetype.traitname]
         except KeyError:
-            raise ETYPE(basetype.declaration_site or site, basetype)
+            raise E.TYPE(basetype.declaration_site or site, basetype)
         return mkSequenceLength(site, baseexpr, trait)
-    elif isinstance(real_basetype, THook):
+    elif isinstance(real_basetype, tp.Hook):
         real_basetype.validate(basetype.declaration_site or site)
         if sub == 'send':
             return mkHookSendRef(site, baseexpr)
@@ -4781,7 +4784,7 @@ def mkSubRef(site, expr, sub, op):
         elif sub == 'suspended':
             return mkHookSuspended(site, baseexpr)
 
-    raise ENOSTRUCT(site, expr)
+    raise E.NOSTRUCT(site, expr)
 
 class ArrayRef(LValue):
     slots = ('type',)
@@ -4789,9 +4792,9 @@ class ArrayRef(LValue):
     explicit_type = True
     @auto_init
     def __init__(self, site, expr, idx):
-        expr_type = realtype_shallow(expr.ctype())
-        self.type = conv_const(expr_type.const
-                               and isinstance(expr_type, TArray),
+        expr_type = tp.realtype_shallow(expr.ctype())
+        self.type = tp.conv_const(expr_type.const
+                               and isinstance(expr_type, tp.Array),
                                expr_type.base)
     def __str__(self):
         return '%s[%s]' % (self.expr, self.idx)
@@ -4807,7 +4810,7 @@ class ArrayRef(LValue):
 
     @property
     def is_pointer_to_stack_allocation(self):
-        return (isinstance(safe_realtype_shallow(self.type), TArray)
+        return (isinstance(tp.safe_realtype_shallow(self.type), tp.Array)
                 and self.is_stack_allocated)
 
 class VectorRef(Expression):
@@ -4815,7 +4818,7 @@ class VectorRef(Expression):
     @auto_init
     def __init__(self, site, expr, idx):
         assert not expr.writable or expr.c_lval
-        self.type = realtype(self.expr.ctype()).base
+        self.type = tp.realtype(self.expr.ctype()).base
     def __str__(self):
         return f'{self.expr}[{self.idx}]'
     def read(self):
@@ -4848,7 +4851,7 @@ def mkIndex(site, expr, idx):
                 if idx.constant:
                     if (idx.value < 0 or
                         idx.value >= expr.local_dimsizes[len(local_indices)]):
-                        raise EOOB(idx)
+                        raise E.OOB(idx)
             if len(expr.local_dimsizes) > len(local_indices) + 1:
                 if isinstance(expr, NodeArrayRef):
                     return NodeArrayRef(site, expr.node, expr.indices + (idx,))
@@ -4867,26 +4870,26 @@ def mkIndex(site, expr, idx):
         if isinstance(expr, AbstractList):
             if idx.constant:
                 if idx.value < 0 or idx.value >= len(expr.value):
-                    raise EOOB(expr)
+                    raise E.OOB(expr)
 
                 assert isinstance(expr.value[idx.value], Expression)
                 return expr.value[idx.value]
 
-            raise EAVAR(idx.site)
+            raise E.AVAR(idx.site)
         raise expr.exc()
 
-    typ = safe_realtype(expr.ctype())
+    typ = tp.safe_realtype(expr.ctype())
 
     if typ.is_int:
         return mkBitSlice(site, expr, idx, None, None)
 
-    if isinstance(typ, (TArray, TPtr)):
+    if isinstance(typ, (tp.Array, tp.Ptr)):
         return ArrayRef(site, expr, idx)
 
-    if isinstance(typ, (TVector)):
+    if isinstance(typ, (tp.Vector)):
         return VectorRef(site, expr, idx)
 
-    raise ENARRAY(expr)
+    raise E.NARRAY(expr)
 
 class Cast(Expression):
     "A C type cast"
@@ -4904,17 +4907,17 @@ class Cast(Expression):
 
     @property
     def is_pointer_to_stack_allocation(self):
-        return (isinstance(safe_realtype_shallow(self.type), TPtr)
+        return (isinstance(tp.safe_realtype_shallow(self.type), tp.Ptr)
                 and self.expr.is_pointer_to_stack_allocation)
 
 def mkCast(site, expr, new_type):
-    real = safe_realtype(new_type)
-    if isinstance(real, TTrait):
+    real = tp.safe_realtype(new_type)
+    if isinstance(real, tp.Trait):
         if isinstance(expr, NodeRef):
             (node, indices) = expr.get_ref()
             if real.trait in node.traits.ancestors:
                 return ObjTraitRef(site, node, real.trait, indices)
-            raise ETEMPLATEUPCAST(site, "object", new_type)
+            raise E.TEMPLATEUPCAST(site, "object", new_type)
         else:
             return mkTraitUpcast(site, expr, real.trait)
 
@@ -4926,15 +4929,15 @@ def mkCast(site, expr, new_type):
 
     if isinstance(expr, NonValue):
         raise expr.exc()
-    old_type = safe_realtype(expr.ctype())
+    old_type = tp.safe_realtype(expr.ctype())
     if (dml.globals.compat_dml12_int(site)
-        and (isinstance(old_type, (TStruct, TVector))
-             or isinstance(real, (TStruct, TVector)))):
+        and (isinstance(old_type, (tp.Struct, tp.Vector))
+             or isinstance(real, (tp.Struct, tp.Vector)))):
         # these casts are permitted by C only if old and new are
         # the same type, which is useless
         return Cast(site, expr, new_type)
-    if isinstance(real, (TVoid, TArray, TFunction)):
-        raise ECAST(site, expr, new_type)
+    if isinstance(real, (tp.Void, tp.Array, tp.Function)):
+        raise E.CAST(site, expr, new_type)
     if old_type.eq(real):
         if (dml.globals.compat_dml12_int(expr.site)
             and old_type.is_int
@@ -4949,13 +4952,13 @@ def mkCast(site, expr, new_type):
                     real)
             return Cast(site, expr, new_type)
         return mkRValue(expr)
-    if isinstance(real, (TStruct, TExternStruct, TVector, TTraitList)):
-        raise ECAST(site, expr, new_type)
-    if isinstance(old_type, (TVoid, TStruct, TVector, TTraitList, TTrait)):
-        raise ECAST(site, expr, new_type)
+    if isinstance(real, (tp.Struct, tp.ExternStruct, tp.Vector, tp.TraitList)):
+        raise E.CAST(site, expr, new_type)
+    if isinstance(old_type, (tp.Void, tp.Struct, tp.Vector, tp.TraitList, tp.Trait)):
+        raise E.CAST(site, expr, new_type)
     if old_type.is_int and old_type.is_endian:
         expr = as_int(expr)
-        old_type = safe_realtype(expr.ctype())
+        old_type = tp.safe_realtype(expr.ctype())
     if real.is_int and not real.is_endian:
         if old_type.is_int and expr.constant:
             value = truncate_int_bits(expr.value, real.signed, real.bits)
@@ -4968,23 +4971,23 @@ def mkCast(site, expr, new_type):
         # Shorten redundant chains of integer casts. Avoids insane C
         # output for expressions like a+b+c+d.
         if (isinstance(expr, Cast)
-            and isinstance(old_type, TInt)
+            and isinstance(old_type, tp.Int)
             and old_type.bits >= real.bits):
             # (uint64)(int64)x -> (uint64)x
             expr = expr.expr
-            old_type = safe_realtype(expr.ctype())
-        if isinstance(old_type, (TFloat, TBool, TUnknown)):
-            old_type = TInt(64, True)
+            old_type = tp.safe_realtype(expr.ctype())
+        if isinstance(old_type, (tp.Float, tp.Bool, tp.Unknown)):
+            old_type = tp.Int(64, True)
             expr = Cast(site, expr, old_type)
-        elif isinstance(old_type, (TPtr, TArray, TFunction)):
-            old_type = TInt(64, False)
+        elif isinstance(old_type, (tp.Ptr, tp.Array, tp.Function)):
+            old_type = tp.Int(64, False)
             expr = Cast(site, expr, old_type)
         elif not old_type.is_int:
-            raise ECAST(site, expr, new_type)
+            raise E.CAST(site, expr, new_type)
         if not dml.globals.compat_dml12_int(site):
             # (uint64)x -> x if x is already uint64
-            if (isinstance(old_type, TInt)
-                and isinstance(real, TInt)
+            if (isinstance(old_type, tp.Int)
+                and isinstance(real, tp.Int)
                 and old_type.bits == real.bits
                 and old_type.signed == real.signed):
                 return expr
@@ -5004,44 +5007,44 @@ def mkCast(site, expr, new_type):
                 expr = Cast(site, expr, new_type)
             return expr
     elif real.is_int and real.is_endian:
-        old_type = safe_realtype(expr.ctype())
-        if old_type.is_arith or isinstance(old_type, TPtr):
+        old_type = tp.safe_realtype(expr.ctype())
+        if old_type.is_arith or isinstance(old_type, tp.Ptr):
             return mkApply(
                 expr.site,
                 mkLit(expr.site, *real.get_store_fun()),
-                (mkCast(expr.site, expr, TInt(64, False)),))
+                (mkCast(expr.site, expr, tp.Int(64, False)),))
         else:
-            raise ECAST(site, expr, new_type)
-    if ((real.is_arith or isinstance(real, TBool))
-         and (old_type.is_arith or isinstance(old_type, TBool))):
+            raise E.CAST(site, expr, new_type)
+    if ((real.is_arith or isinstance(real, tp.Bool))
+         and (old_type.is_arith or isinstance(old_type, tp.Bool))):
         assert (not (real.is_int and real.is_endian)
                 and not (old_type.is_int and old_type.is_endian))
         return Cast(site, expr, new_type)
-    if ((isinstance(real, (TBool, TPtr)) or real.is_int)
-        and (isinstance(old_type, (TBool, TPtr, TArray, TFunction))
+    if ((isinstance(real, (tp.Bool, tp.Ptr)) or real.is_int)
+        and (isinstance(old_type, (tp.Bool, tp.Ptr, tp.Array, tp.Function))
              or old_type.is_int)):
         assert (not (real.is_int and real.is_endian)
                 and not (old_type.is_int and old_type.is_endian))
-        if isinstance(old_type, (TPtr, TArray)) and isinstance(real, TPtr):
+        if isinstance(old_type, (tp.Ptr, tp.Array)) and isinstance(real, tp.Ptr):
             old_base = old_type.base
             new_base = real.base
             old_base_deep = old_base
-            while isinstance(old_base_deep, TArray):
+            while isinstance(old_base_deep, tp.Array):
                 old_base_deep = old_base_deep.base
 
             if (not dml.globals.compat_dml12_int(site)
-                and isinstance(old_base_deep, (TLayout, TEndianInt))
+                and isinstance(old_base_deep, (tp.Layout, tp.EndianInt))
                 and new_base.is_int and not new_base.is_endian
                 and not new_base.bits == 8
                 and not (old_base_deep.is_int and old_base_deep.bits == 8)):
                 byte_order = (old_base_deep.byte_order
                               if old_base_deep.is_int
                               else old_base_deep.endian)
-                likely_intended = TEndianInt(new_base.bits,
+                likely_intended = tp.EndianInt(new_base.bits,
                                              new_base.signed,
                                              byte_order,
                                              const=new_base.const)
-                report(WPCAST(site, old_base, new_base, likely_intended))
+                report(W.PCAST(site, old_base, new_base, likely_intended))
 
         return Cast(site, expr, new_type)
 
@@ -5049,15 +5052,15 @@ def mkCast(site, expr, new_type):
     # for compatibility reasons
     if (dml.globals.dml_version == (1, 2) and isinstance(expr, NodeRef)
         and expr.get_ref()[0].objtype == 'method'
-        and isinstance(real, TPtr) and isinstance(real.base, TFunction)):
+        and isinstance(real, tp.Ptr) and isinstance(real.base, tp.Function)):
         return Cast(site, expr, new_type)
     # Allow casts from dev to pointer types in DML 1.2 for compatibility
     # reasons
     if (dml.globals.dml_version == (1, 2) and isinstance(expr, NodeRef)
-        and expr.get_ref()[0].objtype == 'device' and isinstance(real, TPtr)):
+        and expr.get_ref()[0].objtype == 'device' and isinstance(real, tp.Ptr)):
         return Cast(site, expr, new_type)
 
-    raise ECAST(site, expr, new_type)
+    raise E.CAST(site, expr, new_type)
 
 class RValue(Expression):
     '''Wraps an lvalue to prohibit write. Useful when a composite
@@ -5110,14 +5113,14 @@ class InlinedParam(RValue):
         return self.expr.value
 
 def mkInlinedParam(site, expr, name, type):
-    if not defined(expr):
+    if not expr_util.defined(expr):
         raise ICE(site, 'undefined parameter')
     if isinstance(expr, InlinedParam):
         expr = expr.expr
     if isinstance(expr, IntegerConstant):
         value = expr.value
-        type = realtype(type)
-        etype = realtype(expr.ctype())
+        type = tp.realtype(type)
+        etype = tp.realtype(expr.ctype())
         # Checking type.canstore(etype) isn't good enough here
         if not type.signed and value < 0:
             value += (1 << etype.bits)
@@ -5129,17 +5132,17 @@ def mkInlinedParam(site, expr, name, type):
     return InlinedParam(site, expr, name)
 
 class QName(Expression):
-    type = TPtr(TNamed('char', const = True))
+    type = tp.Ptr(tp.Named('char', const = True))
     @auto_init
     def __init__(self, site, node, relative, indices):
         if self.indices and not all(x.constant for x in self.indices):
             crep.require_dev(site)
     def __str__(self):
-        return dollar(self.site) + '%s.qname' % (self.node)
+        return logging.dollar(self.site) + '%s.qname' % (self.node)
     def read(self):
         if (dml.globals.dml_version == (1, 2)
             and self.node.logname() != self.node.logname_anonymized()):
-            report(WCONFIDENTIAL(self.site))
+            report(W.CONFIDENTIAL(self.site))
 
         if self.indices and not all(x.constant for x in self.indices):
             idx_args = [", (int)" + idx.read() for idx in self.indices]
@@ -5160,7 +5163,7 @@ mkQName = QName
 
 def get_anonymized_name(obj):
     if obj.objtype == 'register':
-        offset = param_expr(obj, 'offset',
+        offset = expr_util.param_expr(obj, 'offset',
                             (mkIntegerLiteral(obj.site, 0),) * obj.dimensions)
         if undefined(offset):
             # acquire a unique name, based on this banks unmapped registers
@@ -5173,7 +5176,7 @@ def get_anonymized_name(obj):
     else:
         assert(obj.objtype == 'field')
         [msb, lsb] = [
-            param_int(
+            expr_util.param_int(
                 obj, name,
                 indices=(mkIntegerLiteral(obj.site, 0),) * obj.dimensions)
             for name in ['msb', 'lsb']]
@@ -5182,14 +5185,14 @@ def get_anonymized_name(obj):
 class HiddenName(StringConstant):
     "Name of the object that will be anonymized in log statements"
     slots = ('node',)
-    type = TPtr(TNamed('char', const=True))
+    type = tp.Ptr(tp.Named('char', const=True))
     @auto_init
     def __init__(self, site, value, node):
         assert(node.objtype in {'register', 'field'})
     def __str__(self):
-        return dollar(self.site) + '%s.name' % (self.node,)
+        return logging.dollar(self.site) + '%s.name' % (self.node,)
     def read(self):
-        report(WCONFIDENTIAL(self.site))
+        report(W.CONFIDENTIAL(self.site))
         return self.quoted
     def fmt(self):
         return (get_anonymized_name(self.node), ())
@@ -5198,12 +5201,12 @@ mkHiddenName = HiddenName
 
 class HiddenQName(Expression):
     "QName of the object that will be anonymised in log statements"
-    type = TPtr(TNamed('char', const = True))
+    type = tp.Ptr(tp.Named('char', const = True))
     @auto_init
     def __init__(self, site, node, indices):
         assert(node.objtype in {'register', 'field'})
     def __str__(self):
-        return dollar(self.site) + '%s.qname' % (self.node)
+        return logging.dollar(self.site) + '%s.qname' % (self.node)
     def read(self):
         return QName(self.site, self.node, 'device', self.indices).read()
     def fmt(self):
@@ -5217,7 +5220,7 @@ class HiddenQName(Expression):
 mkHiddenQName = HiddenQName
 
 class DeviceObject(Expression):
-    type = TPtr(TNamed('conf_object_t'))
+    type = tp.Ptr(tp.Named('conf_object_t'))
     @auto_init
     def __init__(self, site):
         crep.require_dev(site)
@@ -5228,7 +5231,7 @@ class DeviceObject(Expression):
 mkDeviceObject = DeviceObject
 
 class LogGroup(Expression):
-    type = TInt(64, False, const=True)
+    type = tp.Int(64, False, const=True)
     slots = ('name',)
     priority = 1000
     @auto_init
@@ -5275,19 +5278,19 @@ class ExpressionInitializer(Initializer):
         # be UB as long as the session variable hasn't been initialized
         # previously.
         site = self.expr.site
-        rt = safe_realtype_shallow(typ)
+        rt = tp.safe_realtype_shallow(typ)
         # There is a reasonable implementation for this case (memcpy), but it
         # never occurs today
-        assert not isinstance(rt, TArray)
-        if isinstance(rt, TEndianInt):
+        assert not isinstance(rt, tp.Array)
+        if isinstance(rt, tp.EndianInt):
             return (f'{rt.dmllib_fun("copy")}((void *)&{dest},'
                     + f' {self.expr.read()})')
-        elif deep_const(typ):
-            shallow_deconst_typ = safe_realtype_unconst(typ)
+        elif tp.deep_const(typ):
+            shallow_deconst_typ = tp.safe_realtype_unconst(typ)
             # a const-qualified ExternStruct can be leveraged by the user as a
             # sign that there is some const-qualified member unknown to DMLC
-            if (isinstance(shallow_deconst_typ, TExternStruct)
-                or deep_const(shallow_deconst_typ)):
+            if (isinstance(shallow_deconst_typ, tp.ExternStruct)
+                or tp.deep_const(shallow_deconst_typ)):
                 # Expression statement to delimit lifetime of compound literal
                 # TODO it's possible to improve the efficiency of this by not
                 # using a compound literal if self.expr is c_lval.
@@ -5296,12 +5299,12 @@ class ExpressionInitializer(Initializer):
                 # and it's unclear if that path could ever be taken.
                 return ('({ memcpy((void *)&%s, (%s){%s}, sizeof(%s)); })'
                         % (dest,
-                           TArray(typ,
+                           tp.Array(typ,
                                   mkIntegerLiteral(site, 1)).declaration(''),
                            mkCast(site, self.expr, typ).read(),
                            dest))
             else:
-                return (f'*({TPtr(shallow_deconst_typ).declaration("")})'
+                return (f'*({tp.Ptr(shallow_deconst_typ).declaration("")})'
                         + f'&{dest} = {self.expr.read()}')
         else:
             return f'{dest} = {self.expr.read()}'
@@ -5332,7 +5335,7 @@ class CompoundInitializer(Initializer):
         '''output C statements to assign an lvalue'''
         # (void *) cast to avoid GCC erroring if the target type is (partially)
         # const-qualified. See ExpressionInitializer.assign_to
-        if isinstance(typ, (TNamed, TArray, TStruct)):
+        if isinstance(typ, (tp.Named, tp.Array, tp.Struct)):
             # Expression statement to delimit lifetime of compound literal
             return ('({ memcpy((void *)&%s, &(%s)%s, sizeof(%s)); })'
                     % (dest, typ.declaration(''), self.read(), dest))
@@ -5373,13 +5376,13 @@ class DesignatedStructInitializer(Initializer):
         return CompoundLiteral(self.site, self, typ)
     def assign_to(self, dest, typ):
         '''output C statements to assign an lvalue'''
-        typ = safe_realtype(typ)
-        if isinstance(typ, StructType):
+        typ = tp.safe_realtype(typ)
+        if isinstance(typ, tp.StructType):
             # (void *) cast to avoid GCC erroring if the target type is
             # (partially) const-qualified. See ExpressionInitializer.assign_to
             return ('({ memcpy((void *)&%s, (%s){%s}, sizeof(%s)); })'
                     % (dest,
-                       TArray(typ,
+                       tp.Array(typ,
                               mkIntegerLiteral(self.site, 1)).declaration(''),
                        self.read(), dest))
         else:
@@ -5415,9 +5418,9 @@ class MemsetInitializer(Initializer):
         return CompoundLiteral(self.site, self, typ)
     def assign_to(self, dest, typ):
         '''output C statements to assign an lvalue'''
-        assert isinstance(safe_realtype(typ),
-                          (TExternStruct, TStruct, TArray, TEndianInt, TTrait,
-                           THook))
+        assert isinstance(tp.safe_realtype(typ),
+                          (tp.ExternStruct, tp.Struct, tp.Array, tp.EndianInt, tp.Trait,
+                           tp.Hook))
         # (void *) cast to avoid GCC erroring if the target type is
         # (partially) const-qualified. See ExpressionInitializer.assign_to
         return f'memset((void *)&{dest}, 0, sizeof({typ.declaration("")}))'
@@ -5474,11 +5477,11 @@ class Declaration(Statement):
         self.linemark()
 
         if (isinstance(self.init, MemsetInitializer)
-            and not deep_const(self.type)):
+            and not tp.deep_const(self.type)):
             # ducks a potential GCC warning, and also serves to
             # zero-initialize VLAs
             self.type.print_declaration(self.name, unused = self.unused)
-            site_linemark(self.init.site)
+            output.site_linemark(self.init.site)
             out(self.init.assign_to(self.name, self.type) + ';\n')
         else:
             self.type.print_declaration(
@@ -5552,14 +5555,14 @@ class CText(Code):
     def toc(self):
         path = self.site.filename()
         (ident, h_path) = dmldir_macro(path)
-        out('#define %s "%s"\n' % (ident, quote_filename(h_path)))
+        out('#define %s "%s"\n' % (ident, output.quote_filename(h_path)))
         if dml.globals.linemarks:
             linemark(self.site.lineno, path)
         out(self.text)
         if not output.current().bol:
             out('\n')
         if dml.globals.linemarks:
-            reset_line_directive()
+            output.reset_line_directive()
         out('#undef %s\n' % (ident,))
 
 mkCText = CText
@@ -5583,7 +5586,7 @@ def lookup_var(site, scope, name):
 
 def log_object(site, node, indices):
     return mkLit(site, crep.conf_object(site, node, indices),
-                 TPtr(TNamed("conf_object_t")))
+                 tp.Ptr(tp.Named("conf_object_t")))
 
 def log_statement(site, logobj, logtype, level, groups, fmt, *args):
     if logtype in {'warning', 'error', 'critical'}:
@@ -5596,10 +5599,10 @@ def log_statement(site, logobj, logtype, level, groups, fmt, *args):
     if groups is None:
         groups = mkIntegerLiteral(site, 0)
 
-    inargtypes = (([TInt(32, True)] if lvl else [])
-                  + [TPtr(TNamed("conf_object_t")), TInt(64, False),
-                     TPtr(TInt(8, True, const=True))])
-    fun = mkLit(site, logfunc, TFunction(inargtypes, TVoid(), varargs=True))
+    inargtypes = (([tp.Int(32, True)] if lvl else [])
+                  + [tp.Ptr(tp.Named("conf_object_t")), tp.Int(64, False),
+                     tp.Ptr(tp.Int(8, True, const=True))])
+    fun = mkLit(site, logfunc, tp.Function(inargtypes, tp.Void(), varargs=True))
 
     x = Apply(site, fun,
               lvl +

@@ -3,6 +3,8 @@
 
 import simics;
 import stest;
+import testenv
+obj = testenv.instantiate()
 
 after_to_m_elem = ['after', ["('g[%u].m', (None, None))", [2], [2, True],
                              [['dev', []]]]]

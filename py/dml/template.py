@@ -7,8 +7,8 @@ import os
 import functools
 from . import ast, logging
 from . import breaking_changes
-from .logging import *
-from .messages import *
+from .logging import ICE, report
+from . import errors as E, porting as P
 from .set import Set
 import dml.globals
 import dml.traits
@@ -230,9 +230,9 @@ def flatten_ifs(in_each_specs, templates, stmts, preconds):
                                           f, preconds + [neg]))
             if logging.show_porting:
                 if t:
-                    PWUNUSED.positive_conds.add(cond)
+                    P.WUNUSED.positive_conds.add(cond)
                 if f:
-                    PWUNUSED.negative_conds.add(neg)
+                    P.WUNUSED.negative_conds.add(neg)
         elif stmt.kind == 'object':
             composite.append(stmt)
         elif stmt.kind == 'in_each':
@@ -280,7 +280,7 @@ def object_spec_from_asts(site, stmts, templates, inferior, in_each_structure,
                                         '_write_unimplemented': 'write_unimpl',}
                     for (issite, name) in template_refs:
                         if name in template_renames:
-                            report(PRENAME_TEMPLATE(issite, name,
+                            report(P.RENAME_TEMPLATE(issite, name,
                                                     template_renames[name]))
                 is_stmts.extend([(issite, templates[name])
                                  for (issite, name) in template_refs])
@@ -380,7 +380,7 @@ def process_templates(template_decls):
                     # delay error until template instantiation
                     dml.globals.missing_templates.add(missing)
                 else:
-                    report(ENTMPL(site, missing))
+                    report(E.NTMPL(site, missing))
                 template_decls[missing] = (site, [], None)
             return process_templates(template_decls)
     try:
@@ -393,9 +393,9 @@ def process_templates(template_decls):
             (ref_asts, _, _) = rank_structure(asts)
             is_sites.append(ref_asts[p].site)
         if any(name.startswith('@') for name in e.cycle):
-            report(ECYCLICIMP(is_sites))
+            report(E.CYCLICIMP(is_sites))
         else:
-            report(ECYCLICTEMPLATE(is_sites))
+            report(E.CYCLICTEMPLATE(is_sites))
         for name in e.cycle:
             # prune the templates that created a cycle
             (site, _, _) = template_decls[name]

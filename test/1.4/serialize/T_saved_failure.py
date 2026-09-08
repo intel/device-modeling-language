@@ -3,6 +3,8 @@
 
 import stest
 import simics
+import testenv
+obj = testenv.instantiate()
 
 with stest.expect_exception_mgr(simics.SimExc_IllegalValue):
     obj.g_saved_objects = [[['g[%u]', [1]], ['dev', []]],

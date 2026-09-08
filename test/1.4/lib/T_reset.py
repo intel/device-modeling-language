@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import stest
+import testenv
+obj = testenv.instantiate()
 stest.expect_equal(obj.b_r, [0, 1])
 stest.expect_equal(obj.b_p, 0)
 stest.expect_equal(obj.b_q, 0x123b)

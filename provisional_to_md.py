@@ -8,7 +8,6 @@ sys.path.append(path_to_dml)
 dml12_only = {'1.2': True, '1.4': False}[dml_version]
 
 from dml import provisional
-from dml.env import api_versions, default_api_version
 
 with open(outfile, 'w') as f:
     f.write(Path(header).read_text())

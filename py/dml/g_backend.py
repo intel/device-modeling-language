@@ -6,11 +6,10 @@
 __all__ = ('generate',)
 
 import pickle as pickle
-from . import ctree, crep, expr_util, types
+from . import crep, types
 from . import logging
 from .expr import mkLit
-from .logging import dollar
-import dml.globals
+
 
 VERSION = (0, 1)
 
@@ -50,7 +49,7 @@ def en_parameter(node):
     try:
         with crep.DeviceInstanceContext():
             expr = node.get_expr(tuple(
-                mkLit(node.site, dollar(node.site) + idxvar, types.TInt(32, False))
+                mkLit(node.site, logging.dollar(node.site) + idxvar, types.Int(32, False))
                 for idxvar in node.parent.idxvars()))
     except logging.DMLError:
         import os, sys, traceback

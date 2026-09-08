@@ -1,15 +1,17 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
-from .dmllex import *
+# PLY discovers t_* rules from module namespace
+from .dmllex import *  # noqa: F403
 
-tokens = common_tokens + ('DOLLAR', 'DOTDOT', 'HASH')
+tokens = (common_tokens  # noqa: F405
+          + ('DOLLAR', 'DOTDOT', 'HASH'))
 t_DOLLAR = r'\$'
 t_DOTDOT = r'\.\.'
 t_HASH = r'\#'
 
-keywords_dml12 = dict(keywords_common)
-reserved_idents = reserved_idents_common
+keywords_dml12 = dict(keywords_common)  # noqa: F405
+reserved_idents = reserved_idents_common  # noqa: F405
 for kw in ['parameter', 'trait', 'nothrow', 'data']:
     keywords_dml12[kw] = kw.upper()
     tokens += (kw.upper(),)

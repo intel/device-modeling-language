@@ -6,7 +6,6 @@ from pathlib import Path
 import re
 import json
 import functools
-import traceback
 
 def lookup(f, dirs):
     for d in dirs:

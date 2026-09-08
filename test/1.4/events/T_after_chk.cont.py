@@ -1,13 +1,14 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import simics
 import stest
+import conf
 
-run_command("peq")
+simics.run_command("peq")
 conf.obj.cancel_afters = None
 print("Running 2 s")
-SIM_continue(2000000)
-
+simics.SIM_continue(2000000)
 stest.expect_equal(conf.obj.flag, [True]*2)
 stest.expect_equal(conf.obj.g_flag, [False]*2)
 stest.expect_equal(conf.obj.port.p[0][0].flag, [False]*2)

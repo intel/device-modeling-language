@@ -3,6 +3,8 @@
 
 import stest
 import dev_util
+import testenv
+obj = testenv.instantiate()
 
 stest.expect_equal(obj.c, [[None, None, None], [None, None, None]])
 

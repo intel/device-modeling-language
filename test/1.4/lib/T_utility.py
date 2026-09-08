@@ -4,7 +4,9 @@
 import stest
 import dev_util
 import sim_commands
-import contextlib
+import testenv
+import conf
+obj = testenv.instantiate()
 
 [read_write,
  ignore_write,

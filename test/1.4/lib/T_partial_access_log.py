@@ -1,8 +1,11 @@
 # © 2025 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import simics
 import dev_util
 import stest
+import testenv
+obj = testenv.instantiate()
 
 for (order, bank) in [('little', obj.bank.le), ('big', obj.bank.be)]:
     bank.log_level = 4

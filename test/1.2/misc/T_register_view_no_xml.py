@@ -4,6 +4,8 @@
 import stest
 
 from simics import SIM_get_port_interface
+import testenv
+obj = testenv.instantiate()
 
 b = SIM_get_port_interface(obj, 'register_view', 'b')
 stest.expect_equal(b.description(), "")

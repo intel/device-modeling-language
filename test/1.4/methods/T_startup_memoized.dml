@@ -5,8 +5,6 @@
 dml 1.4;
 device test;
 
-/// INSTANTIATE-MANUALLY
-
 independent method call_on_startup(const char *node, const char *meth) {
     local attr_value_t args = SIM_make_attr_list(
         2, SIM_make_attr_string(node), SIM_make_attr_string(meth));

@@ -8,17 +8,18 @@ import functools
 import contextlib
 import abc
 import os
-from . import objects, logging, crep, codegen, toplevel, topsort
+from . import crep, codegen, symtab, topsort
+from .symtab import global_scope
 from . import breaking_changes, provisional
-from .logging import *
-from .codegen import *
-from .symtab import *
-from .ctree import *
-from .expr import *
-from .expr_util import *
-from .messages import *
+from . import logging
+from .template import Rank
+from .logging import ICE, DMLError, report
+from .codegen import c_extra_inargs, c_rettype, eval_type
+from . import ctree as c
+from .expr import mkLit, NonValue
+from . import errors as E, warnings as W
 from .slotsmeta import auto_init
-from .types import *
+from . import types as tp
 from .set import Set
 import dml.globals
 
@@ -27,7 +28,6 @@ __all__ = (
     'merge_ancestor_vtables',
     'typecheck_method_override',
     'ObjTraits',
-    'TraitObjMethod',
     'mktrait',
     'NoDefaultSymbol',
     'AmbiguousDefaultSymbol',
@@ -42,16 +42,16 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
     def check_namecoll(name, site):
         if name in methods:
             (othersite, _, _, _, _, _, _, _, _, _, _) = methods[name]
-            raise ENAMECOLL(site, othersite, name)
+            raise E.NAMECOLL(site, othersite, name)
         if name in params:
             (othersite, _) = params[name]
-            raise ENAMECOLL(site, othersite, name)
+            raise E.NAMECOLL(site, othersite, name)
         if name in sessions:
             (othersite, _) = sessions[name]
-            raise ENAMECOLL(site, othersite, name)
+            raise E.NAMECOLL(site, othersite, name)
         if name in hooks:
             (othersite, _, _) = hooks[name]
-            raise ENAMECOLL(site, othersite, name)
+            raise E.NAMECOLL(site, othersite, name)
 
     for ast in subasts:
         try:
@@ -62,13 +62,13 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                 startup = 'startup' in qualifiers
                 memoized = 'memoized' in qualifiers
                 if (startup and not independent) or (memoized and not startup):
-                    raise ICE(impl.site,
+                    raise ICE(ast.site,
                               'Invalid qualifier combination: '
                               + ' '.join(['independent']*independent
                                          + ['startup']*startup
                                          + ['memoized']*memoized))
-                inp = eval_method_inp(inp_asts, None, global_scope)
-                outp = eval_method_outp(outp_asts, None, global_scope)
+                inp = codegen.eval_method_inp(inp_asts, None, global_scope)
+                outp = codegen.eval_method_outp(outp_asts, None, global_scope)
                 check_namecoll(mname, ast.site)
                 methods[mname] = (ast.site, inp, outp, throws, independent,
                                   startup, memoized, overridable,
@@ -79,7 +79,7 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                     (sname, type_ast) = decl_ast.args
                     (struct_defs, stype) = eval_type(
                         type_ast, ast.site, None, global_scope)
-                    add_late_global_struct_defs(struct_defs)
+                    tp.add_late_global_struct_defs(struct_defs)
                     check_namecoll(sname, ast.site)
                     sessions[sname] = (ast.site, stype)
             elif ast.kind == 'param':
@@ -90,7 +90,7 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                                                  global_scope)
                 # this would be trivial to support, but completely meaningless
                 for (err_site, _) in struct_defs:
-                    report(EANONSTRUCT(err_site, "parameter type"))
+                    report(E.ANONSTRUCT(err_site, "parameter type"))
                 check_namecoll(pname, ast.site)
                 params[pname] = (ast.site, ptype)
             elif ast.kind == 'hook':
@@ -100,10 +100,10 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                 for type_ast in type_asts:
                     (struct_defs, dtype) = eval_type(type_ast, ast.site, None,
                                                      global_scope)
-                    add_late_global_struct_defs(struct_defs)
-                    # TODO maybe realtype?
+                    tp.add_late_global_struct_defs(struct_defs)
+                    # TODO maybe tp.realtype?
                     msg_types.append(dtype)
-                array_lens = tuple(eval_arraylen(len_ast, global_scope)
+                array_lens = tuple(codegen.eval_arraylen(len_ast, global_scope)
                                    for len_ast in arraylen_asts)
                 check_namecoll(hname, ast.site)
                 hooks[hname] = (ast.site, array_lens, msg_types)
@@ -114,7 +114,7 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
     return mktrait(site, name, ancestors, methods, params, sessions, hooks,
                    template_symbols)
 
-class NoDefaultSymbol(Symbol):
+class NoDefaultSymbol(symtab.Symbol):
     """A broken reference to 'default' inside a method that has no default
     method. This is represented as an explicit symbol in order to
     report ENDEFAULT instead of the slightly less informative
@@ -122,9 +122,9 @@ class NoDefaultSymbol(Symbol):
     def __init__(self, site):
         super(NoDefaultSymbol, self).__init__('default', site=site)
     def expr(self, site):
-        raise ENDEFAULT(site)
+        raise E.NDEFAULT(site)
 
-class AmbiguousDefaultSymbol(Symbol):
+class AmbiguousDefaultSymbol(symtab.Symbol):
     """A broken reference to 'default' inside a method that has two
     possible parent methods. This is represented as an explicit
     symbol in order to report EAMBDEFAULT instead of the slightly
@@ -134,7 +134,7 @@ class AmbiguousDefaultSymbol(Symbol):
             'default', site=default_method_sites[0])
         self.default_method_sites = default_method_sites
     def expr(self, site):
-        raise EAMBDEFAULT(site, self.default_method_sites)
+        raise E.AMBDEFAULT(site, self.default_method_sites)
 
 class TraitVTableItem(metaclass=abc.ABCMeta):
     '''A value for a struct field in a vtable instance'''
@@ -180,10 +180,10 @@ class TraitMethod(TraitVTableItem):
         assert self.memoized
         if self._memo_outs_struct is None:
             memo_dict = {'p_' + name: typ for (name, typ) in self.outp}
-            memo_dict['ran'] = TInt(8, True)
+            memo_dict['ran'] = tp.Int(8, True)
             if self.throws:
-                memo_dict['threw'] = TBool()
-            self._memo_outs_struct = TStruct(
+                memo_dict['threw'] = tp.Bool()
+            self._memo_outs_struct = tp.Struct(
                 memo_dict, label=f'_memo_{self.trait.name}__{self.name}')
         return self._memo_outs_struct
 
@@ -224,9 +224,9 @@ class TraitMethod(TraitVTableItem):
     def codegen_body(self):
         with (crep.DeviceInstanceContext()
               if not self.independent else contextlib.nullcontext()):
-            scope = MethodParamScope(self.trait.scope(global_scope))
+            scope = symtab.MethodParamScope(self.trait.scope(global_scope))
             implicit_inargs = self.vtable_trait.implicit_args()
-            site = SimpleSite(self.site.loc())
+            site = logging.SimpleSite(self.site.loc())
             if len(self.default_traits) > 1:
                 default = AmbiguousDefaultSymbol(
                     [trait.method_impls[self.name].site
@@ -235,11 +235,11 @@ class TraitMethod(TraitVTableItem):
                 [default_trait] = self.default_traits
                 default_method = default_trait.method_impls[self.name]
                 [(name, typ)] = implicit_inargs
-                default = ExpressionSymbol(
+                default = c.ExpressionSymbol(
                     'default',
-                    TraitMethodDirect(
+                    c.TraitMethodDirect(
                         default_method.site,
-                        mkLit(site, cident(name), typ),
+                        mkLit(site, tp.cident(name), typ),
                         default_method),
                     site)
             else:
@@ -247,7 +247,7 @@ class TraitMethod(TraitVTableItem):
 
             for (n, t) in self.outp:
                 # See SIMICS-19028
-                if deep_const(t):
+                if tp.deep_const(t):
                     raise ICE(self.site,
                               'Methods with (partially) const output/return '
                               + 'values are not yet supported.')
@@ -257,21 +257,21 @@ class TraitMethod(TraitVTableItem):
                 memoization = codegen.SharedIndependentMemoized(self)
             else:
                 memoization = None
-            body = codegen_method(
+            body = codegen.codegen_method(
                 self.astbody.site, self.inp, self.outp, self.throws,
                 self.independent, memoization, self.astbody, default,
-                Location(dml.globals.device, ()), scope, self.rbrace_site)
+                c.Location(dml.globals.device, ()), scope, self.rbrace_site)
 
             downcast_path = self.downcast_path()
             if downcast_path:
-                trait_decl = mkInline(
+                trait_decl = c.mkInline(
                     site,
                     '%s UNUSED = DOWNCAST(%s, %s, %s);' % (
-                        self.trait.type().declaration('_' + cident(self.trait.name)),
-                        '_' + cident(self.vtable_trait.name),
-                        cident(self.trait.name),
-                        '.'.join(cident(t.name) for t in downcast_path)))
-                body = mkCompound(site, [trait_decl, body])
+                        self.trait.type().declaration('_' + tp.cident(self.trait.name)),
+                        '_' + tp.cident(self.vtable_trait.name),
+                        tp.cident(self.trait.name),
+                        '.'.join(tp.cident(t.name) for t in downcast_path)))
+                body = c.mkCompound(site, [trait_decl, body])
             return body
 
 def merge_ancestor_vtables(ancestors, site):
@@ -285,7 +285,7 @@ def merge_ancestor_vtables(ancestors, site):
                 # This may mean that an abstract method or parameter is
                 # defined in two traits. We could allow this, as long
                 # as types match, and it's overridden in an unambiguous way.
-                report(EAMBINH(site, None, name,
+                report(E.AMBINH(site, None, name,
                                ancestor.name, ancestor_vtables[name].name))
             else:
                 ancestor_vtables[name] = ancestor
@@ -308,7 +308,7 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
             if coll:
                 (orig_site, _) = coll
                 (param_site, _) = params[name]
-                report(ENAMECOLL(param_site, orig_site, name))
+                report(E.NAMECOLL(param_site, orig_site, name))
                 bad_params.append(name)
     for name in bad_params:
         del params[name]
@@ -320,7 +320,7 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
             if coll:
                 (orig_site, _) = coll
                 (session_site, _) = sessions[name]
-                report(ENAMECOLL(session_site, orig_site, name))
+                report(E.NAMECOLL(session_site, orig_site, name))
                 bad_sessions.append(name)
     for name in bad_sessions:
         del sessions[name]
@@ -333,7 +333,7 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
         for p in inp:
             if p.ident:
                 if p.ident in argnames:
-                    report(EARGD(msite, p.ident))
+                    report(E.ARGD(msite, p.ident))
                     bad_methods.add(name)
                 argnames.add(p.ident)
 
@@ -345,7 +345,7 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
                 (orig_site, orig_trait) = coll
                 if orig_trait.member_kind(name) != 'method':
                     # cannot override non-method with method
-                    report(ENAMECOLL(msite, orig_site, name))
+                    report(E.NAMECOLL(msite, orig_site, name))
                     bad_methods.add(name)
 
                 elif body is None and name in ancestor_vtables:
@@ -354,28 +354,28 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
                     # declarations would make no sense, because the
                     # only sensible interpretation would be to ignore
                     # the declaration.
-                    report(EAMETH(msite, orig_site, name))
+                    report(E.AMETH(msite, orig_site, name))
                     bad_methods.add(name)
 
                 elif (name in orig_trait.method_impls
                       and not orig_trait.method_impls[name].overridable):
-                    report(EDMETH(msite, orig_trait.method_impls[name].site,
+                    report(E.DMETH(msite, orig_trait.method_impls[name].site,
                                   name))
                     bad_methods.add(name)
                 elif explicit_decl:
-                    report(EOVERRIDEMETH(msite, orig_site, name,
+                    report(E.OVERRIDEMETH(msite, orig_site, name,
                                          'default ' * overridable))
                     bad_methods.add(name)
                 elif name not in ancestor_vtables:
                     raise ICE(msite,
                               'ancestor is overridable but not in vtable')
-                # Type-checking of overrides is done later, after typedefs
+                # Type-checking of overrides is done later, after tp.typedefs
                 # have been populated with all template types.
                 # See Trait.typecheck_methods()
 
         if (body is not None and not some_coll and not explicit_decl
             and msite.provisional_enabled(provisional.explicit_method_decls)):
-            report(ENOVERRIDEMETH(msite, name, 'default ' * overridable))
+            report(E.NOVERRIDEMETH(msite, name, 'default ' * overridable))
             bad_methods.add(name)
 
     for name in bad_methods:
@@ -388,7 +388,7 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
             if coll:
                 (orig_site, _) = coll
                 (session_site, _, _) = hooks[name]
-                report(ENAMECOLL(session_site, orig_site, name))
+                report(E.NAMECOLL(session_site, orig_site, name))
                 bad_hooks.append(name)
     for name in bad_hooks:
         del hooks[name]
@@ -411,33 +411,33 @@ def typecheck_method_override(left, right):
     (site0, inp0, outp0, throws0, independent0, startup0, memoized0) = left
     (site1, inp1, outp1, throws1, independent1, startup1, memoized1) = right
     if len(inp0) != len(inp1):
-        raise EMETH(site0, site1, "different number of input arguments")
+        raise E.METH(site0, site1, "different number of input arguments")
     if len(outp0) != len(outp1):
-        raise EMETH(site0, site1, "different number of output arguments")
+        raise E.METH(site0, site1, "different number of output arguments")
     if throws0 != throws1:
-        raise EMETH(site0, site1, "different 'throws' annotations")
+        raise E.METH(site0, site1, "different 'throws' annotations")
     for (p0, p1) in zip(inp0, inp1):
-        t0 = safe_realtype_unconst(p0.typ)
-        t1 = safe_realtype_unconst(p1.typ)
+        t0 = tp.safe_realtype_unconst(p0.typ)
+        t1 = tp.safe_realtype_unconst(p1.typ)
         ok = (t0.eq_fuzzy(t1)
               if not breaking_changes.strict_typechecking.enabled
               else t0.eq(t1))
         if not ok:
-            raise EMETH(site0, site1,
+            raise E.METH(site0, site1,
                         f"mismatching types in input argument {p0.logref}")
     for (i, ((_, t0), (_, t1))) in enumerate(zip(outp0, outp1)):
-        t0 = safe_realtype_unconst(t0)
-        t1 = safe_realtype_unconst(t1)
+        t0 = tp.safe_realtype_unconst(t0)
+        t1 = tp.safe_realtype_unconst(t1)
         ok = (t0.eq_fuzzy(t1)
               if not breaking_changes.strict_typechecking.enabled
               else t0.eq(t1))
         if not ok:
-            raise EMETH(site0, site1,
+            raise E.METH(site0, site1,
                         "mismatching types in output argument %d" % (i + 1,))
 
     def qualifier_check(qualifier_name, qualifier0, qualifier1):
         if qualifier0 != qualifier1:
-            raise EMETH(site0, site1,
+            raise E.METH(site0, site1,
                         (f"one declaration is qualified as {qualifier_name}, "
                          + "but the other is not"))
 
@@ -500,7 +500,7 @@ def merge_method_impl_maps(site, parents):
                                 and (len(existing_impls) != 1
                                      or existing_impls[0].method_impls[
                                          mname].overridable))):
-                            report(EAMBINH(
+                            report(E.AMBINH(
                                 site, None, mname,
                                 unmerged_impl.name,
                                 existing_impls[0].name))
@@ -587,7 +587,7 @@ def sort_method_implementations(implementations):
             return rank_to_method[r].overridable
 
         [r1, r2] = sorted(minimal_ancestry[None], key=is_default)[:2]
-        raise EAMBINH(rank_to_method[r1].site,
+        raise E.AMBINH(rank_to_method[r1].site,
                       rank_to_method[r2].site,
                       rank_to_method[r1].name,
                       r1.desc, r2.desc,
@@ -604,10 +604,10 @@ def sort_method_implementations(implementations):
     if (dml.globals.dml_version == (1, 2)
         and os.path.basename(m.site.filename()) != 'dml12-compatibility.dml'):
         if len(implementations) > 2:
-            report(WEXPERIMENTAL(
+            report(W.EXPERIMENTAL(
                 m.site, "more than one level of method overrides"))
         if len(implementations) == 2 and m.overridable:
-            report(WEXPERIMENTAL(
+            report(W.EXPERIMENTAL(
                 m.site, "method with two default declarations"))
 
     return (method_map, method_order)
@@ -692,7 +692,7 @@ class ObjTraits(SubTrait):
         assert isinstance(indices, tuple)
         for trait in self.direct_parents:
             if name in trait.method_impl_traits:
-                ref = ObjTraitRef(site, self.node, trait, indices)
+                ref = c.ObjTraitRef(site, self.node, trait, indices)
                 method = trait.lookup(name, ref, site)
                 assert method
                 return method
@@ -716,7 +716,7 @@ class ReservedSymbol(NonValue):
                # template type, but not if declared inside #if
                'subobj': 'subobject %s',
                }[self.kind] % (self.name,)
-        return ENSHARED(self.site, fmt, self.template, self.decl_site)
+        return E.NSHARED(self.site, fmt, self.template, self.decl_site)
 
 class Trait(SubTrait):
     '''A trait, as defined by a top-level 'trait' statement'''
@@ -761,7 +761,7 @@ class Trait(SubTrait):
             if overridable and name not in ancestor_vtables}
         self.vtable_params = params
         self.vtable_sessions = sessions
-        self.vtable_hooks = {name: (hooks[name], THook(hooks[name][2]))
+        self.vtable_hooks = {name: (hooks[name], tp.Hook(hooks[name][2]))
                              for name in hooks}
         self.vtable_memoized_outs = {
             '_memo_outs_' + name: method.memo_outs_struct
@@ -782,7 +782,7 @@ class Trait(SubTrait):
         return self.name < other.name
 
     def type(self):
-        return TTrait(self)
+        return tp.Trait(self)
 
     def typecheck_members(self):
         self.typecheck_methods()
@@ -791,7 +791,7 @@ class Trait(SubTrait):
             bad_members = []
             for (name, (_, typ)) in table.items():
                 try:
-                    check_named_types(typ)
+                    tp.check_named_types(typ)
                 except DMLError as e:
                     report(e)
                     bad_members.append(name)
@@ -810,7 +810,7 @@ class Trait(SubTrait):
         for (_, inp, outp, _, _, _, _) in self.vtable_methods.values():
             for t in [p.typ for p in inp] + [t for (_, t) in outp]:
                 try:
-                    check_named_types(t)
+                    tp.check_named_types(t)
                 except DMLError as e:
                     report(e)
 
@@ -820,7 +820,7 @@ class Trait(SubTrait):
             if sm.name not in self.vtable_methods:
                 for t in [p.typ for p in sm.inp] + [t for (_, t) in sm.outp]:
                     try:
-                        check_named_types(t)
+                        tp.check_named_types(t)
                     except DMLError as e:
                         bad = True
                         report(e)
@@ -842,17 +842,17 @@ class Trait(SubTrait):
 
     def scope(self, global_scope):
         '''Return a scope for looking up sibling objects in this trait'''
-        s = Symtab(global_scope)
-        selfref = mkLit(self.site, '_' + cident(self.name), self.type())
+        s = symtab.Symtab(global_scope)
+        selfref = mkLit(self.site, '_' + tp.cident(self.name), self.type())
         for name in self.members():
             # This is very hacky, but works well
             try:
-                expr = mkSubRef(self.site, selfref, name, '.')
-            except EINDEPENDENTVIOL:
-                expr = InvalidSymbol(self.site, name, EINDEPENDENTVIOL)
-            s.add(ExpressionSymbol(name, expr, self.site))
+                expr = c.mkSubRef(self.site, selfref, name, '.')
+            except E.INDEPENDENTVIOL:
+                expr = c.InvalidSymbol(self.site, name, E.INDEPENDENTVIOL)
+            s.add(c.ExpressionSymbol(name, expr, self.site))
         # grammar prohibits name collision on 'this'
-        s.add(ExpressionSymbol('this', selfref, self.site))
+        s.add(c.ExpressionSymbol('this', selfref, self.site))
         return s
 
     def empty(self):
@@ -914,7 +914,7 @@ class Trait(SubTrait):
         '''Look up a member of this trait; return a referencing expression or
         None. expr is an expression referencing this trait.'''
         if name == 'templates':
-            return mkTraitTemplatesRef(site, self, expr)
+            return c.mkTraitTemplatesRef(site, self, expr)
         if name in self.method_impl_traits:
             impl_traits = self.method_impl_traits[name]
             if not all(impl_trait.method_impls[name].overridable
@@ -929,42 +929,42 @@ class Trait(SubTrait):
                 [impl_trait] = impl_traits
                 impl = impl_trait.method_impls[name]
                 if self is not impl_trait:
-                    expr = TraitUpcast(site, expr, impl_trait)
+                    expr = c.TraitUpcast(site, expr, impl_trait)
                 if impl_trait is not impl.vtable_trait:
-                    expr = TraitUpcast(site, expr, impl.vtable_trait)
-                return TraitMethodDirect(site, expr, impl)
+                    expr = c.TraitUpcast(site, expr, impl.vtable_trait)
+                return c.TraitMethodDirect(site, expr, impl)
         if name in self.vtable_methods:
             (_, inp, outp, throws, independent, _, _) = \
                 self.vtable_methods[name]
-            return TraitMethodIndirect(site, expr, name, inp, outp, throws,
+            return c.TraitMethodIndirect(site, expr, name, inp, outp, throws,
                                        independent)
         if name in self.vtable_params:
             (_, ptype) = self.vtable_params[name]
-            return TraitParameter(site, expr, name, ptype)
+            return c.TraitParameter(site, expr, name, ptype)
         if name in self.vtable_sessions:
             (_, ptype) = self.vtable_sessions[name]
-            return mkDereference(site, TraitSessionRef(site, expr, name, ptype))
+            return c.mkDereference(site, c.TraitSessionRef(site, expr, name, ptype))
         if name in self.vtable_hooks:
             ((_, dimsizes, _), hooktyp) = self.vtable_hooks[name]
             if dimsizes:
-                return TraitHookArrayRef(site, dimsizes, hooktyp, expr, name,
+                return c.TraitHookArrayRef(site, dimsizes, hooktyp, expr, name,
                                          ())
             else:
-                return TraitHookRef(site, (), hooktyp, expr, name, ())
+                return c.TraitHookRef(site, (), hooktyp, expr, name, ())
         vtable_trait = self.ancestor_vtables.get(name, None)
         if vtable_trait:
             return vtable_trait.lookup(
-                name, TraitUpcast(site, expr, vtable_trait), site)
+                name, c.TraitUpcast(site, expr, vtable_trait), site)
         if name in self.reserved_symbols:
             (kind, decl_site) = self.reserved_symbols[name]
             return ReservedSymbol(site, name, kind, self.name, decl_site)
         return None
 
     def implicit_args(self):
-        return [("_" + cident(self.name), self.type())]
+        return [("_" + tp.cident(self.name), self.type())]
 
     def vtable_method_type(self, inp, outp, throws, independent):
-        return TPtr(TFunction(
+        return tp.Ptr(tp.Function(
             [t for (_, t) in
              crep.maybe_dev_arg(independent) + self.implicit_args()]
             + [p.typ for p in inp]

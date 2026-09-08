@@ -1,13 +1,16 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import simics
 import stest
+import testenv
+obj = testenv.instantiate()
 
 # Every time we access the counter, it will increase by 1
 
 stest.expect_equal(obj.count, 0)
 
-cpu = SIM_create_object("clock", "clock", [["freq_mhz", 1]])
+cpu = simics.SIM_create_object("clock", "clock", [["freq_mhz", 1]])
 obj.queue = cpu
 
 stest.expect_equal(obj.count, 1)
@@ -24,7 +27,7 @@ obj.ev = None
 
 stest.expect_equal(obj.count, 7)
 
-SIM_continue(100000)
+simics.SIM_continue(100000)
 
 stest.expect_equal(obj.count, 9)
 

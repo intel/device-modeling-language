@@ -3,6 +3,8 @@
 
 import stest
 import dev_util
+import testenv
+obj = testenv.instantiate()
 
 for pa1 in obj.port.p:
     for pa2 in pa1:

@@ -1,7 +1,7 @@
 # © 2024 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
-from dml.types import *
+import dml.types as tp
 import dml.globals
 from dml import ctree
 from dml import expr
@@ -14,48 +14,48 @@ import unittest
 class TestClone(unittest.TestCase):
     def test(self):
         # types which support clone
-        typ0 = TVoid()
-        for typ in (TVoid(),
-                    TNamed("int"),
-                    TBool(),
-                    TInt(8, False, {}),
-                    TEndianInt(8, False, 'big-endian', {}),
-                    TFloat("a"),
-                    TArray(typ0, ctree.mkIntegerLiteral(0, 2)),
-                    TPtr(typ0),
-                    TVector(typ0),
-                    TTrait(object()),
-                    TStruct({"name": TInt(32, False)}),
-                    TLayout("big-endian", []),
-                    TDevice("a")):
+        typ0 = tp.Void()
+        for typ in (tp.Void(),
+                    tp.Named("int"),
+                    tp.Bool(),
+                    tp.Int(8, False, {}),
+                    tp.EndianInt(8, False, 'big-endian', {}),
+                    tp.Float("a"),
+                    tp.Array(typ0, ctree.mkIntegerLiteral(0, 2)),
+                    tp.Ptr(typ0),
+                    tp.Vector(typ0),
+                    tp.Trait(object()),
+                    tp.Struct({"name": tp.Int(32, False)}),
+                    tp.Layout("big-endian", []),
+                    tp.Device("a")):
             typ_clone = typ.clone()
             self.assertTrue(
-                realtype(typ_clone).eq(realtype(typ)))
+                tp.realtype(typ_clone).eq(tp.realtype(typ)))
             self.assertTrue(
-                realtype(typ).eq(realtype(typ_clone)))
+                tp.realtype(typ).eq(tp.realtype(typ_clone)))
             typ_clone.const = True
             self.assertFalse(typ.const)
             typ = typ_clone.clone()
             self.assertTrue(typ.const)
 
-        # special case for TraitList, because realtype requires global
+        # special case for tp.TraitList, because tp.realtype requires global
         # state (typedefs)
-        typ = TTraitList("a")
+        typ = tp.TraitList("a")
         typ_clone = typ.clone()
         self.assertTrue(typ.eq(typ_clone))
         self.assertTrue(typ_clone.eq(typ))
         dml.globals.dml_version = (1, 2)
         # types which do not support clone
         with self.assertRaises(logging.ICE):
-            TUnknown().clone()
+            tp.Unknown().clone()
 
-class Typ1(DMLType):
+class Typ1(tp.DMLType):
     def describe(self):
         return 'Typ1'
     def clone(self):
         return Typ1(self.const)
 
-class Typ2(DMLType):
+class Typ2(tp.DMLType):
     def describe(self):
         return 'Typ2'
     def clone(self):
@@ -68,7 +68,7 @@ class TestEq(unittest.TestCase):
         self.assertEqual(t1.hashed(), t2.hashed())
         try:
             self.assertEqual(t1.key(), t2.key())
-        except DMLUnkeyableType:
+        except tp.DMLUnkeyableType:
             pass
 
     def assert_neq(self, t1, t2, hash_collision=False):
@@ -78,7 +78,7 @@ class TestEq(unittest.TestCase):
             self.assertNotEqual(t1.hashed(), t2.hashed())
             try:
                 self.assertNotEqual(t1.key(), t2.key())
-            except DMLUnkeyableType:
+            except tp.DMLUnkeyableType:
                 pass
 
     def test_DMLType(self):
@@ -87,22 +87,22 @@ class TestEq(unittest.TestCase):
         self.assert_neq(Typ1(), Typ2())
 
     def test_IntegerType(self):
-        self.assert_eq(TInt(8, False), TInt(8, False))
-        self.assert_neq(TInt(16, False), TInt(8, False))
+        self.assert_eq(tp.Int(8, False), tp.Int(8, False))
+        self.assert_neq(tp.Int(16, False), tp.Int(8, False))
         # Not equivalent even though the C representations of uint16 and uint13
         # are compatible
-        self.assert_neq(TInt(16, False), TInt(13, False))
+        self.assert_neq(tp.Int(16, False), tp.Int(13, False))
         # Signedness
-        self.assert_neq(TInt(8, True), TInt(8, False))
+        self.assert_neq(tp.Int(8, True), tp.Int(8, False))
 
         # bitfields
-        self.assert_neq(TInt(8, False), TInt(8, False, members={}))
+        self.assert_neq(tp.Int(8, False), tp.Int(8, False, members={}))
 
         def bitfields():
-            return TInt(32, False, { 'a': (TInt(8, False), 13, 6),
-                                     'b': (TInt(13, False), 27, 15) })
+            return tp.Int(32, False, { 'a': (tp.Int(8, False), 13, 6),
+                                     'b': (tp.Int(13, False), 27, 15) })
 
-        self.assert_eq(TInt(8, False, members={}), TInt(8, False, members={}))
+        self.assert_eq(tp.Int(8, False, members={}), tp.Int(8, False, members={}))
         self.assert_eq(bitfields(), bitfields())
 
         @contextmanager
@@ -134,19 +134,19 @@ class TestEq(unittest.TestCase):
             del t.members['b']
 
     def test_TEndianInt(self):
-        self.assert_eq(TEndianInt(8, False, 'big-endian'),
-                       TEndianInt(8, False, 'big-endian'))
-        self.assert_neq(TEndianInt(8, False, 'big-endian'),
-                        TEndianInt(8, False, 'little-endian'))
+        self.assert_eq(tp.EndianInt(8, False, 'big-endian'),
+                       tp.EndianInt(8, False, 'big-endian'))
+        self.assert_neq(tp.EndianInt(8, False, 'big-endian'),
+                        tp.EndianInt(8, False, 'little-endian'))
 
     def test_TFloat(self):
-        self.assert_eq(TFloat('double'), TFloat('double'))
-        self.assert_neq(TFloat('double'), TFloat('float'))
+        self.assert_eq(tp.Float('double'), tp.Float('double'))
+        self.assert_neq(tp.Float('double'), tp.Float('float'))
 
     def mkTArray(self, size, signed=False):
         size = (ctree.mkIntegerConstant(None, size, signed) if size is not None
-                else expr.mkLit(None, 'lit', TInt(32, False)))
-        return TArray(TInt(32, False), size)
+                else expr.mkLit(None, 'lit', tp.Int(32, False)))
+        return tp.Array(tp.Int(32, False), size)
 
     def test_TArray(self):
         # Arrays of constant size need the sizes be equal to be equal.
@@ -193,92 +193,92 @@ class TestEq(unittest.TestCase):
             b.const = True
 
         # Pointers are not equivalent to arrays
-        self.assert_neq(self.mkTArray(4), TPtr(TInt(32, False)))
+        self.assert_neq(self.mkTArray(4), tp.Ptr(tp.Int(32, False)))
 
     def test_TPtr(self):
-        self.assert_eq(TPtr(Typ1()), TPtr(Typ1()))
-        self.assert_neq(TPtr(Typ1()), TPtr(Typ2()))
-        self.assert_neq(TPtr(Typ1(), const=True), TPtr(Typ1()))
-        self.assert_neq(TPtr(Typ1(const=True)), TPtr(Typ1()))
-        self.assert_neq(TPtr(Typ1(), const=True),
-                        TPtr(Typ1(const=True)))
+        self.assert_eq(tp.Ptr(Typ1()), tp.Ptr(Typ1()))
+        self.assert_neq(tp.Ptr(Typ1()), tp.Ptr(Typ2()))
+        self.assert_neq(tp.Ptr(Typ1(), const=True), tp.Ptr(Typ1()))
+        self.assert_neq(tp.Ptr(Typ1(const=True)), tp.Ptr(Typ1()))
+        self.assert_neq(tp.Ptr(Typ1(), const=True),
+                        tp.Ptr(Typ1(const=True)))
 
         # void pointers are not special
-        self.assert_neq(TPtr(Typ1()), TPtr(TVoid()))
+        self.assert_neq(tp.Ptr(Typ1()), tp.Ptr(tp.Void()))
 
     def test_TVector(self):
-        v1 = TVector(Typ1())
+        v1 = tp.Vector(Typ1())
         self.assert_eq(v1, v1.clone())
         v2 = v1.clone()
         v2.const = True
         self.assert_neq(v1, v2)
-        self.assert_neq(v1, TVector(Typ1()))
+        self.assert_neq(v1, tp.Vector(Typ1()))
 
     def test_TTrait(self):
         tr1 = traits.Trait(None, 't1', set(), {}, {}, {}, {}, {}, {}, {})
         tr2 = traits.Trait(None, 't2', set(), {}, {}, {}, {}, {}, {}, {})
 
-        self.assert_eq(TTrait(tr1), TTrait(tr1))
-        self.assert_neq(TTrait(tr1), TTrait(tr2))
+        self.assert_eq(tp.Trait(tr1), tp.Trait(tr1))
+        self.assert_neq(tp.Trait(tr1), tp.Trait(tr2))
 
     def test_TTraitList(self):
-        self.assert_eq(TTraitList('t1'), TTraitList('t1'))
-        self.assert_neq(TTraitList('t1'), TTraitList('t2'))
+        self.assert_eq(tp.TraitList('t1'), tp.TraitList('t1'))
+        self.assert_neq(tp.TraitList('t1'), tp.TraitList('t2'))
 
 
     def test_TStruct(self):
         members = {'a': Typ1()}
-        t1 = TStruct(members, label="a_struct")
-        t2 = TStruct(members)
+        t1 = tp.Struct(members, label="a_struct")
+        t2 = tp.Struct(members)
 
-        self.assert_eq(t1, TStruct(members, label="a_struct"))
+        self.assert_eq(t1, tp.Struct(members, label="a_struct"))
         self.assert_neq(t1, t2)
         self.assert_eq(t2, t2.clone())
-        self.assert_neq(t2, TStruct(members))
+        self.assert_neq(t2, tp.Struct(members))
 
     def test_TExternStruct(self):
-        self.assert_eq(TExternStruct({}, 0), TExternStruct({}, 0))
-        self.assert_eq(TExternStruct({}, "str"), TExternStruct({}, "str"))
-        self.assert_neq(TExternStruct({}, 0), TExternStruct({}, "str"))
+        self.assert_eq(tp.ExternStruct({}, 0), tp.ExternStruct({}, 0))
+        self.assert_eq(tp.ExternStruct({}, "str"), tp.ExternStruct({}, "str"))
+        self.assert_neq(tp.ExternStruct({}, 0), tp.ExternStruct({}, "str"))
 
     def test_TFunction(self):
-        self.assert_eq(TFunction((), TVoid()), TFunction((), TVoid()))
-        self.assert_neq(TFunction((Typ1(),), TVoid()), TFunction((), TVoid()))
+        self.assert_eq(tp.Function((), tp.Void()), tp.Function((), tp.Void()))
+        self.assert_neq(tp.Function((Typ1(),), tp.Void()), tp.Function((), tp.Void()))
 
-        self.assert_eq(TFunction((Typ1(), TPtr(TVoid())), TPtr(Typ2())),
-                       TFunction((Typ1(), TPtr(TVoid())), TPtr(Typ2())))
-        self.assert_neq(TFunction((Typ1(), TPtr(TVoid())), TPtr(Typ1())),
-                        TFunction((Typ1(), TPtr(TVoid())), TPtr(Typ2())))
-        self.assert_neq(TFunction((Typ2(), TPtr(TVoid())), TPtr(Typ2())),
-                        TFunction((Typ1(), TPtr(TVoid())), TPtr(Typ2())))
-        self.assert_neq(TFunction((TPtr(TVoid()), Typ1()), TPtr(Typ2())),
-                        TFunction((Typ1(), TPtr(TVoid())), TPtr(Typ2())))
+        self.assert_eq(tp.Function((Typ1(), tp.Ptr(tp.Void())), tp.Ptr(Typ2())),
+                       tp.Function((Typ1(), tp.Ptr(tp.Void())), tp.Ptr(Typ2())))
+        self.assert_neq(tp.Function((Typ1(), tp.Ptr(tp.Void())), tp.Ptr(Typ1())),
+                        tp.Function((Typ1(), tp.Ptr(tp.Void())), tp.Ptr(Typ2())))
+        self.assert_neq(tp.Function((Typ2(), tp.Ptr(tp.Void())), tp.Ptr(Typ2())),
+                        tp.Function((Typ1(), tp.Ptr(tp.Void())), tp.Ptr(Typ2())))
+        self.assert_neq(tp.Function((tp.Ptr(tp.Void()), Typ1()), tp.Ptr(Typ2())),
+                        tp.Function((Typ1(), tp.Ptr(tp.Void())), tp.Ptr(Typ2())))
 
         # Direct constness doesn't matter
-        self.assert_eq(TFunction((Typ1(True), TPtr(TVoid(), True)),
-                                 TPtr(Typ2(), True)),
-                       TFunction((Typ1(), TPtr(TVoid())), TPtr(Typ2())))
+        self.assert_eq(tp.Function((Typ1(True), tp.Ptr(tp.Void(), True)),
+                                 tp.Ptr(Typ2(), True)),
+                       tp.Function((Typ1(), tp.Ptr(tp.Void())), tp.Ptr(Typ2())))
 
         # Constness behind indirection does
-        self.assert_neq(TFunction((Typ1(), TPtr(TVoid(True))), TPtr(Typ2())),
-                        TFunction((Typ1(), TPtr(TVoid())), TPtr(Typ2())))
-        self.assert_neq(TFunction((Typ1(), TPtr(TVoid())), TPtr(Typ2(True))),
-                        TFunction((Typ1(), TPtr(TVoid())), TPtr(Typ2())))
+        self.assert_neq(tp.Function((Typ1(), tp.Ptr(tp.Void(True))), tp.Ptr(Typ2())),
+                        tp.Function((Typ1(), tp.Ptr(tp.Void())), tp.Ptr(Typ2())))
+        self.assert_neq(tp.Function((Typ1(), tp.Ptr(tp.Void())), tp.Ptr(Typ2(True))),
+                        tp.Function((Typ1(), tp.Ptr(tp.Void())), tp.Ptr(Typ2())))
 
         # Variadicity matters
-        self.assert_eq(TFunction((), TVoid(), varargs=True),
-                       TFunction((), TVoid(), varargs=True))
-        self.assert_neq(TFunction((), TVoid()),
-                        TFunction((), TVoid(), varargs=True))
+        self.assert_eq(tp.Function((), tp.Void(), varargs=True),
+                       tp.Function((), tp.Void(), varargs=True))
+        self.assert_neq(tp.Function((), tp.Void()),
+                        tp.Function((), tp.Void(), varargs=True))
 
     def test_THook(self):
-        self.assert_eq(THook(()), THook(()))
-        self.assert_neq(THook(()), THook((Typ1(),)))
+        self.assert_eq(tp.Hook(()), tp.Hook(()))
+        self.assert_neq(tp.Hook(()), tp.Hook((Typ1(),)))
 
-        self.assert_eq(THook((Typ1(), Typ2())), THook((Typ1(), Typ2())))
+        self.assert_eq(tp.Hook((Typ1(), Typ2())), tp.Hook((Typ1(), Typ2())))
 
         # Order matters
-        self.assert_neq(THook((Typ1(), Typ2())), THook((Typ2(), Typ1())))
+        self.assert_neq(tp.Hook((Typ1(), Typ2())), tp.Hook((Typ2(), Typ1())))
 
         # Direct constness matters (for now; might change with tuple types)
-        self.assert_neq(THook((Typ1(True), Typ2())), THook((Typ1(), Typ2())))
+        self.assert_neq(tp.Hook((Typ1(True), Typ2())), tp.Hook((Typ1(), Typ2())))

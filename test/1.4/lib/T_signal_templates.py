@@ -4,6 +4,7 @@
 import os
 import simics
 import stest
+import testenv
 
 
 class signal_stub:
@@ -36,7 +37,7 @@ clock = simics.SIM_get_object(clock.name)
 stest.expect_equal(stub.level, 1)
 
 # loading a checkpoint doesn't call raise
-cpfile = os.path.join(scratchdir, "checkpoint")
+cpfile = os.path.join(testenv.scratchdir(), "checkpoint")
 simics.SIM_write_configuration_to_file(cpfile, 0)
 simics.SIM_delete_objects([clock, clock.cell, stub, obj])
 simics.SIM_read_configuration(cpfile)

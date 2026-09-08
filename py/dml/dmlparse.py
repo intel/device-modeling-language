@@ -3,12 +3,13 @@
 
 # Parser for DML 1.2
 
-import os, sys, re, itertools
+import os, itertools
 from ply import lex, yacc
 
-from .logging import *
-from .messages import *
-from . import ast, logging
+from . import logging
+from .logging import report
+from . import errors as E, warnings as W, porting as P
+from . import ast
 import dml.globals
 from . import dmllex12
 from . import dmllex14
@@ -85,7 +86,7 @@ def default_site(t, elt=1):
     # tracking, which would sometimes happen if tracking=False was
     # passed to parse().
     assert lexpos != 0 or t.lineno(elt) != 0
-    return DumpableSite(t.parser.file_info, lexpos)
+    return logging.DumpableSite(t.parser.file_info, lexpos)
 
 site = default_site
 
@@ -112,15 +113,15 @@ def track_lexspan():
     global site
     site = extended_site
 def start_site(site):
-    while isinstance(site, ExpandedSite):
+    while isinstance(site, logging.ExpandedSite):
         site = site.site
     assert lexspan_map
     if site not in lexspan_map:
         return None
     (start, _) = lexspan_map[site]
-    return DumpableSite(site.file_info, start)
+    return logging.DumpableSite(site.file_info, start)
 def end_site(site):
-    while isinstance(site, ExpandedSite):
+    while isinstance(site, logging.ExpandedSite):
         site = site.site
     assert lexspan_map
     if site not in lexspan_map:
@@ -131,20 +132,20 @@ def end_site(site):
         # We still produce a well-formed site, to avoid confusing
         # port-dml's tag parser
         if os.path.isfile(site.filename() + 'ast'):
-            return SimpleSite(site.filename() + ':1:1')
+            return logging.SimpleSite(site.filename() + ':1:1')
         # unknown...
         return None
     (_, end) = lexspan_map[site]
-    return DumpableSite(site.file_info, end)
+    return logging.DumpableSite(site.file_info, end)
 
 def lex_end_site(t, elt):
     info = t.parser.file_info
     (start, end) = t.lexspan(elt)
-    return DumpableSite(info, end)
+    return logging.DumpableSite(info, end)
 
 def parse_bitorder(t, syn):
     if syn not in {'be', 'le'}:
-        report(EBITO(site(t), syn))
+        report(E.BITO(site(t), syn))
         return 'le'
     return syn
 
@@ -282,7 +283,7 @@ def device_statements_empty(t):
     t[0] = []
 
 @prod_dml12
-def device_statement(t):
+def device_statement_dml12(t):
     '''device_statement : object_statement
                         | toplevel'''
     t[0] = t[1]
@@ -307,7 +308,7 @@ def toplevel_param(t):
     '''toplevel_param : param'''
     (_, type_info, _, _) = t[1].args
     if type_info is not None and type_info.kind == 'paramtype':
-        report(ESYNTAX(site(t), ':',
+        report(E.SYNTAX(site(t), ':',
                        'parameter type declaration only permitted'
                        + ' in top level template block'))
         # fallback: dummy statement
@@ -358,7 +359,7 @@ def toplevel_else_if(t):
 # Objects
 
 @prod_dml12
-def object_anonymous_bank(t):
+def object_anonymous_bank_dml12(t):
     'object : maybe_extension BANK object_spec'
     t[0] = ast.object_(site(t), None, 'bank', [], None, t[3])
 
@@ -431,23 +432,23 @@ def bitrange_2(t):
             endian_translate_bit(t[4], parent_bitsize(t[4].site), bitorder))]
 
 @prod_dml12
-def object_field_1(t):
+def object_field_1_dml12(t):
     'object : maybe_extension FIELD objident bitrange maybe_istemplate object_spec'
     if logging.show_porting:
-        report(PFIELDRANGE(site(t, 4)))
+        report(P.FIELDRANGE(site(t, 4)))
     t[0] = ast.object_(site(t), t[3], 'field', [], None, t[4] + t[5] + t[6])
 
 @prod_dml12
-def field_array_size_no(t):
+def field_array_size_no_dml12(t):
     'fieldarraysize : '
     fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml12
-def field_array_size(t):
+def field_array_size_dml12(t):
     'fieldarraysize : LBRACKET ident IN expression DOTDOT expression RBRACKET fieldarraysize'
     if t[4].kind != 'int' or t[4].args != (0,):
-        report(EZRANGE(site(t, 4)))
+        report(E.ZRANGE(site(t, 4)))
     s = site(t)
     t[0] = [(ast.variable(site(t, 2), t[2]),
              ast.binop(s, ast.int(s, 1), '+', t[6]))] + t[8]
@@ -457,11 +458,11 @@ def field_array_size(t):
         # standard PARRAY, because it's seldom used.
         remove_from = site(t, 7)
         new = ' + 1'
-        report(PARRAY(site(t, 3), site(t, 5), remove_from,
+        report(P.ARRAY(site(t, 3), site(t, 5), remove_from,
                       end_site(t[6].site), new))
 
 @prod_dml12
-def object_field_2(t):
+def object_field_2_dml12(t):
     'object : maybe_extension FIELD objident fieldarraysize bitrangespec maybe_istemplate object_spec'
     t[0] = ast.object_(site(t), t[3], 'field', t[4], None, t[5] + t[6] + t[7])
 
@@ -471,10 +472,10 @@ def session(t):
     t[0] = t[1]
 
 @prod_dml12
-def session(t):
+def session_dml12(t):
     'session : DATA'
     if logging.show_porting:
-        report(PSESSION(site(t), 'data', 'session'))
+        report(P.SESSION(site(t), 'data', 'session'))
     t[0] = t[1]
 
 @prod
@@ -547,7 +548,7 @@ def object3(t):
               | maybe_extension IMPLEMENT objident array_list maybe_istemplate object_spec'''
     array_spec = t[4]
     if array_spec and t[2] in {'interface', 'implement'}:
-        report(ESYNTAX(site(t, 4), '[', f'{t[2]} array not allowed'))
+        report(E.SYNTAX(site(t, 4), '[', f'{t[2]} array not allowed'))
         array_spec = []
     t[0] = ast.object_(site(t), t[3], t[2], array_spec, t[1], t[5] + t[6])
 
@@ -557,12 +558,12 @@ def object_subdevice(t):
     t[0] = ast.object_(site(t), t[3], t[2], t[4], t[1], t[5] + t[6])
 
 @prod_dml12
-def maybe_extern_yes(t):
+def maybe_extern_yes_dml12(t):
     '''maybe_extern : EXTERN'''
     t[0] = True
 
 @prod_dml12
-def maybe_extern_no(t):
+def maybe_extern_no_dml12(t):
     '''maybe_extern :'''
     fixup_emptyprod_lexpos(t)
     t[0] = False
@@ -588,29 +589,29 @@ def report_pretval(site, file_info, start, end, rparen, outp, stmts):
         and stmts[-1].args[0].kind == 'set'):
         (lh, rh) = stmts[-1].args[0].args
         if lh.kind == 'variable_dml12' and lh.args[0] == outp[0][2]:
-            report(POUTARGRETURN(lh.site, start_site(rh.site), None))
+            report(P.OUTARGRETURN(lh.site, start_site(rh.site), None))
             # suppress PRETVAL's insertion of return statement
             ends_with_return = True
-    report(PRETVAL(
+    report(P.RETVAL(
         site,
-        DumpableSite(file_info, start),
-        DumpableSite(file_info, end),
-        DumpableSite(file_info, rparen),
+        logging.DumpableSite(file_info, start),
+        logging.DumpableSite(file_info, end),
+        logging.DumpableSite(file_info, rparen),
         [(psite.loc(), pname) for (_, psite, pname, _) in outp]))
     if not ends_with_return:
-        report(PRETVAL_END(
+        report(P.RETVAL_END(
             site,
-            DumpableSite(file_info, end),
+            logging.DumpableSite(file_info, end),
             [pname for (_, psite, pname, _) in outp]))
 
 
 @prod_dml12
-def object_method_noinparams(t):
+def object_method_noinparams_dml12(t):
     '''method : METHOD maybe_extern objident method_outparams maybe_default compound_statement'''
     name = t[3]
     (inp, outp, throws) = ([], t[4], True)
     if logging.show_porting:
-        report(PINPARAMLIST(site(t, 4)))
+        report(P.INPARAMLIST(site(t, 4)))
     if logging.show_porting and outp:
         (start, end) = t.lexspan(6)
         [stmts, _] = t[6].args
@@ -625,7 +626,7 @@ def object_method_noinparams(t):
 
 
 @prod_dml12
-def object_method(t):
+def object_method_dml12(t):
     '''method : METHOD maybe_extern objident LPAREN cdecl_maybe_discarded_or_ident_list RPAREN method_outparams maybe_nothrow maybe_default compound_statement'''
     name = t[3]
     inp = t[5]
@@ -634,10 +635,10 @@ def object_method(t):
     if logging.show_porting and any(not typ for (_, _, name, typ) in inp):
         # some standard methods are assigned a type later on
         if name not in {'set', 'write'}:
-            report(PINLINEDECL(site(t), 'method', 'inline method'))
+            report(P.INLINEDECL(site(t), 'method', 'inline method'))
         for (_, decl_site, (_, _, argname), typ) in inp:
             if not typ:
-                report(PINLINEDECL(decl_site, argname, 'inline ' + argname))
+                report(P.INLINEDECL(decl_site, argname, 'inline ' + argname))
     if logging.show_porting and outp:
         (start, end) = t.lexspan(10)
         [stmts, _] = t[10].args
@@ -656,20 +657,20 @@ def method_qualifiers_check(site, qualifiers, inp, outp, throws, default):
     memoized = 'memoized' in qualifiers
     if startup:
         if inp:
-            report(ESYNTAX(site, None,
+            report(E.SYNTAX(site, None,
                            'startup methods may not have input parameters'))
             inp = []
         if (outp or throws) and not memoized:
-            report(ESYNTAX(site, None,
+            report(E.SYNTAX(site, None,
                            'non-memoized startup methods may not have return'
                            + 'values or be throwing'))
             outp = []
         elif not (outp or throws) and memoized:
-            report(ESYNTAX(site, None,
+            report(E.SYNTAX(site, None,
                            'memoized methods must have return values and/or '
                            'be throwing'))
         if default:
-            report(ESYNTAX(site, None,
+            report(E.SYNTAX(site, None,
                            "startup methods may not be declared 'default'"))
     return (inp, outp)
 
@@ -677,7 +678,7 @@ def method_qualifiers_check(site, qualifiers, inp, outp, throws, default):
 def maybe_colon_yes(t):
     '''maybe_colon : COLON'''
     if not site(t).provisional_enabled(provisional.explicit_method_decls):
-        report(ESYNTAX(site(t), ':', "expected '{' or 'default'"))
+        report(E.SYNTAX(site(t), ':', "expected '{' or 'default'"))
         t[0] = False
     else:
         t[0] = True
@@ -720,7 +721,7 @@ def object_inline_method(t):
     if all(typ for (_, asite, name, typ) in inp):
         # inline annotation would have no effect for fully typed methods.
         # We forbid it as a way to strongly discourage unneeded use of inline.
-        report(ESYNTAX(site(t, 2), 'inline',
+        report(E.SYNTAX(site(t, 2), 'inline',
                        'only use inline if there are untyped arguments'))
     body = t[7]
     t[0] = ast.method(site(t), name,
@@ -729,17 +730,17 @@ def object_inline_method(t):
 
 
 @prod_dml12
-def arraydef1(t):
+def arraydef1_dml12(t):
     '''arraydef : expression'''
     t[0] = (ast.variable(site(t), 'i'), t[1])
     if logging.show_porting:
-        report(PARRAY_I(site(t)))
+        report(P.ARRAY_I(site(t)))
 
 @prod_dml12
-def arraydef2(t):
+def arraydef2_dml12(t):
     '''arraydef : ident IN expression DOTDOT expression'''
     if t[3].kind != 'int' or t[3].args != (0,):
-        report(EZRANGE(site(t, 3)))
+        report(E.ZRANGE(site(t, 3)))
     s = site(t)
     t[0] = (ast.variable(site(t, 1), t[1]),
             ast.binop(s, ast.int(s, 1), '+', t[5]))
@@ -759,7 +760,7 @@ def arraydef2(t):
                     # j in 0..expr-1 => j < expr
                     remove_from = t[5].site
                     new = ''
-        report(PARRAY(site(t, 2), site(t, 4), remove_from,
+        report(P.ARRAY(site(t, 2), site(t, 4), remove_from,
                       end_site(t[5].site), new))
 
 @prod_dml14
@@ -775,35 +776,35 @@ def arraydef_implicit(t):
 # Traits
 
 @prod_dml12
-def toplevel_trait(t):
+def toplevel_trait_dml12(t):
     'toplevel : TRAIT typeident maybe_istemplate LBRACE trait_stmts RBRACE'
-    report(WEXPERIMENTAL(site(t), 'traits'))
+    report(W.EXPERIMENTAL(site(t), 'traits'))
     t[0] = ast.template(site(t), t[2], t[3] + t[5])
 
 @prod_dml12
-def trait_stmts_none(t):
+def trait_stmts_none_dml12(t):
     '''trait_stmts : '''
     fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml12
-def trait_stmts(t):
+def trait_stmts_dml12(t):
     '''trait_stmts : trait_stmts trait_stmt'''
     t[0] = t[1] + t[2]
 
 @prod_dml12
-def trait_stmt(t):
+def trait_stmt_dml12(t):
     '''trait_stmt : trait_method
                   | trait_param'''
     t[0] = [t[1]]
 
 @prod_dml12
-def trait_stmt_istemplate(t):
+def trait_stmt_istemplate_dml12(t):
     '''trait_stmt : istemplate SEMI'''
     t[0] = [t[1]]
 
 @prod_dml12
-def trait_session(t):
+def trait_session_dml12(t):
     # We don't support session variable initializers yet, because it's
     # not sufficiently obvious in what scope they should be evaluated.
     'trait_stmt : SESSION named_cdecl SEMI'
@@ -843,14 +844,14 @@ def template_statement_shared_hook(t):
 
 
 @prod_dml12
-def trait_template(t):
+def trait_template_dml12(t):
     '''trait_stmt : TEMPLATE LBRACE object_statements RBRACE'''
     for stmt in t[3]:
         if stmt.kind == 'is':
             # 'is' in a trait block means the same as it would have
             # meant in its template block, and it's confusing to have
             # two syntaxes for the same thing.
-            report(EISINTPL(stmt.site))
+            report(E.ISINTPL(stmt.site))
     t[0] = t[3]
 
 @prod_dml14
@@ -864,7 +865,7 @@ def method_qualifiers(t):
     t[0] = list(itertools.islice(t, 1, None))
 
 @prod_dml12
-def trait_method(t):
+def trait_method_dml12(t):
     '''trait_method : METHOD shared_method'''
     (name, (inp, outp, throws), overridable, explicit_decl, body,
      rbrace_site) = t[2]
@@ -886,7 +887,7 @@ def shared_method_final(t):
     t[0] = (t[1], t[2], False, t[3], t[4], lex_end_site(t, -1))
 
 @prod_dml12
-def trait_param(t):
+def trait_param_dml12(t):
     '''trait_param : PARAMETER named_cdecl SEMI'''
     (name, typ) = t[2].args
     t[0] = ast.param(site(t), name, ast.paramtype(t[2].site, typ), True, None)
@@ -894,7 +895,7 @@ def trait_param(t):
 # Templates
 
 @prod_dml12
-def template(t):
+def template_dml12(t):
     'toplevel : TEMPLATE objident maybe_istemplate object_spec'
     t[0] = ast.template_dml12(site(t), t[2], t[3] + t[4])
 
@@ -905,7 +906,7 @@ def template(t):
     shared_methods = [s for s in t[5] if s.kind == 'sharedmethod']
     stray_is = stray_is_check(t[5])
     if not stray_is and ises and shared_methods:
-        report(WTEMPLATEIS(ises[0].site))
+        report(W.TEMPLATEIS(ises[0].site))
     t[0] = ast.template(site(t), t[2], t[3] + t[5])
 
 # Header/footer
@@ -939,10 +940,10 @@ def constant(t):
     'toplevel : CONSTANT ident EQUALS expression SEMI'
     t[0] = ast.constant(site(t), t[2], t[4])
     if logging.show_porting:
-        report(PCONSTANT(site(t)))
+        report(P.CONSTANT(site(t)))
 
 @prod_dml12
-def extern(t):
+def extern_dml12(t):
     'toplevel : EXTERN cdecl_maybe_discarded_or_ident SEMI'
     t[0] = ast.extern(site(t), cdecl_enforce_not_discarded(t[2]))
 
@@ -962,10 +963,10 @@ def extern_typedef(t):
     t[0] = ast.extern_typedef(site(t), t[3])
 
 @prod_dml12
-def top_struct(t):
+def top_struct_dml12(t):
     'toplevel : STRUCT ident LBRACE struct_decls RBRACE'
     if logging.show_porting:
-        report(PSTRUCTDECL(site(t, 1), site(t, 2), site(t, 5)))
+        report(P.STRUCTDECL(site(t, 1), site(t, 2), site(t, 5)))
     t[0] = ast.dml_typedef(site(t), ast.cdecl(site(t), t[2],
                                               [('struct', t[4])]))
 
@@ -993,7 +994,7 @@ def maybe_extension_yes(t):
     'maybe_extension : IN'
     if not site(t).provisional_enabled(
             provisional.explicit_object_extensions):
-        report(ESYNTAX(site(t), 'in', None))
+        report(E.SYNTAX(site(t), 'in', None))
         t[0] = None
     else:
         t[0] = True
@@ -1010,7 +1011,7 @@ def maybe_extension_no(t):
 # may seem redundant, but no! Removing those uses would lead to shift/reduce
 # conflicts.
 @prod_dml12
-def maybe_extension(t):
+def maybe_extension_dml12(t):
     'maybe_extension : '
     fixup_emptyprod_lexpos(t)
     t[0] = None
@@ -1062,7 +1063,7 @@ def stray_is_check(body):
                 if (other_stmt.kind == 'is'
                     and (other_site.lineno == rough_end_site.lineno
                          or other_site.colno > stmt.site.colno)):
-                    report(WSTRAYIS(other_site, obj_type))
+                    report(W.STRAYIS(other_site, obj_type))
                     some_stray_is = True
                 else:
                     break
@@ -1076,7 +1077,7 @@ def object_statement(t):
     '''object_statement : object_statement_or_typedparam'''
     if (t[1].kind == 'param' and t[1].args[1] is not None
         and t[1].args[1].kind == 'paramtype'):
-        report(ESYNTAX(t[1].args[1].site, None,
+        report(E.SYNTAX(t[1].args[1].site, None,
                        'parameter type declaration only permitted'
                        + ' in top level template block'))
         # fallback: dummy statement
@@ -1092,14 +1093,14 @@ def object_statement_bad_shared_method(t):
 @prod_dml14
 def bad_shared_method(t):
     '''bad_shared_method : SHARED method_qualifiers METHOD shared_method'''
-    report(ESYNTAX(site(t), 'shared',
+    report(E.SYNTAX(site(t), 'shared',
                    'shared method declaration only permitted'
                    + ' in top level template block'))
     # fallback: dummy statement
     t[0] = ast.hashif(site(t), ast.variable(site(t), 'false'), [], [])
 
 @prod_dml12
-def object_statement_or_typedparam(t):
+def object_statement_or_typedparam_dml12(t):
     '''object_statement_or_typedparam : object
                                       | param
                                       | method
@@ -1140,14 +1141,14 @@ def validate_if_body(stmts):
             result.append(stmt)
         else:
             assert stmt.kind in {'param', 'is'}
-            report(EBADCONDSTMT(stmt.site, stmt.kind))
+            report(E.BADCONDSTMT(stmt.site, stmt.kind))
     return result
 
 @prod_dml12
-def hashif(t):
+def hashif_dml12(t):
     '''hashif : IF'''
     if logging.show_porting:
-        report(PHASH(site(t)))
+        report(P.HASH(site(t)))
 
 @prod_dml14
 def hashif(t):
@@ -1156,13 +1157,13 @@ def hashif(t):
 @prod_dml14
 def hashif_nohash(t):
     '''hashif : IF'''
-    report(ESYNTAX(site(t), 'if', "invalid 'if', use '#if' in object context"))
+    report(E.SYNTAX(site(t), 'if', "invalid 'if', use '#if' in object context"))
 
 @prod_dml12
-def hashelse(t):
+def hashelse_dml12(t):
     '''hashelse : ELSE'''
     if logging.show_porting:
-        report(PHASH(site(t)))
+        report(P.HASH(site(t)))
 
 @prod_dml14
 def hashelse(t):
@@ -1171,7 +1172,7 @@ def hashelse(t):
 @prod_dml14
 def hashelse_nohash(t):
     '''hashelse : ELSE'''
-    report(ESYNTAX(site(t), 'else', "invalid 'else', use '#else'"))
+    report(E.SYNTAX(site(t), 'else', "invalid 'else', use '#else'"))
 
 @prod
 def object_if(t):
@@ -1199,21 +1200,21 @@ def object_else_if(t):
 
 # Parameter specification
 @prod_dml12
-def object_parameter(t):
+def object_parameter_dml12(t):
     '''param : PARAMETER objident paramspec_maybe_empty'''
     if logging.show_porting:
-        report(PPARAMETER(site(t)))
+        report(P.PARAMETER(site(t)))
     if logging.show_porting:
         if t[2] == 'hard_reset_value':
-            report(PHARD_RESET_VALUE(site(t, 2)))
+            report(P.HARD_RESET_VALUE(site(t, 2)))
         if t[2] == 'soft_reset_value' and not t[3][0]:
-            report(PSOFT_RESET_VALUE(site(t)))
+            report(P.SOFT_RESET_VALUE(site(t)))
         if t[2] == 'miss_pattern':
-            report(PMISS_PATTERN(site(t, 2)))
+            report(P.MISS_PATTERN(site(t, 2)))
     t[0] = ast.param(site(t), t[2], None, *t[3])
 
 @prod_dml12
-def object_parameter_auto(t):
+def object_parameter_auto_dml12(t):
     '''param : PARAMETER objident AUTO SEMI'''
     t[0] = ast.param(site(t), t[2], ast.auto(site(t, 3)), False, None)
 
@@ -1232,7 +1233,7 @@ def object_param_walrus(t):
     '''param : PARAM objident COLON paramspec'''
     param_type = ast.walrus(site(t, 3))
     if provisional.explicit_param_decls not in t.parser.file_info.provisional:
-        report(ESYNTAX(site(t, 3), ':', "expected '=' or 'default'"))
+        report(E.SYNTAX(site(t, 3), ':', "expected '=' or 'default'"))
         param_type = None
     t[0] = ast.param(site(t), t[2], param_type, *t[4])
 
@@ -1243,7 +1244,7 @@ def object_param_typed(t):
     if (value is not None
         and (provisional.explicit_param_decls
              not in t.parser.file_info.provisional)):
-        report(ESYNTAX(site(t, 5), 'default' if is_default else '=',
+        report(E.SYNTAX(site(t, 5), 'default' if is_default else '=',
                        'expected ;'))
         (is_default, value) = (True, None)
     t[0] = ast.param(site(t), t[2], ast.paramtype(site(t, 2), t[4]),
@@ -1277,7 +1278,7 @@ def method_outparams_none(t):
     t[0] = []
 
 @prod_dml12
-def method_outparams_some(t):
+def method_outparams_some_dml12(t):
     'method_outparams : ARROW LPAREN cdecl_maybe_discarded_or_ident_list RPAREN'
     cdecl_maybe_discarded_list_enforce_not_discarded(t[3])
     t[0] = t[3]
@@ -1290,7 +1291,7 @@ def method_outparams_some(t):
             # It would be logical to just use ESYNTAX here, but be nicer
             # because this is a very common mistake until 1.2 is
             # deprecated
-            report(ERETARGNAME(
+            report(E.RETARGNAME(
                 psite, name.args[0] if name.kind == 'variable' else '_'))
         t[3][i] = ast.cdecl(psite, None, typ)
     t[0] = t[3]
@@ -1305,7 +1306,7 @@ def cdecl_maybe_discarded_list_enforce_unnamed(decls):
     for (i, (kind, psite, name, typ)) in enumerate(decls):
         assert kind == 'cdecl_maybe_discarded'
         if name:
-            report(ESYNTAX(
+            report(E.SYNTAX(
                 psite, name.args[0] if name.kind == 'variable' else '_', ''))
         decls[i] = ast.cdecl(psite, None, typ)
 
@@ -1313,7 +1314,7 @@ def cdecl_maybe_discarded_list_enforce_named(decls):
     for (i, (kind, psite, name, typ)) in enumerate(decls):
         assert kind == 'cdecl_maybe_discarded', kind
         if not name:
-            report(ESYNTAX(psite, None,
+            report(E.SYNTAX(psite, None,
                            'name omitted in parameter declaration'))
             decls[i] = ast.cdecl_maybe_discarded(
                 psite,
@@ -1344,16 +1345,16 @@ def method_params_typed(t):
     t[0] = (t[2], t[4], t[5])
 
 @prod_dml12
-def maybe_nothrow_throws(t):
+def maybe_nothrow_throws_dml12(t):
     'maybe_nothrow : '
     fixup_emptyprod_lexpos(t)
     t[0] = True
 
 @prod_dml12
-def maybe_nothrow_nothrow(t):
+def maybe_nothrow_nothrow_dml12(t):
     'maybe_nothrow : NOTHROW'
     if logging.show_porting:
-        report(PNOTHROW(site(t)))
+        report(P.NOTHROW(site(t)))
     t[0] = False
 
 @prod
@@ -1370,13 +1371,13 @@ def throws_not(t):
 # Method arguments
 
 @prod_dml12
-def returnargs_empty(t):
+def returnargs_empty_dml12(t):
     'returnargs : '
     fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml12
-def returnargs(t):
+def returnargs_dml12(t):
     'returnargs : ARROW LPAREN expression_list RPAREN'
     t[0] = t[3]
 
@@ -1433,7 +1434,7 @@ def offsetspec_empty(t):
 
 # A C-like declaration, or a simple name
 @prod_dml12
-def cdecl_maybe_discarded_or_ident_decl(t):
+def cdecl_maybe_discarded_or_ident_decl_dml12(t):
     '''cdecl_maybe_discarded_or_ident : cdecl_maybe_discarded'''
     (_, site, name, typ) = t[1]
     if name:
@@ -1446,7 +1447,7 @@ def cdecl_maybe_discarded_or_ident_decl(t):
                                          ast.variable(site, typ[0]),
                                          None)
     else:
-        raise ESYNTAX(site, None, "missing parameter name")
+        raise E.SYNTAX(site, None, "missing parameter name")
 
 @prod_dml14
 def cdecl_maybe_discarded_or_ident_decl(t):
@@ -1469,7 +1470,7 @@ def named_cdecl_maybe_discarded(t):
     if name:
         t[0] = t[1]
     else:
-        report(ESYNTAX(site, None, "missing name in declaration"))
+        report(E.SYNTAX(site, None, "missing name in declaration"))
         t[0] = ast.cdecl_maybe_discarded(site,
                                          ast.variable(site, '_name_omitted'),
                                          typ)
@@ -1507,14 +1508,14 @@ def basetype(t):
     t[0] = t[1]
 
 @prod_dml12
-def basetype(t):
+def basetype_dml12(t):
     '''basetype : typeident
                 | struct
                 | layout
                 | bitfields
                 | typeof'''
     if logging.show_porting and t[1] == 'int1':
-        report(PINT1(site(t)))
+        report(P.INT1(site(t)))
     t[0] = t[1]
 
 @prod_dml14
@@ -1552,13 +1553,13 @@ def cdecl2_vect(t):
             if vsite.dml_version() != (1, 2):
                 # defensively suppress warning in 1.2, for
                 # compatibility
-                report(WEXPERIMENTAL(site(t), 'vect types'))
+                report(W.EXPERIMENTAL(site(t), 'vect types'))
         else:
-            report(EOLDVECT(site(t)))
+            report(E.OLDVECT(site(t)))
     t[0] = ['vect'] + t[2]
 
 @prod_dml12
-def cdecl3(t):
+def cdecl3_dml12(t):
     # Madness! we actually allow the declaration 'local int int;'.
     # The declaration 'data int int;' is also accepted, but gives
     # invalid C code.
@@ -1667,7 +1668,7 @@ def check_struct_namecoll(member_decls):
                 continue
             (name,) = ident.args
         if name in sites_by_name:
-            report(ENAMECOLL(decl.site, sites_by_name[name], name))
+            report(E.NAMECOLL(decl.site, sites_by_name[name], name))
         else:
             sites_by_name[name] = decl.site
 
@@ -1715,7 +1716,7 @@ def layout_decl(t):
         fields = t[4]
         check_struct_namecoll(fields)
     if endian not in {'big-endian', 'little-endian'}:
-        raise ESYNTAX(site(t, 2), '"%s"' % endian,
+        raise E.SYNTAX(site(t, 2), '"%s"' % endian,
                       'not one of "big-endian" or "little-endian"')
 
     t[0] = (endian, fields)
@@ -1862,7 +1863,7 @@ def typeident(t):
 # expression
 
 @prod_dml12
-def expression_assign(t):
+def expression_assign_dml12(t):
     'expression : expression EQUALS expression'
     t[0] = ast.set(site(t, 2), t[1], t[3])
 
@@ -1881,7 +1882,7 @@ def assignop(t):
     t[0] = ast.assignop(site(t, 2), t[1], t[2], t[3])
 
 @prod_dml12
-def expression_assignop(t):
+def expression_assignop_dml12(t):
     '''expression : assignop'''
     (tgt, op, src) = t[1].args
     t[0] = ast.set(t[1].site, tgt, ast.binop(t[1].site, tgt, op[:-1], src))
@@ -1944,10 +1945,10 @@ def expression_unary_operator(t):
     t[0] = ast.unop(site(t), t[1], t[2])
 
 @prod_dml12
-def expression_hash(t):
+def expression_hash_dml12(t):
     '''expression : HASH expression'''
     if logging.show_porting:
-        report(PSTRINGIFY(site(t, 1), end_site(site(t, 2))))
+        report(P.STRINGIFY(site(t, 1), end_site(site(t, 2))))
     t[0] = ast.unop(site(t), "stringify", t[2])
 
 @prod_dml14
@@ -1968,7 +1969,7 @@ def expression_postincdec(t):
     t[0] = ast.unop(site(t), 'post' + t[2], t[1])
 
 @prod_dml12
-def application(t):
+def application_dml12(t):
     'expression : expression LPAREN expression_list RPAREN'
     t[0] = ast.apply(
         site(t), t[1],
@@ -2009,7 +2010,7 @@ def utf8_string(t):
     try:
         t[0] = t[1].decode('utf-8')
     except UnicodeDecodeError as e:
-        raise ESYNTAX(
+        raise E.SYNTAX(
             site(t),
             repr(t),
             'utf-8 decoding error: ' + e.reason)
@@ -2020,14 +2021,14 @@ def expression_undefined(t):
     t[0] = ast.undefined(site(t))
 
 @prod_dml12
-def expression_objectref(t):
+def expression_objectref_dml12(t):
     'expression : DOLLAR objident'
     t[0] = ast.objectref(site(t, 2), t[2])
     if logging.show_porting:
-        report(PNODOLLAR(site(t, 1)))
+        report(P.NODOLLAR(site(t, 1)))
 
 @prod_dml12
-def expression_ident(t):
+def expression_ident_dml12(t):
     '''expression : objident
                   | DEFAULT'''
     t[0] = ast.variable_dml12(site(t), t[1])
@@ -2154,13 +2155,13 @@ def expression_list_many(t):
 # A comma-separated expression list.  A trailing comma is NOT allowed.
 
 @prod_dml12
-def expression_list_ntc_empty(t):
+def expression_list_ntc_empty_dml12(t):
     'expression_list_ntc : '
     fixup_emptyprod_lexpos(t)
     t[0] = []
 
 @prod_dml12
-def expression_list_ntc_nonempty(t):
+def expression_list_ntc_nonempty_dml12(t):
     'expression_list_ntc : expression_list_ntc_nonempty'
     t[0] = t[1]
 
@@ -2354,7 +2355,7 @@ def statement_do(t):
 # In DML 1.2, assignments are expressions, and pre/post actions are
 # expression lists.
 @prod_dml12
-def statement_for(t):
+def statement_for_dml12(t):
     'statement_except_hashif : FOR LPAREN expression_list_ntc SEMI expression_opt SEMI expression_list_ntc RPAREN statement'
     post = [ast.expression(e.site, e) for e in t[7]]
     t[0] = ast.for_(site(t), t[3], t[5], post, t[9])
@@ -2415,7 +2416,7 @@ def statement_for(t):
                         s)
 
 @prod_dml12
-def statement_switch(t):
+def statement_switch_dml12(t):
     'statement_except_hashif : SWITCH LPAREN expression RPAREN statement'
     t[0] = ast.switch(site(t), t[3], t[5])
 
@@ -2469,12 +2470,12 @@ def statent_try(t):
     t[0] = ast.try_(site(t), t[2], t[4])
 
 @prod_dml12
-def statement_delay(t):
+def statement_delay_dml12(t):
     'statement_except_hashif : AFTER LPAREN expression RPAREN CALL expression SEMI'
     if logging.show_porting:
         if t[6].kind != 'apply':
-            report(PINPARAMLIST(site(t, 7)))
-        report(PAFTER(site(t, 5), site(t, 6), site(t, 2), site(t, 4)))
+            report(P.INPARAMLIST(site(t, 7)))
+        report(P.AFTER(site(t, 5), site(t, 6), site(t, 2), site(t, 4)))
     t[0] = ast.after(site(t), 's', t[3], t[6])
 
 @prod_dml14
@@ -2485,7 +2486,7 @@ def statement_delay(t):
     supported_units = ['s', 'ps', 'cycles']
     if unit not in supported_units:
         suggestions = ' or '.join(f"'{unit}'" for unit in supported_units)
-        raise ESYNTAX(site(t, 3), t[3],
+        raise E.SYNTAX(site(t, 3), t[3],
                       f"expected time unit ({suggestions})")
     t[0] = ast.after(site(t), unit, t[2], t[5])
 
@@ -2559,7 +2560,7 @@ def statement_delay_immediate(t):
     t[0] = ast.immediateafter(site(t), t[3])
 
 @prod_dml12
-def call(t):
+def call_dml12(t):
     '''statement_except_hashif : CALL expression returnargs SEMI
                                | INLINE expression returnargs SEMI'''
     # This is a bit ugly.  The 'expression' can be a function
@@ -2574,12 +2575,12 @@ def call(t):
             inargs.append(init_ast.args[0])
     else:
         if logging.show_porting:
-            report(PINPARAMLIST(site(t, 3)))
+            report(P.INPARAMLIST(site(t, 3)))
         method_ast = t[2]
         inargs = []
 
     if logging.show_porting:
-        report(PINVOKE(site(t, 1), site(t, 2), site(t, 3), site(t, 4),
+        report(P.INVOKE(site(t, 1), site(t, 2), site(t, 3), site(t, 4),
                        len(t[3])))
 
     t[0] = ast.get(t[1])(site(t), method_ast, inargs, t[3])
@@ -2598,7 +2599,7 @@ def log_kind(t):
                 | ERROR'''
     lt = log_types.get(t[1], None)
     if lt is None:
-        report(ELTYPE(site(t), t[1]))
+        report(E.LTYPE(site(t), t[1]))
         lt = 'info'
     t[0] = lt
 
@@ -2614,15 +2615,15 @@ def log_level(t):
 
 old_log_types = set(log_types.values())
 @prod_dml12
-def log_kind_old(t):
+def log_kind_old_dml12(t):
     'log_kind : utf8_sconst'
     lt = t[1]
     if lt not in old_log_types:
-        report(ELTYPE(site(t), t[1]))
+        report(E.LTYPE(site(t), t[1]))
         lt = 'info'
     if logging.show_porting:
         [newkind] = [k for k in log_types if log_types[k] == lt]
-        report(PLOGKIND(site(t, 1), '"%s"' % lt, newkind))
+        report(P.LOGKIND(site(t, 1), '"%s"' % lt, newkind))
     t[0] = lt
 
 @prod
@@ -2657,10 +2658,10 @@ def statement_log_3(t):
     t[0] = ast.log(site(t), kind, level, later_level, flags, fmt, args)
 
 @prod_dml12
-def hashselect(t):
+def hashselect_dml12(t):
     '''hashselect : SELECT'''
     if logging.show_porting:
-        report(PHASH(site(t)))
+        report(P.HASH(site(t)))
 
 @prod_dml14
 def hashselect(t):
@@ -2672,11 +2673,11 @@ def select(t):
     t[0] = ast.select(site(t), t[2], t[5], t[9], t[11], t[13])
 
 @prod_dml12
-def foreach(t):
+def foreach_dml12(t):
     'statement_except_hashif : FOREACH ident IN LPAREN expression RPAREN statement'
     t[0] = ast.foreach_dml12(site(t), t[2], t[5], t[7])
     if logging.show_porting:
-        report(PHASH(site(t)))
+        report(P.HASH(site(t)))
 
 @prod_dml14
 def foreach(t):
@@ -2689,17 +2690,17 @@ def hashforeach(t):
     t[0] = ast.hashforeach(site(t), t[2], t[5], t[7])
 
 @prod_dml12
-def labeled_statement(t):
+def labeled_statement_dml12(t):
     'statement_except_hashif : ident COLON statement'
     t[0] = ast.label(site(t), t[1], t[3])
 
 @prod_dml12
-def statement_case(t):
+def statement_case_dml12(t):
     'statement_except_hashif : CASE expression COLON statement'
     t[0] = ast.case_dml12(site(t), t[2], t[4])
 
 @prod_dml12
-def statement_default(t):
+def statement_default_dml12(t):
     'statement_except_hashif : DEFAULT COLON statement'
     t[0] = ast.default_dml12(site(t), t[3])
 
@@ -2717,12 +2718,12 @@ def case_statement_default(t):
 def goto_statement(t):
     'statement_except_hashif : GOTO ident SEMI'
     # Restricted goto should be implemented, see SIMICS-6130
-    report(ESYNTAX(site(t), 'goto',
+    report(E.SYNTAX(site(t), 'goto',
                   'goto statements are not yet implemented in DML 1.4'))
     t[0] = ast.null(site(t))
 
 @prod_dml12
-def goto_statement(t):
+def goto_statement_dml12(t):
     'statement_except_hashif : GOTO ident SEMI'
     t[0] = ast.goto(site(t), t[2])
 
@@ -2735,7 +2736,7 @@ def simple_statement(t):
     t[0] = ast.get(t[1])(site(t))
 
 @prod_dml12
-def return_statement_noargs(t):
+def return_statement_noargs_dml12(t):
     '''statement_except_hashif : RETURN SEMI'''
     t[0] = ast.return_dml12(site(t), [])
 
@@ -2773,8 +2774,8 @@ def warning_statement(t):
 def warning_stmt(t):
     'warning_stmt : _WARNING bracketed_string_literal SEMI'
     if breaking_changes.forbid_warning_statement.enabled:
-        raise ESYNTAX(site(t), '_warning', 'deprecated _warning statement')
-    report(WEXPERIMENTAL(site(t), "_warning statement"))
+        raise E.SYNTAX(site(t), '_warning', 'deprecated _warning statement')
+    report(W.EXPERIMENTAL(site(t), "_warning statement"))
     t[0] = ast.warning(site(t), t[2])
 
 # Format arguments for log statements
@@ -2812,10 +2813,10 @@ def statement_list_2(t):
 # local
 
 @prod_dml12
-def local_keyword_auto(t):
+def local_keyword_auto_dml12(t):
     '''local_keyword : AUTO'''
     if logging.show_porting:
-        report(PAUTO(site(t)))
+        report(P.AUTO(site(t)))
     t[0] = 'local'
 
 @prod
@@ -2829,10 +2830,10 @@ def static(t):
     t[0] = 'session'
 
 @prod_dml12
-def static(t):
+def static_dml12(t):
     'static : STATIC'
     if logging.show_porting:
-        report(PSESSION(site(t), 'static', 'session'))
+        report(P.SESSION(site(t), 'static', 'session'))
     t[0] = 'session'
 
 @prod
@@ -2848,7 +2849,7 @@ def local_one(t):
 
     assert typ
     if not name:
-        raise ESYNTAX(tsite, ";", "variable name omitted")
+        raise E.SYNTAX(tsite, ";", "variable name omitted")
     if t[1] in {'session', 'saved'}:
         decl = cdecl_enforce_not_discarded(decl)
 
@@ -2865,7 +2866,7 @@ def local_one_init(t):
     (_, _, name, typ) = decl = t[2]
     assert typ
     if not name:
-        raise ESYNTAX(site(t, 3), "=", "variable name omitted")
+        raise E.SYNTAX(site(t, 3), "=", "variable name omitted")
     if t[1] in {'session', 'saved'}:
         decl = cdecl_enforce_not_discarded(decl)
 
@@ -2913,11 +2914,11 @@ def hook_decl(t):
         # Hook arrays are an internal feature, as their design depends on if we
         # are able to make hooks compound objects in the future
         if dml.globals.enable_testing_features:
-            report(WEXPERIMENTAL(
+            report(W.EXPERIMENTAL(
                 site(t),
                 "***FEATURE FOR INTERNAL TESTING***: hook arrays"))
         else:
-            report(ESYNTAX(site(t, 6), '[', ''))
+            report(E.SYNTAX(site(t, 6), '[', ''))
     t[0] = ast.hook(site(t), t[5], t[6], [typ for (_, _, _, typ) in t[3]])
 
 @prod_dml14
@@ -2937,7 +2938,7 @@ def objident_list(t):
 
 # Object/parameter names may use some additional keywords for now...
 @prod_dml12
-def objident_base(t):
+def objident_base_dml12(t):
     '''objident_base : ident
                      | THIS
                      | REGISTER
@@ -2963,7 +2964,7 @@ def objident_discard(t):
     t[0] = '__'
 
 def discard_error(site):
-    report(ESYNTAX(site,
+    report(E.SYNTAX(site,
                    "_",
                    "can't use the name '_' (the discard identifier) in this "
                    + "context. See the description of 'Identifiers' within "
@@ -2994,7 +2995,7 @@ def ident_rule(idents):
 @prod_dml12
 @lex.TOKEN(ident_rule(dmllex12.reserved_idents + (
     'ID', 'EACH', 'SESSION', 'SEQUENCE')))
-def ident(t):
+def ident_dml12(t):
     t[0] = t[1]
 
 @prod_dml14
@@ -3012,13 +3013,13 @@ reserved_words_14 = reserved_words_12 + ['CALL', 'AUTO',
 
 @prod_dml12
 @lex.TOKEN(ident_rule(reserved_words_12))
-def reserved(t):
-    raise ESYNTAX(site(t, 1), str(t[1]), "reserved word")
+def reserved_dml12(t):
+    raise E.SYNTAX(site(t, 1), str(t[1]), "reserved word")
 
 @prod_dml14
 @lex.TOKEN(ident_rule(reserved_words_14))
 def reserved(t):
-    raise ESYNTAX(site(t, 1), str(t[1]), "reserved word")
+    raise E.SYNTAX(site(t, 1), str(t[1]), "reserved word")
 
 # Error handling
 @prod
@@ -3031,7 +3032,7 @@ def error(t):
         raise UnexpectedEOF()
     else:
         value = str(t.value)
-        raise ESYNTAX(DumpableSite(t.lexer.file_info, t.lexpos), value, None)
+        raise E.SYNTAX(logging.DumpableSite(t.lexer.file_info, t.lexpos), value, None)
 
 # Specific grammars to be passed to ply
 class Grammar(object):

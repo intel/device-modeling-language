@@ -1,6 +1,7 @@
 # © 2022 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import simics
 import itertools
 import stest
 
@@ -17,7 +18,7 @@ def on_startup(node, meth):
     global startup_calls
     startup_calls[(node, meth)] += 1
 
-SIM_load_module('dml-test-startup_memoized')
+simics.SIM_load_module('dml-test-startup_memoized')
 stest.expect_equal(startup_calls, expected_after_startup)
-obj = SIM_create_object('test', 'obj', [])
+obj = simics.SIM_create_object('test', 'obj', [])
 stest.expect_equal(startup_calls, expected_after_startup)

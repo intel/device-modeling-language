@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import stest
+import testenv
+obj = testenv.instantiate()
 
 stest.expect_equal(set(obj.log_groups), {
     'Default_Log_Group', 'Register_Read', 'Register_Write', 'abc_4711'})

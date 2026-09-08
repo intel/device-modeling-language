@@ -1,8 +1,11 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import simics
 import stest
 import dev_util
+import testenv
+obj = testenv.instantiate()
 
 # bank_io_memory works
 stest.expect_equal(dev_util.Register_LE(obj.port.bare, 0, size=1).read(), 0xaa)
@@ -33,7 +36,7 @@ stest.expect_equal(dev_util.Register_LE(
 stest.expect_equal(dev_util.Register_LE((obj.ab.cc, 0xb, 0), size=1).read(),
                                          0xcc)
 # accessing 0x10 hits address 0x100 in the bank
-ms = SIM_create_object('memory-space', 'ms', map=[[0x10, obj, 0xf, 0x100, 1]])
+ms = simics.SIM_create_object('memory-space', 'ms', map=[[0x10, obj, 0xf, 0x100, 1]])
 ms.iface.memory_space.read(None, 0x10, 1, False)
 # .. and incorrect function numbers are handled somewhat gracefully
 with stest.expect_log_mgr(obj, 'error'), stest.expect_exception_mgr(

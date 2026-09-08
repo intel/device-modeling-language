@@ -1,10 +1,13 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import simics
 from functools import reduce
 import operator
 import stest, dev_util
-run_command("log-level 4")
+import testenv
+obj = testenv.instantiate()
+simics.SIM_run_command("log-level 4")
 
 def check(bank, offset, size):
     data = reduce(operator.ior, (

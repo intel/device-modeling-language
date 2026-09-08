@@ -3,6 +3,8 @@
 
 import stest
 import dev_util
+import testenv
+obj = testenv.instantiate()
 
 regs = [[dev_util.Register((obj, 'b', i*2 + j*5), size = 1)
          for j in range(2)]

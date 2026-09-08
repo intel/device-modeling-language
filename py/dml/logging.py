@@ -8,7 +8,6 @@ __all__ = (
     'ICE',
 
     'show_porting',
-    'is_warning_tag',
     'ignore_warning',
     'warning_is_ignored',
     'enable_warning',
@@ -26,6 +25,9 @@ __all__ = (
     'InEachSite',
 
     'dbg',
+
+    'truncate',
+    'binary_dump',
     )
 
 import sys
@@ -49,11 +51,6 @@ include_tag = False
 def set_include_tag(val):
     global include_tag
     include_tag = val
-
-def is_warning_tag(tag):
-    from . import messages
-    cls = getattr(messages, tag, None)
-    return isinstance(cls, type) and issubclass(cls, DMLWarning)
 
 # A set of ignored warnings
 ignored_warnings = {}
@@ -119,6 +116,8 @@ class LogMessage(object):
 
     outfile = sys.stderr
 
+    tag_prefix = ''
+
     def __init__(self, site, *msgargs):
         # The site is the place in the source that this log message
         # refers to.
@@ -156,8 +155,9 @@ class LogMessage(object):
             if os.getenv('DMLC_DEBUG'):
                 raise
 
-    def tag(self):
-        return self.__class__.__name__
+    @classmethod
+    def tag(cls):
+        return cls.tag_prefix + cls.__name__
 
     def preprocess(self):
         '''Call before log when reporting. Return True to actually log
@@ -214,6 +214,7 @@ class ICE(Exception, LogMessage):
 # This is a base class for warning messages
 #
 class DMLWarning(LogMessage):
+    tag_prefix = 'W'
     kind = "warning"
     next_warning_yields_error = False
 
@@ -239,6 +240,7 @@ class DMLWarning(LogMessage):
 # This is a base class for error messages
 #
 class DMLError(Exception, LogMessage):
+    tag_prefix = 'E'
     kind = "error"
 
     def __init__(self, site, *msgargs):
@@ -250,6 +252,7 @@ class DMLError(Exception, LogMessage):
         report_error()
 
 class PortingMessage(LogMessage):
+    tag_prefix = 'P'
     kind = 'porting'
     fmt = ''
 
@@ -487,3 +490,17 @@ def suppress_errors():
         store_errors.append(e)
     finally:
         store_errors = orig
+
+def truncate(s, maxlen):
+    "Make sure that s is not longer than maxlen"
+    if len(s) > maxlen:
+        return s[:maxlen-3] + '...'
+    return s
+
+def binary_dump(lh, rh):
+    """Produce a string to use in warning and error messages describing
+    operands to a binary operation"""
+    return ("LH: '%s' of type '%s'\n"
+            "RH: '%s' of type '%s'"
+            % (truncate(str(lh), 40), lh.ctype(),
+               truncate(str(rh), 40), rh.ctype()))

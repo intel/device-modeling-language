@@ -18,6 +18,8 @@
 
 import stest
 import dev_util
+import testenv
+obj = testenv.instantiate()
 
 def read(bank, offs, len):
     return dev_util.Register_LE(bank, offs, size=len).read()

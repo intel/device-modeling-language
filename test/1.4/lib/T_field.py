@@ -3,6 +3,8 @@
 
 import dev_util
 import stest
+import testenv
+obj = testenv.instantiate()
 for name in ['r1', 'r2', 'r3', 'r4']:
     setattr(obj, 'b_' + name, 4)
     # set adds 1, get adds 2

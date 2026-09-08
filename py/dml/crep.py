@@ -5,20 +5,18 @@
 # encoding of device state in the C device structure.
 
 import dml.globals
-from .objects import *
-from .types import *
-from .logging import *
-from .expr_util import *
-from .messages import *
-from . import breaking_changes
+from .objects import Method
+from . import types as tp
+from .logging import ICE, report
+from .expr_util import param_expr, param_str
+from . import errors as E, warnings as W
+from . import breaking_changes, expr_util
 
 __all__ = (
     'cname',
     'cref_method',
     'cref_portobj',
     'cref_session',
-    'ctype',
-    'conf_obj',
     'cloggroup',
     'dev',
     'require_dev',
@@ -59,11 +57,11 @@ def dev(site):
 
 def require_dev(site):
     if not DeviceInstanceContext.active:
-        raise EINDEPENDENTVIOL(site)
+        raise E.INDEPENDENTVIOL(site)
 
 def maybe_dev_arg(independent):
     return ([] if independent
-            else [('_dev', TDevice(structtype(dml.globals.device)))])
+            else [('_dev', tp.Device(structtype(dml.globals.device)))])
 
 
 
@@ -75,7 +73,7 @@ def cname(node):
         # this is weird... kept for compatibility
         name = param_str(node, 'c_name').replace('-', '_')
         if name != node.name and breaking_changes.dml12_remove_misc_quirks.enabled:
-            report(WDEPRECATED(param_expr_site(node, 'c_name'),
+            report(W.DEPRECATED(expr_util.param_expr_site(node, 'c_name'),
                                'parameter c_name'))
         return name
     elif node.name:
@@ -162,12 +160,12 @@ def node_storage_type(node, site = None):
 
 def node_storage_type_dml12(node, site):
     if node.objtype == 'attribute':
-        if param_defined(node, 'allocate_type'):
+        if expr_util.param_defined(node, 'allocate_type'):
             allocate_type = param_str(node, 'allocate_type')
             if allocate_type == "string":
-                return TPtr(TNamed('char'))
+                return tp.Ptr(tp.Named('char'))
             else:
-                return parse_type(allocate_type)
+                return tp.parse_type(allocate_type)
         else:
             return None
     elif node.objtype == 'method':
@@ -179,23 +177,23 @@ def node_storage_type_dml12(node, site):
     elif node.objtype == 'implement':
         if not breaking_changes.dml12_remove_misc_quirks.enabled:
             typename = param_str(node, 'c_type')
-            t = TNamed(typename)
+            t = tp.Named(typename)
             t.declaration_site = node.site
             return t
         else:
             return None
     elif node.objtype == 'interface':
         typename = param_str(node, 'c_type')
-        return TPtr(TNamed(typename, const=True))
+        return tp.Ptr(tp.Named(typename, const=True))
     elif node.objtype == 'device':
-        return TDevice(structtype(node))
+        return tp.Device(structtype(node))
     elif node.objtype == 'register':
         # Preferably, this should never happen.  But unfortunately,
         # we have to handle this case, which is triggered when someone (e.g.
         # method get from template register) writes 'typeof($reg)' where
         # '$reg' is a register with explicit fields.
-        signed = param_bool(node, 'signed')
-        return TInt(param_int(node, 'bitsize'), signed)
+        signed = expr_util.param_bool(node, 'signed')
+        return tp.Int(expr_util.param_int(node, 'bitsize'), signed)
     elif node.objtype == 'field':
         # TODO: this access to ctree is unholy. We should probably
         # make bitsize a property of the field object instead, but for
@@ -205,10 +203,10 @@ def node_storage_type_dml12(node, site):
         # constant across register indices; it could however happen that
         # structure.register_fields().
         indices = (ctree.mkIntegerLiteral(node.site, 0),) * node.dimensions
-        msb = expr_intval(param_expr(node, 'msb', indices))
-        lsb = expr_intval(param_expr(node, 'lsb', indices))
-        signed = param_bool(node, 'signed')
-        return TInt(msb - lsb + 1, signed)
+        msb = expr_util.expr_intval(param_expr(node, 'msb', indices))
+        lsb = expr_util.expr_intval(param_expr(node, 'lsb', indices))
+        signed = expr_util.param_bool(node, 'signed')
+        return tp.Int(msb - lsb + 1, signed)
     elif node.objtype in {'bank', 'group', 'event', 'port', 'connect',
                           'subdevice'}:
         return None

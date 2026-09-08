@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import builtins
-from .logging import dbg
 
 class AST(object):
     __slots__ = ('__site', '__args', 'kind')

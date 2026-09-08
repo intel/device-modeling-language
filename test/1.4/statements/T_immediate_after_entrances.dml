@@ -9,8 +9,6 @@ device test;
 import "simics/devs/signal.dml";
 import "simics/simulator/callbacks.dml";
 
-/// INSTANTIATE-MANUALLY
-
 // attributes set/get -- hardcoded
 
 attribute count is uint64_attr {

@@ -4,11 +4,14 @@
 # We need to create a second object, since run-test.py expects obj to
 # remain after executing this script.
 
-cpu = SIM_create_object("clock", "clock", [["freq_mhz", 1]])
+import simics
+import testenv
+obj = testenv.instantiate()
+cpu = simics.SIM_create_object("clock", "clock", [["freq_mhz", 1]])
 
-o = SIM_create_object("test", "o", [["queue", cpu]])
+o = simics.SIM_create_object("test", "o", [["queue", cpu]])
 print("Deleting")
-SIM_delete_object(o)
+simics.SIM_delete_object(o)
 print("Done")
-SIM_continue(10000000)
+simics.SIM_continue(10000000)
 print("Events not triggered")

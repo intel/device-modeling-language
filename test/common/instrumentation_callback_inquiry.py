@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import dev_util
-import simics
 import stest
 
 def test_inquiry(register_callback, remove_callback,

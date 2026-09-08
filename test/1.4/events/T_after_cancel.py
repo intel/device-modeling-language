@@ -1,9 +1,12 @@
 # © 2021 Intel Corporation
 # SPDX-License-Identifier: MPL-2.0
 
+import simics
 import stest
+import testenv
+obj = testenv.instantiate()
 
-cpu = SIM_create_object("clock", "clock", [["freq_mhz", 1]])
+cpu = simics.SIM_create_object("clock", "clock", [["freq_mhz", 1]])
 obj.queue = cpu
 
 def init():
@@ -12,10 +15,10 @@ def init():
 
 init()
 obj.test_1 = None
-SIM_continue(99999)
+simics.SIM_continue(99999)
 stest.expect_equal(obj.single_operator, 1)
 stest.expect_equal(obj.multi_operator, [[1, 1], [1, 1]])
-SIM_continue(2)
+simics.SIM_continue(2)
 stest.expect_equal(obj.single_operator, 216)
 stest.expect_equal(obj.multi_operator, [[1, 216], [1, 1]])
 
@@ -23,10 +26,10 @@ for i in (0,1,2):
     try:
         init()
         obj.test_2 = i
-        SIM_continue(99999)
+        simics.SIM_continue(99999)
         stest.expect_equal(obj.single_operator, 1)
         stest.expect_equal(obj.multi_operator, [[1, 1], [1, 1]])
-        SIM_continue(2)
+        simics.SIM_continue(2)
         stest.expect_equal(obj.single_operator, 2)
         stest.expect_equal(obj.multi_operator, [[1, 5], [1, 1]])
     except Exception as e:

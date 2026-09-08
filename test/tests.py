@@ -484,7 +484,6 @@ class DMLFileTestCase(BaseTestCase):
         cc_flags: list[str] = dataclasses.field(default_factory=list)
         dmlc_flags: list[str] = dataclasses.field(default_factory=list)
         api_version: str = default_api_version
-        instantiate_manually: bool = False
         compile_only: bool = False
         no_cc: bool = False
 
@@ -540,8 +539,6 @@ class DMLFileTestCase(BaseTestCase):
                 flags.cc_flags.append(data)
             elif key == 'GREP':
                 flags.exp_stdout.append(data)
-            elif key == 'INSTANTIATE-MANUALLY':
-                flags.instantiate_manually = True
             elif key == 'COMPILE-ONLY':
                 flags.compile_only = True
             elif key == 'NO-CC':
@@ -666,7 +663,7 @@ class CTestCase(DMLFileTestCase):
             self.pr("LD: %r" % args)
         return status
 
-    def run_simics(self, pyfile=None, auto_instantiate=True):
+    def run_simics(self, pyfile=None):
         name = self.shortname
         self.simics_stdout = join(self.scratchdir, name+'.simics_stdout')
         self.simics_stderr = join(self.scratchdir, name+'.simics_stderr')
@@ -675,16 +672,13 @@ class CTestCase(DMLFileTestCase):
         sc = open(self.scriptname, "w")
         #sc.write("print conf.sim.module_searchpath\n")
         #sc.write("run_command('list-modules')\n")
-        sc.write("testname = %r\n" % self.shortname)
         sc.write("scratchdir = %r\n" % self.scratchdir)
-        sc.write("basedir = %r\n" % join(os.path.dirname(self.filename)))
+        sc.write("import sys\n")
+        sc.write("sys.path.insert(0, %r)\n" % join(os.getcwd(), 'common'))
+        sc.write("import testenv\n")
+        sc.write("testenv._scratchdir = scratchdir\n")
         sc.write("SIM_add_module_dir(scratchdir)\n")
         sc.write("SIM_module_list_refresh()\n")
-        if auto_instantiate:
-            sc.write(f"SIM_load_module('dml-test-{self.shortname}')\n")
-            sc.write("obj = SIM_create_object('test', 'obj', [])\n")
-        else:
-            assert pyfile
 
         if pyfile:
             sc.write("print('running', %r)\n" % pyfile)
@@ -694,6 +688,7 @@ class CTestCase(DMLFileTestCase):
             sc.write("sys.path.append(%r)\n" % os.path.dirname(pyfile))
             sc.write("SIM_source_python(%r)\n" % pyfile)
         elif self.fullname.startswith(('1.2/', 'bugs/')):
+            sc.write('obj = testenv.instantiate()\n')
             sc.write("if not obj.runtest:\n")
             sc.write("    print('test attribute returned false')\n")
             sc.write("    SIM_quit(1)\n")
@@ -780,8 +775,7 @@ class CTestCase(DMLFileTestCase):
             return
 
         # Run simics
-        status = self.runlog("Simics", lambda: self.run_simics(
-            pyfile, not self.flags.instantiate_manually))
+        status = self.runlog("Simics", lambda: self.run_simics(pyfile))
         if status != 0:
             self.print_logs('simics', self.simics_stdout, self.simics_stderr)
             raise TestFail("simics status=%d" % status)
@@ -804,9 +798,9 @@ class CTestCase(DMLFileTestCase):
 
 class XmlTestCase(CTestCase):
     __slots__ = ()
-    def run_simics(self, pyfile=None, auto_instantiate=True):
+    def run_simics(self, pyfile=None):
         os.rename('%s.xml' % self.cfilename, join(self.scratchdir, 'test.xml'))
-        return CTestCase.run_simics(self, pyfile, auto_instantiate)
+        return CTestCase.run_simics(self, pyfile)
 
 class DMLCProfileTestCase(CTestCase):
     __slots__ = ()

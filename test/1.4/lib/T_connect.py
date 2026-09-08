@@ -3,8 +3,8 @@
 
 import pyobj
 import stest
-import dev_util
 import simics
+import conf
 
 calls = []
 class signal_stub(pyobj.ConfObject): pass
@@ -18,7 +18,7 @@ with stest.expect_log_mgr(None, 'critical'):
 stest.expect_equal(bad.sub_renamed, [None, None])
 conf.sim.stop_on_error = True
 
-SIM_register_interface('signal_stub', 'signal', signal_interface_t(
+simics.SIM_register_interface('signal_stub', 'signal', simics.signal_interface_t(
     signal_raise=lambda obj: calls.append((obj, 'signal_raise'))))
 
 obj = simics.SIM_create_object('test', 'obj', [])
@@ -29,18 +29,18 @@ stest.expect_equal(obj.sub[1].renamed.classname, 'signal_stub')
 stest.expect_equal(obj.attr.sub_renamed, [obj.sub[0].renamed,
                                           obj.sub[1].renamed])
 
-stest.expect_true(SIM_object_descendant(obj, "a2[1].bank.b2[2].c2[4].d[6]"))
-stest.expect_true(SIM_object_descendant(obj, "a2[1].e.f"))
-stest.expect_true(SIM_object_descendant(obj, "a2[1].port.p.q"))
+stest.expect_true(simics.SIM_object_descendant(obj, "a2[1].bank.b2[2].c2[4].d[6]"))
+stest.expect_true(simics.SIM_object_descendant(obj, "a2[1].e.f"))
+stest.expect_true(simics.SIM_object_descendant(obj, "a2[1].port.p.q"))
 
 # by default, init_as_subobj connects have configuration=none
-stest.expect_false(SIM_class_has_attribute('test', 'noconf'))
+stest.expect_false(simics.SIM_class_has_attribute('test', 'noconf'))
 
-with stest.expect_exception_mgr(SimExc_General):
+with stest.expect_exception_mgr(simics.SimExc_General):
     obj.validate = [conf.sim, "foo"]
-with stest.expect_exception_mgr(SimExc_General):
+with stest.expect_exception_mgr(simics.SimExc_General):
     obj.validate = conf.sim
-with stest.expect_exception_mgr(SimExc_General):
+with stest.expect_exception_mgr(simics.SimExc_General):
     obj.validate = [obj, "bar"]
 obj.validate = [obj, "foo"]
 obj.validate = obj
@@ -65,12 +65,12 @@ only_cable.register()
 both.register()
 three.register()
 [only_common, only_cable, both, three] = [
-    SIM_create_object(name, name, []) for name in [
+    simics.SIM_create_object(name, name, []) for name in [
         'only_common', 'only_cable', 'both', 'three']]
 
-with stest.expect_exception_mgr(SimExc_General):
+with stest.expect_exception_mgr(simics.SimExc_General):
     obj.ifaces = only_common
-with stest.expect_exception_mgr(SimExc_General):
+with stest.expect_exception_mgr(simics.SimExc_General):
     obj.ifaces = only_cable
 
 obj.ifaces = both

@@ -5,7 +5,7 @@ import itertools
 import abc
 import contextlib
 
-from .logging import dollar
+from . import logging
 from .set import Set
 import dml.globals
 
@@ -268,7 +268,7 @@ class CompositeObject(DMLObject):
         if self.isindexed():
             suff = "".join('[%s]' % i for i in
                            indices[-self.local_dimensions():])
-            suff += "".join(f'[{dollar(self.site)}'
+            suff += "".join(f'[{logging.dollar(self.site)}'
                             + f'{"_" if idxvar is None else idxvar}]'
                             for idxvar in self._idxvars[len(indices):])
             indices = indices[:-self.local_dimensions()]
@@ -296,7 +296,7 @@ class CompositeObject(DMLObject):
         if self.isindexed():
             suff = "".join('[%s]' % i for i in
                            indices[-self.local_dimensions():])
-            suff += "".join(f'[{dollar(self.site)}'
+            suff += "".join(f'[{logging.dollar(self.site)}'
                             + f'{"_" if idxvar is None else idxvar} < {arrlen}]'
                             for (idxvar, arrlen) in
                             itertools.islice(
