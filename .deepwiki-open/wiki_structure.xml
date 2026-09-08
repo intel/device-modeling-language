@@ -1,0 +1,192 @@
+<wiki_structure>
+  <title>Device Modeling Language Wiki</title>
+  <description>A comprehensive guide to the Device Modeling Language (DML) project, detailing its architecture, features, and usage.</description>
+  <sections>
+    <section id="section-1">
+      <title>Overview</title>
+      <pages>
+        <page_ref>page-1</page_ref>
+        <page_ref>page-2</page_ref>
+      </pages>
+      <subsections></subsections>
+    </section>
+    <section id="section-2">
+      <title>System Architecture</title>
+      <pages>
+        <page_ref>page-3</page_ref>
+        <page_ref>page-4</page_ref>
+      </pages>
+      <subsections></subsections>
+    </section>
+    <section id="section-3">
+      <title>Core Features</title>
+      <pages>
+        <page_ref>page-5</page_ref>
+        <page_ref>page-6</page_ref>
+      </pages>
+      <subsections></subsections>
+    </section>
+    <section id="section-4">
+      <title>Data Management and Flow</title>
+      <pages>
+        <page_ref>page-7</page_ref>
+      </pages>
+      <subsections></subsections>
+    </section>
+    <section id="section-5">
+      <title>Model Integration</title>
+      <pages>
+        <page_ref>page-8</page_ref>
+      </pages>
+      <subsections></subsections>
+    </section>
+    <section id="section-6">
+      <title>Deployment and Infrastructure</title>
+      <pages>
+        <page_ref>page-9</page_ref>
+      </pages>
+      <subsections></subsections>
+    </section>
+    <section id="section-7">
+      <title>Extensibility and Customization</title>
+      <pages>
+        <page_ref>page-10</page_ref>
+      </pages>
+      <subsections></subsections>
+    </section>
+  </sections>
+  <pages>
+    <page id="page-1">
+      <title>Introduction to Device Modeling Language</title>
+      <description>An overview of the Device Modeling Language (DML) project, its purpose, and its applications.</description>
+      <importance>high</importance>
+      <relevant_files>
+        <file_path>README.md</file_path>
+        <file_path>doc/1.2/introduction.md</file_path>
+        <file_path>doc/1.4/introduction.md</file_path>
+      </relevant_files>
+      <related_pages>
+        <related>page-2</related>
+      </related_pages>
+      <parent_section>section-1</parent_section>
+    </page>
+    <page id="page-2">
+      <title>Release Notes</title>
+      <description>A summary of release notes for various versions of the DML project.</description>
+      <importance>medium</importance>
+      <relevant_files>
+        <file_path>RELEASENOTES.md</file_path>
+        <file_path>RELEASENOTES-1.2.md</file_path>
+        <file_path>RELEASENOTES-1.4.md</file_path>
+      </relevant_files>
+      <related_pages>
+        <related>page-1</related>
+      </related_pages>
+      <parent_section>section-1</parent_section>
+    </page>
+    <page id="page-3">
+      <title>Architecture Overview</title>
+      <description>A high-level overview of the architecture of the DML system, including its components and their interactions.</description>
+      <importance>high</importance>
+      <relevant_files>
+        <file_path>py/dml/dmlc.py</file_path>
+        <file_path>py/dml/structure.py</file_path>
+        <file_path>doc/1.4/running-dmlc.md</file_path>
+      </relevant_files>
+      <related_pages>
+        <related>page-4</related>
+      </related_pages>
+      <parent_section>section-2</parent_section>
+    </page>
+    <page id="page-4">
+      <title>Component Relationships</title>
+      <description>A detailed diagram and explanation of how various components in the DML system relate to each other.</description>
+      <importance>medium</importance>
+      <relevant_files>
+        <file_path>py/dml/objects.py</file_path>
+        <file_path>py/dml/ast.py</file_path>
+        <file_path>py/dml/ctree.py</file_path>
+      </relevant_files>
+      <related_pages>
+        <related>page-3</related>
+      </related_pages>
+      <parent_section>section-2</parent_section>
+    </page>
+    <page id="page-5">
+      <title>Key Features of DML</title>
+      <description>An in-depth look at the core features provided by the DML project.</description>
+      <importance>high</importance>
+      <relevant_files>
+        <file_path>doc/1.2/object-model.md</file_path>
+        <file_path>doc/1.4/changes.md</file_path>
+        <file_path>AI_DIAGNOSTICS_README.md</file_path>
+      </relevant_files>
+      <related_pages>
+        <related>page-6</related>
+      </related_pages>
+      <parent_section>section-3</parent_section>
+    </page>
+    <page id="page-6">
+      <title>AI Diagnostics Integration</title>
+      <description>An explanation of how AI diagnostics are integrated into the DML system.</description>
+      <importance>medium</importance>
+      <relevant_files>
+        <file_path>AI_DIAGNOSTICS_README.md</file_path>
+        <file_path>QUICKSTART_AI_DIAGNOSTICS.md</file_path>
+        <file_path>py/dml/ai_diagnostics.py</file_path>
+      </relevant_files>
+      <related_pages>
+        <related>page-5</related>
+      </related_pages>
+      <parent_section>section-3</parent_section>
+    </page>
+    <page id="page-7">
+      <title>Data Flow and Processing</title>
+      <description>A description of how data is processed and managed within the DML system.</description>
+      <importance>high</importance>
+      <relevant_files>
+        <file_path>py/dml/codegen.py</file_path>
+        <file_path>py/dml/output.py</file_path>
+        <file_path>py/dml/serialize.py</file_path>
+      </relevant_files>
+      <related_pages></related_pages>
+      <parent_section>section-4</parent_section>
+    </page>
+    <page id="page-8">
+      <title>Integration with AI Models</title>
+      <description>Details on how the DML project integrates with AI models for diagnostics and code generation.</description>
+      <importance>medium</importance>
+      <relevant_files>
+        <file_path>QUICKSTART_AI_DIAGNOSTICS.md</file_path>
+        <file_path>py/dml/logging.py</file_path>
+        <file_path>py/dml/messages.py</file_path>
+      </relevant_files>
+      <related_pages></related_pages>
+      <parent_section>section-5</parent_section>
+    </page>
+    <page id="page-9">
+      <title>Deployment Instructions</title>
+      <description>Instructions for building, testing, and deploying the DML compiler and its components.</description>
+      <importance>high</importance>
+      <relevant_files>
+        <file_path>doc/1.4/running-dmlc.md</file_path>
+        <file_path>generate_env.py</file_path>
+        <file_path>run_unit_tests.py</file_path>
+      </relevant_files>
+      <related_pages></related_pages>
+      <parent_section>section-6</parent_section>
+    </page>
+    <page id="page-10">
+      <title>Extensibility and Customization</title>
+      <description>How to extend and customize the DML system, including adding new modules or modifying existing ones.</description>
+      <importance>medium</importance>
+      <relevant_files>
+        <file_path>py/dml/traits.py</file_path>
+        <file_path>py/dml/topsort.py</file_path>
+        <file_path>py/dml/slotsmeta.py</file_path>
+      </relevant_files>
+      <related_pages></related_pages>
+      <parent_section>section-7</parent_section>
+    </page>
+  </pages>
+</wiki_structure>
