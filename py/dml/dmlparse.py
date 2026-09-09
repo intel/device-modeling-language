@@ -16,7 +16,7 @@ from . import provisional
 from . import breaking_changes
 
 assert lex.__version__ == yacc.__version__
-assert yacc.__version__ in {"3.4", "3.11"}
+assert yacc.__version__ in {"3.4", "3.10", "3.11"}
 
 class UnexpectedEOF(Exception): pass
 
