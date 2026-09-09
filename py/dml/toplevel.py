@@ -50,7 +50,7 @@ def get_parser(version, tabmodule=None, debugfile=None):
                     optimize = 0,
                     outputdir = '.')
     cache_dir = '.'
-    if lex.__version__ != '3.4':
+    if lex.__version__ != '3.10':
         # For now we only provide pre-compiled parse tables for PLY 3.4;
         # for 3.11 we create the parse tables on the fly instead.
         # The plan is to switch to pre-compiled parse tables for 3.11
