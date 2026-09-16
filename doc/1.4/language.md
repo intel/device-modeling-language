@@ -246,7 +246,8 @@ or, if _`classification`_ is omitted:
 </pre>
 
 A DML line will be affected by every `COVERITY` pragma specified in preceding
-lines, up until the first line not containing any `COVERITY` pragma. For
+lines, up until the first line not containing any `COVERITY` pragma or other
+line-based pragma (like `WARNING`). For
 example:
 ```
 /*% COVERITY unreachable %*/
@@ -259,7 +260,50 @@ Any C line corresponding to the call to `some_function(...)` will receive
 analysis annotations for `var_deref_model`, `check_return`, and
 `copy_paste_error` (with `copy_paste_error` specifically being classified as a
 false positive), but not any analysis annotation for `unreachable`, as the empty
-line breaks the consecutive specifications of COVERITY pragmas.
+line breaks the consecutive specifications of pragmas.
+
+### WARNING pragma
+The `WARNING` pragma prevents DMLC from reporting DML warnings of a specified
+kind for a particular DML line.
+
+Note that most warnings are designed to have an idiomatic way to silence them
+without needing to employ the `WARNING` pragma; check the documentation for any
+particular warning in Appendix [Messages](messages.html#warning-messages)
+before employing the pragma.
+
+The syntax for the `WARNING` pragma is as follows:
+<pre>
+/*% WARNING <em>tag</em> %*/
+</pre>
+where _`tag`_ is the tag of the warning kind to suppress; see Appendix
+[Messages](messages.html#warning-messages).
+
+A DML line will be affected by every `WARNING` pragma specified in preceding
+lines, up until the first line not containing any `WARNING` pragma or other
+line-based pragma (like `COVERITY`). For example:
+```
+param special default -1;
+param then_level default 1;
+
+method check(uint32 i) {
+    /*% WARNING WREDUNDANTLEVEL %*/
+    /*% WARNING WNEGCONSTCOMP %*/
+    log info, 1 then then_level: "%s", i == special ? "special" : "regular";
+}
+```
+In this case, the two `WARNING` pragmas apply *exclusively* to the `log info`
+line. If any line (even an empty line) without a pragma were to be inserted
+between the two `WARNING` pragmas, then it would break up the consecutive
+specifications of pragmas and only `/*% WARNING WNEGCONSTCOMP %*/` would apply
+to the `log info` line.
+
+This example also demonstrates the most compelling kind of use-case for the
+pragma. By itself, this snippet would cause DMLC to warn about the `then` being
+redundant (`WREDUNDANTLEVEL`) and the `i == special` check being impossible to
+satisfy (`WNEGCONSTCOMP`), and yet those pieces of the code can still be
+meaningful if used in a context where the definitions of `special` and
+`then_level` get overridden. So in this case, the warnings fail to identify
+true problems in the code, making it desirable to suppress them.
 
 ## The Object Model
 

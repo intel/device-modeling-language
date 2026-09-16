@@ -284,3 +284,9 @@
   ```
 - `release 7 7152`
 - `release 6 6461`
+- `note 6` Warning and error messages reported by DMLC now display the tag for
+  the warning/error kind by default. The old behavior of having the tag
+  be omitted now requires passing `--no-tags` to DMLC. With this change, the
+  `-T` flag has become a no-op and will be removed in a future version.
+- `note 6` Added the `WARNING` pragma, which allows for the granular
+  suppression of DMLC warnings for a target line.
