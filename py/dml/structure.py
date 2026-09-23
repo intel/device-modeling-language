@@ -141,32 +141,8 @@ def mkglobals(stmts):
         try:
             if stmt.kind in {'template', 'template_dml12'}:
                 (name, body) = stmt.args
-                template_body = []
-                trait_body = []
-                for tstmt in body:
-                    if tstmt.kind == 'sharedmethod':
-                        trait_body.append(tstmt)
-                    elif tstmt.kind == 'param':
-                        (_, type_info, _, value) = tstmt.args
-                        if (type_info is not None
-                            and type_info.kind == 'paramtype'):
-                            trait_body.append(tstmt)
-                            # the form "param x: int = value;" has
-                            # aspects of both trait and template,
-                            # and the form "param x: int;" has some effect
-                            # when explicit_param_decls is enabled
-                            template_body.append(tstmt)
-                        else:
-                            template_body.append(tstmt)
-                    elif tstmt.kind in {'session', 'saved'}:
-                        template_body.append(tstmt)
-                        if stmt.kind == 'template':
-                            trait_body.append(tstmt)
-                    elif tstmt.kind == 'sharedhook':
-                        template_body.append(tstmt.args[0])
-                        trait_body.append(tstmt.args[0])
-                    else:
-                        template_body.append(tstmt)
+                (template_body, trait_body) = split_template_body(
+                    body, stmt.kind != 'template_dml12')
                 if stmt.kind == 'template_dml12' and name != 'object':
                     # guaranteed by grammar.
                     assert trait_body == []
@@ -284,6 +260,40 @@ def mkglobals(stmts):
                                          canonical_t))
             except ETYPE as e:
                 report(e)
+
+
+def split_template_body(body, creates_trait):
+    '''Split a template body into the part that describes objects and the
+    part that describes the template's trait. Shared object declarations are
+    left in the object part, for `expand_shared_objects` to desugar.'''
+    template_body = []
+    trait_body = []
+    for tstmt in body:
+        if tstmt.kind == 'sharedmethod':
+            trait_body.append(tstmt)
+        elif tstmt.kind == 'param':
+            (_, type_info, _, value) = tstmt.args
+            if (type_info is not None
+                and type_info.kind == 'paramtype'):
+                trait_body.append(tstmt)
+                # the form "param x: int = value;" has
+                # aspects of both trait and template,
+                # and the form "param x: int;" has some effect
+                # when explicit_param_decls is enabled
+                template_body.append(tstmt)
+            else:
+                template_body.append(tstmt)
+        elif tstmt.kind in {'session', 'saved'}:
+            template_body.append(tstmt)
+            if creates_trait:
+                trait_body.append(tstmt)
+        elif tstmt.kind == 'sharedhook':
+            template_body.append(tstmt.args[0])
+            trait_body.append(tstmt.args[0])
+        else:
+            template_body.append(tstmt)
+    return (template_body, trait_body)
+
 
 def type_deps(t, include_structs, expanded_typedefs):
     '''Given that t appears inside a DML typedef, return the set of DML
