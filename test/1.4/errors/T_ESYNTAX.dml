@@ -37,17 +37,29 @@ template t {
     // no error, intended use
     param p : int;
     shared method m() {}
+    shared group g {}
     #if (false) {
         /// ERROR ESYNTAX
         param p : int;
         /// ERROR ESYNTAX
         shared method m() {}
+        /// ERROR ESYNTAX
+        shared group g {}
     }
+    group g2 {
+        /// ERROR ESYNTAX
+        shared group g3 {}
+    }
+    // arrays are not yet supported on shared objects
+    /// ERROR ESYNTAX
+    shared group ga[i < 4] {}
 }
 /// ERROR ESYNTAX
 param p : int;
 /// ERROR ESYNTAX
 shared method m() {}
+/// ERROR ESYNTAX
+shared group g {}
 
 param big    =   0xffff_ffff_ffff_ffff;
 /// ERROR ESYNTAX

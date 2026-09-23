@@ -296,7 +296,7 @@ def device_statement(t):
                         | object
                         | toplevel_param
                         | method
-                        | bad_shared_method
+                        | bad_shared
                         | istemplate SEMI
                         | toplevel_if
                         | error_stmt
@@ -556,6 +556,60 @@ def object3(t):
 def object_subdevice(t):
     '''object : maybe_extension SUBDEVICE objident array_list maybe_istemplate object_spec'''
     t[0] = ast.object_(site(t), t[3], t[2], t[4], t[1], t[5] + t[6])
+
+# A shared object's body may contain shared members, so it needs its own
+# object_spec. The productions are otherwise identical to the ones above, so
+# they reuse their actions.
+@prod_dml14
+def shared_prefix_extension(t):
+    'shared_prefix : IN SHARED'
+    maybe_extension_yes(t)
+
+@prod_dml14
+def shared_prefix_plain(t):
+    'shared_prefix : SHARED'
+    enabled = (provisional.explicit_object_extensions
+               in t.parser.file_info.provisional)
+    t[0] = False if enabled else None
+
+def shared_object_check(t):
+    (name, objtype, arrayinfo, is_extension, spec) = t[0].args
+    if arrayinfo:
+        report(ESYNTAX(t[0].site, '[',
+                       'arrays are not yet supported in shared object'
+                       + ' declarations'))
+        t[0] = ast.object_(t[0].site, name, objtype, [], is_extension, spec)
+
+@prod_dml14
+def shared_object_regarray(t):
+    'shared_object : shared_prefix REGISTER objident array_list sizespec offsetspec maybe_istemplate shared_object_spec'
+    object_regarray(t)
+    shared_object_check(t)
+
+@prod_dml14
+def shared_object_field(t):
+    'shared_object : shared_prefix FIELD objident array_list bitrangespec maybe_istemplate shared_object_spec'
+    object_field(t)
+    shared_object_check(t)
+
+@prod_dml14
+def shared_object3(t):
+    '''shared_object : shared_prefix CONNECT   objident array_list maybe_istemplate shared_object_spec
+                     | shared_prefix INTERFACE objident array_list maybe_istemplate shared_object_spec
+                     | shared_prefix ATTRIBUTE objident array_list maybe_istemplate shared_object_spec
+                     | shared_prefix BANK      objident array_list maybe_istemplate shared_object_spec
+                     | shared_prefix EVENT     objident array_list maybe_istemplate shared_object_spec
+                     | shared_prefix GROUP     objident array_list maybe_istemplate shared_object_spec
+                     | shared_prefix PORT      objident array_list maybe_istemplate shared_object_spec
+                     | shared_prefix IMPLEMENT objident array_list maybe_istemplate shared_object_spec'''
+    object3(t)
+    shared_object_check(t)
+
+@prod_dml14
+def shared_object_subdevice(t):
+    '''shared_object : shared_prefix SUBDEVICE objident array_list maybe_istemplate shared_object_spec'''
+    object_subdevice(t)
+    shared_object_check(t)
 
 @prod_dml12
 def maybe_extern_yes(t):
@@ -827,20 +881,30 @@ def template_statement_obj(t):
     t[0] = [t[1]]
 
 @prod_dml14
-def template_statement_shared_method(t):
-    '''template_stmt : SHARED method_qualifiers METHOD shared_method'''
+def template_statement_shared_member(t):
+    '''template_stmt : shared_member'''
+    t[0] = [t[1]]
+
+@prod_dml14
+def shared_member_method(t):
+    '''shared_member : SHARED method_qualifiers METHOD shared_method'''
     (name, (inp, outp, throws), overridable, explicit_decl, body,
      rbrace_site) = t[4]
     default = overridable and body is not None
     (inp, outp) = method_qualifiers_check(site(t), t[2], inp, outp, throws,
                                           default)
-    t[0] = [ast.sharedmethod(site(t), name, inp, outp, throws, t[2],
-                             overridable, explicit_decl, body, rbrace_site)]
+    t[0] = ast.sharedmethod(site(t), name, inp, outp, throws, t[2],
+                            overridable, explicit_decl, body, rbrace_site)
 
 @prod_dml14
-def template_statement_shared_hook(t):
-    '''template_stmt : SHARED hook_decl'''
-    t[0] = [ast.sharedhook(site(t), t[2])]
+def shared_member_hook(t):
+    '''shared_member : SHARED hook_decl'''
+    t[0] = ast.sharedhook(site(t), t[2])
+
+@prod_dml14
+def shared_member_object(t):
+    '''shared_member : shared_object'''
+    t[0] = ast.sharedobject(t[1].site, t[1])
 
 
 @prod_dml12
@@ -1038,6 +1102,34 @@ def object_statements_empty(t):
     fixup_emptyprod_lexpos(t)
     t[0] = []
 
+@prod_dml14
+def shared_object_spec_none(t):
+    'shared_object_spec : object_desc SEMI'
+    t[0] = t[1]
+
+@prod_dml14
+def shared_object_spec(t):
+    'shared_object_spec : object_desc LBRACE shared_object_statements RBRACE'
+    stray_is_check(t[3])
+    t[0] = t[1] + t[3]
+
+@prod_dml14
+def shared_object_statements(t):
+    'shared_object_statements : shared_object_statements shared_object_statement'
+    t[0] = t[1] + [t[2]]
+
+@prod_dml14
+def shared_object_statements_empty(t):
+    'shared_object_statements : '
+    fixup_emptyprod_lexpos(t)
+    t[0] = []
+
+@prod_dml14
+def shared_object_statement(t):
+    '''shared_object_statement : plain_object_statement
+                               | shared_member'''
+    t[0] = t[1]
+
 def stray_is_check(body):
     '''Checks a block for any standalone 'is' declared following an object
     declaration which looks like it was meant to affect that object
@@ -1074,7 +1166,14 @@ def stray_is_check(body):
 
 @prod
 def object_statement(t):
-    '''object_statement : object_statement_or_typedparam'''
+    '''object_statement : plain_object_statement'''
+    t[0] = t[1]
+
+# Split out from object_statement so that a shared object's body can permit
+# shared members where an ordinary body rejects them, without a conflict.
+@prod
+def plain_object_statement(t):
+    '''plain_object_statement : object_statement_or_typedparam'''
     if (t[1].kind == 'param' and t[1].args[1] is not None
         and t[1].args[1].kind == 'paramtype'):
         report(ESYNTAX(t[1].args[1].site, None,
@@ -1086,18 +1185,27 @@ def object_statement(t):
         t[0] = t[1]
 
 @prod_dml14
-def object_statement_bad_shared_method(t):
-    '''object_statement : bad_shared_method'''
+def object_statement_bad_shared(t):
+    '''object_statement : bad_shared'''
     t[0] = t[1]
 
 @prod_dml14
 def bad_shared_method(t):
-    '''bad_shared_method : SHARED method_qualifiers METHOD shared_method'''
+    '''bad_shared : SHARED method_qualifiers METHOD shared_method'''
     report(ESYNTAX(site(t), 'shared',
                    'shared method declaration only permitted'
                    + ' in top level template block'))
     # fallback: dummy statement
     t[0] = ast.hashif(site(t), ast.variable(site(t), 'false'), [], [])
+
+@prod_dml14
+def bad_shared_object(t):
+    '''bad_shared : shared_object'''
+    report(ESYNTAX(t[1].site, 'shared',
+                   'shared object declaration only permitted'
+                   + ' in top level template block'))
+    # fallback: the object declaration without its sharedness
+    t[0] = t[1]
 
 @prod_dml12
 def object_statement_or_typedparam(t):

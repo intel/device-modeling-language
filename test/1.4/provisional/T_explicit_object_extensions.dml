@@ -33,5 +33,17 @@ template u {
     }
 }
 
+// `in` precedes `shared`, following English word order
+template v {
+    shared group g1 {
+        in group child {
+            session int dummy;
+        }
+    }
+    in shared group g2 {
+        session int dummy;
+    }
+}
+
 group common_1;
 in group common_2;

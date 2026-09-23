@@ -1,0 +1,18 @@
+/*
+  © 2025 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+provisional explicit_object_extensions;
+
+device test;
+
+template t {
+    // only object declarations can be extensions
+    /// ERROR ESYNTAX
+    in shared method m() {}
+    // no error
+    in shared group g;
+}

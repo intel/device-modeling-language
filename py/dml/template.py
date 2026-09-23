@@ -239,6 +239,9 @@ def flatten_ifs(in_each_specs, templates, stmts, preconds):
             (names, _) = stmt.args
             in_eachs.append(([templates[name] for name in names],
                              in_each_specs[stmt]))
+        elif stmt.kind == 'sharedobject':
+            # TODO
+            pass
         else:
             if stmt.kind not in {'method', 'session', 'saved',
                                  'error', 'export', 'hook'}:
@@ -351,6 +354,9 @@ def rank_structure(asts):
             (_, t, f) = spec.args
             queue.extend((s, True) for s in t)
             queue.extend((s, True) for s in f)
+        elif spec.kind == 'sharedobject':
+            # TODO
+            pass
         else:
             assert spec.kind in {'error', 'method', 'param',
                                  'session', 'saved', 'export', 'hook'}
