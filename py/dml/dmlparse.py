@@ -906,6 +906,16 @@ def shared_member_object(t):
     '''shared_member : shared_object'''
     t[0] = ast.sharedobject(t[1].site, t[1])
 
+@prod_dml14
+def template_statement_bad_shared(t):
+    '''template_stmt : SHARED session_decl
+                     | SHARED saved_decl
+                     | SHARED param'''
+    report(ESYNTAX(site(t), 'shared',
+                   'shared is only permitted on methods, hooks and'
+                   + ' composite objects'))
+    t[0] = [t[2]]
+
 
 @prod_dml12
 def trait_template(t):

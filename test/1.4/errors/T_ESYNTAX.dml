@@ -46,6 +46,13 @@ template t {
         /// ERROR ESYNTAX
         shared group g {}
     }
+    // shared is only permitted on composite objects
+    /// ERROR ESYNTAX
+    shared session int s;
+    /// ERROR ESYNTAX
+    shared saved int sv;
+    /// ERROR ESYNTAX
+    shared param sp = 0;
     group g2 {
         /// ERROR ESYNTAX
         shared group g3 {}
