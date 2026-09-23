@@ -173,7 +173,7 @@ class TraitMethod(TraitVTableItem):
 
     def cname(self):
         '''Name of the C identifier for this method'''
-        return '_DML_TM_%s__%s' % (self.trait.name, self.name)
+        return '_DML_TM_%s__%s' % (self.trait.c_name, self.name)
 
     @property
     def memo_outs_struct(self):
@@ -184,7 +184,7 @@ class TraitMethod(TraitVTableItem):
             if self.throws:
                 memo_dict['threw'] = TBool()
             self._memo_outs_struct = TStruct(
-                memo_dict, label=f'_memo_{self.trait.name}__{self.name}')
+                memo_dict, label=f'_memo_{self.trait.c_name}__{self.name}')
         return self._memo_outs_struct
 
     @property
@@ -267,10 +267,10 @@ class TraitMethod(TraitVTableItem):
                 trait_decl = mkInline(
                     site,
                     '%s UNUSED = DOWNCAST(%s, %s, %s);' % (
-                        self.trait.type().declaration('_' + cident(self.trait.name)),
-                        '_' + cident(self.vtable_trait.name),
-                        cident(self.trait.name),
-                        '.'.join(cident(t.name) for t in downcast_path)))
+                        self.trait.type().declaration('_' + self.trait.c_name),
+                        '_' + self.vtable_trait.c_name,
+                        self.trait.c_name,
+                        '.'.join(t.c_name for t in downcast_path)))
                 body = mkCompound(site, [trait_decl, body])
             return body
 
@@ -685,7 +685,7 @@ class ObjTraits(SubTrait):
 
     def vtable_cname(self, trait):
         '''The C name of a trait's vtable'''
-        return "_tr_%s__%s" % (self.node.attrname() or '_dev', trait.name)
+        return "_tr_%s__%s" % (self.node.attrname() or '_dev', trait.c_name)
 
     def lookup_shared_method_impl(self, site, name, indices):
         '''Return implementation of shared method provided by trait'''
@@ -739,6 +739,7 @@ class Trait(SubTrait):
 
         super(Trait, self).__init__(ancestors, ancestor_vtables)
         self.name = name
+        self.c_name = cident(name)
         self.site = site
 
         # Method implementations provided by this trait. Dictionary,
@@ -843,7 +844,7 @@ class Trait(SubTrait):
     def scope(self, global_scope):
         '''Return a scope for looking up sibling objects in this trait'''
         s = Symtab(global_scope)
-        selfref = mkLit(self.site, '_' + cident(self.name), self.type())
+        selfref = mkLit(self.site, '_' + self.c_name, self.type())
         for name in self.members():
             # This is very hacky, but works well
             try:
@@ -961,7 +962,7 @@ class Trait(SubTrait):
         return None
 
     def implicit_args(self):
-        return [("_" + cident(self.name), self.type())]
+        return [("_" + self.c_name, self.type())]
 
     def vtable_method_type(self, inp, outp, throws, independent):
         return TPtr(TFunction(

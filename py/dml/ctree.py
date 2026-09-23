@@ -3126,7 +3126,7 @@ class TraitMethodApplyIndirect(Expression):
         macro = f'CALL_{infix_independent}TRAIT_METHOD{suffix_noarg}'
         args = (['_dev'] * (not self.independent)
                 + [arg.read() for arg in [self.traitref] + self.inargs])
-        trait_name = cident(realtype(self.traitref.ctype()).trait.name)
+        trait_name = realtype(self.traitref.ctype()).trait.c_name
         return f"{macro}({trait_name}, {self.methname}, {', '.join(args)})"
 
 class TraitMethodApplyDirect(Expression):
@@ -3292,12 +3292,12 @@ class EachIn(Expression):
         '''C identifier name for vtable_list_t instance'''
         # 'dev' is guaranteed not to clash with the name of another object
         name = 'dev' if node is dml.globals.device else node.attrname()
-        return f'_each__{trait.name}__in__{name}'
+        return f'_each__{trait.c_name}__in__{name}'
 
     @staticmethod
     def array_ident(trait):
         '''C identifier name for vtable_list_t instance'''
-        return f'_each__{trait.name}'
+        return f'_each__{trait.c_name}'
 
     @staticmethod
     def subobjs_implementing(node, trait):
@@ -3675,10 +3675,10 @@ class ObjTraitRef(Expression):
                             for i in range(self.node.dimensions))
         structref = self.node.traits.vtable_cname(self.ancestry_path[0])
         pointer = '(&%s)' % ('.'.join([structref] + [
-            cident(t.name) for t in self.ancestry_path[1:]]))
+            t.c_name for t in self.ancestry_path[1:]]))
         id = ObjIdentity(self.site, self.node, indices).read()
         traitref_expr = ('((%s) {%s, %s})'
-                         % (cident(self.trait.name), pointer, id))
+                         % (self.trait.c_name, pointer, id))
         if indices_decl:
             return '({%s; %s;})' % (indices_decl, traitref_expr)
         else:
@@ -3770,8 +3770,8 @@ class TraitUpcast(Expression):
                       % (typ.trait.name, self.parent.name))
 
         return ("UPCAST(%s, %s, %s)"
-                % (self.sub.read(), cident(typ.trait.name),
-                   ".".join(cident(t.name) for t in
+                % (self.sub.read(), typ.trait.c_name,
+                   ".".join(t.c_name for t in
                             typ.trait.ancestry_paths[self.parent][0])))
 
 class TraitObjectCast(Expression):
@@ -3805,7 +3805,7 @@ def mkTraitUpcast(site, sub, parent):
 def vtable_read(expr):
     typ = realtype(expr.ctype())
     assert isinstance(typ, TTrait)
-    return '((struct _%s *) (%s).trait)' % (cident(typ.trait.name),
+    return '((struct _%s *) (%s).trait)' % (typ.trait.c_name,
                                             expr.read())
 
 class TraitParameter(Expression):
@@ -3819,7 +3819,7 @@ class TraitParameter(Expression):
     def read(self):
         t = realtype(self.traitref.ctype())
         assert isinstance(t, TTrait)
-        vtable_type = f'struct _{cident(t.trait.name)}'
+        vtable_type = f'struct _{t.trait.c_name}'
         if isinstance(realtype(self.type), TTraitList):
             return (f'_vtable_sequence_param({self.traitref.read()},'
                     f' offsetof({vtable_type}, {self.name}))')
@@ -3847,7 +3847,7 @@ class TraitSessionRef(Expression):
     def read(self):
         t = realtype(self.traitref.ctype())
         assert isinstance(t, TTrait)
-        vtable_type = f'struct _{cident(t.trait.name)}'
+        vtable_type = f'struct _{t.trait.c_name}'
         return (f'VTABLE_SESSION(_dev, {self.traitref.read()}, {vtable_type}'
                 f', {self.name}, {self.ctype().declaration("")})')
 
@@ -3972,7 +3972,7 @@ class TraitHookRef(Expression):
     def read(self):
         t = realtype(self.traitref.ctype())
         assert isinstance(t, TTrait)
-        vtable_type = f'struct _{cident(t.trait.name)}'
+        vtable_type = f'struct _{t.trait.c_name}'
 
         coeff = math.prod(self.dimsizes)
         if all(idx.constant for idx in self.indices):

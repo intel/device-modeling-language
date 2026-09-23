@@ -368,7 +368,7 @@ class SharedIndependentMemoized(Memoization):
         # SimpleSite wrapper to avoid linemarks being generated.
         self.site = SimpleSite(self.method.site.loc())
     def make_ref(self, ref, typ):
-        traitname = cident(self.method.trait.name)
+        traitname = self.method.trait.c_name
         return mkLit(self.site,
                      f'((struct _{traitname} *) _{traitname}.trait)'
                      + f'->_memo_outs_{self.method.name}'

@@ -1093,7 +1093,7 @@ class TTrait(DMLType):
         return hash((TTrait, self.const, self.trait))
 
     def c_name(self):
-        return cident(self.trait.name)
+        return self.trait.c_name
 
     def describe(self):
         return 'template type ' + self.trait.name

@@ -275,8 +275,8 @@ def generate_hfile(device, headers, filename):
     out('#include <stdint.h>\n')
     out('#include "'+os.path.basename(structfilename)+'"\n\n')
 
-    for name in dml.globals.traits:
-        out(f'typedef _traitref_t {cident(name)};\n')
+    for trait in dml.globals.traits.values():
+        out(f'typedef _traitref_t {trait.c_name};\n')
 
     # Constraints from C:
     # - Types must be defined before they are referred to
@@ -2094,7 +2094,7 @@ def generate_each_in_table(trait, instances):
             ancestry_path = sub.traits.ancestry_paths[trait][0]
             base = '&%s%s' % (
                 sub.traits.vtable_cname(ancestry_path[0]),
-                ''.join('.' + cident(t.name)
+                ''.join('.' + t.c_name
                         for t in ancestry_path[1:]))
             num = reduce(operator.mul, sub.dimsizes, 1)
             uniq = sub.uniq
@@ -2132,15 +2132,15 @@ def generate_trait_deserialization_hashtables(device):
         if trait.empty() or trait is dml.globals.object_trait:
             continue
         add_variable_declaration('ht_int_table_t '
-                                 + f'_{cident(trait.name)}_vtable_ht',
+                                 + f'_{trait.c_name}_vtable_ht',
                                  'HT_INT_NULL()')
         for node in dml.globals.trait_instances.get(trait, ()):
             node.traits.mark_referenced(trait)
             ancestry_path = node.traits.ancestry_paths[trait][0]
             structref = node.traits.vtable_cname(ancestry_path[0])
             pointer = '(&%s)' % ('.'.join([structref] + [
-                cident(t.name) for t in ancestry_path[1:]]))
-            inserts.append(f'ht_insert_int(&_{cident(trait.name)}_vtable_ht, '
+                t.c_name for t in ancestry_path[1:]]))
+            inserts.append(f'ht_insert_int(&_{trait.c_name}_vtable_ht, '
                            + f'{node.uniq}, {pointer});\n')
 
     start_function_definition('void _initialize_vtable_hts(void)')
@@ -2157,7 +2157,7 @@ def generate_object_vtables_array():
             ancestry_path = node.traits.ancestry_paths[dml.globals.object_trait][0]
             structref = node.traits.vtable_cname(ancestry_path[0])
             pointer = '(&%s)' % ('.'.join([structref] + [
-                cident(t.name) for t in ancestry_path[1:]]))
+                t.c_name for t in ancestry_path[1:]]))
         else:
             pointer = 'NULL'
         items.append(pointer)
@@ -2202,10 +2202,10 @@ def generate_trait_method(m):
         site_linemark(m.rbrace_site)
         out('}\n', preindent=-1)
 
-def generate_adjustor_thunk(traitname, name, inp, outp, throws, independent,
+def generate_adjustor_thunk(trait_c_name, name, inp, outp, throws, independent,
                             vtable_path, def_path, hardcoded_impl=None):
     generated_name = "__adj_%s__%s__%s" % (
-        traitname, '__'.join(t.name for t in vtable_path), name)
+        trait_c_name, '__'.join(t.c_name for t in vtable_path), name)
     rettype = c_rettype(outp, throws)
     out('static ' + rettype.declaration('\n%s' % (generated_name,)))
     vtable_trait = vtable_path[-1]
@@ -2220,13 +2220,13 @@ def generate_adjustor_thunk(traitname, name, inp, outp, throws, independent,
     [(vt_name, vtable_trait_type)] = implicit_inargs
     assert vtable_trait_type.trait is vtable_trait
     out('%s.trait = &((struct _%s *) DOWNCAST(%s, %s, %s).trait)->%s;\n' % (
-        vt_name, cident(traitname), vt_name, cident(traitname),
-        '.'.join(cident(t.name) for t in vtable_path),
-        '.'.join(cident(t.name) for t in def_path)))
+        vt_name, trait_c_name, vt_name, trait_c_name,
+        '.'.join(t.c_name for t in vtable_path),
+        '.'.join(t.c_name for t in def_path)))
     if not rettype.void:
         out('return ')
     fun = hardcoded_impl or ('((struct _%s *) %s.trait)->%s'
-                             % (cident(vtable_trait.name), vt_name, name))
+                             % (vtable_trait.c_name, vt_name, name))
     out('%s(%s);\n' % (fun, ", ".join(['_dev'] * (not independent) + [vt_name]
                                       + [name for (name, _) in inargs])))
     out('}\n', preindent=-1)
@@ -2319,7 +2319,7 @@ def method_tinit_arg(trait, parent, name, scrambled_name):
                 vtable_trait.vtable_methods[name]
             method_impl = impl_trait.method_impls[name]
             thunk = generate_adjustor_thunk(
-                trait.name, name, inp, outp, throws, independent,
+                trait.c_name, name, inp, outp, throws, independent,
                 canonical_path, impl_path,
                 method_impl.cname())
             if not method_impl.overridable:
@@ -2350,7 +2350,7 @@ def method_tinit_arg(trait, parent, name, scrambled_name):
             hardcoded_fun = None
             def_path = canonical_path
         thunk = generate_adjustor_thunk(
-            trait.name, name, inp, outp, throws, independent,
+            trait.c_name, name, inp, outp, throws, independent,
             vtable_path, def_path,
             hardcoded_fun)
         if len(impl_traits) == 1 and parent.implements(impl_traits[0]):
@@ -2362,9 +2362,9 @@ def method_tinit_arg(trait, parent, name, scrambled_name):
             return thunk
 
 def print_vtable_struct_declaration(trait):
-    out('struct _%s {\n' % cident(trait.name), postindent=1)
+    out('struct _%s {\n' % trait.c_name, postindent=1)
     for p in trait.direct_parents:
-        out("struct _%s %s;\n" % (cident(p.name), cident(p.name)))
+        out("struct _%s %s;\n" % (p.c_name, p.c_name))
     for (name, (_, ptype)) in list(trait.vtable_params.items()):
         if isinstance(realtype(ptype), TTraitList):
             out(f"_each_in_param_t {name};\n")
@@ -2400,7 +2400,7 @@ fields.
     '''
     # prevent argument names from shadowing trait types
     def scramble_argname(name):
-        return "_%s_%s" % (trait.name, name)
+        return "_%s_%s" % (trait.c_name, name)
     initializers = []
     for name in sorted(trait.vtable_methods):
         scrambled_name = scramble_argname(name)
@@ -2434,12 +2434,11 @@ fields.
                 args.append(method_tinit_arg(trait, parent,
                                              name, scrambled_name))
         tinit_calls.append("_tinit_%s(%s);\n" % (
-            parent.name, ", ".join(['&_ret->' + cident(parent.name)]
-                                   + args)))
+            parent.c_name, ", ".join(['&_ret->' + parent.c_name]
+                                     + args)))
 
     out('static void __attribute__((optimize("O0")))\n')
-    out('_tinit_%s(struct _%s *_ret' % (trait.name,
-                                        cident(trait.name)))
+    out('_tinit_%s(struct _%s *_ret' % (trait.c_name, trait.c_name))
     inargs = tinit_args(trait)
     for name in inargs:
         scrambled_name = scramble_argname(name)
@@ -2468,7 +2467,7 @@ fields.
 
     out(')\n{\n', postindent=1)
     if initializers:
-        out('*_ret = (struct _%s){\n' % (cident(trait.name),),
+        out('*_ret = (struct _%s){\n' % (trait.c_name,),
             postindent=1)
         for initializer in initializers:
             out("%s,\n" % (initializer,))
@@ -2479,7 +2478,7 @@ fields.
 
 def trait_trampoline_name(method, vtable_trait):
     return "%s__trampoline_from_%s" % (
-        crep.cref_method(method), vtable_trait.name)
+        crep.cref_method(method), vtable_trait.c_name)
 
 def flatten_object_subtree(node):
     '''return a list of all composite subobjects inside node'''
@@ -2649,7 +2648,7 @@ def init_trait_vtable(node, trait, param_overrides):
     # initialize vtable instance
     vtable_arg = f'&{node.traits.vtable_cname(trait)}'
     init_call = ('_tinit_%s(%s);\n'
-         % (trait.name, ', '.join([vtable_arg] + args)))
+         % (trait.c_name, ', '.join([vtable_arg] + args)))
 
     if param_decl:
         out('{\n', postindent=1)
@@ -2808,7 +2807,7 @@ def generate_vtable_instances(devnode):
             for trait in subnode.traits.referenced:
                 add_variable_declaration(
                     'struct _%s %s'
-                     % (cident(trait.name), subnode.traits.vtable_cname(trait)))
+                     % (trait.c_name, subnode.traits.vtable_cname(trait)))
 
 def calculate_saved_userdata(node, dimsizes, attr_name, sym_spec = None):
     if node.objtype == 'method':

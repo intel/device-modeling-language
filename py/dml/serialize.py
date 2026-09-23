@@ -322,15 +322,14 @@ def deserialize(real_type, current_expr, target_expr, error_out):
                  current_expr, addressof_target_unconst()],
                 set_error_t)
         else:
-            vtable_name = real_type.trait.name
             vtable_ht = expr.mkLit(current_site,
                                    'NULL' if real_type.trait.empty()
-                                   else f'&_{cident(vtable_name)}_vtable_ht',
+                                   else f'&_{real_type.trait.c_name}_vtable_ht',
                                    TPtr(TNamed('ht_int_table_t')))
             apply_expr = apply_c_fun(
                 current_site, '_deserialize_trait_reference',
                 [id_info_ht, vtable_ht,
-                 ctree.mkStringConstant(current_site, vtable_name),
+                 ctree.mkStringConstant(current_site, real_type.trait.name),
                  current_expr, addressof_target_unconst()],
                 set_error_t)
         return construct_subcall(apply_expr)
@@ -452,7 +451,7 @@ def type_signature(dmltype, is_for_serialization):
     if isinstance(dmltype, TVector):
         return 'V%s' % type_signature(dmltype.base, is_for_serialization)
     if isinstance(dmltype, TTrait):
-        return 'T' + (cident(dmltype.trait.name)
+        return 'T' + (dmltype.trait.c_name
                       if not is_for_serialization else '')
     if isinstance(dmltype, THook):
         from .codegen import get_type_sequence_info
