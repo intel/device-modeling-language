@@ -6,6 +6,92 @@ dml 1.4;
 
 device test;
 
+template t1 {
+    shared method m1() -> (int) { return 1; }
+}
+
 template t2 {
-    shared group g;
+    param p: int;
+    shared group g is t1 {
+        param q = p + 1;
+        shared method m2() -> (int) { return 2; }
+        method m3() -> (int) { return 3; }
+    }
+}
+
+group a is t2 {
+    param p = 4;
+}
+
+// the implicit template of an overriding declaration must outrank the one it
+// overrides
+template x {
+    shared group g {
+        shared method m() -> (int) default { return 5; }
+    }
+}
+
+template y is x {
+    shared group g {
+        shared method m() -> (int) { return 6; }
+    }
+}
+
+group b is y;
+
+// a diamond: the node c.g instantiates d1.g, d2.g and d3.g at once
+template d1 {
+    shared group g {
+        shared method m1() -> (int) default { return 1; }
+    }
+}
+
+template d2 is d1 {
+    shared group g {
+        shared method m2() -> (int) { return 2; }
+    }
+}
+
+template d3 is d1 {
+    shared group g {
+        shared method m3() -> (int) { return 3; }
+    }
+}
+
+group c is (d2, d3);
+
+// nested: n.g.h instantiates n1.g.h and n2.g.h
+template n1 {
+    shared group g {
+        shared group h {
+            shared method m() -> (int) default { return 7; }
+        }
+    }
+}
+
+template n2 is n1 {
+    shared group g {
+        shared group h {
+            shared method m() -> (int) { return 8; }
+        }
+    }
+}
+
+group n is n2;
+
+method init() {
+    local t2 t = cast(a, t2);
+    assert t.g.m1() == 1;
+    assert t.g.m2() == 2;
+    // non-shared members and params stay reachable on the object
+    assert a.g.m3() == 3;
+    assert a.g.q == 5;
+
+    assert cast(b, x).g.m() == 6;
+
+    assert cast(c, d1).g.m1() == 1;
+    assert c.g.m2() == 2;
+    assert c.g.m3() == 3;
+
+    assert cast(n, n1).g.h.m() == 8;
 }

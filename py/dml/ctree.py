@@ -4438,7 +4438,7 @@ def mkTemplateQualifiedMethodRef(site, templates_subref, method_name):
     shared_method = None
     if trait is not None:
         for impl_trait in trait.method_impl_traits.get(method_name, []):
-            impl_template = dml.globals.templates[impl_trait.name]
+            impl_template = dml.globals.templates_by_trait[impl_trait]
             shared_method = impl_trait.method_impls[method_name]
             rank_to_candidate[impl_template.spec.rank] = (impl_template,
                                                           shared_method)
@@ -4539,7 +4539,7 @@ def mkTraitTemplatesSubRef(site, templates_ref, template_name):
 def mkTraitTemplateQualifiedMethodRef(site, templates_subref, method_name):
     trait = templates_subref.trait
 
-    tmpl = dml.globals.templates[trait.name]
+    tmpl = dml.globals.templates_by_trait[trait]
     (provides_impl, next_tmpls) = tmpl.get_potential_method_impl_details(
         method_name)
     impl_tmpls = (tmpl,) if provides_impl else next_tmpls
@@ -4557,8 +4557,8 @@ def mkTraitTemplateQualifiedMethodRef(site, templates_subref, method_name):
     # some shared method implementation, then it could be a potential
     # implementation candidate, which renders the TQMIC invalid
     for impl_tmpl in impl_tmpls:
-        if all(impl_tmpl.spec.rank
-               not in dml.globals.templates[impl_trait.name].spec.rank.inferior
+        if all(impl_tmpl.spec.rank not in
+               dml.globals.templates_by_trait[impl_trait].spec.rank.inferior
                for impl_trait in impl_traits):
             raise ENSHAREDTQMIC(site, trait, method_name)
 

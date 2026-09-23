@@ -33,7 +33,20 @@ __all__ = (
     'AmbiguousDefaultSymbol',
 )
 
-def process_trait(site, name, subasts, ancestors, template_symbols):
+def all_traits():
+    '''All traits, including those of shared objects, each one after its
+    ancestors'''
+    def with_shared_objects(trait):
+        for child in trait.shared_objects.values():
+            yield from with_shared_objects(child)
+        yield trait
+    for trait in dml.globals.traits.values():
+        yield from with_shared_objects(trait)
+
+def process_trait(site, name, subasts, shared_objects, ancestors,
+                  template_symbols):
+    '''`shared_objects` maps the name of each `shared <objtype>` declaration
+    to its trait; each also becomes a parameter of that trait type'''
     # Methods declared in this trait
     methods = {}
     params = {}
@@ -111,8 +124,17 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                 raise ICE(ast.site, 'unknown ast')
         except DMLError as e:
             report(e)
-    return mktrait(site, name, ancestors, methods, params, sessions, hooks,
-                   template_symbols)
+    for (oname, otrait) in shared_objects.items():
+        # the object doubles as the value of a trait parameter of the same
+        # name
+        try:
+            check_namecoll(oname, otrait.site)
+        except DMLError as e:
+            report(e)
+        else:
+            params[oname] = (otrait.site, TTrait(otrait))
+    return mktrait(site, name, ancestors, methods, params, shared_objects,
+                   sessions, hooks, template_symbols)
 
 class NoDefaultSymbol(Symbol):
     """A broken reference to 'default' inside a method that has no default
@@ -291,18 +313,24 @@ def merge_ancestor_vtables(ancestors, site):
                 ancestor_vtables[name] = ancestor
     return ancestor_vtables
 
-def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
-            template_symbols):
-    '''Produce a trait, possibly reporting errors'''
+def mktrait(site, tname, ancestors, methods, params, shared_objects, sessions,
+            hooks, template_symbols):
+    '''Produce a trait, possibly reporting errors. `shared_objects` maps
+    a subset of the names in `params` to the TTrait that is the parameter's
+    type.'''
     direct_parents = [a for a in ancestors
                       if not any(a in p.ancestors for p in ancestors)]
     ancestor_method_impls = merge_method_impl_maps(site, direct_parents)
 
     ancestor_vtables = merge_ancestor_vtables(ancestors, site)
 
-    # a parameter declaration cannot override anything
+    # a parameter declaration cannot override anything, except a shared
+    # object: the implicit template of the override inherits the one it
+    # overrides, so the inherited vtable slot already has a compatible type
     bad_params = []
     for name in params:
+        if name in shared_objects:
+            continue
         for ancestor in direct_parents:
             coll = ancestor.member_declaration(name)
             if coll:
@@ -404,8 +432,9 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
     # referencing 'dev.xyz' from a shared method is always OK, even if
     # it's technically an untyped object parameter
     reserved_symbols.pop('dev', None)
-    return Trait(site, tname, ancestors, methods, params, sessions, hooks,
-                 ancestor_vtables, ancestor_method_impls, reserved_symbols)
+    return Trait(site, tname, ancestors, methods, params, shared_objects,
+                 sessions, hooks, ancestor_vtables, ancestor_method_impls,
+                 reserved_symbols)
 
 def typecheck_method_override(left, right):
     (site0, inp0, outp0, throws0, independent0, startup0, memoized0) = left
@@ -725,8 +754,9 @@ class Trait(SubTrait):
     # all its subtraits.
     referenced = Set()
 
-    def __init__(self, site, name, ancestors, methods, params, sessions, hooks,
-                 ancestor_vtables, ancestor_method_impls, reserved_symbols):
+    def __init__(self, site, name, ancestors, methods, params, shared_objects,
+                 sessions, hooks, ancestor_vtables, ancestor_method_impls,
+                 reserved_symbols):
         method_impls = {
             name: TraitMethod(
                 msite, inp, outp, throws, independent, startup, memoized,
@@ -739,7 +769,8 @@ class Trait(SubTrait):
 
         super(Trait, self).__init__(ancestors, ancestor_vtables)
         self.name = name
-        self.c_name = cident(name)
+        # the implicit template of a shared object is named `enclosing.obj`
+        self.c_name = cident(name.replace('.', '__'))
         self.site = site
 
         # Method implementations provided by this trait. Dictionary,
@@ -760,7 +791,10 @@ class Trait(SubTrait):
                         memoized, overridable, _, _, _))
             in list(methods.items())
             if overridable and name not in ancestor_vtables}
-        self.vtable_params = params
+        # a `shared <objtype>` declaration that overrides an inherited one
+        # reuses the inherited vtable slot
+        self.vtable_params = {name: param for (name, param) in params.items()
+                              if name not in ancestor_vtables}
         self.vtable_sessions = sessions
         self.vtable_hooks = {name: (hooks[name], THook(hooks[name][2]))
                              for name in hooks}
@@ -769,6 +803,10 @@ class Trait(SubTrait):
             for (name, method) in method_impls.items()
             if method.independent and method.memoized}
         self.reserved_symbols = reserved_symbols
+        # name -> Trait, for each `shared <objtype>` declaration. The name is
+        # also a parameter of that trait type, in vtable_params unless an
+        # ancestor declares the same shared object
+        self.shared_objects = shared_objects
 
     def __repr__(self):
         return 'Trait(%r, %r)' % (

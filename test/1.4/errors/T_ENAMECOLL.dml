@@ -97,7 +97,7 @@ bank b {
 
 port p0 {
     /// ERROR ENAMECOLL
-    param foo = 1; 
+    param foo = 1;
     /// ERROR ENAMECOLL
     param foo = 1;
 }
@@ -110,7 +110,6 @@ port p2 {
 }
 
 template structural_clash {
-    // EAMBINH might be a better description of this clash
     /// ERROR ENAMECOLL
     param p default 1;
     group g {
@@ -119,9 +118,31 @@ template structural_clash {
     }
 }
 group gg is (structural_clash) {
-    group g is (structural_clash);
+    group g is (structural_clash) {
+        // The error is not just that the inheritance is ambiguous, but that
+        // clashing declarations appear with the same rank. This renders into an
+        // error entirely within `structural_clash`, so an attempt to explicitly
+        // resolve the clash does not resolve it.
+        param p = 3;
+    }
 }
 
+// the same principle applies to shared subobjects
+template structural_clash_shared {
+    shared group g {
+        /// ERROR ENAMECOLL
+        param p default 2;
+    }
+    /// ERROR ENAMECOLL
+    param p default 1;
+}
+// follow-on error from discarding gs.g
+/// ERROR EABSTEMPLATE
+group gs is structural_clash_shared {
+    group g is structural_clash_shared {
+        param p = 3;
+    }
+}
 
 /// ERROR ENAMECOLL
 extern int x;
@@ -250,6 +271,44 @@ bank tb is sm {
     /// ERROR ENAMECOLL
     register m size 1 @ 0;
 }
+
+// a `shared` object declaration occupies one name for both the object and the
+// template parameter, so any other member of that name clashes
+template shared_group {
+    /// ERROR ENAMECOLL
+    shared group g;
+}
+group shared_group_clash is shared_group {
+    /// ERROR ENAMECOLL
+    session int g;
+}
+group so_objtype_clash is shared_group {
+    /// ERROR ENAMECOLL
+    event g;
+}
+group so_param_clash is shared_group {
+    /// ERROR ENAMECOLL
+    param g default 1;
+}
+group so_noclash_group is shared_group {
+    // no error
+    group g;
+}
+
+// the collision leaves the trait parameter without a value, so the object must
+// be abandoned rather than have its vtables initialized
+template so_vtable {
+    /// ERROR ENAMECOLL
+    shared group g { shared method m() -> (int) { return 1; } }
+    shared method n() -> (int) { return g.m(); }
+}
+group so_vtable_clash is so_vtable {
+    /// ERROR ENAMECOLL
+    session int g;
+}
+// no crash
+/// ERROR EIDENT
+param so_p = so_vtable_clash;
 
 /// ERROR ENAMECOLL
 group ga[i < 4][i < 4];

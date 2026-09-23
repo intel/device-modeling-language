@@ -141,8 +141,8 @@ def mkglobals(stmts):
         try:
             if stmt.kind in {'template', 'template_dml12'}:
                 (name, body) = stmt.args
-                (template_body, trait_body) = split_template_body(
-                    body, stmt.kind != 'template_dml12')
+                (template_body, trait_body) = template.split_template_body(
+                    body, stmt.kind == 'template')
                 if stmt.kind == 'template_dml12' and name != 'object':
                     # guaranteed by grammar.
                     assert trait_body == []
@@ -205,17 +205,15 @@ def mkglobals(stmts):
     for sym in new_symbols:
         global_scope.add(sym)
 
-    (dml.globals.templates, dml.globals.traits) = template.process_templates(
-        templates)
+    (dml.globals.templates, dml.globals.traits,
+     dml.globals.templates_by_trait) = template.process_templates(templates)
     assert 'object' in dml.globals.traits
     dml.globals.object_trait = dml.globals.traits['object']
 
-    for (tname, tpl) in list(dml.globals.templates.items()):
-        if tpl.trait:
-            assert tname not in typedefs
-            trait_type = tpl.trait.type()
-            # any name collisions were caught earlier with ENAMECOLL
-            typedefs[tname] = trait_type
+    for trait in dml.globals.traits.values():
+        assert trait.name not in typedefs
+        # any name collisions were caught earlier with ENAMECOLL
+        typedefs[trait.name] = trait.type()
 
     type_declaration_order = sort_type_declarations(new_typedefs,
                                                     anonymous_structs)
@@ -246,7 +244,7 @@ def mkglobals(stmts):
             except ETYPE as e:
                 report(e)
 
-    for t in dml.globals.traits.values():
+    for t in traits.all_traits():
         t.typecheck_members()
 
     # Resolve duplicate externs
@@ -260,39 +258,6 @@ def mkglobals(stmts):
                                          canonical_t))
             except ETYPE as e:
                 report(e)
-
-
-def split_template_body(body, creates_trait):
-    '''Split a template body into the part that describes objects and the
-    part that describes the template's trait. Shared object declarations are
-    left in the object part, for `expand_shared_objects` to desugar.'''
-    template_body = []
-    trait_body = []
-    for tstmt in body:
-        if tstmt.kind == 'sharedmethod':
-            trait_body.append(tstmt)
-        elif tstmt.kind == 'param':
-            (_, type_info, _, value) = tstmt.args
-            if (type_info is not None
-                and type_info.kind == 'paramtype'):
-                trait_body.append(tstmt)
-                # the form "param x: int = value;" has
-                # aspects of both trait and template,
-                # and the form "param x: int;" has some effect
-                # when explicit_param_decls is enabled
-                template_body.append(tstmt)
-            else:
-                template_body.append(tstmt)
-        elif tstmt.kind in {'session', 'saved'}:
-            template_body.append(tstmt)
-            if creates_trait:
-                trait_body.append(tstmt)
-        elif tstmt.kind == 'sharedhook':
-            template_body.append(tstmt.args[0])
-            trait_body.append(tstmt.args[0])
-        else:
-            template_body.append(tstmt)
-    return (template_body, trait_body)
 
 
 def type_deps(t, include_structs, expanded_typedefs):
@@ -1483,7 +1448,7 @@ class AbstractTraitMethodHandle(traits.MethodHandle):
     shared = True
     def __init__(self, name, vtable_trait):
         (site, *sig) = vtable_trait.vtable_methods[name]
-        obj_spec = dml.globals.templates[vtable_trait.name].spec
+        obj_spec = dml.globals.templates_by_trait[vtable_trait].spec
         super(AbstractTraitMethodHandle, self).__init__(
             site, name, obj_spec, True, True, None, *sig)
 
@@ -1499,7 +1464,7 @@ def process_method_declarations(obj, name, declarations,
     shared_methods = [
         TraitMethodHandle(
             impl_trait.method_impls[name],
-            dml.globals.templates[impl_trait.name].spec)
+            dml.globals.templates_by_trait[impl_trait].spec)
         for impl_trait in shared_impl_traits]
     shared_abstract_methods = [
         AbstractTraitMethodHandle(name, vtable_trait)
@@ -1861,7 +1826,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                     t.name for t in direct_parents)),
                 # traitset is a frozenset, with undefined iteration order;
                 # must sort it to keep compilation deterministic
-                Set(sorted(traitset)), {}, {}, {}, {}, {})
+                Set(sorted(traitset)), {}, {}, {}, {}, {}, {})
             implicit_traits[traitset] = new_trait
             if new_trait.name in dml.globals.traits:
                 raise ICE(
@@ -2071,7 +2036,16 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                                   True)
                 continue
 
-            if override.objtype != decl_trait.member_kind(member):
+            if member in decl_trait.shared_objects:
+                # the parameter's value is the object itself; a conflicting
+                # object type is caught by merge_subobj_defs instead, because
+                # the declaration is also an ordinary subobject declaration
+                if not isinstance(override, objects.CompositeObject):
+                    # mkobj2 discarded the object declaration after reporting
+                    # the collision, so the parameter has no value; give up on
+                    # the object rather than leave its vtables uninitialized
+                    raise ENAMECOLL(override.site, decl_site, member)
+            elif override.objtype != decl_trait.member_kind(member):
                 # e.g. an attempt to override a parameter with a method
                 report(ENAMECOLL(override.site, decl_site, member))
                 continue

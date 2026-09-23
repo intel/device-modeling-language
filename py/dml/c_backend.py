@@ -275,7 +275,7 @@ def generate_hfile(device, headers, filename):
     out('#include <stdint.h>\n')
     out('#include "'+os.path.basename(structfilename)+'"\n\n')
 
-    for trait in dml.globals.traits.values():
+    for trait in traits.all_traits():
         out(f'typedef _traitref_t {trait.c_name};\n')
 
     # Constraints from C:
@@ -331,7 +331,7 @@ def generate_hfile(device, headers, filename):
         t.print_struct_definition()
     out('\n')
 
-    for t in dml.globals.traits.values():
+    for t in traits.all_traits():
         for memo_outs_struct in t.vtable_memoized_outs.values():
             memo_outs_struct.print_struct_definition()
         print_vtable_struct_declaration(t)
@@ -2118,7 +2118,7 @@ def generate_each_in_tables():
         by_trait.setdefault(trait, []).append((node, subobjs))
     for t in by_trait:
         generate_each_in_table(t, by_trait[t])
-    for t in Set(dml.globals.traits.values()).difference(by_trait):
+    for t in Set(traits.all_traits()).difference(by_trait):
         # Need by shared methods that belong to unused templates;
         # when dereferencing sequence params, these methods reference
         # the base array.
@@ -2703,19 +2703,22 @@ def generate_init_trait_vtables(node, param_values):
 
 def trait_param_value(node, param_type_site, param_type):
     is_sequence = isinstance(realtype(param_type), TTraitList)
+    def value_expr(indices):
+        if node.objtype != 'parameter':
+            # a `shared <objtype>` declaration: the object is its own value
+            return mkCast(node.site, mkNodeRef(node.site, node, indices),
+                          param_type)
+        expr = node.get_expr(indices)
+        if isinstance(expr, NonValue):
+            raise expr.exc()
+        return source_for_assignment(expr.site, param_type, expr)
     try:
         try:
-            expr = node.get_expr(static_indices(node))
-            if isinstance(expr, NonValue):
-                raise expr.exc()
-            expr = source_for_assignment(expr.site, param_type, expr)
+            expr = value_expr(static_indices(node))
         except EIDXVAR:
             indices = tuple(mkLit(node.site, v, TInt(32, False))
                             for v in IndexedParamValue.indexvars(node))
-            expr = node.get_expr(indices)
-            if isinstance(expr, NonValue):
-                raise expr.exc()
-            expr = source_for_assignment(expr.site, param_type, expr)
+            expr = value_expr(indices)
             if is_sequence:
                 if (isinstance(expr, EachIn)
                     and expr.node is node.parent
@@ -3369,7 +3372,7 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     gather_size_statistics = os.environ.get('DMLC_GATHER_SIZE_STATISTICS', '')
     size_statistics = {}
 
-    for t in list(dml.globals.traits.values()):
+    for t in list(traits.all_traits()):
         for m in list(t.method_impls.values()):
             if gather_size_statistics:
                 ctx = StrOutput(filename=output.current().filename,
