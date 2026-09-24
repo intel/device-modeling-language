@@ -79,6 +79,39 @@ template n2 is n1 {
 
 group n is n2;
 
+// the implicit template inherits the template of the object type
+template r {
+    shared register reg size 1 @ 0 {
+        shared method twice() -> (uint64) { return get() * 2; }
+    }
+}
+
+bank bk {
+    group rg is r;
+}
+
+// all declarations of an object in one template body form its implicit
+// template, as soon as one of them is shared
+param cond = true;
+template m {
+    shared group g {
+        shared method m1() -> (int) { return 1; }
+    }
+    shared group g {
+        shared method m2() -> (int) { return m1() + s; }
+    }
+    group g {
+        session int s = 2;
+    }
+    #if (cond) {
+        group g {
+            param p = 3;
+        }
+    }
+}
+
+group mg is m;
+
 method init() {
     local t2 t = cast(a, t2);
     assert t.g.m1() == 1;
@@ -94,4 +127,11 @@ method init() {
     assert c.g.m3() == 3;
 
     assert cast(n, n1).g.h.m() == 8;
+
+    local r rr = cast(bk.rg, r);
+    rr.reg.set(3);
+    assert rr.reg.twice() == 6;
+
+    assert cast(mg, m).g.m2() == 3;
+    assert mg.g.p == 3;
 }

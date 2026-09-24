@@ -280,14 +280,21 @@ def split_template_body(body, creates_trait):
             template_body.append(tstmt)
     return (template_body, trait_body)
 
-def template_trait(name, spec, trait_stmts, shared_objects):
+def template_trait(name, spec, trait_stmts, shared_objects,
+                   conditional_specs):
+    '''`conditional_specs` are specs whose symbols are reserved in the
+    trait without being part of `spec`'''
     if trait_stmts is None:
         return None
+    symbols = {}
+    for cond_spec in conditional_specs:
+        symbols.update(cond_spec.defined_symbols())
+    symbols.update(spec.defined_symbols())
     return dml.traits.process_trait(
         spec.site, name, trait_stmts,
         {objname: tpl.trait for (objname, tpl) in shared_objects.items()},
         Set().union(*[tpl.traits() for (_, tpl) in spec.templates]),
-        spec.defined_symbols())
+        symbols)
 
 def ancestors(is_stmts):
     result = set()
@@ -314,10 +321,12 @@ def object_spec_from_asts(site, stmts, templates, inferior, in_each_structure,
     inferior_ranks.update(spec.rank for spec in list(in_each_specs.values()))
     rank = Rank(inferior_ranks, desc)
 
-    def shared_template(tname, objname, site, stmts, enclosing_is_stmts):
+    def shared_template(tname, objname, objtype, site, stmts,
+                        conditional_specs, enclosing_is_stmts):
         '''Create the implicit template of a `shared` object declaration.
         It gets the rank of the enclosing template, just like the
-        declaration of an ordinary subobject.'''
+        declaration of an ordinary subobject. `conditional_specs` are the
+        specs of conditional declarations of the same object.'''
         (body, trait_stmts) = split_template_body(stmts, True)
         # Shared members are resolved through trait inheritance rather
         # than by rank, so the implicit template must inherit those of the
@@ -327,9 +336,11 @@ def object_spec_from_asts(site, stmts, templates, inferior, in_each_structure,
              if objname in a.shared_objects),
             key=lambda tpl: tpl.name)
         (spec, shared_objects) = obj_from_asts(
-            site, body, tname, [(site, tpl) for tpl in inherited])
+            site, body, tname,
+            [(site, templates[objtype])] + [(site, tpl) for tpl in inherited])
         return Template(
-            tname, template_trait(tname, spec, trait_stmts, shared_objects),
+            tname, template_trait(tname, spec, trait_stmts, shared_objects,
+                                  conditional_specs),
             spec, shared_objects)
 
     def obj_from_asts(site, stmts, tname, instantiated=()):
@@ -359,7 +370,30 @@ def object_spec_from_asts(site, stmts, templates, inferior, in_each_structure,
             else:
                 rest.append(stmt)
         is_stmts.extend(instantiated)
-        shared_objects = {}
+        def decl_spec(decl_ast, sub_stmts, sub_instantiated):
+            (_, objtype, _, _, _) = decl_ast.args
+            (spec, _) = obj_from_asts(
+                decl_ast.site, sub_stmts + [ast.is_(
+                    decl_ast.site, [(decl_ast.site, objtype)])], None,
+                sub_instantiated)
+            return spec
+        # As soon as one declaration of an object is shared, the bodies of
+        # all its unconditional declarations in this template body form the
+        # implicit template. A condition around a declaration is evaluated
+        # in the enclosing scope, so it cannot be moved into the implicit
+        # template; a conditional declaration only extends the object, but
+        # its names are reserved in the implicit template.
+        # The unconditional declarations are therefore set aside until all
+        # conditional ones are done.
+        #
+        # Object declarations are partitioned by name:
+        # - conditional_specs: specs of conditional declarations, built at once
+        # - unconditional_decls: unconditional declarations, built afterwards
+        # - shared_names: names with a shared declaration, which makes their
+        #   unconditional declarations the implicit template
+        conditional_specs: dict[str, list[ObjectSpec]] = {}
+        unconditional_decls: dict[str, list[ast.AST]] = {}
+        shared_names: set[str] = set()
         blocks = []
         for (preconds, shallow, composite, in_each) in flatten_ifs(
                 in_each_specs, templates, rest, []):
@@ -367,27 +401,41 @@ def object_spec_from_asts(site, stmts, templates, inferior, in_each_structure,
             # list of object ASTs; recursively transform those into
             # ObjectSpec objects
             block = []
-            for decl_ast in composite:
-                if decl_ast.kind == 'sharedobject':
-                    [decl_ast] = decl_ast.args
-                    (name, objtype, indices, is_extension,
-                     sub_stmts) = decl_ast.args
-                    shared_objects[name] = shared_template(
-                        f'{tname}.{name}', name, decl_ast.site, sub_stmts,
-                        is_stmts)
-                    sub_instantiated = [(decl_ast.site, shared_objects[name])]
-                    sub_stmts = []
-                else:
+            if preconds:
+                for decl_ast in composite:
+                    # shared declarations cannot be conditional
                     assert decl_ast.kind == 'object'
                     (name, objtype, indices, is_extension,
                      sub_stmts) = decl_ast.args
-                    sub_instantiated = []
-                (spec, _) = obj_from_asts(
-                    decl_ast.site, sub_stmts + [ast.is_(
-                        decl_ast.site, [(decl_ast.site, objtype)])], None,
-                    sub_instantiated)
-                block.append((objtype, name, indices, is_extension, spec))
+                    spec = decl_spec(decl_ast, sub_stmts, [])
+                    conditional_specs.setdefault(name, []).append(spec)
+                    block.append((objtype, name, indices, is_extension, spec))
+            else:
+                unconditional_block = block
+                for decl_ast in composite:
+                    if decl_ast.kind == 'sharedobject':
+                        [decl_ast] = decl_ast.args
+                        shared_names.add(decl_ast.args[0])
+                    unconditional_decls.setdefault(
+                        decl_ast.args[0], []).append(decl_ast)
             blocks.append((preconds, shallow, block, in_each))
+        shared_objects: dict[str, Template] = {}
+        for (name, decls) in unconditional_decls.items():
+            if name in shared_names:
+                (first, *rest_decls) = decls
+                tpl = shared_template(
+                    f'{tname}.{name}', name, first.args[1], first.site,
+                    [stmt for d in decls for stmt in d.args[4]],
+                    conditional_specs.get(name, []), is_stmts)
+                shared_objects[name] = tpl
+                specs = ([decl_spec(first, [], [(first.site, tpl)])]
+                         + [decl_spec(d, [], []) for d in rest_decls])
+            else:
+                specs = [decl_spec(d, d.args[4], []) for d in decls]
+            for (d, spec) in zip(decls, specs):
+                (_, objtype, indices, is_extension, _) = d.args
+                unconditional_block.append(
+                    (objtype, name, indices, is_extension, spec))
         return (ObjectSpec(site, rank, is_stmts, params, blocks),
                 shared_objects)
     return obj_from_asts(site, stmts, tname)
@@ -505,7 +553,7 @@ def process_templates(template_decls):
             RankDesc('file', os.path.basename(name[1:])) if name.startswith('@')
             else RankDesc('template', name), name)
         templates[name] = Template(
-            name, template_trait(name, spec, trait_stmts, shared_objects),
+            name, template_trait(name, spec, trait_stmts, shared_objects, []),
             spec, shared_objects)
     # The generation of struct definitions assumes the dictionary to
     # be topologically ordered on inheritance: if A inherits B, B
