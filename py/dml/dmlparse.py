@@ -1214,8 +1214,8 @@ def bad_shared_object(t):
     report(ESYNTAX(t[1].site, 'shared',
                    'shared object declaration only permitted'
                    + ' in top level template block'))
-    # fallback: the object declaration without its sharedness
-    t[0] = t[1]
+    # fallback: dummy statement; the body may hold shared members
+    t[0] = ast.hashif(site(t), ast.variable(site(t), 'false'), [], [])
 
 @prod_dml12
 def object_statement_or_typedparam(t):

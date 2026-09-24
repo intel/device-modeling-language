@@ -42,3 +42,20 @@ template y is x {
 param a = 1;
 method b() {}
 attribute c is (uint64_attr);
+
+// a conditional plain declaration of a shared object only extends the object,
+// but its names are reserved in the implicit template
+template z {
+    shared group g {
+        shared method m() {
+            /// ERROR ENSHARED
+            s;
+        }
+    }
+    #if (true) {
+        group g {
+            session int s;
+        }
+    }
+}
+session int s;

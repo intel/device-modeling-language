@@ -310,6 +310,21 @@ group so_vtable_clash is so_vtable {
 /// ERROR EIDENT
 param so_p = so_vtable_clash;
 
+// a shared object may only override an inherited shared object
+template so_inh {
+    param g1: int;
+    shared method g2() {}
+    session int g3;
+}
+template so_inh_clash is so_inh {
+    /// ERROR ENAMECOLL
+    shared group g1;
+    /// ERROR ENAMECOLL
+    shared group g2;
+    /// ERROR ENAMECOLL
+    shared group g3;
+}
+
 /// ERROR ENAMECOLL
 group ga[i < 4][i < 4];
 

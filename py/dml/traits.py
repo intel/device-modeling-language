@@ -325,16 +325,18 @@ def mktrait(site, tname, ancestors, methods, params, shared_objects, sessions,
     ancestor_vtables = merge_ancestor_vtables(ancestors, site)
 
     # a parameter declaration cannot override anything, except a shared
-    # object: the implicit template of the override inherits the one it
-    # overrides, so the inherited vtable slot already has a compatible type
+    # object overriding a shared object: the implicit template of the
+    # override inherits the one it overrides, so the inherited vtable slot
+    # already has a compatible type
     bad_params = []
     for name in params:
-        if name in shared_objects:
-            continue
         for ancestor in direct_parents:
             coll = ancestor.member_declaration(name)
             if coll:
-                (orig_site, _) = coll
+                (orig_site, orig_trait) = coll
+                if (name in shared_objects
+                    and name in orig_trait.shared_objects):
+                    continue
                 (param_site, _) = params[name]
                 report(ENAMECOLL(param_site, orig_site, name))
                 bad_params.append(name)

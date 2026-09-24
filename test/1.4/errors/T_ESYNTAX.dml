@@ -45,6 +45,9 @@ template t {
         shared method m() {}
         /// ERROR ESYNTAX
         shared group g {}
+        // no crash on the shared members of the rejected object
+        /// ERROR ESYNTAX
+        shared group g4 { shared method m() {} }
     }
     // shared is only permitted on composite objects
     /// ERROR ESYNTAX
