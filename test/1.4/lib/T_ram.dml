@@ -1,0 +1,29 @@
+/*
+  © 2025 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+import "utility.dml";
+
+subdevice ram {
+    is ram;
+    param size = 65536;
+}
+
+attribute trigger_test is bool_attr {
+    // cannot run from init: RAM access requires queue to be set
+    method set(attr_value_t _) throws {
+        // integer across page boundary
+        assert ram.ram.page_size == 0x2000;
+        ram.set_u8(0x1ffe, 0x11);
+        ram.set_u8(0x1fff, 0x22);
+        ram.set_u8(0x2000, 0x33);
+        ram.set_u8(0x2001, 0x44);
+        assert ram.get_u64_le(0x1ff8) == 0x2211_0000_0000_0000;
+        assert ram.get_u64_le(0x2000) == 0x4433;
+        assert ram.get_u64_le(0x1ffe) == 0x44332211;
+    }
+}
