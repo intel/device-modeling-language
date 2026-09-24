@@ -1673,6 +1673,24 @@ class ENSHARED(DMLError):
         if self.decl_site:
             self.print_site_message(self.decl_site, "declared here")
 
+class EENCLOSING(DMLError):
+    """<a id="EENCLOSING"/>
+    The members of a template are not accessible from shared methods in a
+    `shared` object declared in it: the object's implicit template type does
+    not include them. The names are still reserved, so a symbol of the same
+    name in the global scope is not found either.
+    """
+    version = "1.4"
+    fmt = ("%s belongs to the enclosing template %s, not to the template"
+           " type %s")
+    def __init__(self, site, name, enclosing, template, decl_site):
+        DMLError.__init__(self, site, name, enclosing, template)
+        self.decl_site = decl_site
+    def log(self):
+        DMLError.log(self)
+        if self.decl_site:
+            self.print_site_message(self.decl_site, "declared here")
+
 class ESERIALIZE(DMLError):
     """Some complex types, in particular most pointer types, cannot be
     automatically checkpointed by DML, and are therefore disallowed in

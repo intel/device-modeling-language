@@ -243,10 +243,10 @@ class TraitMethod(TraitVTableItem):
         return c_rettype(self.outp, self.throws).declaration(
             '%s(%s)' % (self.cname(), args))
 
-    def codegen_body(self):
+    def codegen_body(self, enclosing):
         with (crep.DeviceInstanceContext()
               if not self.independent else contextlib.nullcontext()):
-            scope = MethodParamScope(self.trait.scope(global_scope))
+            scope = MethodParamScope(self.trait.scope(global_scope, enclosing))
             implicit_inargs = self.vtable_trait.implicit_args()
             site = SimpleSite(self.site.loc())
             if len(self.default_traits) > 1:
@@ -747,6 +747,17 @@ class ReservedSymbol(NonValue):
                }[self.kind] % (self.name,)
         return ENSHARED(self.site, fmt, self.template, self.decl_site)
 
+class EnclosingScopeSymbol(NonValue):
+    '''A member of the template that encloses a shared object, as seen from
+    the shared scope of the object's implicit template'''
+    @auto_init
+    def __init__(self, site, name, enclosing, template, decl_site): pass
+    def __str__(self):
+        return self.name
+    def exc(self):
+        return EENCLOSING(self.site, self.name, self.enclosing,
+                          self.template, self.decl_site)
+
 class Trait(SubTrait):
     '''A trait, as defined by a top-level 'trait' statement'''
 
@@ -879,9 +890,14 @@ class Trait(SubTrait):
         # early enough that the bad overrides don't cause ICE:s to happen
         # (though their presence may lead to other strange behaviour.)
 
-    def scope(self, global_scope):
-        '''Return a scope for looking up sibling objects in this trait'''
-        s = Symtab(global_scope)
+    def scope(self, global_scope, enclosing):
+        '''Return a scope for looking up sibling objects in this trait.
+        `enclosing` holds the traits of the templates that enclose a shared
+        object, outermost first.'''
+        s = global_scope
+        for trait in enclosing:
+            s = trait.enclosed_scope(s, self)
+        s = Symtab(s)
         selfref = mkLit(self.site, '_' + self.c_name, self.type())
         for name in self.members():
             # This is very hacky, but works well
@@ -892,6 +908,19 @@ class Trait(SubTrait):
             s.add(ExpressionSymbol(name, expr, self.site))
         # grammar prohibits name collision on 'this'
         s.add(ExpressionSymbol('this', selfref, self.site))
+        return s
+
+    def enclosed_scope(self, outer, inner):
+        '''The scope that the members of this trait create for the shared
+        scope of `inner`, a shared object declared within it: they are not
+        accessible, but they still shadow `outer`'''
+        s = Symtab(outer)
+        for name in self.members():
+            decl = self.member_declaration(name)
+            decl_site = decl[0] if decl else self.reserved_symbols[name][1]
+            s.add(ExpressionSymbol(name, EnclosingScopeSymbol(
+                self.site, name, self.name, inner.name, decl_site),
+                                   self.site))
         return s
 
     def empty(self):

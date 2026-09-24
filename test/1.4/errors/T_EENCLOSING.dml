@@ -1,0 +1,69 @@
+/*
+  © 2026 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+template base {
+    param inh: int;
+}
+
+template t is base {
+    param tp: int;
+    param up = 1;
+    shared method sm() -> (int) { return 1; }
+    method nm() -> (int) { return 1; }
+    session int ses;
+    group sub;
+    shared group g {
+        shared group h {
+            shared method m() -> (int) {
+                // two levels out
+                /// ERROR EENCLOSING
+                local int x = tp;
+                return x;
+            }
+        }
+        shared method m() -> (int) {
+            /// ERROR EENCLOSING
+            local int x = tp;
+            /// ERROR EENCLOSING
+            x = up;
+            /// ERROR EENCLOSING
+            x = inh;
+            /// ERROR EENCLOSING
+            x = sm();
+            /// ERROR EENCLOSING
+            x = nm();
+            /// ERROR EENCLOSING
+            x = ses;
+            /// ERROR EENCLOSING
+            x = sub.x;
+            /// ERROR EENCLOSING
+            x = g.x;
+            return x;
+        }
+    }
+}
+
+group a is t {
+    param tp = 2;
+    param inh = 3;
+}
+
+// the names are reserved, so these are not found either
+constant tp = 10;
+constant up = 10;
+constant inh = 10;
+method sm() -> (int) { return 10; }
+method nm() -> (int) { return 10; }
+session int ses = 10;
+group sub { param x = 10; }
+group g { param x = 10; }
+
+method init() {
+    cast(a, t).g.m();
+    cast(a, t).g.h.m();
+}

@@ -2191,8 +2191,8 @@ def generate_port_object_assocs_array():
         + f'_port_object_assocs[{len(objects.Device.objects)}]',
         init)
 
-def generate_trait_method(m):
-    code = m.codegen_body()
+def generate_trait_method(m, enclosing):
+    code = m.codegen_body(enclosing)
     out('/* %s */\n' % (str(m),))
     start_function_definition(m.declaration())
     with allow_linemarks():
@@ -3372,17 +3372,21 @@ def generate_cfile_body(device, footers, full_module, filename_prefix):
     gather_size_statistics = os.environ.get('DMLC_GATHER_SIZE_STATISTICS', '')
     size_statistics = {}
 
-    for t in list(traits.all_traits()):
+    def generate_trait_methods(t, enclosing):
+        for child in t.shared_objects.values():
+            generate_trait_methods(child, enclosing + (t,))
         for m in list(t.method_impls.values()):
             if gather_size_statistics:
                 ctx = StrOutput(filename=output.current().filename,
                                 lineno=output.current().lineno)
                 with ctx:
-                    generate_trait_method(m)
+                    generate_trait_method(m, enclosing)
                 size_statistics[m.site.loc()] = [len(ctx.buf)]
                 out(ctx.buf)
             else:
-                generate_trait_method(m)
+                generate_trait_method(m, enclosing)
+    for t in list(dml.globals.traits.values()):
+        generate_trait_methods(t, ())
     # Note: methods may be added to method_queue while doing this,
     # so don't try to be too smart
     generated_funcs = set()
