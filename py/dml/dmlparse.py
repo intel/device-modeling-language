@@ -1518,13 +1518,37 @@ def istemplate(t):
 
 @prod
 def istemplate_list_one(t):
-    'istemplate_list : objident'
-    t[0] = [(site(t), t[1])]
+    'istemplate_list : template_ref'
+    t[0] = [t[1]]
 
 @prod
 def istemplate_list_multi(t):
     'istemplate_list : LPAREN objident_list RPAREN'
     t[0] = t[2]
+
+@prod
+def objident_list_one(t):
+    'objident_list : template_ref'
+    t[0] = [t[1]]
+
+@prod
+def objident_list(t):
+    'objident_list : objident_list COMMA template_ref'
+    t[0] = t[1] + [t[3]]
+
+@prod
+def template_ref(t):
+    'template_ref : objident'
+    t[0] = (site(t), t[1])
+
+# The implicit template of a shared object cannot be instantiated on its own;
+# fall back to the enclosing template
+@prod_dml14
+def template_ref_member(t):
+    'template_ref : objident PERIOD template_ref'
+    report(ESYNTAX(site(t, 2), '.', 'the implicit template of a shared object'
+                   ' cannot be instantiated on its own'))
+    t[0] = (site(t), t[1])
 
 # The shorthand size of a register
 @prod
@@ -3036,16 +3060,6 @@ def hook_decl(t):
 def object_hook(t):
     '''object : hook_decl'''
     t[0] = t[1]
-
-@prod
-def objident_list_one(t):
-    'objident_list : objident'
-    t[0] = [(site(t), t[1])]
-
-@prod
-def objident_list(t):
-    'objident_list : objident_list COMMA objident'
-    t[0] = t[1] + [(site(t, 3), t[3])]
 
 # Object/parameter names may use some additional keywords for now...
 @prod_dml12

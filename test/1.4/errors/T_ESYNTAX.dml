@@ -146,3 +146,17 @@ method init() {
 // bad spec of COVERITY pragma
 /// ERROR ESYNTAX
 /*% COVERITY %*/
+
+// the implicit template of a shared object cannot be instantiated on its own
+template shared_x { shared group g; }
+/// ERROR ESYNTAX
+group is_shared_1 is shared_x.g;
+group is_shared_2 {
+    /// ERROR ESYNTAX
+    is shared_x.g;
+}
+group is_shared_3 {
+    // TODO: we could add support for this one
+    /// ERROR ESYNTAX
+    in each shared_x.g { }
+}
