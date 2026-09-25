@@ -311,7 +311,8 @@ def type_deps(t, include_structs, expanded_typedefs):
         return ([dep for pt in t.input_types
                  for dep in type_deps(pt, False, expanded_typedefs)]
                 + type_deps(t.output_type, False, expanded_typedefs))
-    elif isinstance(t, (IntegerType, TVoid, TBool, TFloat, TTrait)):
+    elif isinstance(t, (IntegerType, TVoid, TBool, TFloat, TTrait,
+                        TTraitMember)):
         return []
     elif isinstance(t, TExternStruct):
         # extern structs are assumed to be self-contained

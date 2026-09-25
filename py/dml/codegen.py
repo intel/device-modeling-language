@@ -1544,6 +1544,10 @@ def eval_type(asttype, site, location, scope, extern=False, typename=None,
                            % (expr, expr))
         elif tag == 'sequence':
             etype = TTraitList(info)
+        elif tag == 'member':
+            (base, name) = info
+            (_, base_type) = eval_type([base], site, location, scope)
+            etype = TTraitMember(base_type, name)
         elif tag == 'hook':
             msg_comp_types = []
             for (_, tsite, _, type_ast) in info:

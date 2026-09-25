@@ -112,6 +112,17 @@ template m {
 
 group mg is m;
 
+// the implicit template is a member of the enclosing template type, and is
+// resolved through it, also via a typedef
+typedef t2 t2_alias;
+template tm {
+    param pg: t2.g;
+    shared method get_g() -> (t2_alias.g) { return pg; }
+}
+group tmo is tm {
+    param pg = cast(a.g, t2.g);
+}
+
 method init() {
     local t2 t = cast(a, t2);
     assert t.g.m1() == 1;
@@ -134,4 +145,10 @@ method init() {
 
     assert cast(mg, m).g.m2() == 3;
     assert mg.g.p == 3;
+
+    local t2.g tg = t.g;
+    assert tg.m2() == 2;
+    assert cast(tmo, tm).get_g() == tg;
+    local n1.g.h nh = cast(n, n1).g.h;
+    assert nh.m() == 8;
 }

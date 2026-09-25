@@ -1290,7 +1290,7 @@ template capability {
 This declares the object `cap` as usual, and in addition an implicit template,
 which `cap` instantiates. The implicit template consists of the object's body,
 and inherits the template of the object type (`register` in the example).
-Error messages refer to it as `capability.cap`.
+Its type is written `capability.cap`.
 
 The object is a member of the enclosing template type, and its type is the
 implicit template type. So, shared methods of `capability` can access `cap`
@@ -1300,7 +1300,8 @@ capability; }`:
 
 ```
 local capability c = cast(regs.cap_a, capability);
-c.cap.enable();
+local capability.cap r = c.cap;
+r.enable();
 ```
 
 The body of a shared object follows the same rules as the body of a template:

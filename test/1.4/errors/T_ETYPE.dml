@@ -67,3 +67,26 @@ template u is t {
         assert false;
     }
 }
+
+// a member type must name a shared object of a template type
+template tm {
+    shared group g {
+        group notshared;
+        shared group sub;
+    }
+}
+typedef int tm_int;
+template tm_user {
+    /// ERROR ETYPE
+    session undefined_type.g s3;
+    /// ERROR ETYPE
+    session tm_int.g s2;
+    /// ERROR ETYPE
+    session tm.nosuch s1;
+    /// ERROR ETYPE
+    session tm.g.nosuch s4;
+    /// ERROR ETYPE
+    session tm.g.notshared s5;
+    // no error
+    session tm.g.sub s6;
+}

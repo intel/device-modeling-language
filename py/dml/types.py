@@ -39,6 +39,7 @@ __all__ = (
     'TPtr',
     'TVector',
     'TTrait',
+    'TTraitMember',
     'TTraitList',
     'StructType',
     'TExternStruct',
@@ -110,6 +111,8 @@ def check_named_types(t):
     elif isinstance(t, THook):
         for msg_t in t.msg_types:
             check_named_types(msg_t)
+    elif isinstance(t, TTraitMember):
+        safe_realtype_shallow(t)
     elif isinstance(t, (TVoid, IntegerType, TBool, TFloat, TTrait)):
         pass
     elif dml.globals.dml_version == (1, 2) and isinstance(t, TUnknown):
@@ -122,12 +125,19 @@ def realtype_shallow(t):
     "Lookup a named type"
     #assert isinstance(t, DMLType)
     seen = set()
-    while isinstance(t, TNamed):
+    while isinstance(t, (TNamed, TTraitMember)):
         if t in seen:
             raise ICE(t.declaration_site,
                        "recursive type definition of %r" % t)
         seen.add(t)
-        t2 = typedefs.get(t.c)
+        if isinstance(t, TTraitMember):
+            base = realtype_shallow(t.base)
+            if not (isinstance(base, TTrait)
+                    and t.name in base.trait.shared_objects):
+                raise DMLUnknownType(t)
+            t2 = TTrait(base.trait.shared_objects[t.name])
+        else:
+            t2 = typedefs.get(t.c)
 
         if not t2:
             raise DMLUnknownType(t)
@@ -1100,6 +1110,36 @@ class TTrait(DMLType):
 
     def declaration(self, var):
         return f'{self.const_str}{self.c_name()} {var}'
+
+class TTraitMember(DMLType):
+    '''The template type of the shared object `name` in the template type
+    `base`, written `base.name`. Resolved lazily, like TNamed, since template
+    types are not known when typed parameters are evaluated.'''
+    __slots__ = ('base', 'name')
+
+    def __init__(self, base, name, const=False):
+        DMLType.__init__(self, const)
+        self.base = base
+        self.name = name
+
+    def __repr__(self):
+        return 'TTraitMember(%r, %r, %r)' % (self.base, self.name, self.const)
+    def describe(self):
+        return f'{self.base.describe()}.{self.name}'
+    def key(self):
+        raise ICE(self.declaration_site, 'need realtype before key')
+    def eq(self, other):
+        assert False, 'need realtype before eq'
+    def eq_fuzzy(self, other):
+        assert False, 'need realtype before eq_fuzzy'
+    def hashed(self):
+        assert False, 'need realtype before hashed'
+
+    def clone(self):
+        return TTraitMember(self.base, self.name, self.const)
+
+    def declaration(self, var):
+        return realtype_shallow(self).declaration(var)
 
 class TTraitList(DMLType):
     __slots__ = ('traitname')

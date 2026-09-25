@@ -1642,6 +1642,21 @@ def basetype_each(t):
     t[0] = ('sequence', t[3])
 
 @prod_dml14
+def basetype_member(t):
+    '''basetype : template_member_type'''
+    t[0] = t[1]
+
+# The template type of a shared object, as a member of the enclosing
+# template type. In `new x.g` and `sizeoftype x.g`, the period could also be
+# member access on the expression; this gives two shift/reduce conflicts,
+# where the default shift correctly continues the type.
+@prod_dml14
+def template_member_type(t):
+    '''template_member_type : ident PERIOD ident
+                            | template_member_type PERIOD ident'''
+    t[0] = ('member', (t[1], t[3]))
+
+@prod_dml14
 def basetype_hook(t):
     '''basetype : HOOK LPAREN cdecl_maybe_discarded_list RPAREN'''
     cdecl_maybe_discarded_list_enforce_unnamed(t[3])
