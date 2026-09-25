@@ -1827,7 +1827,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                     t.name for t in direct_parents)),
                 # traitset is a frozenset, with undefined iteration order;
                 # must sort it to keep compilation deterministic
-                Set(sorted(traitset)), {}, {}, {}, {}, {}, {})
+                Set(sorted(traitset)), {}, {}, {}, {}, {}, {}, {})
             implicit_traits[traitset] = new_trait
             if new_trait.name in dml.globals.traits:
                 raise ICE(
@@ -2013,7 +2013,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                 if not impl_traits:
                     # report error: override required by parameter or
                     # abstract method
-                    assert member_kind in {'method', 'parameter'}
+                    assert member_kind in {'method', 'parameter', 'subobject'}
                     for (tsite, t) in obj_traits:
                         if t.implements(decl_trait):
                             raise EABSTEMPLATE(
@@ -2037,15 +2037,17 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                                   True)
                 continue
 
-            if member in decl_trait.shared_objects:
-                # the parameter's value is the object itself; a conflicting
-                # object type is caught by merge_subobj_defs instead, because
-                # the declaration is also an ordinary subobject declaration
+            if member_kind == 'subobject':
+                # a conflicting object type is caught by merge_subobj_defs,
+                # because the declaration is also an ordinary subobject
+                # declaration
                 if not isinstance(override, objects.CompositeObject):
                     # mkobj2 discarded the object declaration after reporting
-                    # the collision, so the parameter has no value; give up on
-                    # the object rather than leave its vtables uninitialized
+                    # the collision; give up on the object rather than leave
+                    # its vtables uninitialized
                     raise ENAMECOLL(override.site, decl_site, member)
+                # handled as a special case in vtable initialization
+                continue
             elif override.objtype != decl_trait.member_kind(member):
                 # e.g. an attempt to override a parameter with a method
                 report(ENAMECOLL(override.site, decl_site, member))

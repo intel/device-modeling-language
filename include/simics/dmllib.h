@@ -366,6 +366,14 @@ _vtable_sequence_param(_traitref_t traitref, size_t vtable_member_offset)
                       .encoded_index = __tref.id.encoded_index * (coeff)    \
                                        + (offset)}; })
 
+// The vtable member of a shared object is a trait reference to the object in
+// the first element of the enclosing object array
+#define VTABLE_SUBOBJ(traitref, vtable_type, member)                    \
+    ({_traitref_t __tref = traitref;                                    \
+      _traitref_t __sub = ((vtable_type *)__tref.trait)->member;        \
+      __sub.id.encoded_index = __tref.id.encoded_index;                 \
+      __sub; })
+
 #define _raw_load_uint8_be_t   UNALIGNED_LOAD_BE8
 #define _raw_load_uint16_be_t  UNALIGNED_LOAD_BE16
 #define _raw_load_uint32_be_t  UNALIGNED_LOAD_BE32

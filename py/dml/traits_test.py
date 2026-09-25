@@ -28,7 +28,7 @@ class Test_traits(unittest.TestCase):
         dml.globals.device = self.prev_device
 
     def test_empty(self):
-        t = Trait(None, 't', set(), {}, {}, {}, {}, {}, {}, {}, {})
+        t = Trait(None, 't', set(), {}, {}, {}, {}, {}, {}, {}, {}, {})
         ot = ObjTraits(self.dev, {t}, {}, {}, {})
         self.dev.set_traits(ot)
         with self.dev.use_for_codegen():
@@ -45,7 +45,7 @@ class Test_traits(unittest.TestCase):
         t = Trait(self.site, 't', set(),
                   {'m': (self.site, [], [], False, False, False, False, True,
                          False, body, None)},
-                  {}, {}, {}, {}, {}, {}, {})
+                  {}, {}, {}, {}, {}, {}, {}, {})
         ot = ObjTraits(self.dev, {t}, {'m': t}, {}, {})
         self.dev.set_traits(ot)
         ref = ot.lookup_shared_method_impl(self.site, 'm', ())

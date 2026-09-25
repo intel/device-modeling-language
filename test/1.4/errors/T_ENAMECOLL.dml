@@ -273,7 +273,7 @@ bank tb is sm {
 }
 
 // a `shared` object declaration occupies one name for both the object and the
-// template parameter, so any other member of that name clashes
+// template member, so any other member of that name clashes
 template shared_group {
     /// ERROR ENAMECOLL
     shared group g;
@@ -295,8 +295,8 @@ group so_noclash_group is shared_group {
     group g;
 }
 
-// the collision leaves the trait parameter without a value, so the object must
-// be abandoned rather than have its vtables initialized
+// the collision leaves the template member without an object, so the enclosing
+// object must be abandoned rather than have its vtables initialized
 template so_vtable {
     /// ERROR ENAMECOLL
     shared group g { shared method m() -> (int) { return 1; } }

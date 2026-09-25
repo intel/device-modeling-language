@@ -1395,13 +1395,13 @@ class ExprTests(GccTests):
             types.TPtr(types.TFunction([], types.TVoid())),
             types.TPtr(types.TArray(types.TBool(), int_const(3))),
             types.TTrait(traits.Trait(
-                site, 'struct_t', set(), {}, {}, {}, {}, {}, {}, {},
+                site, 'struct_t', set(), {}, {}, {}, {}, {}, {}, {}, {},
                 {})),
             types.TTraitMember(types.TTrait(traits.Trait(
                 site, 'outer', set(), {}, {},
                 {'g': traits.Trait(site, 'struct_t', set(), {}, {}, {}, {},
-                                   {}, {}, {}, {})},
-                {}, {}, {}, {}, {})), 'g'),
+                                   {}, {}, {}, {}, {})},
+                {}, {}, {}, {}, {}, {})), 'g'),
             types.TTraitList('struct_t'),
             types.TExternStruct({}, 'struct_t', 'struct_t'),
             types.TStruct({'x': types.TBool()}, 'struct_label'),

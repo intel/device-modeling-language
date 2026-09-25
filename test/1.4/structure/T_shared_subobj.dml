@@ -34,10 +34,21 @@ template x {
 template y is x {
     shared group g {
         shared method m() -> (int) { return 6; }
+        shared method my() -> (int) { return 9; }
     }
 }
 
 group b is y;
+
+// an inherited shared object is a member of the subtemplate's type
+template z is x {}
+group zo is z;
+// ... resolved to the most specific override
+template w is y {}
+group wo is w;
+// ... also when x.g is reached both directly and via z
+template k is (z, y) {}
+group ko is k;
 
 // a diamond: the node c.g instantiates d1.g, d2.g and d3.g at once
 template d1 {
@@ -59,6 +70,13 @@ template d3 is d1 {
 }
 
 group c is (d2, d3);
+// ... where a template type must resolve the diamond with its own declaration
+template e is (d2, d3) { shared group g; }
+group eo is e;
+// ... unless only one branch overrides
+template d4 is d1 {}
+template k2 is (d2, d4) {}
+group k2o is k2;
 
 // nested: n.g.h instantiates n1.g.h and n2.g.h
 template n1 {
@@ -151,4 +169,14 @@ method init() {
     assert cast(tmo, tm).get_g() == tg;
     local n1.g.h nh = cast(n, n1).g.h;
     assert nh.m() == 8;
+    local z.g zg = cast(zo, z).g;
+    assert zg.m() == 5;
+    local w.g wg = cast(wo.g, w.g);
+    assert wg.my() == 9;
+    local e.g eg = cast(eo.g, e.g);
+    assert eg.m2() + eg.m3() == 5;
+    local k.g kg = cast(ko.g, k.g);
+    assert kg.my() == 9;
+    local k2.g k2g = cast(k2o.g, k2.g);
+    assert k2g.m2() == 2;
 }

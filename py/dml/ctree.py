@@ -141,6 +141,7 @@ __all__ = (
     'TraitParameter',
     'TraitSessionRef',
     'TraitHookRef',
+    'TraitSubobjRef',
     'TraitHookArrayRef',
     'TraitMethodRef',
     'TraitMethodIndirect',
@@ -3826,6 +3827,21 @@ class TraitParameter(Expression):
         else:
             return (f'VTABLE_PARAM({self.traitref.read()}, {vtable_type}'
                     f', {self.name})')
+
+class TraitSubobjRef(Expression):
+    '''A reference to a shared object, declared by `shared <objtype>`'''
+    priority = dml.expr.Apply.priority
+    @auto_init
+    def __init__(self, site, traitref, name, type): pass
+
+    def __str__(self):
+        return "%s.%s" % (self.traitref, self.name)
+
+    def read(self):
+        t = realtype(self.traitref.ctype())
+        assert isinstance(t, TTrait)
+        return (f'VTABLE_SUBOBJ({self.traitref.read()},'
+                f' struct _{t.trait.c_name}, {self.name})')
 
 class TraitSessionRef(Expression):
     '''A reference to a trait session variable.

@@ -132,10 +132,11 @@ def realtype_shallow(t):
         seen.add(t)
         if isinstance(t, TTraitMember):
             base = realtype_shallow(t.base)
-            if not (isinstance(base, TTrait)
-                    and t.name in base.trait.shared_objects):
+            otrait = (base.trait.subobj_traits.get(t.name)
+                      if isinstance(base, TTrait) else None)
+            if otrait is None:
                 raise DMLUnknownType(t)
-            t2 = TTrait(base.trait.shared_objects[t.name])
+            t2 = TTrait(otrait)
         else:
             t2 = typedefs.get(t.c)
 

@@ -2241,6 +2241,7 @@ def tinit_args(trait):
         trait.vtable_params,
         trait.vtable_sessions,
         trait.vtable_hooks,
+        trait.vtable_subobjs,
         trait.vtable_memoized_outs,
         (name for name in trait.ancestor_vtables
          if (name not in trait.method_impl_traits
@@ -2374,6 +2375,8 @@ def print_vtable_struct_declaration(trait):
         out(f'uint32 {name};\n') # device struct offset
     for name in trait.vtable_hooks:
         out(f'uint32 {name};\n') # hook unique id
+    for name in trait.vtable_subobjs:
+        out(f'_traitref_t {name};\n')
     for (name, (_, inp, outp, throws, independent, startup,
                 memoized)) in trait.vtable_methods.items():
         t = trait.vtable_method_type(inp, outp, throws, independent)
@@ -2418,6 +2421,8 @@ fields.
         initializers.append('.%s = %s' % (name, scramble_argname(name)))
     for name in sorted(trait.vtable_hooks):
         initializers.append('.%s = %s' % (name, scramble_argname(name)))
+    for name in sorted(trait.vtable_subobjs):
+        initializers.append('.%s = %s' % (name, scramble_argname(name)))
     for name in sorted(trait.vtable_memoized_outs):
         initializers.append('.%s = %s' % (name, scramble_argname(name)))
 
@@ -2427,7 +2432,8 @@ fields.
         for name in tinit_args(parent):
             scrambled_name = scramble_argname(name)
             kind = parent.member_kind(name)
-            if kind in {'parameter', 'session', 'hook', 'memoized_outs'}:
+            if kind in {'parameter', 'session', 'hook', 'subobject',
+                        'memoized_outs'}:
                 args.append(scrambled_name)
             else:
                 assert kind == 'method'
@@ -2460,6 +2466,8 @@ fields.
             out(', uint32 %s' % (scrambled_name)) # device struct offset
         elif member_kind == 'hook':
             out(', uint32 %s' % (scrambled_name)) # hook unique id
+        elif member_kind == 'subobject':
+            out(', _traitref_t %s' % (scrambled_name))
         else:
             assert member_kind == 'memoized_outs'
             memo_outs_struct = vtable_trait.vtable_memoized_outs[name]
@@ -2635,6 +2643,13 @@ def init_trait_vtable(node, trait, param_overrides):
             hook_node = node.get_component(name)
             assert hook_node.objtype == 'hook'
             args.append(str(hook_node.uniq))
+        elif member_kind == 'subobject':
+            subobj = node.get_component(name)
+            otrait = trait.vtable_trait(name).vtable_subobjs[name]
+            args.append(ObjTraitRef(
+                subobj.site, subobj, otrait,
+                (mkIntegerConstant(node.site, 0, False),)
+                * subobj.dimensions).read())
         else:
             assert member_kind == 'memoized_outs'
             typ = trait.vtable_trait(name).vtable_memoized_outs[name]
@@ -2704,10 +2719,6 @@ def generate_init_trait_vtables(node, param_values):
 def trait_param_value(node, param_type_site, param_type):
     is_sequence = isinstance(realtype(param_type), TTraitList)
     def value_expr(indices):
-        if node.objtype != 'parameter':
-            # a `shared <objtype>` declaration: the object is its own value
-            return mkCast(node.site, mkNodeRef(node.site, node, indices),
-                          param_type)
         expr = node.get_expr(indices)
         if isinstance(expr, NonValue):
             raise expr.exc()
