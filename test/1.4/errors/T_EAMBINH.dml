@@ -94,20 +94,3 @@ template so_ab is (so_a, so_b) {}
 // an own declaration does not resolve the conflict
 /// ERROR EAMBINH
 template so_ab_decl is (so_a, so_b) { shared group g; }
-
-// a diamond of shared objects must be resolved by a shared declaration
-template so_d1 { shared group g; }
-template so_d2 is so_d1 { shared group g; }
-template so_d3 is so_d1 { shared group g; }
-/// ERROR EAMBINH
-template so_d23 is (so_d2, so_d3) {}
-/// ERROR EAMBINH
-template so_d23_plain is (so_d2, so_d3) { group g; }
-// no error
-template so_d23_shared is (so_d2, so_d3) { shared group g; }
-// one error, however many unrelated overrides
-template so_d4 is so_d1 { shared group g; }
-/// ERROR EAMBINH
-template so_d234 is (so_d2, so_d3, so_d4) {}
-// no error: an object is not a template type
-group so_d23_obj is (so_d2, so_d3);

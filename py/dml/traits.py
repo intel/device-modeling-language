@@ -3,6 +3,8 @@
 
 # Infrastructure for traits
 
+from __future__ import annotations
+
 import itertools
 import functools
 import contextlib
@@ -122,16 +124,22 @@ def process_trait(site, name, subasts, shared_objects, ancestors,
                 raise ICE(ast.site, 'unknown ast')
         except DMLError as e:
             report(e)
-    shared_objects = dict(shared_objects)
-    for (oname, otrait) in list(shared_objects.items()):
+    declared = shared_objects
+    shared_objects = dict(declared)
+    for (oname, otrait) in declared.items():
         try:
             check_namecoll(oname, otrait.site)
         except DMLError as e:
             report(e)
             del shared_objects[oname]
+    inherited = inherited_subobjs(ancestors)
+    # object_spec_from_asts declares an ambiguous object implicitly
+    assert all(len(decls) == 1 or oname in declared
+               for (oname, decls) in inherited.items())
+    subobj_traits = {oname: decls[0] for (oname, decls) in inherited.items()}
+    subobj_traits.update(declared)
     return mktrait(site, name, ancestors, methods, params, shared_objects,
-                   merge_subobj_maps(site, ancestors, shared_objects),
-                   sessions, hooks, template_symbols)
+                   subobj_traits, sessions, hooks, template_symbols)
 
 class NoDefaultSymbol(Symbol):
     """A broken reference to 'default' inside a method that has no default
@@ -311,7 +319,7 @@ def merge_ancestor_vtables(ancestors, site):
     return ancestor_vtables
 
 def mktrait(site, tname, ancestors, methods, params, shared_objects,
-            ancestor_subobjs, sessions, hooks, template_symbols):
+            subobj_traits, sessions, hooks, template_symbols):
     '''Produce a trait, possibly reporting errors.'''
     direct_parents = [a for a in ancestors
                       if not any(a in p.ancestors for p in ancestors)]
@@ -319,7 +327,7 @@ def mktrait(site, tname, ancestors, methods, params, shared_objects,
 
     ancestor_vtables = merge_ancestor_vtables(ancestors, site)
 
-    bad_params = []
+    bad_params = set()
     for name in params:
         for ancestor in direct_parents:
             coll = ancestor.member_declaration(name)
@@ -327,11 +335,11 @@ def mktrait(site, tname, ancestors, methods, params, shared_objects,
                 (orig_site, _) = coll
                 (param_site, _) = params[name]
                 report(ENAMECOLL(param_site, orig_site, name))
-                bad_params.append(name)
+                bad_params.add(name)
     for name in bad_params:
         del params[name]
 
-    bad_sessions = []
+    bad_sessions = set()
     for name in sessions:
         for ancestor in direct_parents:
             coll = ancestor.member_declaration(name)
@@ -339,7 +347,7 @@ def mktrait(site, tname, ancestors, methods, params, shared_objects,
                 (orig_site, _) = coll
                 (session_site, _) = sessions[name]
                 report(ENAMECOLL(session_site, orig_site, name))
-                bad_sessions.append(name)
+                bad_sessions.add(name)
     for name in bad_sessions:
         del sessions[name]
 
@@ -399,7 +407,7 @@ def mktrait(site, tname, ancestors, methods, params, shared_objects,
     for name in bad_methods:
         del methods[name]
 
-    bad_hooks =  []
+    bad_hooks = set()
     for name in hooks:
         for ancestor in direct_parents:
             coll = ancestor.member_declaration(name)
@@ -407,7 +415,7 @@ def mktrait(site, tname, ancestors, methods, params, shared_objects,
                 (orig_site, _) = coll
                 (session_site, _, _) = hooks[name]
                 report(ENAMECOLL(session_site, orig_site, name))
-                bad_hooks.append(name)
+                bad_hooks.add(name)
     for name in bad_hooks:
         del hooks[name]
 
@@ -440,7 +448,7 @@ def mktrait(site, tname, ancestors, methods, params, shared_objects,
     reserved_symbols.pop('dev', None)
     return Trait(site, tname, ancestors, methods, params, shared_objects,
                  sessions, hooks, ancestor_vtables, ancestor_method_impls,
-                 ancestor_subobjs, reserved_symbols)
+                 subobj_traits, reserved_symbols)
 
 def typecheck_method_override(left, right):
     (site0, inp0, outp0, throws0, independent0, startup0, memoized0) = left
@@ -480,28 +488,20 @@ def typecheck_method_override(left, right):
     qualifier_check('startup', startup0, startup1)
     qualifier_check('memoized', memoized0, memoized1)
 
-def merge_subobj_maps(site, ancestors, shared_objects):
-    '''Return a dictionary mapping the name of each inherited shared object
-    to the most specific trait declaring it. Unlike methods, there must be
-    a unique such trait, unless overridden by `shared_objects`.'''
-    candidates = {}
-    for ancestor in ancestors:
-        for (name, otrait) in ancestor.subobj_traits.items():
+def inherited_subobjs(traits: list[Trait]) -> dict[str, list[Trait]]:
+    '''Map the name of each shared object of the given traits to its
+    maximal declarations among them. As each trait's own value implements
+    those of its ancestors, the result is the same for any set of traits
+    with the same ancestors.'''
+    candidates: dict[str, list[Trait]] = {}
+    for t in traits:
+        for (name, otrait) in t.subobj_traits.items():
             decls = candidates.setdefault(name, [])
-            if all(otrait is not t for (_, t) in decls):
-                decls.append((ancestor, otrait))
-    merged = {}
-    for (name, decls) in candidates.items():
-        maximal = [(a, t) for (a, t) in decls
-                   if not any(o is not t and o.implements(t)
-                              for (_, o) in decls)]
-        merged[name] = maximal[0][1]
-        # unrelated declarations are reported by merge_ancestor_vtables
-        if (len(maximal) > 1 and name not in shared_objects
-            and len(set(a.vtable_trait(name) for (a, _) in maximal)) == 1):
-            report(EAMBINH(site, None, name, maximal[0][1].name,
-                           maximal[1][1].name))
-    return merged
+            if otrait not in decls:
+                decls.append(otrait)
+    return {name: [t for t in decls
+                   if not any(o is not t and o.implements(t) for o in decls)]
+            for (name, decls) in candidates.items()}
 
 def merge_method_impl_maps(site, parents):
     '''Return a dictionary mapping method name to the most specific traits
@@ -801,7 +801,7 @@ class Trait(SubTrait):
 
     def __init__(self, site, name, ancestors, methods, params, shared_objects,
                  sessions, hooks, ancestor_vtables, ancestor_method_impls,
-                 ancestor_subobjs, reserved_symbols):
+                 subobj_traits, reserved_symbols):
         method_impls = {
             name: TraitMethod(
                 msite, inp, outp, throws, independent, startup, memoized,
@@ -852,7 +852,7 @@ class Trait(SubTrait):
         # name -> Trait, for each `shared <objtype>` declaration
         self.shared_objects = shared_objects
         # name -> most specific Trait, for each shared object, also inherited
-        self.subobj_traits = {**ancestor_subobjs, **shared_objects}
+        self.subobj_traits = subobj_traits
 
     def __repr__(self):
         return 'Trait(%r, %r)' % (

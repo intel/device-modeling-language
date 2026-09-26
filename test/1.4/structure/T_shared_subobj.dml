@@ -70,10 +70,24 @@ template d3 is d1 {
 }
 
 group c is (d2, d3);
-// ... where a template type must resolve the diamond with its own declaration
-template e is (d2, d3) { shared group g; }
+// a template inheriting the diamond declares g implicitly, as e.g, which
+// inherits both d2.g and d3.g
+template e is (d2, d3) {}
 group eo is e;
-// ... unless only one branch overrides
+// ... which a plain declaration joins
+template e2 is (d2, d3) {
+    group g { session int s4 = 4; }
+}
+group e2o is e2;
+// ... also with more than two overrides
+template d5 is d1 {
+    shared group g {
+        shared method m5() -> (int) { return 5; }
+    }
+}
+template e3 is (d2, d3, d5) {}
+group e3o is e3;
+// with one overriding branch, the type is that of the override
 template d4 is d1 {}
 template k2 is (d2, d4) {}
 group k2o is k2;
@@ -177,6 +191,9 @@ method init() {
     assert eg.m2() + eg.m3() == 5;
     local k.g kg = cast(ko.g, k.g);
     assert kg.my() == 9;
-    local k2.g k2g = cast(k2o.g, k2.g);
+    local k2.g k2g = cast(k2o.g, d2.g);
     assert k2g.m2() == 2;
+    assert cast(e2o.g, e2.g).s4 == 4;
+    local e3.g e3g = cast(e3o.g, e3.g);
+    assert e3g.m2() + e3g.m3() + e3g.m5() == 10;
 }

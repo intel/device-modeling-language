@@ -1,0 +1,37 @@
+/*
+  © 2026 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+// collisions with the implicit declaration of a shared object in a diamond
+template dia_1 { shared group g; }
+template dia_2 is dia_1 { shared group g; }
+template dia_3 is dia_1 { shared group g; }
+
+/// ERROR ENAMECOLL
+template dia_param is (dia_2, dia_3) {
+    /// ERROR ENAMECOLL
+    param g: int;
+}
+/// ERROR ENAMECOLL
+group dia_param_obj is dia_param { param g = 1; }
+
+/// ERROR ENAMECOLL
+template dia_meth is (dia_2, dia_3) {
+    /// ERROR ENAMECOLL
+    shared method g() {}
+}
+group dia_meth_obj is dia_meth;
+
+// the collision is inherited through one branch of the diamond
+template dia_p {
+    /// ERROR ENAMECOLL
+    param g: int;
+}
+/// ERROR EAMBINH
+template dia_2p is (dia_p, dia_2) {}
+/// ERROR EAMBINH
+template dia_anc is (dia_2p, dia_3) {}
