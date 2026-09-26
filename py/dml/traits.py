@@ -741,10 +741,8 @@ class ObjTraits(SubTrait):
                     codegen.mark_method_referenced(codegen.method_instance(m))
             sub.mark_referenced()
             # the vtable refers to the shared objects' vtables
-            for t in itertools.chain([sub], sub.ancestors):
-                for (name, otrait) in t.vtable_subobjs.items():
-                    self.node.get_component(name).traits.mark_referenced(
-                        otrait)
+            for (_, name, otrait, _) in sub.subobj_args():
+                self.node.get_component(name).traits.mark_referenced(otrait)
 
     def vtable_cname(self, trait):
         '''The C name of a trait's vtable'''
@@ -1018,6 +1016,29 @@ class Trait(SubTrait):
         else:
             return None
 
+    def subobj_args(self):
+        '''Return the tinit arguments for shared object slots, as a list of
+        (argname, name, otrait, parents): the object as `otrait`, its most
+        specific trait, passed on to `parents`. An implicit object trait
+        has no such trait, so each parent gets an argument of its own.'''
+        def has_slot(t, name):
+            return (name in t.vtable_subobjs
+                    or (name in t.ancestor_vtables
+                        and name in t.ancestor_vtables[name].vtable_subobjs))
+        names = sorted(set(self.vtable_subobjs).union(
+            name for (name, t) in self.ancestor_vtables.items()
+            if name in t.vtable_subobjs))
+        args = []
+        for name in names:
+            parents = [p for p in self.direct_parents if has_slot(p, name)]
+            otrait = self.subobj_traits.get(name)
+            if otrait is not None:
+                args.append((name, name, otrait, parents))
+            else:
+                args.extend((f'{name}__{p.c_name}', name,
+                             p.subobj_traits[name], [p]) for p in parents)
+        return args
+
     def lookup(self, name, expr, site):
         '''Look up a member of this trait; return a referencing expression or
         None. expr is an expression referencing this trait.'''
@@ -1063,6 +1084,16 @@ class Trait(SubTrait):
             return TraitSubobjRef(site, expr, name,
                                   TTrait(self.vtable_subobjs[name]))
         vtable_trait = self.ancestor_vtables.get(name, None)
+        if vtable_trait and name in vtable_trait.vtable_subobjs:
+            # step along the canonical path, downcasting to the most
+            # specific type at each step; see subobj_args
+            parent = self.ancestry_paths[vtable_trait][0][0]
+            ref = parent.lookup(name, TraitUpcast(site, expr, parent), site)
+            otrait = self.subobj_traits.get(name)
+            if (otrait is not None
+                and otrait is not parent.subobj_traits.get(name)):
+                ref = TraitDowncast(site, ref, otrait)
+            return ref
         if vtable_trait:
             return vtable_trait.lookup(
                 name, TraitUpcast(site, expr, vtable_trait), site)

@@ -141,6 +141,7 @@ __all__ = (
     'TraitParameter',
     'TraitSessionRef',
     'TraitHookRef',
+    'TraitDowncast',
     'TraitSubobjRef',
     'TraitHookArrayRef',
     'TraitMethodRef',
@@ -3774,6 +3775,25 @@ class TraitUpcast(Expression):
                 % (self.sub.read(), typ.trait.c_name,
                    ".".join(t.c_name for t in
                             typ.trait.ancestry_paths[self.parent][0])))
+
+class TraitDowncast(Expression):
+    '''Inverse of TraitUpcast, along the canonical path'''
+    @auto_init
+    def __init__(self, site, sup, child): pass
+
+    def __str__(self):
+        return "cast(%s, %s)" % (self.sup, self.child.name)
+
+    def ctype(self):
+        return TTrait(self.child)
+
+    def read(self):
+        typ = safe_realtype(self.sup.ctype())
+        assert isinstance(typ, TTrait)
+        return ("DOWNCAST(%s, %s, %s)"
+                % (self.sup.read(), self.child.c_name,
+                   ".".join(t.c_name for t in
+                            self.child.ancestry_paths[typ.trait][0])))
 
 class TraitObjectCast(Expression):
     @auto_init

@@ -36,6 +36,8 @@ template y is x {
         shared method m() -> (int) { return 6; }
         shared method my() -> (int) { return 9; }
     }
+    // g has the type y.g, although its vtable slot is declared by x
+    shared method via_g() -> (int) { return g.my(); }
 }
 
 group b is y;
@@ -196,4 +198,22 @@ method init() {
     assert cast(e2o.g, e2.g).s4 == 4;
     local e3.g e3g = cast(e3o.g, e3.g);
     assert e3g.m2() + e3g.m3() + e3g.m5() == 10;
+
+    // a shared object has the most specific type of the template it is
+    // reached through
+    local y.g yg = cast(b, y).g;
+    assert yg.my() == 9;
+    assert cast(b, y).via_g() == 9;
+    local w.g wg2 = cast(wo, w).g;
+    assert wg2.my() == 9;
+    assert cast(wo, w).via_g() == 9;
+    local e.g eg2 = cast(eo, e).g;
+    assert eg2.m2() + eg2.m3() == 5;
+    local n2.g.h nh2 = cast(n, n2).g.h;
+    assert nh2.m() == 8;
+    // ... also on a non-canonical path
+    local d3.g d3g = cast(eo, d3).g;
+    assert d3g.m3() == 3;
+    assert cast(c, d3).g.m3() == 3;
+    assert cast(c, d2).g.m2() == 2;
 }

@@ -2241,12 +2241,12 @@ def tinit_args(trait):
         trait.vtable_params,
         trait.vtable_sessions,
         trait.vtable_hooks,
-        trait.vtable_subobjs,
         trait.vtable_memoized_outs,
         (name for name in trait.ancestor_vtables
-         if (name not in trait.method_impl_traits
-             or any(impl_trait.method_impls[name].overridable
-                    for impl_trait in trait.method_impl_traits[name])))))
+         if name not in trait.ancestor_vtables[name].vtable_subobjs
+         and (name not in trait.method_impl_traits
+              or any(impl_trait.method_impls[name].overridable
+                     for impl_trait in trait.method_impl_traits[name])))))
 
 def method_tinit_arg(trait, parent, name, scrambled_name):
     '''Return the argument passed by a trait's tinit method to its
@@ -2421,10 +2421,12 @@ fields.
         initializers.append('.%s = %s' % (name, scramble_argname(name)))
     for name in sorted(trait.vtable_hooks):
         initializers.append('.%s = %s' % (name, scramble_argname(name)))
-    for name in sorted(trait.vtable_subobjs):
-        initializers.append('.%s = %s' % (name, scramble_argname(name)))
     for name in sorted(trait.vtable_memoized_outs):
         initializers.append('.%s = %s' % (name, scramble_argname(name)))
+    subobj_args = trait.subobj_args()
+    for (arg, name, _, _) in subobj_args:
+        if name in trait.vtable_subobjs:
+            initializers.append('.%s = %s' % (name, scramble_argname(arg)))
 
     tinit_calls = []
     for parent in trait.direct_parents:
@@ -2432,13 +2434,21 @@ fields.
         for name in tinit_args(parent):
             scrambled_name = scramble_argname(name)
             kind = parent.member_kind(name)
-            if kind in {'parameter', 'session', 'hook', 'subobject',
-                        'memoized_outs'}:
+            if kind in {'parameter', 'session', 'hook', 'memoized_outs'}:
                 args.append(scrambled_name)
             else:
                 assert kind == 'method'
                 args.append(method_tinit_arg(trait, parent,
                                              name, scrambled_name))
+        # one step of upcast, to the parent's most specific trait
+        for (_, pname, ptrait, _) in parent.subobj_args():
+            [(arg, otrait)] = [(arg, otrait)
+                               for (arg, name, otrait, parents) in subobj_args
+                               if name == pname and parent in parents]
+            ref = mkLit(trait.site, scramble_argname(arg), TTrait(otrait))
+            if otrait is not ptrait:
+                ref = TraitUpcast(trait.site, ref, ptrait)
+            args.append(ref.read())
         tinit_calls.append("_tinit_%s(%s);\n" % (
             parent.c_name, ", ".join(['&_ret->' + parent.c_name]
                                      + args)))
@@ -2466,12 +2476,12 @@ fields.
             out(', uint32 %s' % (scrambled_name)) # device struct offset
         elif member_kind == 'hook':
             out(', uint32 %s' % (scrambled_name)) # hook unique id
-        elif member_kind == 'subobject':
-            out(', _traitref_t %s' % (scrambled_name))
         else:
             assert member_kind == 'memoized_outs'
             memo_outs_struct = vtable_trait.vtable_memoized_outs[name]
             out(f', {TPtr(memo_outs_struct).declaration(scrambled_name)}')
+    for (arg, _, _, _) in subobj_args:
+        out(f', _traitref_t {scramble_argname(arg)}')
 
     out(')\n{\n', postindent=1)
     if initializers:
@@ -2643,13 +2653,6 @@ def init_trait_vtable(node, trait, param_overrides):
             hook_node = node.get_component(name)
             assert hook_node.objtype == 'hook'
             args.append(str(hook_node.uniq))
-        elif member_kind == 'subobject':
-            subobj = node.get_component(name)
-            otrait = trait.vtable_trait(name).vtable_subobjs[name]
-            args.append(ObjTraitRef(
-                subobj.site, subobj, otrait,
-                (mkIntegerConstant(node.site, 0, False),)
-                * subobj.dimensions).read())
         else:
             assert member_kind == 'memoized_outs'
             typ = trait.vtable_trait(name).vtable_memoized_outs[name]
@@ -2660,6 +2663,12 @@ def init_trait_vtable(node, trait, param_overrides):
             else:
                 arg = f'({{static {typ.declaration("_tmp")}; &_tmp; }})'
             args.append(arg)
+    for (_, name, otrait, _) in trait.subobj_args():
+        subobj = node.get_component(name)
+        args.append(ObjTraitRef(
+            subobj.site, subobj, otrait,
+            (mkIntegerConstant(node.site, 0, False),)
+            * subobj.dimensions).read())
     # initialize vtable instance
     vtable_arg = f'&{node.traits.vtable_cname(trait)}'
     init_call = ('_tinit_%s(%s);\n'
