@@ -13,3 +13,27 @@ group g[j < 4];
 // No error
 group h[i < ...];
 group h[_ < 4];
+
+// an override of a shared object array has the same sizes
+template so_4 { shared group g[i < 4]; }
+template so_5 is so_4 {
+    /// ERROR EAINCOMP
+    shared group g[i < 5];
+}
+
+// the object must agree with the template type on the size of a shared object
+group so_obj is so_4 {
+    /// ERROR EAINCOMP
+    group g[i < 5];
+}
+
+// the size of a shared object is evaluated both without and with the
+// template's members in scope, which must not give different results.
+// See also T_EIDENT.dml:so
+constant so_n = 3;
+template so_shadow {
+    param so_n = 4;
+    /// ERROR EAINCOMP
+    shared group g[i < so_n];
+}
+group so_shadow_obj is so_shadow;

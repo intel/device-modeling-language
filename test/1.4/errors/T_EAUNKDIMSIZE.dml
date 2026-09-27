@@ -32,3 +32,9 @@ group g5[i < ...][j < 7];
 
 /// ERROR EAUNKDIMSIZE
 group g6[_ < ...];
+
+template so {
+    // the sizes of a shared object array are part of the template type
+    /// ERROR EAUNKDIMSIZE
+    shared group g[i < ...];
+}

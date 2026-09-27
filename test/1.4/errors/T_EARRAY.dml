@@ -23,6 +23,21 @@ template t {
 
 is t;
 
+template ts {
+    shared group g[i < 5][j < 3] { shared method m() {} }
+
+    shared method sm() {
+        /// ERROR EARRAY
+        g.m();
+        /// ERROR EARRAY
+        g[0].m();
+        // no error
+        g[0][0].m();
+    }
+}
+
+group gs is ts;
+
 method init() {
     /// ERROR EARRAY
     cast(dev, t).h.send_now();
@@ -30,4 +45,8 @@ method init() {
     cast(dev, t).h[0].send_now();
     // no error
     cast(dev, t).h[0][0].send_now();
+    /// ERROR EARRAY
+    cast(gs, ts).g[0].m();
+    // no error
+    cast(gs, ts).g[0][0].m();
 }

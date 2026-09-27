@@ -141,7 +141,8 @@ __all__ = (
     'TraitParameter',
     'TraitSessionRef',
     'TraitHookRef',
-    'TraitDowncast',
+    'TraitSubobjArrayRef',
+    'mkTraitSubobjRef',
     'TraitSubobjRef',
     'TraitHookArrayRef',
     'TraitMethodRef',
@@ -3776,25 +3777,6 @@ class TraitUpcast(Expression):
                    ".".join(t.c_name for t in
                             typ.trait.ancestry_paths[self.parent][0])))
 
-class TraitDowncast(Expression):
-    '''Inverse of TraitUpcast, along the canonical path'''
-    @auto_init
-    def __init__(self, site, sup, child): pass
-
-    def __str__(self):
-        return "cast(%s, %s)" % (self.sup, self.child.name)
-
-    def ctype(self):
-        return TTrait(self.child)
-
-    def read(self):
-        typ = safe_realtype(self.sup.ctype())
-        assert isinstance(typ, TTrait)
-        return ("DOWNCAST(%s, %s, %s)"
-                % (self.sup.read(), self.child.c_name,
-                   ".".join(t.c_name for t in
-                            self.child.ancestry_paths[typ.trait][0])))
-
 class TraitObjectCast(Expression):
     @auto_init
     def __init__(self, site, sub): pass
@@ -3849,19 +3831,59 @@ class TraitParameter(Expression):
                     f', {self.name})')
 
 class TraitSubobjRef(Expression):
-    '''A reference to a shared object, declared by `shared <objtype>`'''
+    '''A reference to a shared object, declared by `shared <objtype>`.
+    `types` starts with the type of the vtable slot, followed by the
+    types it is downcast to in turn.'''
     priority = dml.expr.Apply.priority
     @auto_init
-    def __init__(self, site, traitref, name, type): pass
+    def __init__(self, site, traitref, name, dimsizes, indices, types):
+        assert len(indices) == len(dimsizes)
 
     def __str__(self):
-        return "%s.%s" % (self.traitref, self.name)
+        return "%s.%s%s" % (self.traitref, self.name,
+                             ''.join(f'[{expr}]' for expr in self.indices))
+
+    def ctype(self):
+        return TTrait(self.types[-1])
 
     def read(self):
         t = realtype(self.traitref.ctype())
         assert isinstance(t, TTrait)
-        return (f'VTABLE_SUBOBJ({self.traitref.read()},'
-                f' struct _{t.trait.c_name}, {self.name})')
+        coeff = math.prod(self.dimsizes)
+        if all(idx.constant for idx in self.indices):
+            offset = encode_indices_constant(
+                (idx.value for idx in self.indices), self.dimsizes)
+        else:
+            offset = encode_indices(self.indices, self.dimsizes)
+        expr = (f'VTABLE_SUBOBJ({self.traitref.read()},'
+                f' struct _{t.trait.c_name}, {self.name}, {coeff}, {offset})')
+        for (sup, child) in zip(self.types, self.types[1:]):
+            path = '.'.join(t.c_name for t in child.ancestry_paths[sup][0])
+            expr = f'DOWNCAST({expr}, {child.c_name}, {path})'
+        return expr
+
+class TraitSubobjArrayRef(NonValueArrayRef):
+    @auto_init
+    def __init__(self, site, traitref, name, dimsizes, indices, types):
+        assert len(indices) < len(dimsizes)
+
+    @property
+    def local_indices(self):
+        return self.indices
+
+    @property
+    def local_dimsizes(self):
+        return self.dimsizes
+
+    def __str__(self):
+        return "%s.%s%s" % (self.traitref, self.name,
+                             ''.join(f'[{expr}]' for expr in self.indices))
+
+def mkTraitSubobjRef(site, traitref, name, dimsizes, indices, types):
+    if len(indices) < len(dimsizes):
+        return TraitSubobjArrayRef(site, traitref, name, dimsizes, indices,
+                                   types)
+    return TraitSubobjRef(site, traitref, name, dimsizes, indices, types)
 
 class TraitSessionRef(Expression):
     '''A reference to a trait session variable.
@@ -4888,6 +4910,10 @@ def mkIndex(site, expr, idx):
             if len(expr.local_dimsizes) > len(local_indices) + 1:
                 if isinstance(expr, NodeArrayRef):
                     return NodeArrayRef(site, expr.node, expr.indices + (idx,))
+                elif isinstance(expr, TraitSubobjArrayRef):
+                    return TraitSubobjArrayRef(
+                        site, expr.traitref, expr.name, expr.dimsizes,
+                        expr.indices + (idx,), expr.types)
                 else:
                     assert isinstance(expr, TraitHookArrayRef)
                     return TraitHookArrayRef(site, expr.dimsizes,
@@ -4896,6 +4922,10 @@ def mkIndex(site, expr, idx):
             else:
                 if isinstance(expr, NodeArrayRef):
                     return mkNodeRef(site, expr.node, expr.indices + (idx,))
+                elif isinstance(expr, TraitSubobjArrayRef):
+                    return TraitSubobjRef(
+                        site, expr.traitref, expr.name, expr.dimsizes,
+                        expr.indices + (idx,), expr.types)
                 else:
                     return TraitHookRef(
                         site, expr.dimsizes, expr.hooktyp, expr.traitref,

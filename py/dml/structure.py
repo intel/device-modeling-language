@@ -1827,7 +1827,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                     t.name for t in direct_parents)),
                 # traitset is a frozenset, with undefined iteration order;
                 # must sort it to keep compilation deterministic
-                Set(sorted(traitset)), {}, {}, {}, {}, {}, {}, {})
+                Set(sorted(traitset)), {}, {}, {}, {}, {}, {}, {}, {})
             implicit_traits[traitset] = new_trait
             if new_trait.name in dml.globals.traits:
                 raise ICE(
@@ -2046,6 +2046,14 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                     # the collision; give up on the object rather than leave
                     # its vtables uninitialized
                     raise ENAMECOLL(override.site, decl_site, member)
+                # the sizes are evaluated both in the template, for the
+                # vtable, and in the object; they must agree
+                dims = decl_trait.subobj_dims[member]
+                if tuple(override.dimsizes[obj.dimensions:]) != dims:
+                    raise EAINCOMP(
+                        override.site, decl_site, member,
+                        "array size differs from that of the template type"
+                        f" ({', '.join(map(str, dims))})")
                 # handled as a special case in vtable initialization
                 continue
             elif override.objtype != decl_trait.member_kind(member):

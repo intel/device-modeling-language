@@ -60,9 +60,6 @@ template t {
         /// ERROR ESYNTAX
         shared group g3 {}
     }
-    // arrays are not yet supported on shared objects
-    /// ERROR ESYNTAX
-    shared group ga[i < 4] {}
 }
 /// ERROR ESYNTAX
 param p : int;

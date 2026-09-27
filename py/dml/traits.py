@@ -45,8 +45,19 @@ def all_traits():
     for trait in dml.globals.traits.values():
         yield from with_shared_objects(trait)
 
-def process_trait(site, name, subasts, shared_objects, ancestors,
-                  template_symbols):
+def eval_subobj_dims(arrayinfo):
+    '''Evaluate the array sizes of a shared object declaration, which
+    cannot depend on the enclosing template'''
+    dims = []
+    for (dim_i, (_, len_ast)) in enumerate(arrayinfo):
+        if len_ast is None:
+            raise EAUNKDIMSIZE(arrayinfo[0][0].site, dim_i, '')
+        dims.append(eval_arraylen(len_ast, None))
+    return tuple(dims)
+
+def process_trait(site, name, subasts, shared_objects, subobj_arrayinfo,
+                  ancestors, template_symbols):
+    '''`subobj_arrayinfo` holds the array info of each shared object'''
     # Methods declared in this trait
     methods = {}
     params = {}
@@ -116,7 +127,7 @@ def process_trait(site, name, subasts, shared_objects, ancestors,
                     add_late_global_struct_defs(struct_defs)
                     # TODO maybe realtype?
                     msg_types.append(dtype)
-                array_lens = tuple(eval_arraylen(len_ast, global_scope)
+                array_lens = tuple(eval_arraylen(len_ast, None)
                                    for len_ast in arraylen_asts)
                 check_namecoll(hname, ast.site)
                 hooks[hname] = (ast.site, array_lens, msg_types)
@@ -126,9 +137,11 @@ def process_trait(site, name, subasts, shared_objects, ancestors,
             report(e)
     declared = shared_objects
     shared_objects = dict(declared)
+    subobj_dims = {}
     for (oname, otrait) in declared.items():
         try:
             check_namecoll(oname, otrait.site)
+            subobj_dims[oname] = eval_subobj_dims(subobj_arrayinfo[oname])
         except DMLError as e:
             report(e)
             del shared_objects[oname]
@@ -139,7 +152,8 @@ def process_trait(site, name, subasts, shared_objects, ancestors,
     subobj_traits = {oname: decls[0] for (oname, decls) in inherited.items()}
     subobj_traits.update(declared)
     return mktrait(site, name, ancestors, methods, params, shared_objects,
-                   subobj_traits, sessions, hooks, template_symbols)
+                   subobj_traits, subobj_dims, sessions, hooks,
+                   template_symbols)
 
 class NoDefaultSymbol(Symbol):
     """A broken reference to 'default' inside a method that has no default
@@ -319,7 +333,7 @@ def merge_ancestor_vtables(ancestors, site):
     return ancestor_vtables
 
 def mktrait(site, tname, ancestors, methods, params, shared_objects,
-            subobj_traits, sessions, hooks, template_symbols):
+            subobj_traits, subobj_dims, sessions, hooks, template_symbols):
     '''Produce a trait, possibly reporting errors.'''
     direct_parents = [a for a in ancestors
                       if not any(a in p.ancestors for p in ancestors)]
@@ -431,7 +445,11 @@ def mktrait(site, tname, ancestors, methods, params, shared_objects,
                 if orig_trait.member_kind(name) != 'subobject':
                     report(ENAMECOLL(otrait.site, orig_site, name))
                     bad_subobjs.append(name)
-    for name in bad_subobjs:
+                elif orig_trait.subobj_dims[name] != subobj_dims[name]:
+                    report(EAINCOMP(otrait.site, orig_site, name,
+                                    "mismatching array sizes"))
+                    bad_subobjs.append(name)
+    for name in set(bad_subobjs):
         del shared_objects[name]
 
     reserved_symbols = {sym: template_symbols[sym]
@@ -448,7 +466,7 @@ def mktrait(site, tname, ancestors, methods, params, shared_objects,
     reserved_symbols.pop('dev', None)
     return Trait(site, tname, ancestors, methods, params, shared_objects,
                  sessions, hooks, ancestor_vtables, ancestor_method_impls,
-                 subobj_traits, reserved_symbols)
+                 subobj_traits, subobj_dims, reserved_symbols)
 
 def typecheck_method_override(left, right):
     (site0, inp0, outp0, throws0, independent0, startup0, memoized0) = left
@@ -799,7 +817,7 @@ class Trait(SubTrait):
 
     def __init__(self, site, name, ancestors, methods, params, shared_objects,
                  sessions, hooks, ancestor_vtables, ancestor_method_impls,
-                 subobj_traits, reserved_symbols):
+                 subobj_traits, subobj_dims, reserved_symbols):
         method_impls = {
             name: TraitMethod(
                 msite, inp, outp, throws, independent, startup, memoized,
@@ -842,6 +860,8 @@ class Trait(SubTrait):
         self.vtable_subobjs = {name: otrait
                                for (name, otrait) in shared_objects.items()
                                if name not in ancestor_vtables}
+        # name -> array sizes, for each `shared <objtype>` declaration
+        self.subobj_dims = subobj_dims
         self.vtable_memoized_outs = {
             '_memo_outs_' + name: method.memo_outs_struct
             for (name, method) in method_impls.items()
@@ -1081,8 +1101,8 @@ class Trait(SubTrait):
             else:
                 return TraitHookRef(site, (), hooktyp, expr, name, ())
         if name in self.vtable_subobjs:
-            return TraitSubobjRef(site, expr, name,
-                                  TTrait(self.vtable_subobjs[name]))
+            return mkTraitSubobjRef(site, expr, name, self.subobj_dims[name],
+                                    (), (self.vtable_subobjs[name],))
         vtable_trait = self.ancestor_vtables.get(name, None)
         if vtable_trait and name in vtable_trait.vtable_subobjs:
             # step along the canonical path, downcasting to the most
@@ -1092,7 +1112,9 @@ class Trait(SubTrait):
             otrait = self.subobj_traits.get(name)
             if (otrait is not None
                 and otrait is not parent.subobj_traits.get(name)):
-                ref = TraitDowncast(site, ref, otrait)
+                ref = mkTraitSubobjRef(site, ref.traitref, name,
+                                       ref.dimsizes, (),
+                                       ref.types + (otrait,))
             return ref
         if vtable_trait:
             return vtable_trait.lookup(

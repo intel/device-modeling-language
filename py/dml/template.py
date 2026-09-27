@@ -129,7 +129,8 @@ class InstantiatedTemplateSpec(ObjectSpec):
         super().__init__(site, rank, templates, params, blocks)
 
 class Template(object):
-    def __init__(self, name, trait, spec, shared_objects, objtype=None):
+    def __init__(self, name, trait, spec, shared_objects, objtype=None,
+                 arrayinfo=()):
         self.name = name
         # Trait instance, or None
         self.trait = trait
@@ -139,6 +140,8 @@ class Template(object):
         self.shared_objects = shared_objects
         # the object type, if this is the template of a shared object
         self.objtype = objtype
+        # ... and its array info, as in the declaration AST
+        self.arrayinfo = arrayinfo
 
     def __repr__(self):
         return 'Template(%r)' % (self.name,)
@@ -295,6 +298,7 @@ def template_trait(name, spec, trait_stmts, shared_objects,
     return dml.traits.process_trait(
         spec.site, name, trait_stmts,
         {objname: tpl.trait for (objname, tpl) in shared_objects.items()},
+        {objname: tpl.arrayinfo for (objname, tpl) in shared_objects.items()},
         Set().union(*[tpl.traits() for (_, tpl) in spec.templates]),
         symbols)
 
@@ -323,7 +327,7 @@ def object_spec_from_asts(site, stmts, templates, inferior, in_each_structure,
     inferior_ranks.update(spec.rank for spec in list(in_each_specs.values()))
     rank = Rank(inferior_ranks, desc)
 
-    def shared_template(tname, objname, objtype, site, stmts,
+    def shared_template(tname, objname, objtype, arrayinfo, site, stmts,
                         conditional_specs, enclosing_is_stmts):
         '''Create the implicit template of a `shared` object declaration.
         It gets the rank of the enclosing template, just like the
@@ -343,7 +347,7 @@ def object_spec_from_asts(site, stmts, templates, inferior, in_each_structure,
         return Template(
             tname, template_trait(tname, spec, trait_stmts, shared_objects,
                                   conditional_specs),
-            spec, shared_objects, objtype)
+            spec, shared_objects, objtype, arrayinfo)
 
     def obj_from_asts(site, stmts, tname, instantiated=()):
         '''`instantiated` is a list of (site, Template) for templates
@@ -389,11 +393,12 @@ def object_spec_from_asts(site, stmts, templates, inferior, in_each_structure,
         # Object declarations are partitioned by name:
         # - conditional_specs: specs of conditional declarations, built at once
         # - unconditional_decls: unconditional declarations, built afterwards
-        # - shared_names: names with a shared declaration, which makes their
-        #   unconditional declarations the implicit template
+        # - shared_arrayinfo: array info of the first shared declaration of
+        #   each name, which makes its unconditional declarations the
+        #   implicit template
         conditional_specs: dict[str, list[ObjectSpec]] = {}
         unconditional_decls: dict[str, list[ast.AST]] = {}
-        shared_names: set[str] = set()
+        shared_arrayinfo: dict[str, list] = {}
         blocks = []
         for (preconds, shallow, composite, in_each) in flatten_ifs(
                 in_each_specs, templates, rest, []):
@@ -415,7 +420,8 @@ def object_spec_from_asts(site, stmts, templates, inferior, in_each_structure,
                 for decl_ast in composite:
                     if decl_ast.kind == 'sharedobject':
                         [decl_ast] = decl_ast.args
-                        shared_names.add(decl_ast.args[0])
+                        shared_arrayinfo.setdefault(decl_ast.args[0],
+                                                    decl_ast.args[2])
                     unconditional_decls.setdefault(
                         decl_ast.args[0], []).append(decl_ast)
             blocks.append((preconds, shallow, block, in_each))
@@ -427,14 +433,29 @@ def object_spec_from_asts(site, stmts, templates, inferior, in_each_structure,
             inherited = dml.traits.inherited_subobjs(
                 Set().union(*[tpl.traits() for (_, tpl) in is_stmts]))
             implicit = [name for (name, decls) in inherited.items()
-                        if len(decls) > 1 and name not in shared_names]
-            shared_names.update(implicit)
+                        if len(decls) > 1 and name not in shared_arrayinfo]
+            for name in implicit:
+                shared_arrayinfo[name] = next(
+                    a.shared_objects[name].arrayinfo
+                    for a in sorted(ancestors(is_stmts), key=lambda t: t.name)
+                    if name in a.shared_objects)
         shared_objects: dict[str, Template] = {}
         for (name, decls) in unconditional_decls.items():
-            if name in shared_names:
+            if name in shared_arrayinfo:
                 (first, *rest_decls) = decls
+                # a size given as `...` may be given by another declaration
+                # of the object in the same body; conflicts are reported for
+                # the object
+                arrayinfo = [
+                    (idxvar, length if length is not None else next(
+                        (d.args[2][dim][1] for d in decls
+                         if dim < len(d.args[2])
+                         and d.args[2][dim][1] is not None), None))
+                    for (dim, (idxvar, length))
+                    in enumerate(shared_arrayinfo[name])]
                 tpl = shared_template(
-                    f'{tname}.{name}', name, first.args[1], first.site,
+                    f'{tname}.{name}', name, first.args[1],
+                    arrayinfo, first.site,
                     [stmt for d in decls for stmt in d.args[4]],
                     conditional_specs.get(name, []), is_stmts)
                 shared_objects[name] = tpl
@@ -456,11 +477,13 @@ def object_spec_from_asts(site, stmts, templates, inferior, in_each_structure,
                 a.shared_objects[name].objtype
                 for a in sorted(ancestors(is_stmts), key=lambda t: t.name)
                 if name in a.shared_objects)
-            tpl = shared_template(f'{tname}.{name}', name, objtype, site, [],
-                                  conditional_specs.get(name, []), is_stmts)
+            arrayinfo = shared_arrayinfo[name]
+            tpl = shared_template(f'{tname}.{name}', name, objtype, arrayinfo,
+                                  site, [], conditional_specs.get(name, []),
+                                  is_stmts)
             shared_objects[name] = tpl
             unconditional_block.append(
-                (objtype, name, [], None,
+                (objtype, name, arrayinfo, None,
                  decl_spec(site, objtype, [], [(site, tpl)])))
         return (ObjectSpec(site, rank, is_stmts, params, blocks),
                 shared_objects)

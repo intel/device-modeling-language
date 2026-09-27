@@ -1347,7 +1347,11 @@ template t {
 
 The `shared` keyword is permitted on any composite object declaration directly
 in a template body, or directly in the body of another shared object. It is
-not permitted inside `#if`, or on object arrays.
+not permitted inside `#if`.
+
+A shared object can be an object array. The sizes of the array are part of the
+template type, so they must be constant, and cannot depend on the members of
+the template.
 
 ## Parameters detailed
 

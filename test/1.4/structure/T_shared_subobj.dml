@@ -157,6 +157,52 @@ group tmo is tm {
     param pg = cast(a.g, t2.g);
 }
 
+// arrays of shared objects, also inside object arrays
+template ta {
+    shared group g[i < 3][j < 2] {
+        shared method v() -> (int) default { return -1; }
+    }
+    shared method sum() -> (int) {
+        local int s = 0;
+        for (local int k = 0; k < g.len; k++)
+            for (local int l = 0; l < g[k].len; l++)
+                s += g[k][l].v();
+        return s;
+    }
+}
+template tb is ta {
+    shared group g[i < 3][j < 2] {
+        shared method w() -> (int) { return v() + 1000; }
+    }
+}
+group ao is ta {
+    group g[i < 3][j < 2] { method v() -> (int) { return i * 10 + j; } }
+}
+group aao[k < 2] is ta {
+    group g[i < 3][j < 2] {
+        method v() -> (int) { return k * 100 + i * 10 + j; }
+    }
+}
+group bo is tb {
+    group g[i < 3][j < 2] { method v() -> (int) { return i * 10 + j; } }
+}
+// ... declared implicitly in a diamond
+template tc is ta {
+    shared group g[i < 3][j < 2] {
+        shared method u() -> (int) { return v() + 2000; }
+    }
+}
+template td is (tb, tc) {}
+group dao is td {
+    group g[i < 3][j < 2] { method v() -> (int) { return i * 10 + j; } }
+}
+// ... with a size given by another declaration in the same template
+template te {
+    group g[i < 2][j < ...];
+    shared group g[i < ...][j < 2] { shared method m() -> (int) { return 7; } }
+}
+group teo is te;
+
 method init() {
     local t2 t = cast(a, t2);
     assert t.g.m1() == 1;
@@ -216,4 +262,27 @@ method init() {
     assert d3g.m3() == 3;
     assert cast(c, d3).g.m3() == 3;
     assert cast(c, d2).g.m2() == 2;
+
+    local ta x = cast(ao, ta);
+    assert x.g.len == 3;
+    assert x.g[0].len == 2;
+    for (local int k = 0; k < 3; k++)
+        for (local int l = 0; l < 2; l++)
+            assert x.g[k][l].v() == k * 10 + l;
+    assert x.sum() == 63;
+    assert cast(aao[1], ta).g[2][1].v() == 121;
+    local int k = 1;
+    assert cast(aao[k], ta).g[k + 1][k].v() == 121;
+    // .len is constant, also on a run-time reference and index
+    #if (x.g.len != 3 || x.g[k].len != 2) {
+        error "wrong .len";
+    }
+    #if (cast(teo, te).g.len != 2 || cast(teo, te).g[k].len != 2) {
+        error "wrong .len";
+    }
+    assert cast(teo, te).g[1][1].m() == 7;
+    local tb.g tbg = cast(bo, tb).g[1][1];
+    assert tbg.w() == 1011;
+    local td.g tdg = cast(dao, td).g[2][0];
+    assert tdg.w() + tdg.u() == 3040;
 }

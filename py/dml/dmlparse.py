@@ -572,25 +572,15 @@ def shared_prefix_plain(t):
                in t.parser.file_info.provisional)
     t[0] = False if enabled else None
 
-def shared_object_check(t):
-    (name, objtype, arrayinfo, is_extension, spec) = t[0].args
-    if arrayinfo:
-        report(ESYNTAX(t[0].site, '[',
-                       'arrays are not yet supported in shared object'
-                       + ' declarations'))
-        t[0] = ast.object_(t[0].site, name, objtype, [], is_extension, spec)
-
 @prod_dml14
 def shared_object_regarray(t):
     'shared_object : shared_prefix REGISTER objident array_list sizespec offsetspec maybe_istemplate shared_object_spec'
     object_regarray(t)
-    shared_object_check(t)
 
 @prod_dml14
 def shared_object_field(t):
     'shared_object : shared_prefix FIELD objident array_list bitrangespec maybe_istemplate shared_object_spec'
     object_field(t)
-    shared_object_check(t)
 
 @prod_dml14
 def shared_object3(t):
@@ -603,13 +593,11 @@ def shared_object3(t):
                      | shared_prefix PORT      objident array_list maybe_istemplate shared_object_spec
                      | shared_prefix IMPLEMENT objident array_list maybe_istemplate shared_object_spec'''
     object3(t)
-    shared_object_check(t)
 
 @prod_dml14
 def shared_object_subdevice(t):
     '''shared_object : shared_prefix SUBDEVICE objident array_list maybe_istemplate shared_object_spec'''
     object_subdevice(t)
-    shared_object_check(t)
 
 @prod_dml12
 def maybe_extern_yes(t):
