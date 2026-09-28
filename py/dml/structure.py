@@ -1816,7 +1816,11 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                 exports.append(s)
             elif s.kind == 'hook':
                 (name, _, _) = s.args
-                hooks[name] = s
+                if name in symbols:
+                    report(ENAMECOLL(s.site, symbols[name], name))
+                else:
+                    symbols[name] = s.site
+                    hooks[name] = s
             else:
                 raise ICE(s.site, 'UNKNOWN %r' % (s,))
 

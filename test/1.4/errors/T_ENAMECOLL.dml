@@ -12,6 +12,17 @@ param c0 = 5;
 connect c0;
 
 /// ERROR ENAMECOLL
+hook() c_hook;
+/// ERROR ENAMECOLL
+group c_hook;
+
+// a hook cannot be declared twice, not even with the same type
+/// ERROR ENAMECOLL
+hook(int) c_hook2;
+/// ERROR ENAMECOLL
+hook(int) c_hook2;
+
+/// ERROR ENAMECOLL
 param c1 = 5;
 /// ERROR ENAMECOLL
 method c1() {
