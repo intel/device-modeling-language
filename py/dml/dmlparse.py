@@ -2888,7 +2888,8 @@ def simple_array_list(t):
 def hook_decl(t):
     '''hook_decl : HOOK LPAREN cdecl_maybe_discarded_list RPAREN ident simple_array_list SEMI'''
     cdecl_maybe_discarded_list_enforce_unnamed(t[3])
-    if t[6]:
+    arraylens = t[6]
+    if arraylens:
         # Hook arrays are an internal feature, as their design depends on if we
         # are able to make hooks compound objects in the future
         if dml.globals.enable_testing_features:
@@ -2897,7 +2898,8 @@ def hook_decl(t):
                 "***FEATURE FOR INTERNAL TESTING***: hook arrays"))
         else:
             report(ESYNTAX(site(t, 6), '[', ''))
-    t[0] = ast.hook(site(t), t[5], t[6], [typ for (_, _, _, typ) in t[3]])
+            arraylens = []
+    t[0] = ast.hook(site(t), t[5], arraylens, [typ for (_, _, _, typ) in t[3]])
 
 @prod_dml14
 def object_hook(t):
