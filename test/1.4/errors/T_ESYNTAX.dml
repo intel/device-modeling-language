@@ -124,3 +124,12 @@ method init() {
 // bad spec of COVERITY pragma
 /// ERROR ESYNTAX
 /*% COVERITY %*/
+
+// without testing features, the sizes of a rejected hook array must not be
+// evaluated
+template hook_array {
+    param n = 4;
+    /// ERROR ESYNTAX
+    shared hook() h[n];
+}
+group hook_array_obj is hook_array;
