@@ -4469,30 +4469,46 @@ class TemplatesSubRef(NonValue):
     '''A subreference of the 'templates' param of an object, specifying the
        template of the template-qualified method implementation call'''
     @auto_init
-    def __init__(self, site, templates_ref, template_name): pass
+    def __init__(self, site, templates_ref, template): pass
 
     def __str__(self):
-        return f'{self.templates_ref}.{self.template_name}'
+        return f'{self.templates_ref}.{self.template.name}'
 
 def mkTemplatesSubRef(site, templates_ref, template_name):
     tmpl = dml.globals.templates.get(template_name)
     if tmpl is None:
         raise ENTMPL(site, template_name)
-    if tmpl not in templates_ref.node.templates:
-        raise ETQMIC(site, templates_ref.node.identity(), template_name)
-    return TemplatesSubRef(site, templates_ref, template_name)
+    node = templates_ref.node
+    if tmpl not in node.templates:
+        # in a shared object, the template of an enclosing object stands for
+        # its view of the shared object
+        path = []
+        enclosing = node
+        while enclosing is not None and tmpl not in enclosing.templates:
+            path.append(enclosing.ident)
+            enclosing = enclosing.parent
+        trait = tmpl.trait if enclosing is not None else None
+        for ident in reversed(path):
+            if trait is None:
+                break
+            trait = trait.subobj_traits.get(ident)
+        if (trait is None
+            or dml.globals.templates_by_trait[trait] not in node.templates):
+            raise ETQMIC(site, node.identity(), template_name)
+        tmpl = dml.globals.templates_by_trait[trait]
+    return TemplatesSubRef(site, templates_ref, tmpl)
 
 def mkTemplateQualifiedMethodRef(site, templates_subref, method_name):
     node = templates_subref.templates_ref.node
     indices = templates_subref.templates_ref.indices
 
-    template_name = templates_subref.template_name
-    template = dml.globals.templates[template_name]
+    template = templates_subref.template
+    template_name = template.name
 
     rank_to_candidate = {}
 
     # Add any shared method implementation as a possible candidate
-    trait = dml.globals.traits.get(template_name)
+    trait = template.trait
     shared_method = None
     if trait is not None:
         for impl_trait in trait.method_impl_traits.get(method_name, []):
@@ -4590,7 +4606,21 @@ def mkTraitTemplatesSubRef(site, templates_ref, template_name):
         raise ENTMPL(site, template_name)
     if not (templates_ref.trait.implements(trait)
             or trait is dml.globals.object_trait):
-        raise ETTQMIC(site, trait.name, templates_ref.trait.name)
+        # in a shared object, the template of an enclosing object stands for
+        # its view of the shared object
+        path = []
+        enclosing = templates_ref.trait
+        while enclosing is not None and not enclosing.implements(trait):
+            (enclosing, ident) = enclosing.enclosing or (None, None)
+            path.append(ident)
+        view = trait if enclosing is not None else None
+        for ident in reversed(path):
+            if view is None:
+                break
+            view = view.subobj_traits.get(ident)
+        if view is None or not templates_ref.trait.implements(view):
+            raise ETTQMIC(site, trait.name, templates_ref.trait.name)
+        trait = view
 
     return TraitTemplatesSubRef(site, templates_ref, trait)
 
@@ -4639,6 +4669,37 @@ def mkTraitTemplateQualifiedMethodRef(site, templates_subref, method_name):
         traitref = mkTraitUpcast(site, traitref, method.vtable_trait)
 
     return TraitMethodDirect(site, traitref, method)
+
+class TemplateQualifiedArrayRef(NonValueArrayRef):
+    '''`x.templates.t.g` for an array `g`, where each element gets
+    qualified by `view`, the trait of `t`'s view of `g`'''
+    @auto_init
+    def __init__(self, site, array, view): pass
+
+    @property
+    def local_indices(self):
+        return self.array.local_indices
+
+    @property
+    def local_dimsizes(self):
+        return self.array.local_dimsizes
+
+    def __str__(self):
+        return str(self.array)
+
+def mkTemplateQualifiedSubobj(site, obj, view):
+    '''`obj.templates.t`, where `view` is the trait of `t`'s view of obj'''
+    if isinstance(obj, NonValueArrayRef):
+        return TemplateQualifiedArrayRef(site, obj, view)
+    if isinstance(obj, NodeRef):
+        (node, indices) = obj.get_ref()
+        tmpl = dml.globals.templates_by_trait[view]
+        if tmpl not in node.templates:
+            raise ETQMIC(site, node.identity(), tmpl.name)
+        return TemplatesSubRef(site, mkTemplatesRef(site, node, indices), tmpl)
+    trait = safe_realtype(obj.ctype()).trait
+    return TraitTemplatesSubRef(site, mkTraitTemplatesRef(site, trait, obj),
+                                view)
 
 class Variable(LValue):
     "Variable storage"
@@ -4766,10 +4827,23 @@ def mkSubRef(site, expr, sub, op):
             if isinstance(expr, TemplatesRef):
                 return mkTemplatesSubRef(site, expr, sub)
             elif isinstance(expr, TemplatesSubRef):
+                view = expr.template.trait and (
+                    expr.template.trait.subobj_traits.get(sub))
+                if view:
+                    templates_ref = expr.templates_ref
+                    return mkTemplateQualifiedSubobj(
+                        site, mkSubRef(site, mkNodeRef(
+                            site, templates_ref.node, templates_ref.indices),
+                                       sub, '.'), view)
                 return mkTemplateQualifiedMethodRef(site, expr, sub)
             elif isinstance(expr, TraitTemplatesRef):
                 return mkTraitTemplatesSubRef(site, expr, sub)
             elif isinstance(expr, TraitTemplatesSubRef):
+                view = expr.trait.subobj_traits.get(sub)
+                if view:
+                    return mkTemplateQualifiedSubobj(
+                        site, mkSubRef(site, expr.templates_ref.traitref,
+                                       sub, '.'), view)
                 return mkTraitTemplateQualifiedMethodRef(site, expr, sub)
 
         raise expr.exc()
@@ -4900,6 +4974,9 @@ def mkIndex(site, expr, idx):
     else:
         idx = as_int(idx)
     if isinstance(expr, NonValue):
+        if isinstance(expr, TemplateQualifiedArrayRef):
+            return mkTemplateQualifiedSubobj(
+                site, mkIndex(site, expr.array, idx), expr.view)
         if isinstance(expr, NonValueArrayRef):
             local_indices = expr.local_indices
             if not isinstance(idx, StaticIndex):

@@ -869,6 +869,11 @@ class Trait(SubTrait):
         self.reserved_symbols = reserved_symbols
         # name -> Trait, for each `shared <objtype>` declaration
         self.shared_objects = shared_objects
+        # (Trait, name) of the declaration of a shared object; set by the
+        # enclosing trait, which is created after this one
+        self.enclosing = None
+        for (oname, otrait) in shared_objects.items():
+            otrait.enclosing = (self, oname)
         # name -> most specific Trait, for each shared object, also inherited
         self.subobj_traits = subobj_traits
 

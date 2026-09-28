@@ -203,6 +203,36 @@ template te {
 }
 group teo is te;
 
+// the template of an enclosing object qualifies calls on a shared object with
+// its view of the object
+template qa {
+    shared group g[i < 3][j < 2] {
+        shared method v() -> (int) default { return -1; }
+        shared group h {
+            shared method hv() -> (int) default { return -2; }
+        }
+    }
+}
+template qb is qa {
+    shared group g[i < 3][j < 2] {
+        shared method v() -> (int) default { return 5; }
+        shared group h {
+            shared method hv() -> (int) default { return 6; }
+        }
+    }
+}
+// ... also when only inherited
+template qz is qa {}
+group qbo is qb {
+    group g[i < 3][j < 2] {
+        method v() -> (int) { return i * 10 + j; }
+        group h { method hv() -> (int) { return 7; } }
+    }
+}
+group qzo is qz {
+    group g[i < 3][j < 2] { method v() -> (int) { return 9; } }
+}
+
 method init() {
     local t2 t = cast(a, t2);
     assert t.g.m1() == 1;
@@ -285,4 +315,25 @@ method init() {
     assert tbg.w() == 1011;
     local td.g tdg = cast(dao, td).g[2][0];
     assert tdg.w() + tdg.u() == 3040;
+
+    assert qbo.g[1][1].v() == 11;
+    assert qbo.g[1][1].templates.qa.v() == -1;
+    assert qbo.g[1][1].templates.qb.v() == 5;
+    assert qbo.g[1][1].h.templates.qa.hv() == -2;
+    assert qbo.g[1][1].h.templates.qb.hv() == 6;
+    assert qzo.g[0][0].templates.qz.v() == -1;
+    local qb.g qg = cast(qbo, qb).g[1][1];
+    assert qg.templates.qa.v() == -1;
+    assert qg.templates.qb.v() == 5;
+    assert qg.h.templates.qa.hv() == -2;
+    // ... equivalently, before selecting the object
+    assert qbo.templates.qa.g[1][1].v() == -1;
+    assert qbo.templates.qb.g[1][1].v() == 5;
+    assert qbo.templates.qa.g[1][1].h.hv() == -2;
+    assert cast(qbo, qb).templates.qa.g[1][1].v() == -1;
+    assert cast(qbo, qb).templates.qa.g[1][1].h.hv() == -2;
+    assert qzo.templates.qz.g[0][0].v() == -1;
+    #if (qbo.templates.qa.g.len != 3) {
+        error "wrong .len";
+    }
 }
