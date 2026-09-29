@@ -8,12 +8,6 @@
 Group: dmllib(name)
   $(HOST)/bin/dml/{name}.dml
   $(HOST)/bin/dml/{name}.dmlast
-  @6-only($(HOST)/bin/dml-old-4.8/{name}.dml)
-  @6-only($(HOST)/bin/dml-old-4.8/{name}.dmlast)
-
-Group: dmllib-old-4.8(name)
-  @6-only($(HOST)/bin/dml-old-4.8/{name}.dml)
-  @6-only($(HOST)/bin/dml-old-4.8/{name}.dmlast)
 
 Group: dml-1.2-reference-manual
 Require-tokens: public
@@ -88,8 +82,6 @@ Require-tokens: public
 Make: dmlc
     $(HOST)/bin/dml/include/simics/LICENSE
     $(HOST)/bin/dml/include/simics/dmllib.h
-    @6-only($(HOST)/bin/dml-old-4.8/1.2/LICENSE)
-    @6-only($(HOST)/bin/dml-old-4.8/1.4/LICENSE)
     $(HOST)/bin/dml/1.2/LICENSE
     $(HOST)/bin/dml/1.4/LICENSE
     # dml files available in all APIs
@@ -113,22 +105,3 @@ Make: dmlc
     @dmllib(1.4/dml12-compatibility)
     @dmllib(1.4/internal)
     @dmllib(1.4/utility)
-    # deprecated interfaces
-    @6-only(@dmllib(1.2/mil-std-1553))
-    @6-only(@dmllib(1.2/rapidio))
-    @6-only(@dmllib(1.2/rapidio-device))
-    # dml files available in 4.8 API
-    @dmllib-old-4.8(1.2/i2c)
-    @dmllib-old-4.8(1.2/ieee-802-3)
-    @dmllib-old-4.8(1.2/interrupt)
-    @dmllib-old-4.8(1.2/microwire)
-    @dmllib-old-4.8(1.2/mii)
-    @dmllib-old-4.8(1.2/mips)
-    @dmllib-old-4.8(1.2/nand-flash)
-    @dmllib-old-4.8(1.2/ppc)
-    @dmllib-old-4.8(1.2/recorder)
-    @dmllib-old-4.8(1.2/sata-interface)
-    @dmllib-old-4.8(1.2/serial-device)
-    @dmllib-old-4.8(1.2/serial-peripheral-interface)
-    @dmllib-old-4.8(1.2/usb)
-    @dmllib-old-4.8(1.2/x86)

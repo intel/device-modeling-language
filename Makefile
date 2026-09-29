@@ -66,23 +66,16 @@ PARSER_DEBUGFILES :=	$(PYPATH)/dml12_parser.out \
 
 include $(SIMICS_BASE)/$(HOST_TYPE)/include/api-versions.mk
 
-# lib-old-4.8/* is copied to bin/dml-old-4.8
-# lib/* is copied to both bin/dml, bin/dml-old-4.8
-OLD_DMLLIB_SRC_4_8 := $(DMLC_DIR)/lib-old-4.8
-OLD_DMLLIB_DEST_4_8 := $(LIBDIR)/dml-old-4.8
+# lib/* is copied to bin/dml
 DMLLIB_SRC := $(DMLC_DIR)/lib
 DMLLIB_DEST := $(LIBDIR)/dml
 DMLLIB_DESTDIRS := $(addprefix $(DMLLIB_DEST)/,1.2 1.4)
-OLD_DMLLIB_DESTDIRS_4_8 := $(addprefix $(OLD_DMLLIB_DEST_4_8)/,1.2 1.4)
-OLD_DMLFILES_4_8 := $(wildcard $(OLD_DMLLIB_SRC_4_8)/*/*.dml)
 DMLFILES := $(wildcard $(DMLLIB_SRC)/*/*.dml)
-OLD_DMLFILES_SRC_4_8 := $(subst $(OLD_DMLLIB_SRC_4_8)/,,$(OLD_DMLFILES_4_8))
 DMLFILES := $(subst $(DMLLIB_SRC)/,,$(DMLFILES))
-OLD_DMLFILES_4_8 := $(addprefix $(OLD_DMLLIB_DEST_4_8)/,$(DMLFILES) $(OLD_DMLFILES_SRC_4_8))
 DMLFILES := $(addprefix $(DMLLIB_DEST)/,$(DMLFILES))
 SCRIPTS := $(addprefix $(PYPATH)/,port_dml.py dead_dml_methods.py)
 MPL_LICENSE := $(PYPATH)/LICENSE
-BSD0_LICENSES := $(addsuffix /LICENSE,$(DMLLIB_DESTDIRS) $(OLD_DMLLIB_DESTDIRS_4_8) $(DMLLIB_DEST)/include/simics)
+BSD0_LICENSES := $(addsuffix /LICENSE,$(DMLLIB_DESTDIRS) $(DMLLIB_DEST)/include/simics)
 
 HFILES := $(DMLLIB_DEST)/include/simics/dmllib.h
 
@@ -91,7 +84,6 @@ DMLC_BIN := $(OUT_PYFILES) $(OUT_GEN_PYFILES) $(HFILES)
 all: $(DMLC_BIN)					\
      $(SCRIPTS)						\
      $(DMLFILES)					\
-     $(OLD_DMLFILES_4_8)				\
      $(BSD0_LICENSES)					\
      $(MPL_LICENSE)					\
      $(PYUNIT_TESTED)					\
@@ -138,19 +130,11 @@ RUN_PY_UNIT_TEST := $(PYTHON) $(DMLC_DIR)/run_unit_tests.py
 	$(RUN_PY_UNIT_TEST) $(SIMICS_PROJECT)/$(HOST_TYPE) $<
 	touch $@
 
-$(DMLLIB_DESTDIRS) $(OLD_DMLLIB_DESTDIRS_4_8) $(PYPATH):
+$(DMLLIB_DESTDIRS) $(PYPATH):
 	$(MKDIRS) $@
 
 # Copy the DML library files
 $(DMLFILES): $(DMLLIB_DEST)/%: $(DMLLIB_SRC)/% | $(DMLLIB_DESTDIRS)
-	$(info Copying $*)
-	cp $< $@
-
-$(OLD_DMLLIB_DEST_4_8)/%: $(DMLLIB_SRC)/% | $(OLD_DMLLIB_DESTDIRS_4_8)
-	$(info Copying $*)
-	cp $< $@
-
-$(OLD_DMLLIB_DEST_4_8)/%: $(OLD_DMLLIB_SRC_4_8)/% | $(OLD_DMLLIB_DESTDIRS_4_8)
 	$(info Copying $*)
 	cp $< $@
 
@@ -159,9 +143,6 @@ $(MPL_LICENSE): $(PYPATH)/%: $(DMLC_DIR)/% | $(PYPATH)
 	cp $< $@
 
 $(DMLLIB_DESTDIRS:=/LICENSE): $(DMLLIB_DEST)/%: $(DMLC_DIR)/lib/% | $(DMLLIB_DESTDIRS)
-	$(info Copying $*)
-	cp $< $@
-$(OLD_DMLLIB_DESTDIRS_4_8:=/LICENSE): $(DMLC_DIR)/lib-old-4.8/1.2/LICENSE | $(OLD_DMLLIB_DESTDIRS_4_8)
 	$(info Copying $*)
 	cp $< $@
 # HFILES dep to have the dest dir created
@@ -182,13 +163,12 @@ dmlast-generator: $(DMLC_BIN)
 # marker. The marker doubles as a depfile that makes sure we rebuild
 # this directory when DML files are updated
 PREPARSE_MARKERS := $(foreach d,1.2 1.4,\
-  dml-old-4.8/$d.d dml/$d.d $(foreach a,$(API_VERSIONS),dml/api/$a/$d.d))
+  dml/$d.d $(foreach a,$(API_VERSIONS),dml/api/$a/$d.d))
 -include $(PREPARSE_MARKERS)
 DML_VERSIONS:=1.2 1.4
-$(DML_VERSIONS:%=dml-old-4.8/%.d): $(OLD_DMLFILES_4_8)
 $(DML_VERSIONS:%=dml/%.d): $(DMLFILES)
 DMLAST_SRC_BASE:=$(if $(_CORE_PROJECT_BUILD),$(SIMICS_PROJECT),$(SIMICS_BASE))
-$(foreach d,1.2 1.4,dml-old-4.8/$d.d dml/$d.d): DMLAST_SRC_BASE:=$(SIMICS_PROJECT)
+$(foreach d,1.2 1.4,dml/$d.d): DMLAST_SRC_BASE:=$(SIMICS_PROJECT)
 $(PREPARSE_MARKERS): dmlast-generator
 	$(info Generating .dmlast files for $(@:.d=))
 	$(PYTHON) $(SRC_BASE)/$(TARGET)/dmlast.py $(PYPATH) $(SIMICS_PROJECT)/$(HOST_TYPE)/bin/$(@:.d=) $(DMLAST_SRC_BASE)/$(HOST_TYPE)/bin/$(@:.d=) $@
