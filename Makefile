@@ -178,13 +178,13 @@ DODOC := $(SIMICS_BASE)/$(HOST_TYPE)/bin/dodoc$(EXE_SUFFIX)
 
 generated-md-1.2 generated-md-1.4 github-wiki:
 	$(MKDIRS) $@
-generated-md-1.2/grammar.md generated-md-1.4/grammar.md: generated-md-1.%/grammar.md: $(PYPATH)/dml1%_parser.out $(SRC_BASE)/$(TARGET)/grammar_to_md.py
-	$(PYTHON) $(SRC_BASE)/$(TARGET)/grammar_to_md.py $(PYPATH) $< $@
-generated-md-1.2/messages.md generated-md-1.4/messages.md: generated-md-%/messages.md: $(SRC_BASE)/$(TARGET)/messages_to_md.py $(DMLC_BIN)
+generated-md-1.2/grammar.md generated-md-1.4/grammar.md: generated-md-1.%/grammar.md: $(PYPATH)/dml1%_parser.out $(SRC_BASE)/$(TARGET)/doc/1.4/grammar_to_md.py
+	$(PYTHON) $(SRC_BASE)/$(TARGET)/doc/1.4/grammar_to_md.py $(PYPATH) $< $@
+generated-md-1.2/messages.md generated-md-1.4/messages.md: generated-md-%/messages.md: $(SRC_BASE)/$(TARGET)/doc/1.4/messages_to_md.py $(DMLC_BIN)
 	$(PYTHON) $< $(PYPATH) $* $@
-generated-md-1.2/deprecations-auto.md: $(SRC_BASE)/$(TARGET)/deprecations_to_md.py $(SRC_BASE)/$(TARGET)/doc/1.2/deprecations-header.md $(DMLC_BIN) | generated-md-1.2
+generated-md-1.2/deprecations-auto.md: $(SRC_BASE)/$(TARGET)/doc/1.4/deprecations_to_md.py $(SRC_BASE)/$(TARGET)/doc/1.2/deprecations-header.md $(DMLC_BIN) | generated-md-1.2
 	$(PYTHON) $< $(PYPATH) $(word 2,$^) $@
-generated-md-1.2/provisional-auto.md: $(SRC_BASE)/$(TARGET)/provisional_to_md.py $(SRC_BASE)/$(TARGET)/doc/1.2/provisional-header.md $(DMLC_BIN) | generated-md-1.2
+generated-md-1.2/provisional-auto.md: $(SRC_BASE)/$(TARGET)/doc/1.4/provisional_to_md.py $(SRC_BASE)/$(TARGET)/doc/1.2/provisional-header.md $(DMLC_BIN) | generated-md-1.2
 	$(PYTHON) $< $(PYPATH) $(word 2,$^) $@ 1.2
 
 DOC_SRC_DIR_14 := $(SRC_BASE)/$(TARGET)/doc/1.4
@@ -194,11 +194,11 @@ DOC_DEST_14 := $(SIMICS_PROJECT)/$(HOST_TYPE)/doc/html/dml-1.4-reference-manual
 DOC_MARKER_14 := $(DOC_DEST_14)/filelist.json
 
 GENERATED_MD_FILES_14 = $(addprefix generated-md-1.4/,grammar.md messages.md changes-auto.md dml-builtins.md utility.md deprecations-auto.md provisional-auto.md)
-generated-md-1.4/changes-auto.md: $(SRC_BASE)/$(TARGET)/porting_to_md.py $(DMLC_BIN) | generated-md-1.4
+generated-md-1.4/changes-auto.md: $(SRC_BASE)/$(TARGET)/doc/1.4/porting_to_md.py $(DMLC_BIN) | generated-md-1.4
 	$(PYTHON) $< $(PYPATH) $@
-generated-md-1.4/deprecations-auto.md: $(SRC_BASE)/$(TARGET)/deprecations_to_md.py $(SRC_BASE)/$(TARGET)/doc/1.4/deprecations-header.md $(DMLC_BIN) | generated-md-1.4
+generated-md-1.4/deprecations-auto.md: $(SRC_BASE)/$(TARGET)/doc/1.4/deprecations_to_md.py $(SRC_BASE)/$(TARGET)/doc/1.4/deprecations-header.md $(DMLC_BIN) | generated-md-1.4
 	$(PYTHON) $< $(PYPATH) $(word 2,$^) $@
-generated-md-1.4/provisional-auto.md: $(SRC_BASE)/$(TARGET)/provisional_to_md.py $(SRC_BASE)/$(TARGET)/doc/1.4/provisional-header.md $(DMLC_BIN) | generated-md-1.4
+generated-md-1.4/provisional-auto.md: $(SRC_BASE)/$(TARGET)/doc/1.4/provisional_to_md.py $(SRC_BASE)/$(TARGET)/doc/1.4/provisional-header.md $(DMLC_BIN) | generated-md-1.4
 	$(PYTHON) $< $(PYPATH) $(word 2,$^) $@ 1.4
 
 generated-md-1.4/dml-builtins.md generated-md-1.4/utility.md: generated-md-1.4/%.md: $(DMLC_DIR)/lib/1.4/%.dml
