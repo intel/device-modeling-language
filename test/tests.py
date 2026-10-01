@@ -1911,7 +1911,8 @@ SPDX-License-Identifier: MPL-2.0
                     self.validate_file(root / f, bsd0_copyright_re)
                 elif f.endswith(('.dml', '.h')):
                     self.validate_file(root / f, dml_copyright_re)
-                elif f.endswith(('.py', '.yaml')) or f == 'Makefile':
+                elif (f.endswith(('.py', '.yaml', 'CMakeLists.txt'))
+                      or f == 'Makefile'):
                     self.validate_file(root / f, py_copyright_re)
                 elif f.endswith(('.md', '.docu')):
                     self.validate_file(root / f, xml_copyright_re)

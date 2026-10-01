@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import sys
+from pathlib import Path
 [path_to_dml, outfile] = sys.argv[1:]
 sys.path.append(path_to_dml)
 
@@ -18,6 +19,7 @@ for n in dir(messages):
 
 portings.sort(key=lambda x: x.__name__)
 
+Path(outfile).parent.mkdir(parents=True, exist_ok=True)
 with open(outfile, 'w') as f:
     f.write("# Language differences handled by the port-dml script\n\n")
 

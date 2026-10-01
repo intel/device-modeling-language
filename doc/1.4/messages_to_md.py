@@ -3,6 +3,7 @@
 
 import sys
 import argparse
+from pathlib import Path
 
 def fmt_message(err):
     msg = err.fmt
@@ -92,6 +93,7 @@ if __name__ == "__main__":
     parser.add_argument('outfile')
     args = parser.parse_args()
     (warnings, errors) = extract_messages(args.path)
+    Path(args.outfile).parent.mkdir(parents=True, exist_ok=True)
     with open(args.outfile, 'w') as f:
         print_messages(
             f, [w for w in warnings if matches_version(w, args.version)],

@@ -21,4 +21,6 @@ def strip_max_common_indent(elem):
 
 elements = [strip_max_common_indent(e) for e in comment_re.findall(f)]
 
-Path(outfile).write_text(''.join(elements))
+output = Path(outfile)
+output.parent.mkdir(parents=True, exist_ok=True)
+output.write_text(''.join(elements))
