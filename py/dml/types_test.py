@@ -215,8 +215,10 @@ class TestEq(unittest.TestCase):
         self.assert_neq(v1, TVector(Typ1()))
 
     def test_TTrait(self):
-        tr1 = traits.Trait(None, 't1', set(), {}, {}, {}, {}, {}, {}, {})
-        tr2 = traits.Trait(None, 't2', set(), {}, {}, {}, {}, {}, {}, {})
+        tr1 = traits.Trait(None, 't1', set(), {}, {}, {}, {}, {}, {},
+                           {}, {}, {}, {})
+        tr2 = traits.Trait(None, 't2', set(), {}, {}, {}, {}, {}, {},
+                           {}, {}, {}, {})
 
         self.assert_eq(TTrait(tr1), TTrait(tr1))
         self.assert_neq(TTrait(tr1), TTrait(tr2))

@@ -284,3 +284,10 @@
   ```
 - `release 7 7152`
 - `release 6 6461`
+- `note 6` A composite object declared directly in a template can now be
+  declared `shared`, as in `template t { shared group g { shared method m()
+  { ... } } }`. The object becomes a member of the template type, so shared
+  methods of `t` can call `g.m()`. The type of `g` is written `t.g`.
+  Previously, this required moving the body
+  of `g` into a separate template, and adding a typed parameter that holds a
+  cast of `g` to that template.

@@ -9,6 +9,16 @@ device test;
 /// ERROR EIDENT
 param p = garbage;
 
+// the sizes of a shared object array are part of the template type, so they
+// cannot depend on the template. See also T_EAINCOMP.dml:so_shadow
+template so {
+    param n = 2;
+    // no error
+    group g[i < n];
+    /// ERROR EIDENT
+    shared group g[i < n];
+}
+
 // Conditional members are not visible in object scope, but they are reserved
 // in the template type's scope.
 template x {

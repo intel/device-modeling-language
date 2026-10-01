@@ -85,3 +85,12 @@ group g2 is (asm6, asm7) {
 // Redundancy as a smoke test that ancestor vtable merging works properly
 // no error
 group g3 is (asm6, asm7, asm1, asm8);
+
+// shared objects declared by unrelated templates
+template so_a { shared group g; }
+template so_b { shared group g; }
+/// ERROR EAMBINH
+template so_ab is (so_a, so_b) {}
+// an own declaration does not resolve the conflict
+/// ERROR EAMBINH
+template so_ab_decl is (so_a, so_b) { shared group g; }

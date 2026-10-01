@@ -20,6 +20,10 @@ template u {
 
 is (t3, u);
 
+template so_a { shared group g { shared method v() {} } }
+template so_z is so_a {}
+group so_o is so_z;
+
 method init() {
     local t2 x = cast(dev, t2);
 
@@ -44,4 +48,13 @@ method init() {
     x.templates.t3.m();
     /// ERROR ETTQMIC
     x.templates.u.n();
+
+    // no error
+    so_o.g.templates.so_z.v();
+    // no enclosing object instantiates the template
+    /// ERROR ETQMIC
+    so_o.g.templates.t1.v();
+    // a value of type so_a.g knows nothing of so_z
+    /// ERROR ETTQMIC
+    cast(so_o, so_z).g.templates.so_z.v();
 }

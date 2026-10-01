@@ -1175,6 +1175,9 @@ A template type has the following members:
 * Every `shared` [hook](#hook-declarations) declared within the template.
   E.g. the declaration `shared hook(int, bool) h;` gives a type member `h`.
 
+* Every [shared object](#shared-objects) declared within the template.
+  E.g. the declaration `shared group g { ... }` gives a type member `g`.
+
 * All type members of inherited templates. E.g., the declaration
   `is simple_time_event;`
   adds two type members `post` and `next`, since
@@ -1265,6 +1268,90 @@ template get_qname {
     }
 }
 ```
+
+### Shared objects
+
+A composite object declared directly in a template can be declared `shared`:
+
+```
+template capability {
+    shared register cap size 2 @ 0x4 {
+        param init_val = 0x10;
+        shared method enable() {
+            set(get() | 1);
+        }
+    }
+    shared method setup() {
+        cap.enable();
+    }
+}
+```
+
+This declares the object `cap` as usual, and in addition an implicit template,
+which `cap` instantiates. The implicit template consists of the object's body,
+and inherits the template of the object type (`register` in the example).
+Its type is written `capability.cap`.
+
+The object is a member of the enclosing template type, and its type is the
+implicit template type. So, shared methods of `capability` can access `cap`
+and call its shared methods, and so can any code holding a value of type
+`capability`. For instance, given a declaration `bank regs { group cap_a is
+capability; }`:
+
+```
+local capability c = cast(regs.cap_a, capability);
+local capability.cap r = c.cap;
+r.enable();
+```
+
+The body of a shared object follows the same rules as the body of a template:
+Shared methods, typed parameters, session and saved variables, and shared
+hooks declared in it become members of the implicit template type, and so do
+the members of templates instantiated with `is`. Other declarations, such as
+`param init_val` above, belong to the object just like in an ordinary object
+declaration.
+
+A shared method declared in the body of a shared object operates on the
+implicit template type, so it cannot access the members of the enclosing
+template; this is reported as an [`EENCLOSING`](messages.html#EENCLOSING)
+error.
+
+Shared objects can be overridden in inheriting templates:
+
+```
+template x {
+    shared group g {
+        shared method m() -> (int) default { return 1; }
+    }
+}
+template y is x {
+    shared group g {
+        // overrides x.g.m()
+        shared method m() -> (int) { return default() + 1; }
+    }
+}
+```
+
+Session and saved variables declared in non-shared declarations of the same
+object in the template body also become members of the implicit template:
+
+```
+template t {
+    shared group g {
+        ...
+    }
+    // n is a member of type t.g, because g is shared in t
+    group g { saved int n; }
+}
+```
+
+The `shared` keyword is permitted on any composite object declaration directly
+in a template body, or directly in the body of another shared object. It is
+not permitted inside `#if`.
+
+A shared object can be an object array. The sizes of the array are part of the
+template type, so they must be constant, and cannot depend on the members of
+the template.
 
 ## Parameters detailed
 

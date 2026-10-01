@@ -3,6 +3,8 @@
 
 # Infrastructure for traits
 
+from __future__ import annotations
+
 import itertools
 import functools
 import contextlib
@@ -33,7 +35,29 @@ __all__ = (
     'AmbiguousDefaultSymbol',
 )
 
-def process_trait(site, name, subasts, ancestors, template_symbols):
+def all_traits():
+    '''All traits, including those of shared objects, each one after its
+    ancestors'''
+    def with_shared_objects(trait):
+        for child in trait.shared_objects.values():
+            yield from with_shared_objects(child)
+        yield trait
+    for trait in dml.globals.traits.values():
+        yield from with_shared_objects(trait)
+
+def eval_subobj_dims(arrayinfo):
+    '''Evaluate the array sizes of a shared object declaration, which
+    cannot depend on the enclosing template'''
+    dims = []
+    for (dim_i, (_, len_ast)) in enumerate(arrayinfo):
+        if len_ast is None:
+            raise EAUNKDIMSIZE(arrayinfo[0][0].site, dim_i, '')
+        dims.append(eval_arraylen(len_ast, None))
+    return tuple(dims)
+
+def process_trait(site, name, subasts, shared_objects, subobj_arrayinfo,
+                  ancestors, template_symbols):
+    '''`subobj_arrayinfo` holds the array info of each shared object'''
     # Methods declared in this trait
     methods = {}
     params = {}
@@ -103,7 +127,7 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                     add_late_global_struct_defs(struct_defs)
                     # TODO maybe realtype?
                     msg_types.append(dtype)
-                array_lens = tuple(eval_arraylen(len_ast, global_scope)
+                array_lens = tuple(eval_arraylen(len_ast, None)
                                    for len_ast in arraylen_asts)
                 check_namecoll(hname, ast.site)
                 hooks[hname] = (ast.site, array_lens, msg_types)
@@ -111,7 +135,24 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                 raise ICE(ast.site, 'unknown ast')
         except DMLError as e:
             report(e)
-    return mktrait(site, name, ancestors, methods, params, sessions, hooks,
+    declared = shared_objects
+    shared_objects = dict(declared)
+    subobj_dims = {}
+    for (oname, otrait) in declared.items():
+        try:
+            check_namecoll(oname, otrait.site)
+            subobj_dims[oname] = eval_subobj_dims(subobj_arrayinfo[oname])
+        except DMLError as e:
+            report(e)
+            del shared_objects[oname]
+    inherited = inherited_subobjs(ancestors)
+    # object_spec_from_asts declares an ambiguous object implicitly
+    assert all(len(decls) == 1 or oname in declared
+               for (oname, decls) in inherited.items())
+    subobj_traits = {oname: decls[0] for (oname, decls) in inherited.items()}
+    subobj_traits.update(declared)
+    return mktrait(site, name, ancestors, methods, params, shared_objects,
+                   subobj_traits, subobj_dims, sessions, hooks,
                    template_symbols)
 
 class NoDefaultSymbol(Symbol):
@@ -173,7 +214,7 @@ class TraitMethod(TraitVTableItem):
 
     def cname(self):
         '''Name of the C identifier for this method'''
-        return '_DML_TM_%s__%s' % (self.trait.name, self.name)
+        return '_DML_TM_%s__%s' % (self.trait.c_name, self.name)
 
     @property
     def memo_outs_struct(self):
@@ -184,7 +225,7 @@ class TraitMethod(TraitVTableItem):
             if self.throws:
                 memo_dict['threw'] = TBool()
             self._memo_outs_struct = TStruct(
-                memo_dict, label=f'_memo_{self.trait.name}__{self.name}')
+                memo_dict, label=f'_memo_{self.trait.c_name}__{self.name}')
         return self._memo_outs_struct
 
     @property
@@ -221,10 +262,10 @@ class TraitMethod(TraitVTableItem):
         return c_rettype(self.outp, self.throws).declaration(
             '%s(%s)' % (self.cname(), args))
 
-    def codegen_body(self):
+    def codegen_body(self, enclosing):
         with (crep.DeviceInstanceContext()
               if not self.independent else contextlib.nullcontext()):
-            scope = MethodParamScope(self.trait.scope(global_scope))
+            scope = MethodParamScope(self.trait.scope(global_scope, enclosing))
             implicit_inargs = self.vtable_trait.implicit_args()
             site = SimpleSite(self.site.loc())
             if len(self.default_traits) > 1:
@@ -267,10 +308,10 @@ class TraitMethod(TraitVTableItem):
                 trait_decl = mkInline(
                     site,
                     '%s UNUSED = DOWNCAST(%s, %s, %s);' % (
-                        self.trait.type().declaration('_' + cident(self.trait.name)),
-                        '_' + cident(self.vtable_trait.name),
-                        cident(self.trait.name),
-                        '.'.join(cident(t.name) for t in downcast_path)))
+                        self.trait.type().declaration('_' + self.trait.c_name),
+                        '_' + self.vtable_trait.c_name,
+                        self.trait.c_name,
+                        '.'.join(t.c_name for t in downcast_path)))
                 body = mkCompound(site, [trait_decl, body])
             return body
 
@@ -280,7 +321,7 @@ def merge_ancestor_vtables(ancestors, site):
         for name in itertools.chain(
                 ancestor.vtable_methods, ancestor.vtable_params,
                 ancestor.vtable_sessions, ancestor.vtable_hooks,
-                ancestor.vtable_memoized_outs):
+                ancestor.vtable_subobjs, ancestor.vtable_memoized_outs):
             if name in ancestor_vtables:
                 # This may mean that an abstract method or parameter is
                 # defined in two traits. We could allow this, as long
@@ -291,17 +332,16 @@ def merge_ancestor_vtables(ancestors, site):
                 ancestor_vtables[name] = ancestor
     return ancestor_vtables
 
-def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
-            template_symbols):
-    '''Produce a trait, possibly reporting errors'''
+def mktrait(site, tname, ancestors, methods, params, shared_objects,
+            subobj_traits, subobj_dims, sessions, hooks, template_symbols):
+    '''Produce a trait, possibly reporting errors.'''
     direct_parents = [a for a in ancestors
                       if not any(a in p.ancestors for p in ancestors)]
     ancestor_method_impls = merge_method_impl_maps(site, direct_parents)
 
     ancestor_vtables = merge_ancestor_vtables(ancestors, site)
 
-    # a parameter declaration cannot override anything
-    bad_params = []
+    bad_params = set()
     for name in params:
         for ancestor in direct_parents:
             coll = ancestor.member_declaration(name)
@@ -309,11 +349,11 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
                 (orig_site, _) = coll
                 (param_site, _) = params[name]
                 report(ENAMECOLL(param_site, orig_site, name))
-                bad_params.append(name)
+                bad_params.add(name)
     for name in bad_params:
         del params[name]
 
-    bad_sessions = []
+    bad_sessions = set()
     for name in sessions:
         for ancestor in direct_parents:
             coll = ancestor.member_declaration(name)
@@ -321,7 +361,7 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
                 (orig_site, _) = coll
                 (session_site, _) = sessions[name]
                 report(ENAMECOLL(session_site, orig_site, name))
-                bad_sessions.append(name)
+                bad_sessions.add(name)
     for name in bad_sessions:
         del sessions[name]
 
@@ -381,7 +421,7 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
     for name in bad_methods:
         del methods[name]
 
-    bad_hooks =  []
+    bad_hooks = set()
     for name in hooks:
         for ancestor in direct_parents:
             coll = ancestor.member_declaration(name)
@@ -389,9 +429,28 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
                 (orig_site, _) = coll
                 (session_site, _, _) = hooks[name]
                 report(ENAMECOLL(session_site, orig_site, name))
-                bad_hooks.append(name)
+                bad_hooks.add(name)
     for name in bad_hooks:
         del hooks[name]
+
+    # A shared object can only override a shared object. The implicit
+    # template of the override inherits the one it overrides, so the
+    # override reuses the inherited vtable slot.
+    bad_subobjs = []
+    for (name, otrait) in shared_objects.items():
+        for ancestor in direct_parents:
+            coll = ancestor.member_declaration(name)
+            if coll:
+                (orig_site, orig_trait) = coll
+                if orig_trait.member_kind(name) != 'subobject':
+                    report(ENAMECOLL(otrait.site, orig_site, name))
+                    bad_subobjs.append(name)
+                elif orig_trait.subobj_dims[name] != subobj_dims[name]:
+                    report(EAINCOMP(otrait.site, orig_site, name,
+                                    "mismatching array sizes"))
+                    bad_subobjs.append(name)
+    for name in set(bad_subobjs):
+        del shared_objects[name]
 
     reserved_symbols = {sym: template_symbols[sym]
                          for sym in template_symbols
@@ -399,13 +458,15 @@ def mktrait(site, tname, ancestors, methods, params, sessions, hooks,
                              and sym not in params
                              and sym not in sessions
                              and sym not in hooks
+                             and sym not in shared_objects
                              and sym not in ancestor_vtables
                              and sym not in ancestor_method_impls)}
     # referencing 'dev.xyz' from a shared method is always OK, even if
     # it's technically an untyped object parameter
     reserved_symbols.pop('dev', None)
-    return Trait(site, tname, ancestors, methods, params, sessions, hooks,
-                 ancestor_vtables, ancestor_method_impls, reserved_symbols)
+    return Trait(site, tname, ancestors, methods, params, shared_objects,
+                 sessions, hooks, ancestor_vtables, ancestor_method_impls,
+                 subobj_traits, subobj_dims, reserved_symbols)
 
 def typecheck_method_override(left, right):
     (site0, inp0, outp0, throws0, independent0, startup0, memoized0) = left
@@ -444,6 +505,21 @@ def typecheck_method_override(left, right):
     qualifier_check('independent', independent0, independent1)
     qualifier_check('startup', startup0, startup1)
     qualifier_check('memoized', memoized0, memoized1)
+
+def inherited_subobjs(traits: list[Trait]) -> dict[str, list[Trait]]:
+    '''Map the name of each shared object of the given traits to its
+    maximal declarations among them. As each trait's own value implements
+    those of its ancestors, the result is the same for any set of traits
+    with the same ancestors.'''
+    candidates: dict[str, list[Trait]] = {}
+    for t in traits:
+        for (name, otrait) in t.subobj_traits.items():
+            decls = candidates.setdefault(name, [])
+            if otrait not in decls:
+                decls.append(otrait)
+    return {name: [t for t in decls
+                   if not any(o is not t and o.implements(t) for o in decls)]
+            for (name, decls) in candidates.items()}
 
 def merge_method_impl_maps(site, parents):
     '''Return a dictionary mapping method name to the most specific traits
@@ -682,10 +758,13 @@ class ObjTraits(SubTrait):
                 if sub.member_declaration(m.name) is not None:
                     codegen.mark_method_referenced(codegen.method_instance(m))
             sub.mark_referenced()
+            # the vtable refers to the shared objects' vtables
+            for (_, name, otrait, _) in sub.subobj_args():
+                self.node.get_component(name).traits.mark_referenced(otrait)
 
     def vtable_cname(self, trait):
         '''The C name of a trait's vtable'''
-        return "_tr_%s__%s" % (self.node.attrname() or '_dev', trait.name)
+        return "_tr_%s__%s" % (self.node.attrname() or '_dev', trait.c_name)
 
     def lookup_shared_method_impl(self, site, name, indices):
         '''Return implementation of shared method provided by trait'''
@@ -718,6 +797,17 @@ class ReservedSymbol(NonValue):
                }[self.kind] % (self.name,)
         return ENSHARED(self.site, fmt, self.template, self.decl_site)
 
+class EnclosingScopeSymbol(NonValue):
+    '''A member of the template that encloses a shared object, as seen from
+    the shared scope of the object's implicit template'''
+    @auto_init
+    def __init__(self, site, name, enclosing, template, decl_site): pass
+    def __str__(self):
+        return self.name
+    def exc(self):
+        return EENCLOSING(self.site, self.name, self.enclosing,
+                          self.template, self.decl_site)
+
 class Trait(SubTrait):
     '''A trait, as defined by a top-level 'trait' statement'''
 
@@ -725,8 +815,9 @@ class Trait(SubTrait):
     # all its subtraits.
     referenced = Set()
 
-    def __init__(self, site, name, ancestors, methods, params, sessions, hooks,
-                 ancestor_vtables, ancestor_method_impls, reserved_symbols):
+    def __init__(self, site, name, ancestors, methods, params, shared_objects,
+                 sessions, hooks, ancestor_vtables, ancestor_method_impls,
+                 subobj_traits, subobj_dims, reserved_symbols):
         method_impls = {
             name: TraitMethod(
                 msite, inp, outp, throws, independent, startup, memoized,
@@ -739,6 +830,8 @@ class Trait(SubTrait):
 
         super(Trait, self).__init__(ancestors, ancestor_vtables)
         self.name = name
+        # the implicit template of a shared object is named `enclosing.obj`
+        self.c_name = cident(name.replace('.', '__'))
         self.site = site
 
         # Method implementations provided by this trait. Dictionary,
@@ -763,11 +856,26 @@ class Trait(SubTrait):
         self.vtable_sessions = sessions
         self.vtable_hooks = {name: (hooks[name], THook(hooks[name][2]))
                              for name in hooks}
+        # an overriding shared object reuses the inherited slot
+        self.vtable_subobjs = {name: otrait
+                               for (name, otrait) in shared_objects.items()
+                               if name not in ancestor_vtables}
+        # name -> array sizes, for each `shared <objtype>` declaration
+        self.subobj_dims = subobj_dims
         self.vtable_memoized_outs = {
             '_memo_outs_' + name: method.memo_outs_struct
             for (name, method) in method_impls.items()
             if method.independent and method.memoized}
         self.reserved_symbols = reserved_symbols
+        # name -> Trait, for each `shared <objtype>` declaration
+        self.shared_objects = shared_objects
+        # (Trait, name) of the declaration of a shared object; set by the
+        # enclosing trait, which is created after this one
+        self.enclosing = None
+        for (oname, otrait) in shared_objects.items():
+            otrait.enclosing = (self, oname)
+        # name -> most specific Trait, for each shared object, also inherited
+        self.subobj_traits = subobj_traits
 
     def __repr__(self):
         return 'Trait(%r, %r)' % (
@@ -840,10 +948,15 @@ class Trait(SubTrait):
         # early enough that the bad overrides don't cause ICE:s to happen
         # (though their presence may lead to other strange behaviour.)
 
-    def scope(self, global_scope):
-        '''Return a scope for looking up sibling objects in this trait'''
-        s = Symtab(global_scope)
-        selfref = mkLit(self.site, '_' + cident(self.name), self.type())
+    def scope(self, global_scope, enclosing):
+        '''Return a scope for looking up sibling objects in this trait.
+        `enclosing` holds the traits of the templates that enclose a shared
+        object, outermost first.'''
+        s = global_scope
+        for trait in enclosing:
+            s = trait.enclosed_scope(s, self)
+        s = Symtab(s)
+        selfref = mkLit(self.site, '_' + self.c_name, self.type())
         for name in self.members():
             # This is very hacky, but works well
             try:
@@ -855,9 +968,23 @@ class Trait(SubTrait):
         s.add(ExpressionSymbol('this', selfref, self.site))
         return s
 
+    def enclosed_scope(self, outer, inner):
+        '''The scope that the members of this trait create for the shared
+        scope of `inner`, a shared object declared within it: they are not
+        accessible, but they still shadow `outer`'''
+        s = Symtab(outer)
+        for name in self.members():
+            decl = self.member_declaration(name)
+            decl_site = decl[0] if decl else self.reserved_symbols[name][1]
+            s.add(ExpressionSymbol(name, EnclosingScopeSymbol(
+                self.site, name, self.name, inner.name, decl_site),
+                                   self.site))
+        return s
+
     def empty(self):
         return not (self.direct_parents or self.vtable_params
                     or self.vtable_sessions or self.vtable_hooks
+                    or self.vtable_subobjs
                     or self.vtable_methods or self.vtable_memoized_outs)
 
     def members(self):
@@ -868,6 +995,8 @@ class Trait(SubTrait):
         for name in self.vtable_sessions:
             yield name
         for name in self.vtable_hooks:
+            yield name
+        for name in self.vtable_subobjs:
             yield name
         for name in self.vtable_methods:
             assert name not in self.ancestor_vtables
@@ -905,10 +1034,35 @@ class Trait(SubTrait):
         elif name in self.vtable_hooks:
             ((site, _, _), _) = self.vtable_hooks[name]
             return (site, self)
+        elif name in self.vtable_subobjs:
+            return (self.vtable_subobjs[name].site, self)
         elif name in self.ancestor_vtables:
             return self.ancestor_vtables[name].member_declaration(name)
         else:
             return None
+
+    def subobj_args(self):
+        '''Return the tinit arguments for shared object slots, as a list of
+        (argname, name, otrait, parents): the object as `otrait`, its most
+        specific trait, passed on to `parents`. An implicit object trait
+        has no such trait, so each parent gets an argument of its own.'''
+        def has_slot(t, name):
+            return (name in t.vtable_subobjs
+                    or (name in t.ancestor_vtables
+                        and name in t.ancestor_vtables[name].vtable_subobjs))
+        names = sorted(set(self.vtable_subobjs).union(
+            name for (name, t) in self.ancestor_vtables.items()
+            if name in t.vtable_subobjs))
+        args = []
+        for name in names:
+            parents = [p for p in self.direct_parents if has_slot(p, name)]
+            otrait = self.subobj_traits.get(name)
+            if otrait is not None:
+                args.append((name, name, otrait, parents))
+            else:
+                args.extend((f'{name}__{p.c_name}', name,
+                             p.subobj_traits[name], [p]) for p in parents)
+        return args
 
     def lookup(self, name, expr, site):
         '''Look up a member of this trait; return a referencing expression or
@@ -951,7 +1105,22 @@ class Trait(SubTrait):
                                          ())
             else:
                 return TraitHookRef(site, (), hooktyp, expr, name, ())
+        if name in self.vtable_subobjs:
+            return mkTraitSubobjRef(site, expr, name, self.subobj_dims[name],
+                                    (), (self.vtable_subobjs[name],))
         vtable_trait = self.ancestor_vtables.get(name, None)
+        if vtable_trait and name in vtable_trait.vtable_subobjs:
+            # step along the canonical path, downcasting to the most
+            # specific type at each step; see subobj_args
+            parent = self.ancestry_paths[vtable_trait][0][0]
+            ref = parent.lookup(name, TraitUpcast(site, expr, parent), site)
+            otrait = self.subobj_traits.get(name)
+            if (otrait is not None
+                and otrait is not parent.subobj_traits.get(name)):
+                ref = mkTraitSubobjRef(site, ref.traitref, name,
+                                       ref.dimsizes, (),
+                                       ref.types + (otrait,))
+            return ref
         if vtable_trait:
             return vtable_trait.lookup(
                 name, TraitUpcast(site, expr, vtable_trait), site)
@@ -961,7 +1130,7 @@ class Trait(SubTrait):
         return None
 
     def implicit_args(self):
-        return [("_" + cident(self.name), self.type())]
+        return [("_" + self.c_name, self.type())]
 
     def vtable_method_type(self, inp, outp, throws, independent):
         return TPtr(TFunction(
@@ -991,6 +1160,8 @@ class Trait(SubTrait):
             return 'session'
         elif name in self.vtable_hooks:
             return 'hook'
+        elif name in self.vtable_subobjs:
+            return 'subobject'
         elif name in self.vtable_memoized_outs:
             return 'memoized_outs'
         elif name in self.ancestor_vtables:
@@ -1003,6 +1174,7 @@ class Trait(SubTrait):
         member'''
         if (name in self.vtable_methods or name in self.vtable_params
             or name in self.vtable_sessions or name in self.vtable_hooks
+            or name in self.vtable_subobjs
             or name in self.vtable_memoized_outs):
             return self
         return self.ancestor_vtables[name]

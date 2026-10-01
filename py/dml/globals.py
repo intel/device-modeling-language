@@ -13,6 +13,9 @@ templates = {}
 missing_templates = set()
 
 traits = None
+# Trait -> Template, for every template that has a trait, including the
+# implicit templates of shared objects
+templates_by_trait = None
 
 # A mapping from each trait to the set of objects instantiating that trait.
 # {Trait: [CompositeObject]}

@@ -1,0 +1,339 @@
+/*
+  © 2026 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+template t1 {
+    shared method m1() -> (int) { return 1; }
+}
+
+template t2 {
+    param p: int;
+    shared group g is t1 {
+        param q = p + 1;
+        shared method m2() -> (int) { return 2; }
+        method m3() -> (int) { return 3; }
+    }
+}
+
+group a is t2 {
+    param p = 4;
+}
+
+// the implicit template of an overriding declaration must outrank the one it
+// overrides
+template x {
+    shared group g {
+        shared method m() -> (int) default { return 5; }
+    }
+}
+
+template y is x {
+    shared group g {
+        shared method m() -> (int) { return 6; }
+        shared method my() -> (int) { return 9; }
+    }
+    // g has the type y.g, although its vtable slot is declared by x
+    shared method via_g() -> (int) { return g.my(); }
+}
+
+group b is y;
+
+// an inherited shared object is a member of the subtemplate's type
+template z is x {}
+group zo is z;
+// ... resolved to the most specific override
+template w is y {}
+group wo is w;
+// ... also when x.g is reached both directly and via z
+template k is (z, y) {}
+group ko is k;
+
+// a diamond: the node c.g instantiates d1.g, d2.g and d3.g at once
+template d1 {
+    shared group g {
+        shared method m1() -> (int) default { return 1; }
+    }
+}
+
+template d2 is d1 {
+    shared group g {
+        shared method m2() -> (int) { return 2; }
+    }
+}
+
+template d3 is d1 {
+    shared group g {
+        shared method m3() -> (int) { return 3; }
+    }
+}
+
+group c is (d2, d3);
+// a template inheriting the diamond declares g implicitly, as e.g, which
+// inherits both d2.g and d3.g
+template e is (d2, d3) {}
+group eo is e;
+// ... which a plain declaration joins
+template e2 is (d2, d3) {
+    group g { session int s4 = 4; }
+}
+group e2o is e2;
+// ... also with more than two overrides
+template d5 is d1 {
+    shared group g {
+        shared method m5() -> (int) { return 5; }
+    }
+}
+template e3 is (d2, d3, d5) {}
+group e3o is e3;
+// with one overriding branch, the type is that of the override
+template d4 is d1 {}
+template k2 is (d2, d4) {}
+group k2o is k2;
+
+// nested: n.g.h instantiates n1.g.h and n2.g.h
+template n1 {
+    shared group g {
+        shared group h {
+            shared method m() -> (int) default { return 7; }
+        }
+    }
+}
+
+template n2 is n1 {
+    shared group g {
+        shared group h {
+            shared method m() -> (int) { return 8; }
+        }
+    }
+}
+
+group n is n2;
+
+// the implicit template inherits the template of the object type
+template r {
+    shared register reg size 1 @ 0 {
+        shared method twice() -> (uint64) { return get() * 2; }
+    }
+}
+
+bank bk {
+    group rg is r;
+}
+
+// all declarations of an object in one template body form its implicit
+// template, as soon as one of them is shared
+param cond = true;
+template m {
+    shared group g {
+        shared method m1() -> (int) { return 1; }
+    }
+    shared group g {
+        shared method m2() -> (int) { return m1() + s; }
+    }
+    group g {
+        session int s = 2;
+    }
+    #if (cond) {
+        group g {
+            param p = 3;
+        }
+    }
+}
+
+group mg is m;
+
+// the implicit template is a member of the enclosing template type, and is
+// resolved through it, also via a typedef
+typedef t2 t2_alias;
+template tm {
+    param pg: t2.g;
+    shared method get_g() -> (t2_alias.g) { return pg; }
+}
+group tmo is tm {
+    param pg = cast(a.g, t2.g);
+}
+
+// arrays of shared objects, also inside object arrays
+template ta {
+    shared group g[i < 3][j < 2] {
+        shared method v() -> (int) default { return -1; }
+    }
+    shared method sum() -> (int) {
+        local int s = 0;
+        for (local int k = 0; k < g.len; k++)
+            for (local int l = 0; l < g[k].len; l++)
+                s += g[k][l].v();
+        return s;
+    }
+}
+template tb is ta {
+    shared group g[i < 3][j < 2] {
+        shared method w() -> (int) { return v() + 1000; }
+    }
+}
+group ao is ta {
+    group g[i < 3][j < 2] { method v() -> (int) { return i * 10 + j; } }
+}
+group aao[k < 2] is ta {
+    group g[i < 3][j < 2] {
+        method v() -> (int) { return k * 100 + i * 10 + j; }
+    }
+}
+group bo is tb {
+    group g[i < 3][j < 2] { method v() -> (int) { return i * 10 + j; } }
+}
+// ... declared implicitly in a diamond
+template tc is ta {
+    shared group g[i < 3][j < 2] {
+        shared method u() -> (int) { return v() + 2000; }
+    }
+}
+template td is (tb, tc) {}
+group dao is td {
+    group g[i < 3][j < 2] { method v() -> (int) { return i * 10 + j; } }
+}
+// ... with a size given by another declaration in the same template
+template te {
+    group g[i < 2][j < ...];
+    shared group g[i < ...][j < 2] { shared method m() -> (int) { return 7; } }
+}
+group teo is te;
+
+// the template of an enclosing object qualifies calls on a shared object with
+// its view of the object
+template qa {
+    shared group g[i < 3][j < 2] {
+        shared method v() -> (int) default { return -1; }
+        shared group h {
+            shared method hv() -> (int) default { return -2; }
+        }
+    }
+}
+template qb is qa {
+    shared group g[i < 3][j < 2] {
+        shared method v() -> (int) default { return 5; }
+        shared group h {
+            shared method hv() -> (int) default { return 6; }
+        }
+    }
+}
+// ... also when only inherited
+template qz is qa {}
+group qbo is qb {
+    group g[i < 3][j < 2] {
+        method v() -> (int) { return i * 10 + j; }
+        group h { method hv() -> (int) { return 7; } }
+    }
+}
+group qzo is qz {
+    group g[i < 3][j < 2] { method v() -> (int) { return 9; } }
+}
+
+method init() {
+    local t2 t = cast(a, t2);
+    assert t.g.m1() == 1;
+    assert t.g.m2() == 2;
+    // non-shared members and params stay reachable on the object
+    assert a.g.m3() == 3;
+    assert a.g.q == 5;
+
+    assert cast(b, x).g.m() == 6;
+
+    assert cast(c, d1).g.m1() == 1;
+    assert c.g.m2() == 2;
+    assert c.g.m3() == 3;
+
+    assert cast(n, n1).g.h.m() == 8;
+
+    local r rr = cast(bk.rg, r);
+    rr.reg.set(3);
+    assert rr.reg.twice() == 6;
+
+    assert cast(mg, m).g.m2() == 3;
+    assert mg.g.p == 3;
+
+    local t2.g tg = t.g;
+    assert tg.m2() == 2;
+    assert cast(tmo, tm).get_g() == tg;
+    local n1.g.h nh = cast(n, n1).g.h;
+    assert nh.m() == 8;
+    local z.g zg = cast(zo, z).g;
+    assert zg.m() == 5;
+    local w.g wg = cast(wo.g, w.g);
+    assert wg.my() == 9;
+    local e.g eg = cast(eo.g, e.g);
+    assert eg.m2() + eg.m3() == 5;
+    local k.g kg = cast(ko.g, k.g);
+    assert kg.my() == 9;
+    local k2.g k2g = cast(k2o.g, d2.g);
+    assert k2g.m2() == 2;
+    assert cast(e2o.g, e2.g).s4 == 4;
+    local e3.g e3g = cast(e3o.g, e3.g);
+    assert e3g.m2() + e3g.m3() + e3g.m5() == 10;
+
+    // a shared object has the most specific type of the template it is
+    // reached through
+    local y.g yg = cast(b, y).g;
+    assert yg.my() == 9;
+    assert cast(b, y).via_g() == 9;
+    local w.g wg2 = cast(wo, w).g;
+    assert wg2.my() == 9;
+    assert cast(wo, w).via_g() == 9;
+    local e.g eg2 = cast(eo, e).g;
+    assert eg2.m2() + eg2.m3() == 5;
+    local n2.g.h nh2 = cast(n, n2).g.h;
+    assert nh2.m() == 8;
+    // ... also on a non-canonical path
+    local d3.g d3g = cast(eo, d3).g;
+    assert d3g.m3() == 3;
+    assert cast(c, d3).g.m3() == 3;
+    assert cast(c, d2).g.m2() == 2;
+
+    local ta x = cast(ao, ta);
+    assert x.g.len == 3;
+    assert x.g[0].len == 2;
+    for (local int k = 0; k < 3; k++)
+        for (local int l = 0; l < 2; l++)
+            assert x.g[k][l].v() == k * 10 + l;
+    assert x.sum() == 63;
+    assert cast(aao[1], ta).g[2][1].v() == 121;
+    local int k = 1;
+    assert cast(aao[k], ta).g[k + 1][k].v() == 121;
+    // .len is constant, also on a run-time reference and index
+    #if (x.g.len != 3 || x.g[k].len != 2) {
+        error "wrong .len";
+    }
+    #if (cast(teo, te).g.len != 2 || cast(teo, te).g[k].len != 2) {
+        error "wrong .len";
+    }
+    assert cast(teo, te).g[1][1].m() == 7;
+    local tb.g tbg = cast(bo, tb).g[1][1];
+    assert tbg.w() == 1011;
+    local td.g tdg = cast(dao, td).g[2][0];
+    assert tdg.w() + tdg.u() == 3040;
+
+    assert qbo.g[1][1].v() == 11;
+    assert qbo.g[1][1].templates.qa.v() == -1;
+    assert qbo.g[1][1].templates.qb.v() == 5;
+    assert qbo.g[1][1].h.templates.qa.hv() == -2;
+    assert qbo.g[1][1].h.templates.qb.hv() == 6;
+    assert qzo.g[0][0].templates.qz.v() == -1;
+    local qb.g qg = cast(qbo, qb).g[1][1];
+    assert qg.templates.qa.v() == -1;
+    assert qg.templates.qb.v() == 5;
+    assert qg.h.templates.qa.hv() == -2;
+    // ... equivalently, before selecting the object
+    assert qbo.templates.qa.g[1][1].v() == -1;
+    assert qbo.templates.qb.g[1][1].v() == 5;
+    assert qbo.templates.qa.g[1][1].h.hv() == -2;
+    assert cast(qbo, qb).templates.qa.g[1][1].v() == -1;
+    assert cast(qbo, qb).templates.qa.g[1][1].h.hv() == -2;
+    assert qzo.templates.qz.g[0][0].v() == -1;
+    #if (qbo.templates.qa.g.len != 3) {
+        error "wrong .len";
+    }
+}

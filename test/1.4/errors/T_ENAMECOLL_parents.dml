@@ -1,0 +1,21 @@
+/*
+  © 2026 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+// a member colliding with the same name in two parents
+template a {
+    /// ERROR ENAMECOLL
+    param g: int;
+}
+template b {
+    /// ERROR ENAMECOLL
+    param g: int;
+}
+/// ERROR EAMBINH
+template c is (a, b) {
+    session int g;
+}

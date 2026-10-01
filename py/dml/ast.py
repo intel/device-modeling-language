@@ -116,6 +116,7 @@ astkinds = {
     'toplevel_if',
     'sharedhook',
     'sharedmethod',
+    'sharedobject',
     'try',
     'typeop',
     'undefined',

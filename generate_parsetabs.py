@@ -33,7 +33,9 @@ def generate_parsetabs(dml_package, version, parsetab, debugfile):
     conflicts = lines[3:]
     from ply import lex
     assert lex.__version__ == "3.4"
-    assert len(conflicts) == 10, conflicts
+    # 1.4 has two more: PERIOD after the type in `new x.g` and
+    # `sizeoftype x.g`, see template_member_type
+    assert len(conflicts) == (12 if version == '14' else 10), conflicts
     assert all(conflict.startswith('shift/reduce conflict')
                for conflict in conflicts)
 

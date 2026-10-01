@@ -1379,6 +1379,8 @@ class ExprTests(GccTests):
 
     @subtest()
     def const_types(self):
+        subobj_trait = traits.Trait(site, 'struct_t', set(), {}, {}, {}, {},
+                                    {}, {}, {}, {}, {}, {})
         type_objs = [
             types.TVoid(),
             types.TDevice('struct_t'),
@@ -1395,7 +1397,11 @@ class ExprTests(GccTests):
             types.TPtr(types.TFunction([], types.TVoid())),
             types.TPtr(types.TArray(types.TBool(), int_const(3))),
             types.TTrait(traits.Trait(
-                site, 'struct_t', set(), {}, {}, {}, {}, {}, {}, {})),
+                site, 'struct_t', set(), {}, {}, {}, {}, {}, {}, {}, {},
+                {}, {})),
+            types.TTraitMember(types.TTrait(traits.Trait(
+                site, 'outer', set(), {}, {}, {'g': subobj_trait},
+                {}, {}, {}, {}, {'g': subobj_trait}, {'g': ()}, {})), 'g'),
             types.TTraitList('struct_t'),
             types.TExternStruct({}, 'struct_t', 'struct_t'),
             types.TStruct({'x': types.TBool()}, 'struct_label'),
