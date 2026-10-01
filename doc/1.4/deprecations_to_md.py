@@ -17,6 +17,7 @@ for bc in breaking_changes.changes.values():
         or bc.required_after > breaking_changes.apis[default_api_version()]):
         by_version.setdefault(bc.required_after, []).append(bc)
 
+Path(outfile).parent.mkdir(parents=True, exist_ok=True)
 with open(outfile, 'w') as f:
     f.write(Path(header).read_text())
     for (ver, bcs) in sorted(by_version.items()):
