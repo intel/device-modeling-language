@@ -8,7 +8,9 @@ from simicsutils.host import is_windows
 from simicsutils.internal import api_versions, default_api_version
 
 def generate_env(out):
-    Path(out).write_text(f'''\
+    output = Path(out)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(f'''\
 def is_windows():
     return {is_windows()}
 def api_versions():

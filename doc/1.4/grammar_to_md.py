@@ -106,6 +106,7 @@ for line in Path(infile).read_text().splitlines():
         current_prods = [prod]
         rules.append((current_term, current_prods))
 
+Path(outfile).parent.mkdir(parents=True, exist_ok=True)
 with open(outfile, 'w') as f:
     f.write('# Formal Grammar\n')
     f.write('<dl>\n')

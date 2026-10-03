@@ -11,13 +11,13 @@ Group: dmllib(name)
 
 Group: dml-1.2-reference-manual
 Require-tokens: public
-Directory: $(HOST)/doc/html/dml-1.2-reference-manual/[filelist.json]
-Directory-Suffixes: .css, .js, .html, .png, .json, .svg
+Make: doc-dml-1.2-reference-manual
+  @doc-files(dml-1.2-reference-manual)
 
 Group: dml-1.4-reference-manual
 Require-tokens: public
-Directory: $(HOST)/doc/html/dml-1.4-reference-manual/[filelist.json]
-Directory-Suffixes: .css, .js, .html, .png, .json, .svg
+Make: doc-dml-1.4-reference-manual
+  @doc-files(dml-1.4-reference-manual)
 
 Group: dmlc-py
 Require-tokens: public
