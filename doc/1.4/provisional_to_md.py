@@ -3,13 +3,11 @@
 
 import sys
 from pathlib import Path
-from pathlib import Path
 [path_to_dml, header, outfile, dml_version] = sys.argv[1:]
 sys.path.append(path_to_dml)
 dml12_only = {'1.2': True, '1.4': False}[dml_version]
 
 from dml import provisional
-from dml.env import api_versions, default_api_version
 
 Path(outfile).parent.mkdir(parents=True, exist_ok=True)
 with open(outfile, 'w') as f:
