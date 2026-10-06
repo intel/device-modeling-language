@@ -26,7 +26,7 @@ foreach(source IN LISTS dmlc_python_sources)
   set(output ${dmlc_python_dir}/${relative_source})
   add_custom_command(
     OUTPUT ${output}
-    COMMAND ${SIMICS_PYTHON_EXECUTABLE} ${SIMICS_COPY_PYTHON_PY}
+    COMMAND mini-python ${SIMICS_COPY_PYTHON_PY}
       ${source} ${output}
     DEPENDS ${source} ${SIMICS_COPY_PYTHON_PY}
     VERBATIM)
@@ -42,7 +42,7 @@ foreach(version 12 14)
   add_custom_command(
     OUTPUT ${parsetab} ${parser_debug}
     BYPRODUCTS ${generated_parsetab}
-    COMMAND ${SIMICS_PYTHON_EXECUTABLE}
+    COMMAND mini-python
       ${CMAKE_CURRENT_SOURCE_DIR}/generate_parsetabs.py
       ${dmlc_python_dir} ${version} dml${version}_parsetab ${parser_debug}
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -55,7 +55,7 @@ endforeach()
 
 add_custom_command(
   OUTPUT ${dmlc_env}
-  COMMAND ${SIMICS_PYTHON_EXECUTABLE}
+  COMMAND mini-python
     ${CMAKE_CURRENT_SOURCE_DIR}/generate_env.py ${dmlc_env}
   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/generate_env.py
   VERBATIM)
@@ -64,7 +64,7 @@ list(APPEND dmlc_generated_python_outputs ${dmlc_env})
 set(dmlc_header ${dmlc_library_dir}/include/simics/dmllib.h)
 add_custom_command(
   OUTPUT ${dmlc_header}
-  COMMAND ${SIMICS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/copy_h.py
+  COMMAND mini-python ${CMAKE_CURRENT_SOURCE_DIR}/copy_h.py
     ${CMAKE_CURRENT_SOURCE_DIR}/include/simics/dmllib.h ${dmlc_header}
   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/copy_h.py
     ${CMAKE_CURRENT_SOURCE_DIR}/include/simics/dmllib.h
@@ -76,7 +76,7 @@ foreach(script port_dml.py dead_dml_methods.py)
   set(output ${dmlc_python_dir}/${script})
   add_custom_command(
     OUTPUT ${output}
-    COMMAND ${SIMICS_PYTHON_EXECUTABLE} ${SIMICS_COPY_PYTHON_PY}
+    COMMAND mini-python ${SIMICS_COPY_PYTHON_PY}
       ${source} ${output}
     DEPENDS ${source} ${SIMICS_COPY_PYTHON_PY}
     VERBATIM)
@@ -135,7 +135,7 @@ foreach(version 1.2 1.4)
   set(output_dir ${dmlc_library_dir}/${version})
   add_custom_command(
     OUTPUT ${marker}
-    COMMAND ${SIMICS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/dmlast.py
+    COMMAND mini-python ${CMAKE_CURRENT_SOURCE_DIR}/dmlast.py
       ${dmlc_python_dir} ${output_dir} ${output_dir} ${marker}
     DEPFILE ${marker}
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/dmlast.py dmlc-files
@@ -155,7 +155,7 @@ foreach(api_version IN LISTS dmlc_api_versions)
     endif()
     add_custom_command(
       OUTPUT ${marker}
-      COMMAND ${SIMICS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/dmlast.py
+      COMMAND mini-python ${CMAKE_CURRENT_SOURCE_DIR}/dmlast.py
         ${dmlc_python_dir} ${api_output_dir} ${api_source_dir} ${marker}
       DEPFILE ${marker}
       DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/dmlast.py dmlc-files
@@ -167,6 +167,10 @@ endforeach()
 
 add_custom_target(dmlc-local-preparse DEPENDS ${dmlc_local_preparse_outputs})
 add_custom_target(dmlc-api-preparse DEPENDS ${dmlc_api_preparse_outputs})
+if(TARGET pkgs_dir)
+  add_dependencies(dmlc-local-preparse pkgs_dir)
+  add_dependencies(dmlc-api-preparse pkgs_dir)
+endif()
 add_custom_target(dmlc DEPENDS ${dmlc_local_preparse_outputs}
   ${dmlc_api_preparse_outputs})
 add_dependencies(dmlc dmlc-files dmlc-local-preparse dmlc-api-preparse)
@@ -183,7 +187,7 @@ foreach(test_source IN LISTS dmlc_test_sources)
     COMMAND ${CMAKE_COMMAND} -E env
     "SIMICS_BASE=${SIMICS_BASE_DIR}"
     "CC=${CMAKE_C_COMPILER}"
-    ${SIMICS_PYTHON_EXECUTABLE}
+    $<TARGET_FILE:mini-python>
     ${CMAKE_CURRENT_SOURCE_DIR}/run_unit_tests.py
     ${dmlc_host_dir} ${test_source}
     COMMAND ${CMAKE_COMMAND} -E touch ${test_stamp}
@@ -195,6 +199,9 @@ foreach(test_source IN LISTS dmlc_test_sources)
   list(APPEND dmlc_test_stamps ${test_stamp})
 endforeach()
 add_custom_target(dmlc-unit-tests DEPENDS ${dmlc_test_stamps})
+if(TARGET pkgs_dir)
+  add_dependencies(dmlc-unit-tests pkgs_dir)
+endif()
 add_dependencies(dmlc dmlc-unit-tests)
 
 add_subdirectory(doc/1.2)

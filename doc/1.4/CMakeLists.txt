@@ -86,3 +86,7 @@ add_custom_command(
 
 simics_add_documentation(${dmlc_doc_name}
   DEPENDS ${doc_sources} ${generated_files} ${link_validation_stamp})
+if(TARGET pkgs_dir)
+  add_dependencies(doc-${dmlc_doc_name} pkgs_dir)
+  add_dependencies(doc_${dmlc_doc_name} pkgs_dir)
+endif()
