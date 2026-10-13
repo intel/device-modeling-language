@@ -1,0 +1,47 @@
+/*
+  © 2026 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+
+dml 1.4;
+
+device test;
+
+/// COMPILE-ONLY
+
+template t {
+    param special default -1;
+    param then_level default 1;
+
+    method check(uint32 i) {
+        /// WARNING WREDUNDANTLEVEL
+        log info, 1 then then_level: "%s",
+            /// WARNING WNEGCONSTCOMP
+            i == special ? "special" : "regular";
+
+        // no warning
+        /*% WARNING WREDUNDANTLEVEL %*/
+        /*% WARNING WNEGCONSTCOMP %*/
+        log info, 1 then then_level: "%s", i == special ? "special" : "regular";
+    }
+}
+
+is t;
+method init() {
+    local uint32 x = 0;
+
+    // pragma must immediately precede the line causing the warning, or another
+    // pragma targeting that line
+    /*% WARNING WNEGCONSTCOMP %*/
+    /// WARNING WNEGCONSTCOMP
+    _ = x == -1;
+
+    /*% WARNING WNEGCONSTCOMP
+        %*/
+    /*% COVERITY bar  %*/
+    /*% COVERITY baz %*/ /*% WARNING WREDUNDANTLEVEL
+        %*/
+    log info, 1 then 1: "%d", cast(x == -1, uint1);
+
+    dev.check(0);
+}

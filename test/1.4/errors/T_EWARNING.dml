@@ -1,0 +1,11 @@
+/*
+  © 2026 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+/// ERROR EWARNING
+/*% WARNING EAFTER %*/
+/// ERROR EWARNING
+/*% WARNING WHATEVER %*/
+device test;

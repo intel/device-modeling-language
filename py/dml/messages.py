@@ -1991,6 +1991,13 @@ class EDISCARDREF(DMLError):
     fmt = ("'_' can only be used as an assignment target "
            + "(to discard some value)")
 
+class EWARNING(DMLError):
+    """
+    An invalid warning tag was specified in a WARNING pragma.
+    """
+    version = "1.4"
+    fmt = "Not a valid warning tag: '%s'"
+
 #
 # WARNINGS (keep these as few as possible)
 #
