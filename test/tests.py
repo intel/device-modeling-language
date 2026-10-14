@@ -1889,6 +1889,8 @@ SPDX-License-Identifier: MPL-2.0
             # Don't bother.
             'test/1.2/misc/T_dos_newline.dml',
             # empty
+            'test/1.4/errors/T_WDMLAST.dmlast',
+            # empty
             'test/SUITEINFO',
             # data files
             'test/XFAIL',
