@@ -118,3 +118,5 @@
 - `note 6` Added porting rules to automatically convert `event` objects in DML 1.2 into `simple_cycle_event` or `simple_time_event` when applicable.
 - `release 7 7084`
 - `release 6 6392`
+- `note 6` The `description` method of the `register_view` interface of banks
+  no longer leaks memory.
