@@ -1062,18 +1062,10 @@ template bank {
     if (defined($name)) {
         implement register_view {
             method description() -> (const char *desc) {
-                local attr_value_t args;
-                args = SIM_make_attr_list(
-                    2,
-                    SIM_make_attr_string($dev.classname),
-                    SIM_make_attr_string($bank.qname));
-
-                local attr_value_t ret;
-                ret = VT_call_python_module_function("register_view",
-                                                     "description",
-                                                     &args);
-                SIM_attr_free(&args);
-                desc = SIM_attr_string(ret);
+                if (defined $bank.desc)
+                    desc = $bank.desc;
+                else
+                    desc = "";
             }
             method big_endian_bitorder() -> (bool big_endian) {
                 local attr_value_t args;
