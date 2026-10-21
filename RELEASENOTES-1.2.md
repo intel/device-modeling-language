@@ -120,3 +120,4 @@
 - `release 6 6392`
 - `note 6` The `description` method of the `register_view` interface of banks
   no longer leaks memory.
+- `release 7 7216`
