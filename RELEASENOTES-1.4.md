@@ -453,3 +453,5 @@
 - `note 6` The `map_target` template from `utility.dml` now frees the internally
  created map target upon device deletion.
 - `release 7 7178`
+- `note 6` Fixed an issue where the `throws` annotation of non-`shared`
+  abstract methods wouldn't be checked on overrides.

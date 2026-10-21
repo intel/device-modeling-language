@@ -29,6 +29,11 @@ template t {
 
     method with_abstract_decls(int i) default {}
 
+    /// ERROR EMETH
+    method with_throwing_abstract_decls() throws;
+
+    method with_throwing_abstract_decls() default {}
+
     shared method sm() {}
 }
 
@@ -44,6 +49,11 @@ method sm();
 method with_abstract_decls(bool b);
 
 method with_abstract_decls(int i) {}
+
+/// ERROR EMETH
+method with_throwing_abstract_decls() throws;
+
+method with_throwing_abstract_decls() {}
 
 template u is t {}
 
@@ -84,6 +94,11 @@ group g5 is t {
     method with_abstract_decls(bool b);
 
     method with_abstract_decls(int i) {}
+
+    /// ERROR EMETH
+    method with_throwing_abstract_decls() throws;
+
+    method with_throwing_abstract_decls() {}
 
     /// ERROR EMETH
     independent startup method indep() {

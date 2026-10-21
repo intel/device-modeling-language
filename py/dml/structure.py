@@ -716,7 +716,7 @@ def merge_parameters(params, obj_specs):
 
     return param0
 
-def typecheck_method_override(m1, m2, location):
+def typecheck_method_override(m1, m2, location, check_throws=True):
     '''check that m1 can override m2'''
     assert m1.kind == m2.kind == 'method'
     (_, (inp1, outp1, throws1, qualifiers1, _), _, _, _, _) \
@@ -735,6 +735,8 @@ def typecheck_method_override(m1, m2, location):
         raise EMETH(m1.site, m2.site, "different number of input parameters")
     if len(outp1) != len(outp2):
         raise EMETH(m1.site, m2.site, "different number of output parameters")
+    if check_throws and throws1 != throws2:
+        raise EMETH(m1.site, m2.site, "different 'throws' annotations")
     for (idx, (a1, a2)) in enumerate(zip(inp1, inp2)):
         ((n1, t1), (n2, t2)) = (a1.args, a2.args)
         if (t1 is None) != (t2 is None):
@@ -805,7 +807,6 @@ def typecheck_method_override(m1, m2, location):
     qualifier_check('startup', startup1, startup2)
     qualifier_check('memoized', memoized1, memoized2)
 
-    # 'throws' annotations are verified later
 
 def report_poverride(sup, inf, obj_specs):
     if inf in sup.inferior:
@@ -1634,7 +1635,8 @@ def process_method_declarations(obj, name, declarations,
                 assert not impl.shared
                 typecheck_method_override(impl.method_ast,
                                           overridden.method_ast,
-                                          location)
+                                          location,
+                                          check_throws=False)
             if (impl.site.dml_version() == (1, 2) and throws
                 and not overridden.throws
                 and overridden.site.dml_version() == (1, 4)):
