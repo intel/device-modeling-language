@@ -4344,6 +4344,8 @@ be allocated.  The result is a pointer to the allocated memory. (The
 pointer is never null; if allocation should fail, the Simics
 application will be terminated.)
 
+The allocated memory will be zero-initialized.
+
 When the memory is no longer needed, it should be deallocated using a
 `delete` statement.
 
