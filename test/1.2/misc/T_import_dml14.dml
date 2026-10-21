@@ -106,6 +106,13 @@ port p is nothrowing {
         throw;
     }
     /// WARNING WTHROWS_DML12
+    method nothrow_abstract() {
+        /// GREP .*info.*call nothrow_abstract
+        log info: "call nothrow_abstract";
+        /// GREP .*error.*Unexpected exception in p[.]nothrow_abstract
+        throw;
+    }
+    /// WARNING WTHROWS_DML12
     method nothrow_shared_default() {
         /// GREP .*info.*call nothrow_shared_default
         log info: "call nothrow_shared_default";
@@ -155,6 +162,7 @@ method test() -> (bool ok) {
     call $p.nothrow_shared_default();
     call $p.nothrow_shared_abstract();
     call $p.nothrow_method();
+    call $p.nothrow_abstract();
     call $pseudo_attr_test();
     call $field_regs.test();
     call $io_memory_access_bank.test();
