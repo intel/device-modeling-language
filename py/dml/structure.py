@@ -1583,8 +1583,14 @@ def process_method_declarations(obj, name, declarations,
                 traits.typecheck_method_override(
                     impl.signature, abstract_decls[0].signature)
             else:
+                # Any non-throwing abstract declaration is considered evidence
+                # that all 1.2 implementations are meant to be non-throwing,
+                # so 1.2 implementations shouldn't be rejected on the basis
+                # that they throw
                 typecheck_method_override(
-                    impl.method_ast, abstract_decls[0].method_ast, location)
+                    impl.method_ast, abstract_decls[0].method_ast, location,
+                    check_throws=not (impl.throws
+                                      and impl.site.dml_version() == (1, 2)))
         else:
             # This only done in this path because we favor reporting
             # EABSTEMPLATE (done by the caller) over EABSMETH
@@ -1592,6 +1598,9 @@ def process_method_declarations(obj, name, declarations,
 
     if not nonshared_impls:
         return None
+
+    nothrow_evidence = vtable_nothrow_dml14 or next(
+        (decl.site for decl in abstract_decls if not decl.throws), None)
 
     impl_to_method = {}
     for (default_level, impl) in reversed(list(enumerate(nonshared_impls))):
@@ -1619,10 +1628,9 @@ def process_method_declarations(obj, name, declarations,
                                  + ['startup']*startup
                                  + ['memoized']*memoized))
 
-        if (impl.site.dml_version() == (1, 2) and throws
-            and vtable_nothrow_dml14):
+        if impl.site.dml_version() == (1, 2) and throws and nothrow_evidence:
             body = wrap_method_body_in_try(
-                impl.site, vtable_nothrow_dml14,
+                impl.site, nothrow_evidence,
                 obj, name, body, rbrace_site)
             throws = False
         for overridden in default_map[impl]:
