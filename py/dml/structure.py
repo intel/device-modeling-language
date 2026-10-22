@@ -716,7 +716,7 @@ def merge_parameters(params, obj_specs):
 
     return param0
 
-def typecheck_method_override(m1, m2, location):
+def typecheck_method_override(m1, m2, location, check_throws=True):
     '''check that m1 can override m2'''
     assert m1.kind == m2.kind == 'method'
     (_, (inp1, outp1, throws1, qualifiers1, _), _, _, _, _) \
@@ -735,6 +735,8 @@ def typecheck_method_override(m1, m2, location):
         raise EMETH(m1.site, m2.site, "different number of input parameters")
     if len(outp1) != len(outp2):
         raise EMETH(m1.site, m2.site, "different number of output parameters")
+    if check_throws and throws1 != throws2:
+        raise EMETH(m1.site, m2.site, "different 'throws' annotations")
     for (idx, (a1, a2)) in enumerate(zip(inp1, inp2)):
         ((n1, t1), (n2, t2)) = (a1.args, a2.args)
         if (t1 is None) != (t2 is None):
@@ -805,7 +807,6 @@ def typecheck_method_override(m1, m2, location):
     qualifier_check('startup', startup1, startup2)
     qualifier_check('memoized', memoized1, memoized2)
 
-    # 'throws' annotations are verified later
 
 def report_poverride(sup, inf, obj_specs):
     if inf in sup.inferior:
@@ -1582,8 +1583,14 @@ def process_method_declarations(obj, name, declarations,
                 traits.typecheck_method_override(
                     impl.signature, abstract_decls[0].signature)
             else:
+                # Any non-throwing abstract declaration is considered evidence
+                # that all 1.2 implementations are meant to be non-throwing,
+                # so 1.2 implementations shouldn't be rejected on the basis
+                # that they throw
                 typecheck_method_override(
-                    impl.method_ast, abstract_decls[0].method_ast, location)
+                    impl.method_ast, abstract_decls[0].method_ast, location,
+                    check_throws=not (impl.throws
+                                      and impl.site.dml_version() == (1, 2)))
         else:
             # This only done in this path because we favor reporting
             # EABSTEMPLATE (done by the caller) over EABSMETH
@@ -1591,6 +1598,9 @@ def process_method_declarations(obj, name, declarations,
 
     if not nonshared_impls:
         return None
+
+    nothrow_evidence = vtable_nothrow_dml14 or next(
+        (decl.site for decl in abstract_decls if not decl.throws), None)
 
     impl_to_method = {}
     for (default_level, impl) in reversed(list(enumerate(nonshared_impls))):
@@ -1618,10 +1628,9 @@ def process_method_declarations(obj, name, declarations,
                                  + ['startup']*startup
                                  + ['memoized']*memoized))
 
-        if (impl.site.dml_version() == (1, 2) and throws
-            and vtable_nothrow_dml14):
+        if impl.site.dml_version() == (1, 2) and throws and nothrow_evidence:
             body = wrap_method_body_in_try(
-                impl.site, vtable_nothrow_dml14,
+                impl.site, nothrow_evidence,
                 obj, name, body, rbrace_site)
             throws = False
         for overridden in default_map[impl]:
@@ -1634,7 +1643,8 @@ def process_method_declarations(obj, name, declarations,
                 assert not impl.shared
                 typecheck_method_override(impl.method_ast,
                                           overridden.method_ast,
-                                          location)
+                                          location,
+                                          check_throws=False)
             if (impl.site.dml_version() == (1, 2) and throws
                 and not overridden.throws
                 and overridden.site.dml_version() == (1, 4)):

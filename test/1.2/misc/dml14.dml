@@ -11,6 +11,7 @@ import "simics/simulator/conf-object.dml";
 template nothrowing {
     shared method nothrow_shared_default() default { }
     shared method nothrow_shared_abstract();
+    method nothrow_abstract();
     method nothrow_method() default { }
 }
 
