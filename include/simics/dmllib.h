@@ -22,6 +22,7 @@
 #include <simics/util/swabber.h>
 #include <simics/model-iface/bank-instrumentation.h>
 #include <simics/simulator/conf-object.h>
+#include <simics/simulator/thread.h>
 #include <simics/util/alloc.h>
 #include <simics/util/hashtab.h>
 #include <simics/util/help-macros.h>
@@ -2378,7 +2379,7 @@ _DML_regname_indexed(const _dml_reg_t *regs, const _dml_reg_number_t *map)
 
         const char *src = reg->name;
         const uint16 *idxp = map->idx;
-        
+
         for (int dim = reg->dim; dim > 0; dim--) {
                 while (*src != '[')
                         sb_addc(&name, *src++);
@@ -2416,7 +2417,7 @@ _DML_find_regname(const _dml_reg_number_t *map, int maplen,
                 if (name_unindexed) {
                         found = (strcmp(name, name_unindexed) == 0);
                 } else {
-                        char *name_indexed = 
+                        char *name_indexed =
                                 _DML_regname_indexed(regs, &map[i]);
                         found = (strcmp(name, name_indexed) == 0);
                         MM_FREE(name_indexed);
@@ -2703,6 +2704,17 @@ _remove_connection_callbacks(conf_object_t *bank,
                              conf_object_t *connection,
                              _connection_vect_t *connections)
 {
+        if (!VT_is_oec_thread()) {
+                /* bp-manager violates this rule in old base packages.
+                Forgive this to avoid interoperability problems. */
+                if (SIM_attr_integer(SIM_get_attribute(
+                    SIM_get_object("sim"), "build_id")) >= 7211) {
+                    SIM_log_error(
+                        bank, 0,
+                        "bank_instrumentation_subscribe.remove_connection_callbacks"
+                        " may only be called from Global Context");
+                }
+        }
         VFORI(*connections, i) {
                 _connection_entry_t *entry = VGET(*connections, i);
                 if (entry->connection == connection) {
@@ -2956,20 +2968,44 @@ _issue_callback(_callback_type_t type,
         }
 }
 
+static bool
+_still_registered(_callback_entry_t *callback, int idx,
+               _callback_vect_t *callbacks)
+{
+        // fast path: no callback before this one was removed
+        if (idx < VLEN(*callbacks) && VGET(*callbacks, idx) == callback) {
+                return true;
+        }
+        VFOREACH_T(*callbacks, _callback_entry_t *, c) {
+                if (*c == callback) {
+                        return true;
+                }
+        }
+        return false;
+}
+
 static void
 _issue_callbacks(_callback_type_t type,
                  bank_access_t *handle,
                  conf_object_t *connection,
                  _callback_vect_t *callbacks)
 {
-        for (int i = 0; i < VLEN(*callbacks); ++i) {
-                _callback_entry_t *callback = VGET(*callbacks, i);
+        /* A callback may remove callbacks, so iterate over a snapshot and skip
+           callbacks that have been removed */
+        _callback_vect_t snapshot = VNULL;
+        VCOPY(snapshot, *callbacks);
+        for (int i = 0; i < VLEN(snapshot); ++i) {
+                _callback_entry_t *callback = VGET(snapshot, i);
+                if (!callbacks || !_still_registered(callback, i, callbacks)) {
+                        continue;
+                }
                 if (!_in_range(callback->offset, callback->size,
                                *handle->offset, handle->size)) {
                         continue;
                 }
                 _issue_callback(type, callback, handle, connection);
         }
+        VFREE(snapshot);
 }
 
 static _callback_vect_t *
