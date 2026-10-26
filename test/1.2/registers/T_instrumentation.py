@@ -21,6 +21,7 @@ import instrumentation_overlapping_order
 import instrumentation_range
 import instrumentation_remove_callback
 import instrumentation_remove_connection_callbacks
+import instrumentation_remove_during_callback
 import instrumentation_subscribe_multiple
 
 subscribe_b1 = SIM_get_port_interface(
@@ -59,3 +60,4 @@ instrumentation_range.test(obj, subscribe_b1)
 instrumentation_subscribe_multiple.test(obj, subscribe_b1, subscribe_b2)
 instrumentation_remove_callback.test(obj, subscribe_b1)
 instrumentation_remove_connection_callbacks.test(obj, subscribe_b1)
+instrumentation_remove_during_callback.test(obj, subscribe_b1)

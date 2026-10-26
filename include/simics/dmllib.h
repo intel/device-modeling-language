@@ -2956,11 +2956,18 @@ _issue_callback(_callback_type_t type,
         }
 }
 
+typedef struct {
+        conf_object_t *connection;
+        _callback_entry_t callback;
+} _pending_callback_t;
+
+typedef VECT(_pending_callback_t) _pending_callback_vect_t;
+
 static void
-_issue_callbacks(_callback_type_t type,
-                 bank_access_t *handle,
-                 conf_object_t *connection,
-                 _callback_vect_t *callbacks)
+_collect_callbacks(bank_access_t *handle,
+                   conf_object_t *connection,
+                   _callback_vect_t *callbacks,
+                   _pending_callback_vect_t *pending)
 {
         for (int i = 0; i < VLEN(*callbacks); ++i) {
                 _callback_entry_t *callback = VGET(*callbacks, i);
@@ -2968,7 +2975,9 @@ _issue_callbacks(_callback_type_t type,
                                *handle->offset, handle->size)) {
                         continue;
                 }
-                _issue_callback(type, callback, handle, connection);
+                VADD(*pending, ((_pending_callback_t){
+                                .connection = connection,
+                                .callback = *callback}));
         }
 }
 
@@ -3000,14 +3009,23 @@ _issue_callbacks_for_type(conf_object_t *bank,
                 return;
         }
 
-        _issue_callbacks(type, handle, NULL, anonymous_callbacks);
+        /* Callbacks may unregister themselves or their connection, which
+           frees the entries. Collect what to call first, by value, so that
+           the vectors are never touched after a callback has run. */
+        _pending_callback_vect_t pending = VNULL;
+        _collect_callbacks(handle, NULL, anonymous_callbacks, &pending);
         VFOREACH_T(*connections, _connection_entry_t *, entry) {
                 if (!(*entry)->enabled) {
                         continue;
                 }
-                _issue_callbacks(type, handle, (*entry)->connection,
-                                 _connection_callbacks(*entry, type));
+                _collect_callbacks(handle, (*entry)->connection,
+                                   _connection_callbacks(*entry, type),
+                                   &pending);
         }
+        VFOREACH_T(pending, _pending_callback_t, p) {
+                _issue_callback(type, &p->callback, handle, p->connection);
+        }
+        VFREE(pending);
 }
 
 UNUSED static void
