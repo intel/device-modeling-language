@@ -288,7 +288,7 @@ class DMLFileTestCase(BaseTestCase):
         reaper = dmlc_reaper_args(
             exitcode_file,
             dmlc_timeout_multipliers.get(self.fullname, 1))
-        args = ["-T"]
+        args = []
         if not line_directives:
             args += ["--noline"]
         args += dmlc_extraargs

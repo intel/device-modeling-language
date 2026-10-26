@@ -13,6 +13,7 @@ __all__ = (
     'warning_is_ignored',
     'enable_warning',
     'set_include_tag',
+    'site_line_pragmas',
     'ErrorContext',
 
     'dollar',
@@ -65,6 +66,14 @@ def enable_warning(tag):
 
 def warning_is_ignored(tag):
     return dml.globals.ignore_all_warnings or ignored_warnings.get(tag, False)
+
+def warning_occurrence_is_ignored(warning):
+    tag = warning.tag()
+    if warning_is_ignored(tag):
+        return True
+
+    return any((p == "WARNING" and t == tag
+                for (p, t) in site_line_pragmas(warning.site)))
 
 class ErrorContext(object):
     __slots__ = ('node', 'site')
@@ -219,7 +228,7 @@ class DMLWarning(LogMessage):
 
     def preprocess(self):
         # Don't print anything if the user asked us not to
-        if warning_is_ignored(self.tag()):
+        if warning_occurrence_is_ignored(self):
             return False
         if DMLWarning.next_warning_yields_error:
             self.print_site_message(self.site,
@@ -265,6 +274,35 @@ class PortingMessage(LogMessage):
                 # messages on Windows
                 os.path.normcase(arg.loc()) if isinstance(arg, Site) else arg
                 for arg in self.args]))
+
+def site_line_pragmas(s):
+    if s is None or isinstance(s, SimpleSite):
+        return []
+
+    pragmas = []
+    filename = s.filename()
+    tgt_lineno = s.lineno
+
+    while (filename, tgt_lineno) in dml.globals.line_pragmas:
+        (start_lineno, inline_pragmas) = dml.globals.line_pragmas[(filename,
+                                                                  tgt_lineno)]
+        pragmas.extend(reversed(inline_pragmas))
+
+        # A minor HACK to handle the case of:
+        #   /*% PRAGMA foo %*/ /*% PRAGMA
+        #   bar %*/
+        #   some_statement
+        #
+        # Otherwise 'foo' won't be captured
+        if (start_lineno + 1 < tgt_lineno
+            and ((filename, start_lineno + 1)
+                 in dml.globals.line_pragmas)):
+            tgt_lineno = start_lineno + 1
+        else:
+            tgt_lineno = start_lineno
+
+    pragmas.reverse()
+    return pragmas
 
 class Site(metaclass=abc.ABCMeta):
     __slots__ = ()
