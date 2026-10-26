@@ -1863,27 +1863,27 @@ _DML_serialize_hook_queue(ht_str_table_t *callback_ht,
     return out;
 }
 
-typedef attr_value_t (*_get_attr_t)(conf_object_t *, lang_void *);
+typedef attr_value_t (*_get_attr_t)(conf_object_t *, unboxed_void *);
 typedef set_error_t (*_set_attr_t)(conf_object_t *, attr_value_t *,
-                                   lang_void *);
+                                   unboxed_void *);
 
 #if DML_LEGACY_ATTRS
 typedef struct {
     _get_attr_t get_attr;
     _set_attr_t set_attr;
-    lang_void   *user_data_get;
-    lang_void   *user_data_set;
+    unboxed_void *user_data_get;
+    unboxed_void *user_data_set;
 } _dml_legacy_attr_info_t;
 
 UNUSED static attr_value_t
-_DML_legacy_attr_get_trampoline(lang_void *_info, conf_object_t *obj,
+_DML_legacy_attr_get_trampoline(unboxed_void *_info, conf_object_t *obj,
                                 attr_value_t *_idx) {
     const _dml_legacy_attr_info_t *info = (_dml_legacy_attr_info_t *)_info;
     return info->get_attr(obj, info->user_data_get);
 }
 
 UNUSED static set_error_t
-_DML_legacy_attr_set_trampoline(lang_void *_info, conf_object_t *obj,
+_DML_legacy_attr_set_trampoline(unboxed_void *_info, conf_object_t *obj,
                                 attr_value_t *out, attr_value_t *_idx) {
     const _dml_legacy_attr_info_t *info = (_dml_legacy_attr_info_t *)_info;
     return info->set_attr(obj, out, info->user_data_set);
@@ -1892,8 +1892,8 @@ _DML_legacy_attr_set_trampoline(lang_void *_info, conf_object_t *obj,
 UNUSED static void
 _DML_register_attribute(
     conf_class_t *NOTNULL cls, const char *NOTNULL name,
-    _get_attr_t get_attr, lang_void *user_data_get,
-    _set_attr_t set_attr, lang_void *user_data_set,
+    _get_attr_t get_attr, boxed_void *user_data_get,
+    _set_attr_t set_attr, boxed_void *user_data_set,
     attr_attr_t attr, const char *type, const char *desc) {
     _dml_legacy_attr_info_t *info = MM_MALLOC(1, _dml_legacy_attr_info_t);
     info->get_attr = get_attr;
@@ -1904,10 +1904,10 @@ _DML_register_attribute(
     SIM_register_typed_attribute(cls, name,
                                  get_attr ? _DML_legacy_attr_get_trampoline
                                           : NULL,
-                                 get_attr ? (lang_void *)info : NULL,
+                                 get_attr ? (boxed_void *)info : NULL,
                                  set_attr ? _DML_legacy_attr_set_trampoline
                                           : NULL,
-                                 set_attr ? (lang_void *)info : NULL,
+                                 set_attr ? (boxed_void *)info : NULL,
                                  attr, type, NULL, desc);
 }
 #else
@@ -1930,8 +1930,8 @@ _DML_register_hook_attribute(conf_class_t *cls, const char *attrname,
         MM_FREE(tmp_type);
     }
     SIM_register_attribute_with_user_data(
-        cls, attrname, getter, (lang_void *) aux_info, setter,
-        (lang_void *) aux_info, Sim_Attr_Optional | Sim_Attr_Internal,
+        cls, attrname, getter, (boxed_void *) aux_info, setter,
+        (boxed_void *) aux_info, Sim_Attr_Optional | Sim_Attr_Internal,
         sb_str(&type), "hook");
     sb_free(&type);
 }
