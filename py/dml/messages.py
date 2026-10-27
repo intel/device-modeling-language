@@ -2150,7 +2150,19 @@ class WOLDAST(DMLWarning):
         DMLWarning.__init__(self, SimpleSite(dmlfile + ":0"),
                             dmlfile + "ast")
 
+class WDMLAST(DMLWarning):
+    """Some files in the DML standard library are preparsed into files
+    with the `.dmlast` suffix. If such files are encountered
+    elsewhere, then they are ignored to avoid potential coherency
+    problems, and this warning is printed.
+    """
+    fmt = "AST file for file outside the standard library: %s"
+    def __init__(self, dmlfile):
+        DMLWarning.__init__(self, SimpleSite(dmlfile + ":0"),
+                            dmlfile + "ast")
+
 class WWRNSTMT(DMLWarning):
+
     """
     The source code contained a statement "`warning;`", which
     causes a warning to be printed.
