@@ -59,13 +59,7 @@ extern char *_DML_describe_uint64_event(const char *base, uint64 data);
 extern attr_value_t VT_get_port_interfaces(conf_class_t *cls);
 
 extern typedef struct {
-} _callback_entry_t;
-
-extern typedef struct {
-} _connection_entry_t;
-
-extern typedef _callback_entry_t * vect _callback_vect_t;
-extern typedef _connection_entry_t * vect _connection_vect_t;
+} _bank_instrumentation_t;
 
 extern typedef struct {
     const char *logname;
@@ -92,8 +86,7 @@ extern bank_callback_handle_t _register_before_read(
     uint64 size,
     before_read_callback_t before_read,
     void *user_data,
-    _connection_vect_t *connections,
-    _callback_vect_t *anonymous_callbacks);
+    _bank_instrumentation_t *instr);
 extern bank_callback_handle_t _register_after_read(
     conf_object_t *bank,
     conf_object_t *connection,
@@ -101,8 +94,7 @@ extern bank_callback_handle_t _register_after_read(
     uint64 size,
     after_read_callback_t after_read,
     void *user_data,
-    _connection_vect_t *connections,
-    _callback_vect_t *anonymous_callbacks);
+    _bank_instrumentation_t *instr);
 extern bank_callback_handle_t _register_before_write(
     conf_object_t *bank,
     conf_object_t *connection,
@@ -110,8 +102,7 @@ extern bank_callback_handle_t _register_before_write(
     uint64 size,
     before_write_callback_t before_write,
     void *user_data,
-    _connection_vect_t *connections,
-    _callback_vect_t *anonymous_callbacks);
+    _bank_instrumentation_t *instr);
 extern bank_callback_handle_t _register_after_write(
     conf_object_t *bank,
     conf_object_t *connection,
@@ -119,57 +110,48 @@ extern bank_callback_handle_t _register_after_write(
     uint64 size,
     after_write_callback_t after_write,
     void *user_data,
-    _connection_vect_t *connections,
-    _callback_vect_t *anonymous_callbacks);
+    _bank_instrumentation_t *instr);
 
-extern attr_value_t _get_connections(_connection_vect_t *connections);
-extern bool _move_before(conf_object_t *connection, conf_object_t *before,
-                         _connection_vect_t *connections);
+extern attr_value_t _get_connections(_bank_instrumentation_t *instr);
+extern bool _move_before(conf_object_t *bank, conf_object_t *connection,
+                         conf_object_t *before, _bank_instrumentation_t *instr);
 
 extern void _remove_callback(bank_callback_handle_t callback,
-                             _connection_vect_t *connections,
-                             _callback_vect_t *anonymous_before_read,
-                             _callback_vect_t *anonymous_after_read,
-                             _callback_vect_t *anonymous_before_write,
-                             _callback_vect_t *anonymous_after_write);
+                             _bank_instrumentation_t *instr);
 
 extern void _remove_connection_callbacks(conf_object_t *bank,
                                          conf_object_t *connection,
-                                         _connection_vect_t *connections);
+                                         _bank_instrumentation_t *instr);
 extern void _enable_connection_callbacks(conf_object_t *connection,
-                                         _connection_vect_t *connections);
+                                         _bank_instrumentation_t *instr);
 extern void _disable_connection_callbacks(conf_object_t *connection,
-                                          _connection_vect_t *connections);
+                                          _bank_instrumentation_t *instr);
 
 extern void _callback_before_read(conf_object_t *bank,
                                   conf_object_t *initiator,
                                   bool *inquiry,
                                   physical_address_t *offset,
                                   physical_address_t size,
-                                  _connection_vect_t *connections,
-                                  _callback_vect_t *anonymous_callbacks);
+                                  _bank_instrumentation_t *instr);
 extern void _callback_after_read(conf_object_t *bank,
                                  conf_object_t *initiator,
                                  physical_address_t *offset,
                                  physical_address_t size,
                                  uint64 *value, bool *success,
-                                 _connection_vect_t *connections,
-                                 _callback_vect_t *anonymous_callbacks);
+                                 _bank_instrumentation_t *instr);
 extern void _callback_before_write(conf_object_t *bank,
                                    conf_object_t *initiator,
                                    physical_address_t *offset,
                                    physical_address_t size,
                                    uint64 *value,
                                    bool *suppress,
-                                   _connection_vect_t *connections,
-                                   _callback_vect_t *anonymous_callbacks);
+                                   _bank_instrumentation_t *instr);
 extern void _callback_after_write(conf_object_t *bank,
                                   conf_object_t *initiator,
                                   physical_address_t *offset,
                                   physical_address_t size,
                                   bool *success,
-                                  _connection_vect_t *connections,
-                                  _callback_vect_t *anonymous_callbacks);
+                                  _bank_instrumentation_t *instr);
 
 extern void _cancel_simple_events(conf_object_t *obj, _identity_t id);
 extern void _register_attributes(conf_object_t *obj, _identity_t id);
@@ -2071,11 +2053,7 @@ template bank is (object, shown_desc) {
     param _le_byte_order : bool;
     param _each_register : sequence(register);
 
-    session _callback_vect_t _before_read_callbacks;
-    session _callback_vect_t _after_read_callbacks;
-    session _callback_vect_t _before_write_callbacks;
-    session _callback_vect_t _after_write_callbacks;
-    session _connection_vect_t _connections;
+    session _bank_instrumentation_t _instrumentation;
 
     // structural info
     param objtype = "bank";
@@ -2562,7 +2540,7 @@ template bank is (object, shown_desc) {
                 local bool inquiry_override = false;
                 _callback_before_read(
                     this._bank_obj(), ini, &inquiry_override,
-                    &offset, size, &_connections, &_before_read_callbacks);
+                    &offset, size, &_instrumentation);
                 try {
                     if (inquiry_override) {
                         value = this.get(offset, size);
@@ -2573,8 +2551,7 @@ template bank is (object, shown_desc) {
                     success = false;
                 }
                 _callback_after_read(this._bank_obj(), ini, &offset, size,
-                                     &value, &success, &_connections,
-                                     &_after_read_callbacks);
+                                     &value, &success, &_instrumentation);
 
                 if (success) {
                     this._memop_set_read_value(memop, value);
@@ -2585,7 +2562,7 @@ template bank is (object, shown_desc) {
                 local bool suppress = false;
                 _callback_before_write(
                     this._bank_obj(), ini, &offset, size, &writevalue,
-                    &suppress, &_connections, &_before_write_callbacks);
+                    &suppress, &_instrumentation);
                 if (!suppress) {
                     try {
                         this.write(offset, writevalue, _mask(size), aux);
@@ -2594,8 +2571,7 @@ template bank is (object, shown_desc) {
                     }
                 }
                 _callback_after_write(this._bank_obj(), ini, &offset, size,
-                                      &success, &_connections,
-                                      &_after_write_callbacks);
+                                      &success, &_instrumentation);
             }
         }
 
@@ -2666,7 +2642,7 @@ template bank is (object, shown_desc) {
                 local bool inquiry_override = false;
                 _callback_before_read(this._bank_obj(), ini,
                                       &inquiry_override, &offset,
-                                      size, &_connections, &_before_read_callbacks);
+                                      size, &_instrumentation);
                 local uint64 value = 0;
                 try {
                     if (inquiry_override) {
@@ -2679,8 +2655,7 @@ template bank is (object, shown_desc) {
                 }
 
                 _callback_after_read(this._bank_obj(), ini, &offset, size,
-                                     &value, &success, &_connections,
-                                     &_after_read_callbacks);
+                                     &value, &success, &_instrumentation);
 
                 if (success) {
                     this._set_read_value(size, buf, value);
@@ -2691,7 +2666,7 @@ template bank is (object, shown_desc) {
                 local bool suppress = false;
                 _callback_before_write(
                     this._bank_obj(), ini, &offset, size, &writevalue,
-                    &suppress, &_connections, &_before_write_callbacks);
+                    &suppress, &_instrumentation);
                 if (!suppress) {
                     try {
                         this.write(offset, writevalue, _mask(size), aux);
@@ -2700,8 +2675,7 @@ template bank is (object, shown_desc) {
                     }
                 }
                 _callback_after_write(this._bank_obj(), ini, &offset, size,
-                                      &success, &_connections,
-                                      &_after_write_callbacks);
+                                      &success, &_instrumentation);
             }
         }
 
@@ -2859,8 +2833,7 @@ template bank is (object, shown_desc) {
                                         bank_callback_handle_t) {
             return _register_before_read(
                 bank._bank_obj(), connection, offset, size, before_read,
-                user_data, &bank._connections,
-                &bank._before_read_callbacks);
+                user_data, &bank._instrumentation);
         }
         method register_after_read(conf_object_t *connection,
                                    uint64 offset,
@@ -2870,8 +2843,7 @@ template bank is (object, shown_desc) {
                                        bank_callback_handle_t) {
             return _register_after_read(
                 bank._bank_obj(), connection, offset, size, after_read,
-                user_data, &bank._connections,
-                &bank._after_read_callbacks);
+                user_data, &bank._instrumentation);
         }
 
         method register_before_write(conf_object_t *connection,
@@ -2882,8 +2854,7 @@ template bank is (object, shown_desc) {
                                          bank_callback_handle_t) {
             return _register_before_write(
                 bank._bank_obj(), connection, offset, size, before_write,
-                user_data, &bank._connections,
-                &bank._before_write_callbacks);
+                user_data, &bank._instrumentation);
         }
         method register_after_write(conf_object_t *connection,
                                     uint64 offset,
@@ -2893,37 +2864,33 @@ template bank is (object, shown_desc) {
                                         bank_callback_handle_t) {
             return _register_after_write(
                 bank._bank_obj(), connection, offset, size, after_write,
-                user_data, &bank._connections,
-                &bank._after_write_callbacks);
+                user_data, &bank._instrumentation);
         }
 
         method remove_callback(bank_callback_handle_t callback) {
-            _remove_callback(callback, &bank._connections,
-                             &bank._before_read_callbacks,
-                             &bank._after_read_callbacks,
-                             &bank._before_write_callbacks,
-                             &bank._after_write_callbacks);
+            _remove_callback(callback, &bank._instrumentation);
         }
 
         method remove_connection_callbacks(conf_object_t *connection) {
             _remove_connection_callbacks(
-                bank._bank_obj(), connection, &bank._connections);
+                bank._bank_obj(), connection, &bank._instrumentation);
         }
         method enable_connection_callbacks(conf_object_t *connection) {
-            _enable_connection_callbacks(connection, &bank._connections);
+            _enable_connection_callbacks(connection, &bank._instrumentation);
         }
         method disable_connection_callbacks(conf_object_t *connection) {
-            _disable_connection_callbacks(connection, &bank._connections);
+            _disable_connection_callbacks(connection, &bank._instrumentation);
         }
     }
 
     implement instrumentation_order {
         method get_connections() -> (attr_value_t) {
-            return _get_connections(&bank._connections);
+            return _get_connections(&bank._instrumentation);
         }
         method move_before(conf_object_t *connection,
                            conf_object_t *before) -> (bool) {
-            return _move_before(connection, before, &bank._connections);
+            return _move_before(bank._bank_obj(), connection, before,
+                                &bank._instrumentation);
         }
     }
 }

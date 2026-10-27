@@ -22,6 +22,7 @@
 #include <simics/util/swabber.h>
 #include <simics/model-iface/bank-instrumentation.h>
 #include <simics/simulator/conf-object.h>
+#include <simics/simulator/thread.h>
 #include <simics/util/alloc.h>
 #include <simics/util/hashtab.h>
 #include <simics/util/help-macros.h>
@@ -2475,6 +2476,7 @@ typedef struct _callback_entry {
         uint64 size;
         lang_void *user_data;
         _callback_t callback;
+        bool removed;
 } _callback_entry_t;
 
 typedef VECT(_callback_entry_t *) _callback_vect_t;
@@ -2482,60 +2484,73 @@ typedef VECT(_callback_entry_t *) _callback_vect_t;
 typedef struct _connection_entry {
         conf_object_t *connection;
         bool enabled;
-
-        _callback_vect_t before_read_callbacks;
-        _callback_vect_t after_read_callbacks;
-        _callback_vect_t before_write_callbacks;
-        _callback_vect_t after_write_callbacks;
+        bool removed;
+        // indexed by _callback_type_t
+        _callback_vect_t callbacks[4];
 } _connection_entry_t;
 
 typedef VECT(_connection_entry_t *) _connection_vect_t;
 
-static _connection_entry_t *
-_new_connection_entry(conf_object_t *connection)
-{
-        _connection_entry_t *entry = MM_ZALLOC(1, _connection_entry_t);
-        entry->connection = connection;
-        entry->enabled = true;
-        return entry;
-}
+/* While callbacks are issued (dispatch_depth > 0), removed callbacks and
+   connections are only marked as removed, and are freed when the last
+   dispatch finishes. Thus, vectors never shrink and entries are never freed
+   during a dispatch. Only anonymous callbacks may be registered during a
+   dispatch. Must be zero-initialized. */
+typedef struct {
+        _connection_vect_t connections;
+        // indexed by _callback_type_t
+        _callback_vect_t anonymous[4];
+        uint32 dispatch_depth;
+        bool has_removed;
+} _bank_instrumentation_t;
 
 static _connection_entry_t *
-_get_or_new_connection_entry(conf_object_t *connection,
-                             _connection_vect_t *connections)
+_find_connection(_bank_instrumentation_t *instr, conf_object_t *connection)
 {
-        _connection_entry_t *found = NULL;
-        VFOREACH_T(*connections, _connection_entry_t *, cur) {
-                if ((*cur)->connection == connection) {
-                        found = *cur;
-                        break;
+        VFORP(instr->connections, _connection_entry_t, entry) {
+                if (!entry->removed && entry->connection == connection) {
+                        return entry;
                 }
         }
-
-        if (!found) {
-                found = _new_connection_entry(connection);
-                VADD(*connections, found);
-        }
-
-        return found;
+        return NULL;
 }
 
-static _callback_entry_t *
-_new_callback_entry(uint64 offset, uint64 size, lang_void *user_data,
-                    _callback_t callback)
+static bank_callback_handle_t
+_register_callback(conf_object_t *bank,
+                   _bank_instrumentation_t *instr,
+                   conf_object_t *connection,
+                   _callback_type_t type,
+                   uint64 offset,
+                   uint64 size,
+                   _callback_t callback,
+                   lang_void *user_data)
 {
+        _callback_vect_t *callbacks = &instr->anonymous[type];
+        if (connection) {
+                if (instr->dispatch_depth > 0) {
+                        SIM_log_error(
+                                bank, 0,
+                                "bank_instrumentation_subscribe: callbacks"
+                                " with a connection may not be registered"
+                                " while instrumentation callbacks are issued");
+                        return 0;
+                }
+                _connection_entry_t *conn = _find_connection(instr,
+                                                             connection);
+                if (!conn) {
+                        conn = MM_ZALLOC(1, _connection_entry_t);
+                        conn->connection = connection;
+                        conn->enabled = true;
+                        VADD(instr->connections, conn);
+                }
+                callbacks = &conn->callbacks[type];
+        }
+
         _callback_entry_t *entry = MM_ZALLOC(1, _callback_entry_t);
         entry->offset = offset;
         entry->size = size;
         entry->user_data = user_data;
         entry->callback = callback;
-
-        return entry;
-}
-
-static bank_callback_handle_t
-_register_callback(_callback_entry_t *entry, _callback_vect_t *callbacks)
-{
         VADD(*callbacks, entry);
         return (bank_callback_handle_t)entry;
 }
@@ -2547,21 +2562,11 @@ _register_before_read(conf_object_t *bank,
                       uint64 size,
                       before_read_callback_t before_read,
                       lang_void *user_data,
-                      _connection_vect_t *connections,
-                      _callback_vect_t *anonymous_callbacks)
+                      _bank_instrumentation_t *instr)
 {
-        _callback_t callback = (_callback_t){.before_read = before_read};
-        if (!connection) {
-                return _register_callback(
-                        _new_callback_entry(offset, size, user_data, callback),
-                        anonymous_callbacks);
-        }
-
-        _connection_entry_t *entry = _get_or_new_connection_entry(connection,
-                                                                  connections);
         return _register_callback(
-                _new_callback_entry(offset, size, user_data, callback),
-                &entry->before_read_callbacks);
+                bank, instr, connection, Callback_Before_Read, offset, size,
+                (_callback_t){.before_read = before_read}, user_data);
 }
 UNUSED static bank_callback_handle_t
 _register_after_read(conf_object_t *bank,
@@ -2570,21 +2575,11 @@ _register_after_read(conf_object_t *bank,
                      uint64 size,
                      after_read_callback_t after_read,
                      lang_void *user_data,
-                     _connection_vect_t *connections,
-                     _callback_vect_t *anonymous_callbacks)
+                     _bank_instrumentation_t *instr)
 {
-        _callback_t callback = (_callback_t){.after_read = after_read};
-        if (!connection) {
-                return _register_callback(
-                        _new_callback_entry(offset, size, user_data, callback),
-                        anonymous_callbacks);
-        }
-
-        _connection_entry_t *entry = _get_or_new_connection_entry(connection,
-                                                                  connections);
         return _register_callback(
-                _new_callback_entry(offset, size, user_data, callback),
-                &entry->after_read_callbacks);
+                bank, instr, connection, Callback_After_Read, offset, size,
+                (_callback_t){.after_read = after_read}, user_data);
 }
 
 UNUSED static bank_callback_handle_t
@@ -2594,21 +2589,11 @@ _register_before_write(conf_object_t *bank,
                        uint64 size,
                        before_write_callback_t before_write,
                        lang_void *user_data,
-                       _connection_vect_t *connections,
-                       _callback_vect_t *anonymous_callbacks)
+                       _bank_instrumentation_t *instr)
 {
-        _callback_t callback = (_callback_t){.before_write = before_write};
-        if (!connection) {
-                return _register_callback(
-                        _new_callback_entry(offset, size, user_data, callback),
-                        anonymous_callbacks);
-        }
-
-        _connection_entry_t *entry = _get_or_new_connection_entry(connection,
-                                                                  connections);
         return _register_callback(
-                _new_callback_entry(offset, size, user_data, callback),
-                &entry->before_write_callbacks);
+                bank, instr, connection, Callback_Before_Write, offset, size,
+                (_callback_t){.before_write = before_write}, user_data);
 }
 
 UNUSED static bank_callback_handle_t
@@ -2618,136 +2603,189 @@ _register_after_write(conf_object_t *bank,
                       uint64 size,
                       after_write_callback_t after_write,
                       lang_void *user_data,
-                      _connection_vect_t *connections,
-                      _callback_vect_t *anonymous_callbacks)
+                      _bank_instrumentation_t *instr)
 {
-        _callback_t callback = (_callback_t){.after_write = after_write};
-        if (!connection) {
-                return _register_callback(
-                        _new_callback_entry(offset, size, user_data, callback),
-                        anonymous_callbacks);
-        }
-
-        _connection_entry_t *entry = _get_or_new_connection_entry(connection,
-                                                                  connections);
         return _register_callback(
-                _new_callback_entry(offset, size, user_data, callback),
-                &entry->after_write_callbacks);
+                bank, instr, connection, Callback_After_Write, offset, size,
+                (_callback_t){.after_write = after_write}, user_data);
 }
 
 static bool
-_remove_callback_from(bank_callback_handle_t callback,
-                      _callback_vect_t *callbacks) {
-        for (int i = 0; i < VLEN(*callbacks); ++i) {
+_remove_callback_from(_bank_instrumentation_t *instr,
+                      bank_callback_handle_t callback,
+                      _callback_vect_t *callbacks)
+{
+        VFORI(*callbacks, i) {
                 _callback_entry_t *entry = VGET(*callbacks, i);
-                if ((bank_callback_handle_t)entry == callback) {
+                if ((bank_callback_handle_t)entry != callback
+                    || entry->removed) {
+                        continue;
+                }
+                if (instr->dispatch_depth > 0) {
+                        entry->removed = true;
+                        instr->has_removed = true;
+                } else {
                         MM_FREE(entry);
                         VDELETE_ORDER(*callbacks, i);
-                        return true;
                 }
+                return true;
         }
         return false;
 }
 
 UNUSED static void
-_remove_callback(bank_callback_handle_t callback,
-                 _connection_vect_t *connections,
-                 _callback_vect_t *anonymous_before_read,
-                 _callback_vect_t *anonymous_after_read,
-                 _callback_vect_t *anonymous_before_write,
-                 _callback_vect_t *anonymous_after_write)
+_remove_callback(conf_object_t *bank,
+                 bank_callback_handle_t callback,
+                 _bank_instrumentation_t *instr)
 {
-        VECT(_callback_vect_t *) all_callbacks = VNULL;
-        VADD(all_callbacks, anonymous_before_read);
-        VADD(all_callbacks, anonymous_after_read);
-        VADD(all_callbacks, anonymous_before_write);
-        VADD(all_callbacks, anonymous_after_write);
-
-        VFOREACH_T(*connections, _connection_entry_t *, entry) {
-                VADD(all_callbacks, &(*entry)->before_read_callbacks);
-                VADD(all_callbacks, &(*entry)->after_read_callbacks);
-                VADD(all_callbacks, &(*entry)->before_write_callbacks);
-                VADD(all_callbacks, &(*entry)->after_write_callbacks);
-        }
-
-        VFOREACH_T(all_callbacks, _callback_vect_t *, callbacks) {
-                if (_remove_callback_from(callback, *callbacks)) {
-                        break;
+        for (int type = 0; type < ALEN(instr->anonymous); type++) {
+                if (_remove_callback_from(instr, callback,
+                                          &instr->anonymous[type])) {
+                        return;
                 }
         }
-
-        VFREE(all_callbacks);
-}
-
-static void
-_free_callbacks(_callback_vect_t *callbacks)
-{
-        for (int i = 0; i < VLEN(*callbacks); ++i) {
-                _callback_entry_t *entry = VGET(*callbacks, i);
-                MM_FREE(entry);
+        VFORP(instr->connections, _connection_entry_t, conn) {
+                if (conn->removed) {
+                        continue;
+                }
+                for (int type = 0; type < ALEN(conn->callbacks); type++) {
+                        if (_remove_callback_from(instr, callback,
+                                                  &conn->callbacks[type])) {
+                                if (instr->dispatch_depth > 0) {
+                                        SIM_log_error(
+                                                bank, 0,
+                                                "bank_instrumentation_subscribe:"
+                                                " callbacks with a connection"
+                                                " may not be removed while"
+                                                " instrumentation callbacks"
+                                                " are issued");
+                                }
+                                return;
+                        }
+                }
         }
 }
 
 static void
-_free_connection(_connection_entry_t *entry)
+_free_connection(_connection_entry_t *conn)
 {
-        _free_callbacks(&entry->before_read_callbacks);
-        _free_callbacks(&entry->after_read_callbacks);
-        _free_callbacks(&entry->before_write_callbacks);
-        _free_callbacks(&entry->after_write_callbacks);
-        MM_FREE(entry);
+        for (int type = 0; type < ALEN(conn->callbacks); type++) {
+                VFORP(conn->callbacks[type], _callback_entry_t, entry) {
+                        MM_FREE(entry);
+                }
+                VFREE(conn->callbacks[type]);
+        }
+        MM_FREE(conn);
+}
+
+static void
+_free_removed_callbacks(_callback_vect_t *callbacks)
+{
+        int kept = 0;
+        VFORI(*callbacks, i) {
+                _callback_entry_t *entry = VGET(*callbacks, i);
+                if (entry->removed) {
+                        MM_FREE(entry);
+                } else {
+                        VSET(*callbacks, kept++, entry);
+                }
+        }
+        VTRUNCATE(*callbacks, kept);
+}
+
+static void
+_free_removed(_bank_instrumentation_t *instr)
+{
+        for (int type = 0; type < ALEN(instr->anonymous); type++) {
+                _free_removed_callbacks(&instr->anonymous[type]);
+        }
+        int kept = 0;
+        VFORI(instr->connections, i) {
+                _connection_entry_t *conn = VGET(instr->connections, i);
+                if (conn->removed) {
+                        _free_connection(conn);
+                        continue;
+                }
+                for (int type = 0; type < ALEN(conn->callbacks); type++) {
+                        _free_removed_callbacks(&conn->callbacks[type]);
+                }
+                VSET(instr->connections, kept++, conn);
+        }
+        VTRUNCATE(instr->connections, kept);
+        instr->has_removed = false;
 }
 
 UNUSED static void
 _remove_connection_callbacks(conf_object_t *bank,
                              conf_object_t *connection,
-                             _connection_vect_t *connections)
+                             _bank_instrumentation_t *instr)
 {
-        VFORI(*connections, i) {
-                _connection_entry_t *entry = VGET(*connections, i);
-                if (entry->connection == connection) {
-                        _free_connection(entry);
-                        VDELETE_ORDER(*connections, i);
-                        break;
+        if (!VT_is_oec_thread()) {
+                /* bp-manager violates this rule in old base packages.
+                Forgive this to avoid interoperability problems. */
+                if (SIM_attr_integer(SIM_get_attribute(
+                    SIM_get_object("sim"), "build_id")) >= 7211) {
+                    SIM_log_error(
+                        bank, 0,
+                        "bank_instrumentation_subscribe.remove_connection_callbacks"
+                        " may only be called from Global Context");
                 }
+        }
+        VFORI(instr->connections, i) {
+                _connection_entry_t *conn = VGET(instr->connections, i);
+                if (conn->removed || conn->connection != connection) {
+                        continue;
+                }
+                if (instr->dispatch_depth > 0) {
+                        conn->removed = true;
+                        instr->has_removed = true;
+                } else {
+                        _free_connection(conn);
+                        VDELETE_ORDER(instr->connections, i);
+                }
+                break;
         }
 }
 
 static void
 _toggle_connection(conf_object_t *connection,
-                   _connection_vect_t *connections,
+                   _bank_instrumentation_t *instr,
                    bool enable)
 {
-        VFOREACH_T(*connections, _connection_entry_t *, entry) {
-                if ((*entry)->connection == connection) {
-                        (*entry)->enabled = enable;
-                        break;
-                }
+        _connection_entry_t *conn = _find_connection(instr, connection);
+        if (conn) {
+                conn->enabled = enable;
         }
 }
 
 UNUSED static void
 _enable_connection_callbacks(conf_object_t *connection,
-                             _connection_vect_t *connections)
+                             _bank_instrumentation_t *instr)
 {
-        _toggle_connection(connection, connections, true);
+        _toggle_connection(connection, instr, true);
 }
 
 UNUSED static void
 _disable_connection_callbacks(conf_object_t *connection,
-                              _connection_vect_t *connections)
+                              _bank_instrumentation_t *instr)
 {
-        _toggle_connection(connection, connections, false);
+        _toggle_connection(connection, instr, false);
 }
 
 UNUSED static attr_value_t
-_get_connections(_connection_vect_t *connections)
+_get_connections(_bank_instrumentation_t *instr)
 {
-        attr_value_t v = SIM_alloc_attr_list(VLEN(*connections));
-        for (int i = 0; i < VLEN(*connections); ++i) {
-                _connection_entry_t *entry = VGET(*connections, i);
-                SIM_attr_list_set_item(&v, i,
-                                       SIM_make_attr_object(entry->connection));
+        int count = 0;
+        VFORP(instr->connections, _connection_entry_t, conn) {
+                count += !conn->removed;
+        }
+        attr_value_t v = SIM_alloc_attr_list(count);
+        int i = 0;
+        VFORP(instr->connections, _connection_entry_t, conn) {
+                if (!conn->removed) {
+                        SIM_attr_list_set_item(
+                                &v, i++, SIM_make_attr_object(conn->connection));
+                }
         }
         return v;
 }
@@ -2765,14 +2803,23 @@ _connection_idx(conf_object_t *connection, _connection_vect_t *connections)
 }
 
 UNUSED static bool
-_move_before(conf_object_t *connection,
+_move_before(conf_object_t *bank,
+             conf_object_t *connection,
              conf_object_t *before,
-             _connection_vect_t *connections)
+             _bank_instrumentation_t *instr)
 {
+        if (instr->dispatch_depth > 0) {
+                SIM_log_error(bank, 0,
+                              "instrumentation_order.move_before may not be"
+                              " called while instrumentation callbacks are"
+                              " issued");
+                return false;
+        }
         if (connection == before) {
                 return false;
         }
 
+        _connection_vect_t *connections = &instr->connections;
         int connection_idx = _connection_idx(connection, connections);
         if (connection_idx < 0) {
                 return false;
@@ -2962,36 +3009,22 @@ _issue_callbacks(_callback_type_t type,
                  conf_object_t *connection,
                  _callback_vect_t *callbacks)
 {
-        for (int i = 0; i < VLEN(*callbacks); ++i) {
+        // skip anonymous callbacks registered during the dispatch
+        int len = VLEN(*callbacks);
+        for (int i = 0; i < len; i++) {
                 _callback_entry_t *callback = VGET(*callbacks, i);
-                if (!_in_range(callback->offset, callback->size,
-                               *handle->offset, handle->size)) {
+                if (callback->removed
+                    || !_in_range(callback->offset, callback->size,
+                                  *handle->offset, handle->size)) {
                         continue;
                 }
                 _issue_callback(type, callback, handle, connection);
         }
 }
 
-static _callback_vect_t *
-_connection_callbacks(_connection_entry_t *entry, _callback_type_t type)
-{
-        switch (type) {
-        case Callback_Before_Read:
-                return &entry->before_read_callbacks;
-        case Callback_After_Read:
-                return &entry->after_read_callbacks;
-        case Callback_Before_Write:
-                return &entry->before_write_callbacks;
-        case Callback_After_Write:
-                return &entry->after_write_callbacks;
-        }
-        ASSERT(0);
-}
-
 static void
 _issue_callbacks_for_type(conf_object_t *bank,
-                          _connection_vect_t *connections,
-                          _callback_vect_t *anonymous_callbacks,
+                          _bank_instrumentation_t *instr,
                           bank_access_t *handle,
                           _callback_type_t type)
 {
@@ -3000,13 +3033,17 @@ _issue_callbacks_for_type(conf_object_t *bank,
                 return;
         }
 
-        _issue_callbacks(type, handle, NULL, anonymous_callbacks);
-        VFOREACH_T(*connections, _connection_entry_t *, entry) {
-                if (!(*entry)->enabled) {
-                        continue;
+        instr->dispatch_depth++;
+        _issue_callbacks(type, handle, NULL, &instr->anonymous[type]);
+        VFORI(instr->connections, i) {
+                _connection_entry_t *conn = VGET(instr->connections, i);
+                if (conn->enabled && !conn->removed) {
+                        _issue_callbacks(type, handle, conn->connection,
+                                         &conn->callbacks[type]);
                 }
-                _issue_callbacks(type, handle, (*entry)->connection,
-                                 _connection_callbacks(*entry, type));
+        }
+        if (--instr->dispatch_depth == 0 && instr->has_removed) {
+                _free_removed(instr);
         }
 }
 
@@ -3016,8 +3053,7 @@ _callback_before_read(conf_object_t *bank,
                       bool *inquiry,
                       physical_address_t *offset,
                       physical_address_t size,
-                      _connection_vect_t *connections,
-                      _callback_vect_t *anonymous_callbacks)
+                      _bank_instrumentation_t *instr)
 {
         bank_access_t access = {
                 .bank = bank,
@@ -3025,9 +3061,7 @@ _callback_before_read(conf_object_t *bank,
                 .offset = offset,
                 .size = size,
                 .initiator = initiator};
-        _issue_callbacks_for_type(bank, connections,
-                                  anonymous_callbacks, &access,
-                                  Callback_Before_Read);
+        _issue_callbacks_for_type(bank, instr, &access, Callback_Before_Read);
 }
 UNUSED static void
 _callback_after_read(conf_object_t *bank,
@@ -3036,8 +3070,7 @@ _callback_after_read(conf_object_t *bank,
                      physical_address_t size,
                      uint64 *value,
                      bool *success,
-                     _connection_vect_t *connections,
-                     _callback_vect_t *anonymous_callbacks)
+                     _bank_instrumentation_t *instr)
 {
         bank_access_t access = {
                 .bank = bank,
@@ -3047,9 +3080,7 @@ _callback_after_read(conf_object_t *bank,
                 .value = value,
                 .success = success,
                 .initiator = initiator};
-        _issue_callbacks_for_type(bank, connections,
-                                  anonymous_callbacks, &access,
-                                  Callback_After_Read);
+        _issue_callbacks_for_type(bank, instr, &access, Callback_After_Read);
 }
 
 UNUSED static void
@@ -3059,8 +3090,7 @@ _callback_before_write(conf_object_t *bank,
                        physical_address_t size,
                        uint64 *value,
                        bool *suppress,
-                       _connection_vect_t *connections,
-                       _callback_vect_t *anonymous_callbacks)
+                       _bank_instrumentation_t *instr)
 {
         bank_access_t access = {
                 .bank = bank,
@@ -3070,9 +3100,7 @@ _callback_before_write(conf_object_t *bank,
                 .value = value,
                 .suppress = suppress,
                 .initiator = initiator};
-        _issue_callbacks_for_type(bank, connections, anonymous_callbacks,
-                                  &access,
-                                  Callback_Before_Write);
+        _issue_callbacks_for_type(bank, instr, &access, Callback_Before_Write);
 }
 UNUSED static void
 _callback_after_write(conf_object_t *bank,
@@ -3080,8 +3108,7 @@ _callback_after_write(conf_object_t *bank,
                       physical_address_t *offset,
                       physical_address_t size,
                       bool *success,
-                      _connection_vect_t *connections,
-                      _callback_vect_t *anonymous_callbacks)
+                      _bank_instrumentation_t *instr)
 {
         bank_access_t access = {
                 .bank = bank,
@@ -3090,9 +3117,7 @@ _callback_after_write(conf_object_t *bank,
                 .size = size,
                 .success = success,
                 .initiator = initiator};
-        _issue_callbacks_for_type(bank, connections, anonymous_callbacks,
-                                  &access,
-                                  Callback_After_Write);
+        _issue_callbacks_for_type(bank, instr, &access, Callback_After_Write);
 }
 
 UNUSED static set_error_t
