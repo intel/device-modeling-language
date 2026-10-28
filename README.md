@@ -114,3 +114,26 @@ Note that the statistics only includes code directly generated from method
 declarations; the total code size includes much more. One megabyte of code size
 from method declarations usually contributes with a few seconds of compile
 time.
+
+### DMLC_PARSE_CACHE_DIR
+DMLC is shipped with pre-compiled parse tables for version 3.11 of
+[PLY](https://github.com/dabeaz/ply), which is the version of PLY bundled with
+`mini-python` &mdash; the default Python interpreter for Simics &mdash;
+as of version 7.22.0 of the Python package (1033). For migration purposes,
+DMLC temporarily also supports PLY 3.4; this support will be removed in the
+near future.
+
+When DMLC is run with PLY 3.4, it is forced to generate the parse table for
+the DML version in play on the fly. This takes a few seconds, and hence DMLC
+caches the result in the current working directory. Since DMLC is (typically)
+invoked from Make or CMake, that directory will be the working directory of the
+target being built. What this means is that as long as DMLC is used with
+PLY 3.4, a short time penalty will be paid every time a device module is built
+for the first time.
+
+By setting `DMLC_PARSE_CACHE_DIR` to an **existing** directory while running
+DMLC, DMLC will cache the generated parse table within that directory instead
+of the current working directory, allowing it to be re-used across all device
+modules being built and eliminating the time penalty.
+
+The variable has no effect when DMLC is run with PLY 3.11.
