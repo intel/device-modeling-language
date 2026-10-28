@@ -455,3 +455,4 @@
 - `release 7 7178`
 - `note 6` Fixed an issue where the `throws` annotation of non-`shared`
   abstract methods wouldn't be checked on overrides.
+- `release 7 7219`
