@@ -50,11 +50,10 @@ def get_parser(version, tabmodule=None, debugfile=None):
                     optimize = 0,
                     outputdir = '.')
     cache_dir = '.'
-    if lex.__version__ != '3.4':
-        # For now we only provide pre-compiled parse tables for PLY 3.4;
-        # for 3.11 we create the parse tables on the fly instead.
-        # The plan is to switch to pre-compiled parse tables for 3.11
-        # when we bump mini-python to PLY 3.11.
+    if lex.__version__ != '3.11':
+        # We only provide pre-compiled parse tables for PLY 3.11.
+        # The temporary PLY 3.4 support is enabled only by generating parse
+        # tables on the fly.
         assert tabmodule is None
         tabmodule = "_dml%s_parsetab_ply%s" % (
             ''.join(map(str, version)), lex.__version__.replace('.', ''))
