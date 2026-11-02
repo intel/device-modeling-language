@@ -5,10 +5,12 @@ import os
 import sys
 
 def generate_parsetabs(dml_package, version, parsetab, debugfile):
-    # Pre-compiled parse tables are only used with PLY 3.11, see
-    # dml.toplevel.get_parser
+    # Temporary PLY 3.4 support. Parse tables named *_ply34 are for PLY 3.4.
+    expected_ply = '3.4' if parsetab.endswith('_ply34') else '3.11'
     from ply import lex
-    assert lex.__version__ == "3.11", lex.__version__
+    if lex.__version__ != expected_ply:
+        sys.exit(f'{parsetab} must be generated with PLY {expected_ply},'
+                 f' but PLY {lex.__version__} was found')
     sys.path.append(dml_package)
     from dml import toplevel
 
@@ -35,7 +37,8 @@ def generate_parsetabs(dml_package, version, parsetab, debugfile):
                  if line.startswith(prefix)]
     assert lines[0:3] == ['', 'Conflicts:', ''], lines
     conflicts = lines[3:]
-    assert len(conflicts) == (10 if version == '12' else 12), conflicts
+    assert len(conflicts) == (10 if version == '12' or expected_ply == '3.4'
+                              else 12), conflicts
     assert all(conflict.startswith('shift/reduce conflict')
                for conflict in conflicts)
 
