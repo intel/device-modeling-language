@@ -3040,7 +3040,7 @@ def generate_hook_attribute_funs():
         &_typeseq_after_on_hook_hts[acc->typeseq_uniq],
         &_id_info_ht, _id_infos };
     _id_info_t info = _hook_id_infos[acc->hook_id - 1];
-    uint32 dimension_strides[info.dimensions];
+    uint32 dimension_strides[info.dimensions > 0 ? info.dimensions : 1];
     _DML_init_dimension_strides_from_dimsizes(
         dimension_strides, info.dimsizes, info.dimensions,
         sizeof(_dml_hook_t));
@@ -3064,7 +3064,7 @@ def generate_hook_attribute_funs():
         &_typeseq_after_on_hook_hts[acc->typeseq_uniq],
         &_id_info_ht, _id_infos };
     _id_info_t info = _hook_id_infos[acc->hook_id - 1];
-    uint32 dimension_strides[info.dimensions];
+    uint32 dimension_strides[info.dimensions > 0 ? info.dimensions : 1];
     _DML_init_dimension_strides_from_dimsizes(
         dimension_strides, info.dimsizes, info.dimensions,
         sizeof(_dml_hook_t));
@@ -3090,7 +3090,7 @@ def generate_hook_attribute_funs():
         &_typeseq_after_on_hook_hts[acc->typeseq_uniq],
         &_id_info_ht, _id_infos };
     _id_info_t info = _hook_id_infos[acc->hook_id - 1];
-    uint32 dimension_strides[info.dimensions];
+    uint32 dimension_strides[info.dimensions > 0 ? info.dimensions : 1];
     _DML_init_dimension_strides_from_dimsizes(
         dimension_strides, info.dimsizes, info.dimensions,
         sizeof(_dml_hook_t));
@@ -3123,7 +3123,7 @@ def generate_hook_attribute_funs():
         &_typeseq_after_on_hook_hts[acc->typeseq_uniq],
         &_id_info_ht, _id_infos };
     _id_info_t info = _hook_id_infos[acc->hook_id - 1];
-    uint32 dimension_strides[info.dimensions];
+    uint32 dimension_strides[info.dimensions > 0 ? info.dimensions : 1];
     _DML_init_dimension_strides_from_dimsizes(
         dimension_strides, info.dimsizes, info.dimensions,
         sizeof(_dml_hook_t));
