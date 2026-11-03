@@ -33,14 +33,20 @@ the Intel Simics simulator](https://software.intel.com/simics-simulator)
 and create a Simics project (automatic in the default installation flow).
 
 ### Building DMLC from a Simics project
-In your Simics project, check out the DML repository into the `modules/dmlc`
-directory.  At the top-level of the project, do `make dmlc`
-(or `bin\make dmlc` on Windows). 
+Your Simics project must be set up to use host python (by passing
+`--python` to `project-setup`), and must *not* pin `ply==3.4` in its
+`requirements.txt` file.
+
+In that project, check out the DML repository into the `modules/dmlc`
+directory. Then configure CMake\* (see [Using CMake with the Intel
+Simics Simulator](https://simics-download.pdx.intel.com/simics-7/docs/html/cmake/README.html)),
+passing `-DSIMICS_DMLC_DIR=<your-project>/<hosttype>/bin` to ensure devices
+you build via CMake leverage your local DMLC. After that, DMLC can be built via
+`cmake --build bt --target dmlc`.
 
 ### Testing DMLC from a Simics project
-To run the unit tests provided with DMLC, run `make test-dmlc` or
-`bin/test-runner --suite modules/dmlc/test` from the top-level
-of the project.
+To run the unit tests provided with DMLC, run
+`bin/test-runner --suite modules/dmlc/test` from the top-level of the project.
 
 
 ## Environment variables
