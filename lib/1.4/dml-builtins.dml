@@ -3053,7 +3053,7 @@ a register, possibly with side-effects.
 
 The default implementation of `read_unmapped_bits`
 acts similarly to if the unmapped regions of the register were covered by
-fields, the `value` of the register is masked by
+fields: the `val` member of the register is masked by
 `unmapped_enabled_bits` and returned.
 
 </dd><dt>
@@ -3064,16 +3064,16 @@ fields, the `value` of the register is masked by
 The `write_unmapped_bits` method is called from
 the default implementation of the `write_register` method
 when `enabled_bytes` specifies
-bytes not completely covered by field in the register (and the register
+bytes not completely covered by a field in the register (and the register
 has at least one field).
-`unmapped_enabled_bits` is defined as in the
-`read_unmapped_bits` method. `val` is the
-`val` argument passed to `write_register`, masked with
+The parameter `unmapped_enabled_bits` is defined as in the
+`read_unmapped_bits` method, whereas `value` is passed from the
+`value` parameter of `write_register`, masked with
 the bits not covered by fields.
 
 Default behaviour of `write_unmapped_bits` is to compare
 the `unmapped_enabled_bits` in `value` to those
-in the register `val`; if they do not match, a
+in the register's `val` member; if they do not match, a
 message of type `spec-viol` is logged for each bitrange
 that does not match, but `val` is not modified.
 
