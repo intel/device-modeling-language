@@ -204,8 +204,9 @@ method test -> (bool ok)
         local int i;
         for (i = 0; i < 3; ++i) {
             r[i] = 0xcc;
-            v = SIM_attr_integer(
-                SIM_attr_list_item(SIM_get_attribute(u_obj, r[i].aname), i));
+            local attr_value_t val = SIM_get_attribute(u_obj, r[i].aname);
+            v = SIM_attr_integer(SIM_attr_list_item(val, i));
+            SIM_attr_free(&val);
             if (v != 0xcc) {
                 log error: "%s value=%x", r[i].qname, v;
                 return;

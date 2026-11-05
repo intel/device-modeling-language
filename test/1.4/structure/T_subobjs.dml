@@ -64,14 +64,15 @@ method test() {
     b[1].bs = 9;
     assert SIM_attr_integer(SIM_get_attribute(b[1].obj, "bs")) == 9;
     b[1].bb[2][3].val = 8;
+    local attr_value_t v = SIM_get_attribute(b[1].obj, "bb");
     assert SIM_attr_integer(
-        SIM_attr_list_item(
-            SIM_attr_list_item(SIM_get_attribute(b[1].obj, "bb"), 2), 3)) == 8;
+        SIM_attr_list_item(SIM_attr_list_item(v, 2), 3)) == 8;
+    SIM_attr_free(&v);
     g[1].b.g[2].gbga[3].val = 10;
+    v = SIM_get_attribute(g[1].b.obj, "g_gbga");
     assert SIM_attr_integer(
-        SIM_attr_list_item(
-            SIM_attr_list_item(SIM_get_attribute(g[1].b.obj, "g_gbga"), 2), 3))
-        == 10;
+        SIM_attr_list_item(SIM_attr_list_item(v, 2), 3)) == 10;
+    SIM_attr_free(&v);
 
     // legacy trampoline attributes
     assert SIM_class_has_attribute(SIM_object_class(dev.obj), "p_pa");

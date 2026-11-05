@@ -18,5 +18,7 @@ attribute dict_attr is read_only_attr "some dict attr" {
 
 method init() {
     default();
-    assert SIM_attr_is_dict((SIM_get_attribute(dev.obj, "dict_attr")));
+    local attr_value_t v = SIM_get_attribute(dev.obj, "dict_attr");
+    assert SIM_attr_is_dict(v);
+    SIM_attr_free(&v);
 }

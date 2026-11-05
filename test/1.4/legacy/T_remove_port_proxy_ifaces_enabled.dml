@@ -35,6 +35,7 @@ method init() {
         assert SIM_clear_exception() == SimExc_InterfaceNotFound;
         assert strstr(SIM_last_error(), "Did you mean obj.port.p?") != NULL;
     }
+    SIM_attr_free(&pair);
 }
 
 bank b;
