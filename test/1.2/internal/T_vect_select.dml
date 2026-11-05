@@ -25,4 +25,5 @@ method test() -> (bool ok) {
         first = false;
     } else { ok = false; }
     ok = ok && !first;
+    VFREE(v);
 }

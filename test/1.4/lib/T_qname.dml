@@ -45,4 +45,5 @@ method init() {
     sb_fmt(&sb, "%s %s %s %s %s", s[0], s[1], s[2], s[3], s[4]);
     // arr[1] is unaffected by the above qname expressions
     assert strcmp(sb_str(&sb), "arr[4] arr[1] arr[2] arr[3] arr[4]") == 0;
+    sb_free(&sb);
 }
