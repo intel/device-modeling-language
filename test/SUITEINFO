@@ -1,1 +1,3 @@
 timeout: 3000
+# SIMICS-9055: int_register.get_name leaks the names of register array elements
+no_asan_tests: 1.2/registers/numbered
