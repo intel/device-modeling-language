@@ -284,3 +284,7 @@
   ```
 - `release 7 7152`
 - `release 6 6461`
+- `note 7` Fixed a use-after-free in the bank instrumentation callback
+  dispatch: a callback that removed its own connection (or callback) while
+  being invoked, e.g. a bank breakpoint that deletes itself, would make the
+  dispatcher continue iterating over freed memory.
