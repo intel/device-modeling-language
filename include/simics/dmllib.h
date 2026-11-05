@@ -2686,6 +2686,7 @@ _free_callbacks(_callback_vect_t *callbacks)
                 _callback_entry_t *entry = VGET(*callbacks, i);
                 MM_FREE(entry);
         }
+        VFREE(*callbacks);
 }
 
 static void
