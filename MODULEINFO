@@ -61,6 +61,8 @@ Make: dmlc
     $(HOST)/bin/dml/python/dml/types.py
     $(HOST)/bin/dml/python/dml/dml12_parsetab.py
     $(HOST)/bin/dml/python/dml/dml14_parsetab.py
+    $(HOST)/bin/dml/python/dml/dml12_parsetab_ply34.py
+    $(HOST)/bin/dml/python/dml/dml14_parsetab_ply34.py
     $(HOST)/bin/dml/python/LICENSE
     $(HOST)/bin/dml/python/port_dml.py
     $(HOST)/bin/dml/python/dead_dml_methods.py

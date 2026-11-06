@@ -53,6 +53,44 @@ foreach(version 12 14)
   list(APPEND dmlc_generated_python_outputs ${parsetab} ${parser_debug})
 endforeach()
 
+# Temporary PLY 3.4 support; generate parse tables for PLY 3.4 for distribution
+# alongside the ones for PLY 3.11.
+#
+# This is only done when DMLC is built from the Simics Base repo on a SSC lab
+# host.
+if(DEFINED SIMICS_BUILD_DEPS_ROOT)
+  # HACK: PLY 3.4 is retrieved from build-deps 7.38, the last build-deps
+  # version that provides it.
+  get_filename_component(dmlc_build_deps_base ${SIMICS_BUILD_DEPS_ROOT}
+    DIRECTORY)
+  set(ply34_dir
+    ${dmlc_build_deps_base}/7.38/simics-pkgs-python-modules)
+  if(EXISTS ${ply34_dir}/ply/__init__.py)
+    foreach(version 12 14)
+      set(generated_parsetab
+        ${CMAKE_CURRENT_BINARY_DIR}/dml${version}_parsetab_ply34.py)
+      set(parsetab ${dmlc_python_dir}/dml/dml${version}_parsetab_ply34.py)
+      # Unlike .out files for the PLY 3.11 parse tables, the ones for 3.4 have no
+      # consumer.
+      set(parser_debug ${CMAKE_CURRENT_BINARY_DIR}/dml${version}_parser_ply34.out)
+      add_custom_command(
+        OUTPUT ${parsetab}
+        BYPRODUCTS ${generated_parsetab} ${parser_debug}
+        COMMAND ${CMAKE_COMMAND} -E env MINIPYTHONPATH=${ply34_dir}
+          ${SIMICS_PYTHON_EXECUTABLE}
+          ${CMAKE_CURRENT_SOURCE_DIR}/generate_parsetabs.py
+          ${dmlc_python_dir} ${version} dml${version}_parsetab_ply34
+          ${parser_debug}
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          ${generated_parsetab} ${parsetab}
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/generate_parsetabs.py
+          ${dmlc_python_outputs} ${dmlc_env}
+        VERBATIM)
+      list(APPEND dmlc_generated_python_outputs ${parsetab})
+    endforeach()
+  endif()
+endif()
+
 add_custom_command(
   OUTPUT ${dmlc_env}
   COMMAND ${SIMICS_PYTHON_EXECUTABLE}
