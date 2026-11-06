@@ -22,6 +22,7 @@ import instrumentation_range
 import instrumentation_subscribe_multiple
 import instrumentation_remove_callback
 import instrumentation_remove_connection_callbacks
+import instrumentation_remove_during_callback
 
 import stest
 
@@ -66,3 +67,4 @@ def test(obj):
     instrumentation_subscribe_multiple.test(obj, subscribe_b1, subscribe_b2)
     instrumentation_remove_callback.test(obj, subscribe_b1)
     instrumentation_remove_connection_callbacks.test(obj, subscribe_b1)
+    instrumentation_remove_during_callback.test(obj, subscribe_b1)
