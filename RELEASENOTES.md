@@ -286,3 +286,4 @@
 - `release 6 6461`
 - `note 7` Fixed a memory leak when an instrumentation connection is removed
   from a bank.
+- `release 7 7223`
