@@ -3,7 +3,7 @@
 
 # Parser for DML 1.2
 
-import os, sys, re, itertools
+import os, sys, re, itertools, inspect
 from ply import lex, yacc
 
 from .logging import *
@@ -206,9 +206,28 @@ def fixup_emptyprod_lexpos(t):
         sym.lexpos = latest_tok.lexpos
         sym.lineno = latest_tok.lineno
 
+def normalize_prod_doc(f):
+    '''
+    Normalize the docstring of a production rule by stripping out common
+    leading indentation.
+
+    The reason why this is necessary is because Python >= 3.13 does this
+    *automatically*. Which is an issue, since we gen and distribute parse
+    tables with a Python version below that, and the signature of a parse
+    table is based on the docstrings and embedded into the parse table as a
+    constant.
+
+    Without this normalization, a Simics project set up to use host Python
+    >= 3.13 would cause PLY to reject the packaged parse table when DMLC is
+    run, forcing regeneration.
+    '''
+    if f.__doc__ is not None:
+        f.__doc__ = inspect.cleandoc(f.__doc__)
+
 def prod_dml12(f):
     '''Decorator for functions that should be used as production rules
     in the DML 1.2 grammar'''
+    normalize_prod_doc(f)
     name = 'p_' + f.__name__
     assert name not in production_rules_dml12, f.__name__
     production_rules_dml12[name] = f
@@ -217,6 +236,7 @@ def prod_dml12(f):
 def prod_dml14(f):
     '''Decorator for functions that should be used as production rules
     in the DML 1.4 grammar'''
+    normalize_prod_doc(f)
     name = 'p_' + f.__name__
     assert name not in production_rules_dml14, f.__name__
     production_rules_dml14[name] = f
