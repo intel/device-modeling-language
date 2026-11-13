@@ -49,42 +49,21 @@ def get_parser(version, tabmodule=None, debugfile=None):
     lexer = lex.lex(module = dml.dmlparse.lexers[version],
                     optimize = 0,
                     outputdir = '.')
-    cache_dir = '.'
-    if lex.__version__ != '3.4':
-        # For now we only provide pre-compiled parse tables for PLY 3.4;
-        # for 3.11 we create the parse tables on the fly instead.
-        # The plan is to switch to pre-compiled parse tables for 3.11
-        # when we bump mini-python to PLY 3.11.
-        assert tabmodule is None
-        tabmodule = "_dml%s_parsetab_ply%s" % (
-            ''.join(map(str, version)), lex.__version__.replace('.', ''))
-        cache_dir = os.environ.get('DMLC_PARSE_CACHE_DIR', '.')
-        tabfile = f'{cache_dir}/{tabmodule}.py'
-        if not os.path.isfile(tabfile):
-            # crude good-enough caching: parsetab is typically generated once
-            # per directory. The `move` ensures atomicity in case of two
-            # parallel runs. There is possibly an unlikely race on Windows.
-            import tempfile
-            with tempfile.TemporaryDirectory(dir=cache_dir) as d:
-                yacc.yacc(
-                    module = dml.dmlparse.grammars[version],
-                    tabmodule=tabmodule,
-                    debug=False,
-                    optimize=0,
-                    outputdir=d)
-                import shutil
-                shutil.move(os.path.join(d, tabmodule + '.py'), tabfile)
-        sys.path.append(cache_dir)
+    if tabmodule is None:
+        tabmodule = 'dml.dml%s_parsetab' % (''.join(map(str, version)),)
+        # Temporary PLY 3.4 support. Separate parse tables are shipped for
+        # PLY 3.4.
+        if lex.__version__ == '3.4':
+            tabmodule += '_ply34'
 
     parser = yacc.yacc(
         module = dml.dmlparse.grammars[version],
         method='LALR',
-        tabmodule=(tabmodule
-                   or 'dml.dml%s_parsetab' % (''.join(map(str, version)),)),
+        tabmodule=tabmodule,
         debug = debugfile is not None,
         debugfile = debugfile,
         optimize = 0,
-        outputdir = cache_dir)
+        outputdir = '.')
 
     parsers[version] = (lexer, parser)
     return (lexer, parser)

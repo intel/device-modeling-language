@@ -287,3 +287,6 @@
 - `note 7` Fixed a memory leak when an instrumentation connection is removed
   from a bank.
 - `release 7 7223`
+- `note 7` Fixed an issue where a Simics project set up to use host Python
+  with Python version 3.13 or greater could lead to DMLC run times being
+  increased by a few seconds.
