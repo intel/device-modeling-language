@@ -205,9 +205,11 @@ endforeach()
 
 add_custom_target(dmlc-local-preparse DEPENDS ${dmlc_local_preparse_outputs})
 add_custom_target(dmlc-api-preparse DEPENDS ${dmlc_api_preparse_outputs})
-add_custom_target(dmlc DEPENDS ${dmlc_local_preparse_outputs}
+add_custom_target(dmlc-compiler DEPENDS ${dmlc_local_preparse_outputs}
   ${dmlc_api_preparse_outputs})
-add_dependencies(dmlc dmlc-files dmlc-local-preparse dmlc-api-preparse)
+add_dependencies(dmlc-compiler dmlc-files dmlc-local-preparse dmlc-api-preparse)
+add_custom_target(dmlc)
+add_dependencies(dmlc dmlc-compiler)
 
 file(GLOB dmlc_test_sources CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/py/dml/*_test.py)
@@ -273,5 +275,7 @@ if(SIMICS_REPO_ROOT AND "${BUILD_MODE}" STREQUAL "Normal"
     DEPENDS ${dmlc_make_wiki_sources}
     VERBATIM)
   add_custom_target(dmlc-doc-wiki-inputs DEPENDS ${dmlc_make_wiki_md})
-  add_dependencies(dmlc dmlc-doc-wiki-inputs)
+  if(NOT DEFINED WITH_DOCS OR WITH_DOCS)
+    add_dependencies(dmlc dmlc-doc-wiki-inputs)
+  endif()
 endif()
