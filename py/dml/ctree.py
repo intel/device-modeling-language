@@ -2542,6 +2542,15 @@ def source_for_assignment(site, target_type, source):
                     source = mkIfExpr(site, source,
                                       mkIntegerLiteral(site, 1),
                                       mkIntegerLiteral(site, 0))
+            # Permit traitrefs to get upcast
+            # We do this here rather than in eval_initializer in order to
+            # properly handle assignment chains and method call initializers
+            elif isinstance(real_target_type, TTrait):
+                try:
+                    source = mkTraitUpcast(site, source,
+                                           real_target_type.trait)
+                except ECAST as e:
+                    raise EASTYPE(site, target_type, source) from e
             else:
                 raise EASTYPE(site, target_type, source)
         if ((isinstance(real_target_type, TInt)
@@ -3812,7 +3821,10 @@ def mkTraitUpcast(site, sub, parent):
             if sub.constant and isinstance(sub, ObjTraitRef):
                 return ObjTraitRef(site, sub.node, parent, sub.indices)
             return TraitObjectCast(site, sub)
-    raise ETEMPLATEUPCAST(site, typ, parent.type())
+        else:
+            raise ETEMPLATEUPCAST(site, sub, parent.type(), typ)
+    else:
+        raise ECAST(site, sub, parent.type())
 
 def vtable_read(expr):
     typ = realtype(expr.ctype())
@@ -4922,11 +4934,12 @@ class Cast(Expression):
 def mkCast(site, expr, new_type):
     real = safe_realtype(new_type)
     if isinstance(real, TTrait):
-        if isinstance(expr, NodeRef):
+        if (isinstance(expr, NodeRef)
+            and isinstance(expr.node, objects.CompositeObject)):
             (node, indices) = expr.get_ref()
             if real.trait in node.traits.ancestors:
                 return ObjTraitRef(site, node, real.trait, indices)
-            raise ETEMPLATEUPCAST(site, "object", new_type)
+            raise ETEMPLATEUPCAST(site, expr, new_type, "object")
         else:
             return mkTraitUpcast(site, expr, real.trait)
 

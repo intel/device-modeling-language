@@ -2704,12 +2704,28 @@ def generate_init_trait_vtables(node, param_values):
     splitting_point()
 
 def trait_param_value(node, param_type_site, param_type):
-    is_sequence = isinstance(realtype(param_type), TTraitList)
+    param_realtype = realtype(param_type)
+    is_traitref = isinstance(param_realtype, TTrait)
+    is_sequence = isinstance(param_realtype, TTraitList)
+
+    # HACK avoid automatic traitref upcasts. Param defs aren't initializers.
+    # Now this *is* pretty stupid. We only enforce this to maintain consistency
+    # between a param ref resolved via vtable vs. resolved via untyped
+    # substitution.
+    # TODO An alternative is to force a param ref to always be done via vtable
+    # if typed. That'd allow us to make param defs initializers if the param
+    # is typed, and have it behave consistently no matter how its referenced.
+    def traitref_check(expr):
+        source_type = safe_realtype_shallow(expr.ctype())
+        if (isinstance(source_type, TTrait) and is_traitref
+            and source_type.trait is not param_realtype.trait):
+            raise EASTYPE(expr.site, param_type, expr)
     try:
         try:
             expr = node.get_expr(static_indices(node))
             if isinstance(expr, NonValue):
                 raise expr.exc()
+            traitref_check(expr)
             expr = source_for_assignment(expr.site, param_type, expr)
         except EIDXVAR:
             indices = tuple(mkLit(node.site, v, TInt(32, False))
@@ -2717,6 +2733,7 @@ def trait_param_value(node, param_type_site, param_type):
             expr = node.get_expr(indices)
             if isinstance(expr, NonValue):
                 raise expr.exc()
+            traitref_check(expr)
             expr = source_for_assignment(expr.site, param_type, expr)
             if is_sequence:
                 if (isinstance(expr, EachIn)

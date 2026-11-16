@@ -33,8 +33,18 @@ template t {
 
 is t;
 
+template u {
+    param p : t;
+    // Param defs aren't initializers (no matter if the param is typed)
+    /// ERROR ENVAL
+    param p = dev;
+}
+
+is u;
 
 method m() {}
+
+extern int printf(const char *, ...);
 
 method init() {
     local int x;
@@ -49,6 +59,10 @@ method init() {
 
     /// ERROR ENVAL
     cast([], t);
+
+    // Variadic arguments are not initializers
+    /// ERROR ENVAL
+    printf("%p", dev);
 
     // Discard identifier; not added to scope
     local int _;

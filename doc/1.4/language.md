@@ -1189,7 +1189,7 @@ Template members are dereferenced using the `.` operator,
 much like struct members.
 
 A template's type is named like the template, and an object
-reference can be converted to a value using the `cast`
+reference can be explicitly converted to a value using the `cast`
 operator.  For instance, a reference to the
 register `regs.r0` can be created and used as follows
 (all register objects automatically implement the template `register`):
@@ -1210,6 +1210,24 @@ local attribute y = cast(x, attribute);
 ```
 In addition, a value of any template type can be cast to the template type
 `object`, even if `object` is not an ancestor of the template.
+
+When used as an initializer, any object reference or value of template type
+will automatically be converted to the desired type, and `cast` may be omitted.
+E.g. the last example may also be written as:
+```
+local uint64_attr x = attr;
+local attribute y = x;
+```
+
+The right-hand side of [assignments](#assignment-statements) and variable
+declarations
+([`local`](#local-statements)/[`session`](#session-variables)/[`saved`](#saved-variables))
+are considered initializers, as are arguments of a [`return`
+statement](#return-statements), and non-variadic arguments of a [function or
+method call](#calling-methods). This leaves [parameter
+definitions](#parameters-detailed) &mdash; particularly when the parameter
+[is explicitly of template type](#typed-parameters-detailed) &mdash; as the
+most common situation in which explicit `cast`s must be used.
 
 ### Shared methods
 If a method is declared in a template, then one copy of the method
@@ -1895,8 +1913,10 @@ templates, such that `default` can't be unambiguously resolved (see [Resolution
 of overrides](#resolution-of-overrides).) Unlike `default`, `templates` can also
 be used even outside the body of the overriding method.
 
-DML supports _compound initializer syntax_ for the arguments of called methods,
-meaning arguments of struct-like types can be constructed using
+Each non-variadic, non-[`inline`](#inline-methods) argument of a called method
+is processed as an *initializer*. The most important consequence of this
+is that DML supports _compound initializer syntax_ for such arguments, meaning
+any argument of struct-like type can be constructed using
 <tt>{<em>...</em>}</tt>. For example:
 ```
 typedef struct {
@@ -1915,8 +1935,6 @@ method m() {
     copy_struct(&s, {.y = 1, ...}); // Partial designated initializer
 }
 ```
-This syntax can't be used for variadic arguments or [inline
-arguments](#inline-methods).
 
 ### Inline Methods
 

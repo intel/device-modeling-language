@@ -1,0 +1,83 @@
+/*
+  © 2026 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+template t {}
+template u is t {}
+
+group g is u;
+
+session t obj_var = g;
+
+group arr[i < 2] is u {
+    // Index-dependent initializer
+    session t obj_var_idx = this;
+}
+
+method ret_obj() -> (t) {
+    return g;
+}
+
+method ret_u() -> (u) {
+    return g;
+}
+
+method obj_arg(t x) -> (t) {
+    return x;
+}
+
+method ret_two() -> (u, u) {
+    return (g, cast(arr[0], u));
+}
+
+method ret_throwing() -> (u) throws {
+    return g;
+}
+
+method init() {
+    local t x = g;
+    assert x == cast(g, t);
+
+    // Method call initializer as expression
+    local object o = ret_u();
+    assert o == cast(g, object);
+
+    // Method call initializers via try_codegen_invocation
+    local (object o1, object o2) = ret_two();
+    assert o1 == cast(g, object) && o2 == cast(arr[0], object);
+    (o1, o2) = ret_two();
+    assert o1 == cast(g, object) && o2 == cast(arr[0], object);
+    try {
+        local object o3 = ret_throwing();
+        assert o3 == cast(g, object);
+        o3 = ret_throwing();
+        assert o3 == cast(g, object);
+    } catch assert false;
+
+    session t sess = g;
+    assert sess == cast(g, t);
+
+    saved t svd = g;
+    assert svd == cast(g, t);
+
+    x = arr[0];
+    assert x == cast(arr[0], t);
+
+    // Intermediate targets of assignment chains
+    o = x = arr[1];
+    assert o == cast(arr[1], object);
+
+    (x, o) = (g, arr[0]);
+    assert x == cast(g, t) && o == cast(arr[0], object);
+
+    assert ret_obj() == cast(g, t);
+    assert obj_arg(arr[1]) == cast(arr[1], t);
+
+    assert obj_var == cast(g, t);
+    assert arr[0].obj_var_idx == cast(arr[0], t);
+    assert arr[1].obj_var_idx == cast(arr[1], t);
+}
