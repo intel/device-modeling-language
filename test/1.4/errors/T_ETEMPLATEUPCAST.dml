@@ -1,0 +1,86 @@
+/*
+  © 2021 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+
+device test;
+
+template a_t {}
+template b_t {}
+template c_t is b_t {}
+
+port p {
+    is c_t;
+}
+
+template t {}
+template u is t {}
+
+is u;
+
+method m() -> (t) {
+    return cast(dev, t);
+}
+
+/// ERROR ENORET
+method ret_a() -> (a_t) {
+    /// ERROR ETEMPLATEUPCAST
+    return p;
+    /// ERROR EASTYPE
+    return NULL;
+}
+
+method ret_two_c() -> (c_t, c_t) {
+    return (p, p);
+}
+
+template with_tp {
+    param tp : b_t;
+    // Param defs are not initializers (no matter if the param is typed)
+    /// ERROR EASTYPE
+    param tp = cast(p, c_t);
+}
+
+is with_tp;
+
+method init() {
+    /// ERROR ETEMPLATEUPCAST
+    cast(p, a_t);
+    // no error
+    cast(p, b_t);
+    local c_t c = cast(p, c_t);
+    /// ERROR ETEMPLATEUPCAST
+    cast(c, a_t);
+    // no error
+    cast(c, b_t);
+    /// ERROR ECAST
+    cast(4, a_t);
+    /// ERROR ECAST
+    cast(NULL, a_t);
+
+    // Regression test for SIMICS-22874
+    /// ERROR ETEMPLATEUPCAST
+    local u x = m();
+
+    // Failed traitref conversions of initializers
+    /// ERROR ETEMPLATEUPCAST
+    local a_t y = p;
+    /// ERROR ETEMPLATEUPCAST
+    local a_t z = c;
+    /// ERROR EASTYPE
+    local a_t w = 4;
+    ret_a();
+
+    // Failed conversion of method return values
+    local (b_t b1,
+           /// ERROR EARGT
+           a_t a1
+           ) = ret_two_c();
+    local b_t b2;
+    local a_t a2;
+    (b2,
+     /// ERROR EARGT
+     a2
+     ) = ret_two_c();
+}

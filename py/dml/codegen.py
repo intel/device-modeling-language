@@ -1861,7 +1861,16 @@ def eval_initializer(site, etype, astinit, location, scope, static):
     def do_eval(etype, astinit):
         shallow_real_etype = safe_realtype_shallow(etype)
         if astinit.kind == 'initializer_scalar':
-            expr = codegen_expression(astinit.args[0], location, scope)
+            expr = codegen_expression_maybe_nonvalue(astinit.args[0], location,
+                                                     scope)
+            if isinstance(expr, NonValue):
+                if (isinstance(shallow_real_etype, TTrait)
+                    and isinstance(expr, NodeRef)
+                    and isinstance(expr.node, objects.CompositeObject)):
+                    expr = mkCast(astinit.site, expr, etype)
+                else:
+                    raise expr.exc()
+
             if static and not expr.constant:
                 raise EDATAINIT(astinit.site, 'non-constant expression')
 
@@ -4239,19 +4248,11 @@ def copy_outarg(arg, var, parmname, parmtype, method_name):
     if isinstance(arg, NonValue):
         if not arg.writable:
             raise arg.exc()
-    else:
-        argtype = arg.ctype()
-
-        if not argtype:
-            raise ICE(arg.site, "unknown expression type")
-        else:
-            ok, trunc, constviol = realtype(parmtype).canstore(
-                realtype(argtype))
-            if not ok:
-                raise EARGT(arg.site, 'call', method_name,
-                             arg.ctype(), parmname, parmtype, 'output')
-
-    return mkCopyData(var.site, var, arg)
+    try:
+        return mkCopyData(var.site, var, arg)
+    except (EASTYPE, ETEMPLATEUPCAST) as e:
+        raise EARGT(arg.site, 'call', method_name,
+                    arg.ctype(), parmname, parmtype, 'output') from e
 
 def add_proxy_outvar(site, parmname, parmtype, callscope):
     varname = parmname
