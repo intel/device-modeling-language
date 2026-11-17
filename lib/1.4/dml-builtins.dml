@@ -80,6 +80,17 @@ extern typedef struct {
     uint32 id;
     uint32 encoded_index;
 } _identity_t;
+
+// DMLC doesn't expose to DML that template types are thin wrappers around
+// _traitref_t.
+// To convert a value of one to the other, do '*cast(&x, ...)'
+//
+// Wart: although converting a template type to _traitref_t this way is
+// definitely fine, there's no consensus whether the C standard permits the
+// inverse. Mainly due to how poorly the strict aliasing rules are written.
+// Even so, GCC, Clang, and MSVC all play nice with either direction (MSVC
+// doesn't even try to exploit strict aliasing at all), and there's very little
+// reason to believe they ever wouldn't.
 extern typedef struct {
     void *trait;
     _identity_t id;
@@ -1028,8 +1039,9 @@ extern typedef struct {
     bool allow_cutoff;
 } _dml_attr_conf_info_t;
 
-independent method _get_attribute_info(_conf_attribute attr)
+independent method _get_attribute_info(_traitref_t ref)
     -> (_dml_attr_conf_info_t) {
+    local _conf_attribute attr = *cast(&ref, _conf_attribute *);
     return {
         attr._attr_name, attr._attr_type, attr._documentation,
         attr._parent_obj_class ? *attr._parent_obj_class : NULL,
@@ -1213,7 +1225,7 @@ extern typedef struct {} _dml_port_object_assoc_t;
 extern void *_DML_register_attributes(
     conf_class_t *, const _id_info_t *, const _dml_port_object_assoc_t *,
     const _vtable_list_t *, sequence(_conf_attribute),
-    _dml_attr_conf_info_t (*)(_conf_attribute),
+    _dml_attr_conf_info_t (*)(_traitref_t),
     attr_value_t (*get)(conf_object_t *, void *),
     set_error_t (*set)(conf_object_t *, attr_value_t *, void *),
     attr_value_t (*port_get)(conf_object_t *, void *),

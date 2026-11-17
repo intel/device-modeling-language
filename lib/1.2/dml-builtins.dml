@@ -64,6 +64,11 @@ extern typedef struct {
     uint32 encoded_index;
 } _identity_t;
 
+extern typedef struct {
+    void *trait;
+    _identity_t id;
+} _traitref_t;
+
 extern bank_callback_handle_t _register_before_read(
     conf_object_t *bank,
     conf_object_t *connection,

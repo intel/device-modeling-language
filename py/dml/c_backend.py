@@ -276,7 +276,7 @@ def generate_hfile(device, headers, filename):
     out('#include "'+os.path.basename(structfilename)+'"\n\n')
 
     for name in dml.globals.traits:
-        out(f'typedef _traitref_t {cident(name)};\n')
+        out(f'typedef struct {{ _traitref_t ref; }} {cident(name)};\n')
 
     # Constraints from C:
     # - Types must be defined before they are referred to
@@ -2219,13 +2219,14 @@ def generate_adjustor_thunk(traitname, name, inp, outp, throws, independent,
     # TODO should ideally be agnostic of what implicit_inargs is
     [(vt_name, vtable_trait_type)] = implicit_inargs
     assert vtable_trait_type.trait is vtable_trait
-    out('%s.trait = &((struct _%s *) DOWNCAST(%s, %s, %s).trait)->%s;\n' % (
-        vt_name, cident(traitname), vt_name, cident(traitname),
-        '.'.join(cident(t.name) for t in vtable_path),
-        '.'.join(cident(t.name) for t in def_path)))
+    out('%s.ref.trait = &((struct _%s *) DOWNCAST(%s, %s, %s).ref.trait)'
+        '->%s;\n'
+        % (vt_name, cident(traitname), vt_name, cident(traitname),
+           '.'.join(cident(t.name) for t in vtable_path),
+           '.'.join(cident(t.name) for t in def_path)))
     if not rettype.void:
         out('return ')
-    fun = hardcoded_impl or ('((struct _%s *) %s.trait)->%s'
+    fun = hardcoded_impl or ('((struct _%s *) %s.ref.trait)->%s'
                              % (cident(vtable_trait.name), vt_name, name))
     out('%s(%s);\n' % (fun, ", ".join(['_dev'] * (not independent) + [vt_name]
                                       + [name for (name, _) in inargs])))
@@ -2775,7 +2776,7 @@ def generate_trait_trampoline(method, vtable_trait):
         site = method.site
         obj = method.parent
         if obj.dimensions:
-            out(f'uint32 _flat_index = {tname}.id.encoded_index;\n')
+            out(f'uint32 _flat_index = {tname}.ref.id.encoded_index;\n')
         indices = [
             mkLit(site, '((_flat_index / %d) %% %d)' % (
                 reduce(operator.mul, obj.dimsizes[dim + 1:], 1),
@@ -3168,11 +3169,10 @@ def generate_startup_trait_calls(data, idxvars):
 
     indices = tuple(mkLit(site, idx, TInt(32, False)) for idx in idxvars)
 
-    out('{\n', postindent=1)
-    out('_traitref_t _tref;\n')
     for (trait, trait_methods) in traits.items():
+        out('{\n', postindent=1)
         ref = ObjTraitRef(site, node, trait, indices)
-        out(f'_tref = {ref.read()};\n')
+        out(f'{TTrait(trait).declaration("_tref")} = {ref.read()};\n')
         for method in trait_methods:
             outargs = [mkDiscardRef(method.site) for _ in method.outp]
 
@@ -3181,7 +3181,7 @@ def generate_startup_trait_calls(data, idxvars):
             with IgnoreFailure(site):
                 codegen_call_traitmethod(method.site, method_ref, [],
                                          outargs).toc()
-    out('}\n', preindent=-1)
+        out('}\n', preindent=-1)
 
 def generate_startup_regular_call(method, idxvars):
     site = method.site
