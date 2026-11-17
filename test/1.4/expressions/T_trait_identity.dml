@@ -9,8 +9,9 @@ device test;
 param base1 = base[1];
 
 template t {}
+template u is t {}
 
-group base[i < 2] is t {
+group base[i < 2] is u {
     group child[l < 5][m < 7] is t;
 }
 
@@ -32,25 +33,38 @@ method init() {
         error "base[0].child[0][0] == base[0]";
     }
 
+    // Upcasts of constant trait references are constant
+    #if (cast(cast(base[0], u), t) == cast(base1, t)) {
+        error "base[0] == base1";
+    }
+    #if (cast(cast(base[1], u), t) != cast(base1, t)) {
+        error "base[1] != base1";
+    }
+    #if (cast(cast(base[0], u), object) == cast(base1, object)) {
+        error "base[0] == base1";
+    }
+    #if (cast(cast(base[1], u), object) != cast(base1, object)) {
+        error "base[1] != base1";
+    }
+
     for (local int i = 0; i < 2; ++i) {
         assert cast(base[i], t) == cast(base[i], t);
         assert cast(base[i], t) != cast(base[i ^ 1], t);
         assert cast(base[i].child[0][0], t) != cast(base[i], t);
 
+        local t as_t = cast(base[i], t);
+        local object as_object_1 = cast(base[i], object);
+        local object as_object_2 = cast(as_t, object);
 
-        assert cast(cast(base[i], t), object)
-            == cast(base[i], object);
-        assert cast(cast(base[i], t), object)
-            == cast(cast(base[i], object), object);
+        assert cast(as_t, object) == cast(base[i], object);
+        assert cast(as_t, object) == cast(as_object_1, object);
 
-        local object id_1 = cast(base[i], object);
-        local object id_2 = cast(cast(base[i], t), object);
-        assert id_1 == id_2;
-        assert cast(base[i], object) == id_2;
-        assert id_1 == cast(cast(base[i], t), object);
+        assert as_object_1 == as_object_2;
+        assert cast(base[i], object) == as_object_2;
+        assert as_object_1 == cast(cast(base[i], t), object);
 
         // Ensure traitrefs cast to `object` are given the correct vtable
-        assert strcmp(cast(cast(base[i], t), object).name, "base") == 0;
+        assert strcmp(as_object_2.name, "base") == 0;
     }
 
     local int found = 0;

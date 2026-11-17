@@ -461,3 +461,5 @@
 - `note 7` Fixed a memory safety bug affecting values of template type that are
   subsequently cast to `object`. This bug would only manifest if the `.name`
   (not `._qname()`) member of such a value was accessed.
+- `note 7` If a constant value of a template type is cast to a different
+  template type, the resulting value will now also be considered constant.
