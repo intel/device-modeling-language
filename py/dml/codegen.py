@@ -370,9 +370,9 @@ class SharedIndependentMemoized(Memoization):
     def make_ref(self, ref, typ):
         traitname = cident(self.method.trait.name)
         return mkLit(self.site,
-                     f'((struct _{traitname} *) _{traitname}.trait)'
+                     f'((struct _{traitname} *) _{traitname}.ref.trait)'
                      + f'->_memo_outs_{self.method.name}'
-                     + f'[_{traitname}.id.encoded_index].{ref}', typ)
+                     + f'[_{traitname}.ref.id.encoded_index].{ref}', typ)
     def prelude(self):
         return memoization_common_prelude(
             self.method.name, self.site, self.method.outp, self.method.throws,

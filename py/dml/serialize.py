@@ -196,7 +196,9 @@ def serialize(real_type, current_expr, target_expr):
     elif isinstance(real_type, TTrait):
         id_infos = expr.mkLit(current_site, '_id_infos',
                               TPtr(TNamed('_id_info_t', const = True)))
-        identity_expr = ctree.StructMember(current_site, current_expr, "id",
+        traitref_expr = ctree.StructMember(current_site, current_expr, "ref",
+                                           TNamed("_traitref_t"), ".")
+        identity_expr = ctree.StructMember(current_site, traitref_expr, "id",
                                            TNamed("_identity_t"), ".")
         apply_expr = apply_c_fun(current_site, "_serialize_identity",
                                  [id_infos, identity_expr], attr_value_t)
@@ -312,6 +314,10 @@ def deserialize(real_type, current_expr, target_expr, error_out):
     elif isinstance(real_type, TTrait):
         id_info_ht = expr.mkLit(current_site, '&_id_info_ht',
                                 TPtr(TNamed('ht_str_table_t')))
+        target_traitref = ctree.Cast(
+            current_site,
+            addressof_target_unconst(),
+            TPtr(TNamed('_traitref_t')))
         assert dml.globals.object_trait
         if real_type.trait is dml.globals.object_trait:
             object_vtable_array = expr.mkLit(current_site, '_object_vtables',
@@ -319,7 +325,7 @@ def deserialize(real_type, current_expr, target_expr, error_out):
             apply_expr = apply_c_fun(
                 current_site, '_deserialize_object_trait_reference',
                 [id_info_ht, object_vtable_array,
-                 current_expr, addressof_target_unconst()],
+                 current_expr, target_traitref],
                 set_error_t)
         else:
             vtable_name = real_type.trait.name
@@ -331,7 +337,7 @@ def deserialize(real_type, current_expr, target_expr, error_out):
                 current_site, '_deserialize_trait_reference',
                 [id_info_ht, vtable_ht,
                  ctree.mkStringConstant(current_site, vtable_name),
-                 current_expr, addressof_target_unconst()],
+                 current_expr, target_traitref],
                 set_error_t)
         return construct_subcall(apply_expr)
     elif isinstance(real_type, THook):
