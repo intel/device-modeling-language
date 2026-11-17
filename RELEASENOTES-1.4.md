@@ -456,3 +456,4 @@
 - `note 6` Fixed an issue where the `throws` annotation of non-`shared`
   abstract methods wouldn't be checked on overrides.
 - `release 7 7219`
+- `note 7` Fixed a performance bug in attribute setters. The bug affected devices with thousands of register banks organized into arrays, and caused slowdowns when restoring a snapshot or checkpoint.
