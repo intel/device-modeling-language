@@ -3801,8 +3801,16 @@ def mkTraitUpcast(site, sub, parent):
         if typ.trait is parent:
             return sub
         elif parent in typ.trait.ancestors:
+            if sub.constant and isinstance(sub, ObjTraitRef):
+                return ObjTraitRef(
+                    site, sub.node, parent, sub.indices,
+                    # We want this to ensure downcast-ability gets preserved.
+                    # In particular, TQMICs needs this.
+                    sub.ancestry_path + typ.trait.ancestry_paths[parent][0])
             return TraitUpcast(site, sub, parent)
         elif parent is dml.globals.object_trait:
+            if sub.constant and isinstance(sub, ObjTraitRef):
+                return ObjTraitRef(site, sub.node, parent, sub.indices)
             return TraitObjectCast(site, sub)
     raise ETEMPLATEUPCAST(site, typ, parent.type())
 
