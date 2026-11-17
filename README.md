@@ -39,7 +39,7 @@ Your Simics project must be set up to use host python (by passing
 
 In that project, check out the DML repository into the `modules/dmlc`
 directory. Then configure CMake\* (see [Using CMake with the Intel
-Simics Simulator](https://simics-download.pdx.intel.com/simics-7/docs/html/cmake/README.html)),
+Simics Simulator](https://intel.github.io/simics/docs/cmake/README.html)),
 passing `-DSIMICS_DMLC_DIR=<your-project>/<hosttype>/bin` to ensure devices
 you build via CMake leverage your local DMLC. After that, DMLC can be built via
 `cmake --build bt --target dmlc`.
