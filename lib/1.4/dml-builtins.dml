@@ -3398,6 +3398,9 @@ template register is (_conf_attribute, get, set, shown_desc,
 
     shared method _default_get() -> (uint64) {
         local int num = _get_fields.len;
+        if (num == 0) {
+            return this.val[bitsize - 1 : 0];
+        }
         local _get_field fields[num];
         local uint64 unmapped;
         unmapped = this._get_get_fields(fields, num);
@@ -3411,6 +3414,10 @@ template register is (_conf_attribute, get, set, shown_desc,
 
     shared method _default_set(uint64 value) {
         local int num = _set_fields.len;
+        if (num == 0) {
+            this.val = value[bitsize - 1 : 0];
+            return;
+        }
         local _set_field fields[num];
         local uint64 unmapped;
         unmapped = this._get_set_fields(fields, num);
