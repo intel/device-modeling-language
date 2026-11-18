@@ -3159,10 +3159,9 @@ template register is (_conf_attribute, get, set, shown_desc,
 
     // fills in the passed array with all fields in this register, and returns
     // the number of elements and a bitmask showing bits not covered by fields.
-    shared method _get_get_fields(_get_field *fields) -> (int, uint64) /* n, unmapped */ {
+    shared method _get_get_fields(_get_field *fields, int num) -> (uint64) /* unmapped */ {
         local uint64 unmapped;
         unmapped[this.bitsize - 1 : 0 ] = -1;
-        local int n = 0;
         local uint64 lsbs = 0;
 
         // counting sort
@@ -3170,21 +3169,21 @@ template register is (_conf_attribute, get, set, shown_desc,
             local int lsb = f.lsb;
             lsbs[lsb] = 1;
             unmapped[lsb + f.bitsize - 1 : lsb] = 0;
-            ++n;
         }
 
         foreach f in (_get_fields) {
-            fields[bit_count64(lsbs[f.lsb : 0]) - 1] = f;
+            local int index = bit_count64(lsbs[f.lsb : 0]) - 1;
+            assert index < num;
+            fields[index] = f;
         }
-        return (n, unmapped);
+        return unmapped;
     }
 
     // fills in the passed array with all fields in this register, and returns
     // the number of elements and a bitmask showing bits not covered by fields.
-    shared method _get_set_fields(_set_field *fields) -> (int, uint64) /* n, unmapped */ {
+    shared method _get_set_fields(_set_field *fields, int num) -> (uint64) /* unmapped */ {
         local uint64 unmapped;
         unmapped[this.bitsize - 1 : 0 ] = -1;
-        local int n = 0;
         local uint64 lsbs = 0;
 
         // counting sort
@@ -3192,21 +3191,21 @@ template register is (_conf_attribute, get, set, shown_desc,
             local int lsb = f.lsb;
             lsbs[lsb] = 1;
             unmapped[lsb + f.bitsize - 1 : lsb] = 0;
-            ++n;
         }
 
         foreach f in (_set_fields) {
-            fields[bit_count64(lsbs[f.lsb : 0]) - 1] = f;
+            local int index = bit_count64(lsbs[f.lsb : 0]) - 1;
+            assert index < num;
+            fields[index] = f;
         }
-        return (n, unmapped);
+        return unmapped;
     }
 
     // fills in the passed array with all fields in this register, and returns
     // the number of elements and a bitmask showing bits not covered by fields.
-    shared method _get_write_fields(_write_field *fields) -> (int, uint64) /* n, unmapped */ {
+    shared method _get_write_fields(_write_field *fields, int num) -> (uint64) /* unmapped */ {
         local uint64 unmapped;
         unmapped[this.bitsize - 1 : 0 ] = -1;
-        local int n = 0;
         local uint64 lsbs = 0;
 
         // counting sort
@@ -3214,21 +3213,21 @@ template register is (_conf_attribute, get, set, shown_desc,
             local int lsb = f.lsb;
             lsbs[lsb] = 1;
             unmapped[lsb + f.bitsize - 1 : lsb] = 0;
-            ++n;
         }
 
         foreach f in (_write_fields) {
-            fields[bit_count64(lsbs[f.lsb : 0]) - 1] = f;
+            local int index = bit_count64(lsbs[f.lsb : 0]) - 1;
+            assert index < num;
+            fields[index] = f;
         }
-        return (n, unmapped);
+        return unmapped;
     }
 
     // fills in the passed array with all fields in this register, and returns
     // the number of elements and a bitmask showing bits not covered by fields.
-    shared method _get_read_fields(_read_field *fields) -> (int, uint64) /* n, unmapped */ {
+    shared method _get_read_fields(_read_field *fields, int num) -> (uint64) {
         local uint64 unmapped;
         unmapped[this.bitsize - 1 : 0 ] = -1;
-        local int n = 0;
         local uint64 lsbs = 0;
 
         // counting sort
@@ -3236,13 +3235,14 @@ template register is (_conf_attribute, get, set, shown_desc,
             local int lsb = f.lsb;
             lsbs[lsb] = 1;
             unmapped[lsb + f.bitsize - 1 : lsb] = 0;
-            ++n;
         }
 
         foreach f in (_read_fields) {
-            fields[bit_count64(lsbs[f.lsb : 0]) - 1] = f;
+            local int index = bit_count64(lsbs[f.lsb : 0]) - 1;
+            assert index < num;
+            fields[index] = f;
         }
-        return (n, unmapped);
+        return unmapped;
     }
 
     // Reset register to init_val, except bits covered by fields. Only intended
@@ -3271,10 +3271,9 @@ template register is (_conf_attribute, get, set, shown_desc,
            // if no fields, then default is to return the value
            return val & enabled_bytes;
         }
-        local int num_fields;
-        local _read_field fields[64];
-        local uint64 unmapped;
-        (num_fields, unmapped) = this._get_read_fields(fields);
+        local int num_fields = _read_fields.len;
+        local _read_field fields[num_fields];
+        local uint64 unmapped = this._get_read_fields(fields, num_fields);
         local uint64 default_access_bits = unmapped & field_bits;
         local uint64 unmapped_bits = unmapped & ~field_bits;
         local uint64 val = (this.val & default_access_bits & enabled_bytes);
@@ -3358,10 +3357,9 @@ template register is (_conf_attribute, get, set, shown_desc,
             this.val = (this.val & ~enabled_bytes) | (value & enabled_bytes);
             return;
         }
-        local int num_fields;
-        local _write_field fields[64];
-        local uint64 unmapped;
-        (num_fields, unmapped) = this._get_write_fields(fields);
+        local int num_fields = _write_fields.len;
+        local _write_field fields[num_fields];
+        local uint64 unmapped = this._get_write_fields(fields, num_fields);
         local uint64 default_write_bits = unmapped & field_bits;
         local uint64 unmapped_bits = unmapped & ~field_bits;
         if (enabled_bytes == 0) {
@@ -3399,10 +3397,10 @@ template register is (_conf_attribute, get, set, shown_desc,
     }
 
     shared method _default_get() -> (uint64) {
-        local _get_field fields[64];
-        local int num;
+        local int num = _get_fields.len;
+        local _get_field fields[num];
         local uint64 unmapped;
-        (num, unmapped) = this._get_get_fields(fields);
+        unmapped = this._get_get_fields(fields, num);
         local uint64 val = get_val() & unmapped;
         for (local int i = 0; i < num; i++) {
             local int lsb = fields[i].lsb;
@@ -3412,10 +3410,10 @@ template register is (_conf_attribute, get, set, shown_desc,
     }
 
     shared method _default_set(uint64 value) {
-        local _set_field fields[64];
-        local int num;
+        local int num = _set_fields.len;
+        local _set_field fields[num];
         local uint64 unmapped;
-        (num, unmapped) = this._get_set_fields(fields);
+        unmapped = this._get_set_fields(fields, num);
         this.val = ((this.val & ~unmapped) |
                     (value & unmapped))[bitsize-1:0];
         for (local int i = 0; i < num; i++) {
