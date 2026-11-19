@@ -458,3 +458,6 @@
 - `release 7 7219`
 - `note 7` Fixed a performance bug in attribute setters. The bug affected devices with thousands of register banks organized into arrays, and caused slowdowns when restoring a snapshot or checkpoint.
 - `release 7 7227`
+- `note 7` Fixed a memory safety bug affecting values of template type that are
+  subsequently cast to `object`. This bug would only manifest if the `.name`
+  (not `._qname()`) member of such a value was accessed.

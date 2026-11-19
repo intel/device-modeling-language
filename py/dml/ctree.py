@@ -3786,7 +3786,9 @@ class TraitObjectCast(Expression):
 
     def read(self):
         return (f'({{_identity_t __id = ({self.sub.read()}).id; '
-                + '(_traitref_t) {_object_vtables[__id.id], __id};})')
+                + '(_traitref_t)'
+                +  '{likely(__id.id) ? _object_vtables[__id.id - 1] : NULL, '
+                +  '__id};})')
 
 def mkTraitUpcast(site, sub, parent):
     if isinstance(sub, NonValue):
