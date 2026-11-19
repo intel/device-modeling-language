@@ -48,10 +48,15 @@ method init() {
         assert id_1 == id_2;
         assert cast(base[i], object) == id_2;
         assert id_1 == cast(cast(base[i], t), object);
+
+        // Ensure traitrefs cast to `object` are given the correct vtable
+        assert strcmp(cast(cast(base[i], t), object).name, "base") == 0;
     }
 
     local int found = 0;
     foreach child in (each t in (base[1])) {
+        assert strcmp(cast(child, object).name, "child") == 0;
+
         local bool same = child == cast(base[1].child[2][3], t);
         assert (strcmp(base[1].child[2][3].qname,
                        cast(child, object)._qname()) == 0)
