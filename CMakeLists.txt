@@ -59,12 +59,12 @@ endforeach()
 # This is only done when DMLC is built from the Simics Base repo on a SSC lab
 # host.
 if(DEFINED SIMICS_BUILD_DEPS_ROOT)
-  # HACK: PLY 3.4 is retrieved from build-deps 7.38, the last build-deps
-  # version that provides it.
-  get_filename_component(dmlc_build_deps_base ${SIMICS_BUILD_DEPS_ROOT}
-    DIRECTORY)
+  # Fetch PLY 3.4 from lab-deps, it is no longer in build-deps
   set(ply34_dir
-    ${dmlc_build_deps_base}/7.38/simics-pkgs-python-modules)
+    /nfs/simics/build-deps/lab/simics-pkgs-python-modules-7.38)
+  if(WIN32)
+    set(ply34_dir C:${ply34_dir})
+  endif()
   if(EXISTS ${ply34_dir}/ply/__init__.py)
     foreach(version 12 14)
       set(generated_parsetab
