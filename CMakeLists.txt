@@ -65,6 +65,13 @@ if(DEFINED SIMICS_BUILD_DEPS_ROOT)
   if(WIN32)
     set(ply34_dir C:${ply34_dir})
   endif()
+  if(NOT EXISTS ${ply34_dir}/ply/__init__.py)
+    set(ply34_dir /labnfs/simics-pkgs-python-modules-7.38)
+    if(WIN32)
+      set(ply34_dir C:${ply34_dir})
+    endif()
+  endif()
+
   if(EXISTS ${ply34_dir}/ply/__init__.py)
     foreach(version 12 14)
       set(generated_parsetab
