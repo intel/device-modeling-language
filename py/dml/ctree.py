@@ -177,6 +177,7 @@ __all__ = (
     'as_int',
     'sym_declaration',
     'lookup_var',
+    'symbol_expr',
     'log_object',
     'log_statement',
 
@@ -262,7 +263,7 @@ class ExpressionSymbol(symtab.Symbol):
     @property
     def type(self):
         return self.value.ctype()
-    def expr(self, site):
+    def expr(self, site, indices):
         expr = self.value.copy(site)
         expr.incref()
         return expr
@@ -273,7 +274,7 @@ class LiteralSymbol(symtab.Symbol):
         super(LiteralSymbol, self).__init__(name, value = crep or name,
                                             site = site)
         self.type = type
-    def expr(self, site):
+    def expr(self, site, indices):
         return mkLit(site, self.value, self.type)
 
 class Location(object):
@@ -3984,55 +3985,26 @@ class TraitHookRef(Expression):
                 + f'{self.name}, {coeff}, {index_offset})')
 
 
-def lookup_component(site, base, indices, name, only_local):
+def lookup_component(site: Site, base: objects.DMLObject,
+                     indices: tuple[Expression, ...], name: str,
+                     only_local: bool) -> Expression | None:
     '''Lookup a name in object scope 'base' and return an
     Expression, or None.'''
-    assert isinstance(base, objects.DMLObject)
-    assert isinstance(indices, tuple)
-
-    if name == 'this':
-        if isinstance(base, objects.Method):
-            base = base.parent
-        return mkNodeRef(site, base, indices)
-
-    node = base.get_component(name)
-    if node:
-        if node.objtype == 'parameter':
-            return node.get_expr(indices).copy(site)
-        if node.isindexed() and len(indices) < node.dimensions:
-            return NodeArrayRef(site, node, indices)
-        else:
-            return mkNodeRef(site, node, indices)
-
-    if base.traits:
-        # A shared method implementation does not end up as an object
-        # in the object hierarchy, so need to look for it explicitly
-        shared_method = base.traits.lookup_shared_method_impl(
-            site, name, indices)
-        if shared_method is not None:
-            return shared_method
-
-    # Search upwards in outer scopes if it wasn't found
-    if not only_local and base.parent:
-        if base.isindexed():
-            indices = indices[:-base.local_dimensions()]
-        return lookup_component(site, base.parent, indices, name, False)
-
-    if (not breaking_changes.dml12_remove_misc_quirks.enabled
-        and not base.parent):
-        # Last resort is to look for components in anonymous banks
-        for bank in base.get_components('bank'):
-            if not bank.name:
-                node = bank.get_component(name)
-                if node:
-                    if node.objtype == 'parameter':
-                        return node.get_expr(indices).copy(site)
-                    if node.isindexed() and len(indices) < node.dimensions:
-                        return NodeArrayRef(site, node, indices)
-                    else:
-                        return mkNodeRef(site, node, indices)
-
+    if not isinstance(base, objects.CompositeObject):
+        base = base.parent
+    sym = base.scope.lookup(name, local=only_local)
+    if isinstance(sym, objects.MemberSymbol):
+        return sym.expr(site, indices)
     return None
+
+def component_ref(site: Site, node: objects.DMLObject,
+                  indices: tuple[Expression, ...]) -> Expression:
+    if node.objtype == 'parameter':
+        return node.get_expr(indices).copy(site)
+    if node.isindexed() and len(indices) < node.dimensions:
+        return NodeArrayRef(site, node, indices)
+    else:
+        return mkNodeRef(site, node, indices)
 
 
 # Return the node type for a node
@@ -5564,13 +5536,16 @@ class CText(Code):
 
 mkCText = CText
 
-def lookup_var(site, scope, name):
+def lookup_var(site: Site, scope: symtab.Symtab, name: str,
+               indices: tuple[Expression, ...]) -> Expression | None:
     "Lookup a symbol in scope or parameters and create an expression for it"
     # dbg("LOOKUP_VAR %s %s" % (scope.id, name))
     sym = scope.lookup(name)
-    if not sym:
-        return None
-    elif isinstance(sym, symtab.LocalSymbol):
+    return symbol_expr(site, sym, indices) if sym else None
+
+def symbol_expr(site: Site, sym: symtab.Symbol,
+                indices: tuple[Expression, ...]) -> Expression:
+    if isinstance(sym, symtab.LocalSymbol):
         expr = mkLocalVariable(site, sym)
         assert expr.site == site
         return expr
@@ -5579,7 +5554,7 @@ def lookup_var(site, scope, name):
         assert expr.site == site
         return expr
     else:
-        return sym.expr(site)
+        return sym.expr(site, indices)
 
 def log_object(site, node, indices):
     return mkLit(site, crep.conf_object(site, node, indices),

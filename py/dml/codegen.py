@@ -1104,7 +1104,7 @@ def expr_unop(tree, location, scope):
     if (not breaking_changes.dml12_remove_misc_quirks.enabled
         and op == 'sizeof' and rh_ast.kind == 'variable_dml12'):
         var = rh_ast.args[0]
-        if var in typedefs and scope.lookup(var) is None:
+        if var in typedefs and lookup_without_objects(scope, var) is None:
             report(WSIZEOFTYPE(tree.site))
             return codegen_sizeof(
                 tree.site, mkLit(tree.site, cident(var), None))
@@ -1205,24 +1205,40 @@ def expr_apply(tree, location, scope):
 @expression_dispatcher
 def expr_variable_dml12(tree, location, scope):
     [name] = tree.args
-    e = lookup_var(tree.site, scope, name)
-    if e is None:
+    check_object_scope(location, scope)
+    sym = scope.lookup(name)
+    if isinstance(sym, objects.MemberSymbol):
+        # in 1.2, a name without $ shadows the object hierarchy
+        sym = global_scope.lookup(name) or sym
+    if sym is None:
         raise EIDENT(tree.site, name)
-    return e
+    return symbol_expr(tree.site, sym, location_indices(location))
+
+def lookup_without_objects(scope: Symtab, name: str) -> Symbol | None:
+    '''Look up a name, as if the object hierarchy were not part of the
+    scope'''
+    sym = scope.lookup(name)
+    return (global_scope.lookup(name)
+            if isinstance(sym, objects.MemberSymbol) else sym)
+
+def check_object_scope(location: Location | None, scope: Symtab) -> None:
+    # TODO: remove together with the location argument
+    if location is not None:
+        node = location.node
+        target = (node.parent if isinstance(node, objects.Method)
+                  else node).scope
+        while scope is not target:
+            scope = scope.parent
+            assert scope is not None, location
+
+def location_indices(location: Location | None) -> tuple[Expression, ...]:
+    return () if location is None else location.indices
 
 @expression_dispatcher
 def expr_variable(tree, location, scope):
     [name] = tree.args
-    e = lookup_var(tree.site, scope, name)
-    if scope.lookup(name) is global_scope.lookup(name) and location:
-        # Hack: Object hierarchy is shoehorned between global scope and any
-        # local scope
-        # TODO: we should move symbols from global scope into device
-        # scope instead. And location + scope args should be unified.
-        in_dev_tree = ctree.lookup_component(
-            tree.site, location.node, location.indices, name, False)
-        if in_dev_tree:
-            e = in_dev_tree
+    check_object_scope(location, scope)
+    e = lookup_var(tree.site, scope, name, location_indices(location))
     if e is None:
         raise EIDENT(tree.site, name)
     return e
@@ -1234,17 +1250,20 @@ def expr_discard(tree, location, scope):
 @expression_dispatcher
 def expr_objectref(tree, location, scope):
     [name] = tree.args
-    if not location:
+    node = scope.lookup('$')
+    if not node:
         # This happens when invoked from mkglobals
         raise ENCONST(tree.site, dollar(tree.site)+name)
+    check_object_scope(location, scope)
     e = ctree.lookup_component(
-        tree.site, location.node, location.indices, name, False)
+        tree.site, node.value, location.indices, name, False)
     if not e:
         raise EREF(tree.site, name)
     assert dml.globals.dml_version == (1, 2)
     if logging.show_porting:
-        if (scope.lookup(name)
-            and scope.lookup(name) != global_scope.lookup(name)):
+        if (lookup_without_objects(scope, name)
+            and (lookup_without_objects(scope, name)
+                 != global_scope.lookup(name))):
             this = location.node
             if this.objtype == 'method':
                 this = this.parent
@@ -1256,7 +1275,8 @@ def expr_objectref(tree, location, scope):
                 prefix = 'dev.'
             elif node is this:
                 prefix = 'this.'
-            elif node.objtype == 'bank' and not scope.lookup('bank'):
+            elif (node.objtype == 'bank'
+                  and not lookup_without_objects(scope, 'bank')):
                 prefix = 'bank.'
             else:
                 prefix = 'dev.%s.' % (node.logname(
@@ -1429,8 +1449,9 @@ def fix_printf(fmt, args, argsites, site):
 
     return filtered_fmt, filtered_args
 
-def eval_arraylen(size_ast, parent_scope):
-    size = codegen_expression(size_ast, parent_scope, global_scope)
+def eval_arraylen(size_ast: ast.AST, location: Location | None,
+                  scope: Symtab) -> int:
+    size = codegen_expression(size_ast, location, scope)
     if not size.constant:
         raise EASZVAR(size.site, size)
     if not isinstance(size.value, int):
@@ -2168,13 +2189,14 @@ def stmt_session(stmt, location, scope):
     for (decl_ast, init) in zip(decls, inits):
         (name, asttype) = decl_ast.args
         (struct_decls, etype) = eval_type(asttype, stmt.site, location,
-                                          global_scope)
+                                          location.node.parent.scope)
         etype = etype.resolve()
         add_late_global_struct_defs(struct_decls)
         if init:
             try:
                 init = eval_initializer(
-                    stmt.site, etype, init, location, global_scope, True)
+                    stmt.site, etype, init, location,
+                    location.node.parent.scope, True)
             except DMLError as e:
                 report(e)
                 init = None
@@ -2792,7 +2814,8 @@ def stmt_log(stmt, location, scope):
         identity = ObjIdentity(site, location.node.parent, location.indices)
         logobj = log_object(site, location.node, location.indices)
     else:
-        identity = TraitObjIdentity(site, lookup_var(site, scope, "this"))
+        identity = TraitObjIdentity(
+            site, lookup_var(site, scope, "this", location.indices))
         logobj = (PortObjectFromObjIdentity(site, identity)
                   if breaking_changes.shared_logs_locally.enabled
                   else log_object(site, dml.globals.device, ()))
@@ -2868,6 +2891,16 @@ def stmt_try(stmt, location, scope):
     excblock = codegen_statement(excblock, location, scope)
     return [mkTryCatch(stmt.site, f.label, tryblock, excblock)]
 
+def after_domains(site: Site, location: Location,
+                  scope: Symtab) -> list[Expression]:
+    # TODO after statement should be extended to allow the user to explicitly
+    # give the domains
+    if location.method():
+        return [ObjIdentity(site, location.node.parent, location.indices)]
+    else:
+        return [TraitObjIdentity(
+            site, lookup_var(site, scope, "this", location.indices))]
+
 @statement_dispatcher
 def stmt_after(stmt, location, scope):
     [unit, delay, callexpr] = stmt.args
@@ -2910,12 +2943,7 @@ def stmt_after(stmt, location, scope):
     if unit in {'cycles', 'ps'} and not safe_realtype(old_delay_type).is_int:
         report(WTTYPEC(site, old_delay_type, unit_type, unit))
 
-    # TODO after statement should be extended to allow the user to explicitly
-    # give the domains
-    if location.method():
-        domains = [ObjIdentity(site, location.node.parent, location.indices)]
-    else:
-        domains = [TraitObjIdentity(site, lookup_var(site, scope, "this"))]
+    domains = after_domains(site, location, scope)
 
     methodref = codegen_expression_maybe_nonvalue(method_ast, location, scope)
 
@@ -3011,12 +3039,7 @@ def stmt_afteronhook(stmt, location, scope):
 
     real_hooktype.validate(hooktype.declaration_site or hookref_expr.site)
 
-    # TODO after statement should be extended to allow the user to explicitly
-    # give the domains
-    if location.method():
-        domains = [ObjIdentity(site, location.node.parent, location.indices)]
-    else:
-        domains = [TraitObjIdentity(site, lookup_var(site, scope, "this"))]
+    domains = after_domains(site, location, scope)
 
     methodref = codegen_expression_maybe_nonvalue(method, location, scope)
 
@@ -3139,12 +3162,7 @@ def stmt_immediateafter(stmt, location, scope):
     method = callexpr[2]
     inarg_asts = callexpr[3]
 
-    # TODO after statement should be extended to allow the user to explicitly
-    # give the domains
-    if location.method():
-        domains = [ObjIdentity(site, location.node.parent, location.indices)]
-    else:
-        domains = [TraitObjIdentity(site, lookup_var(site, scope, "this"))]
+    domains = after_domains(site, location, scope)
 
     methodref = codegen_expression_maybe_nonvalue(method, location, scope)
 
@@ -3227,7 +3245,7 @@ def stmt_select(stmt, location, scope):
     elif (not breaking_changes.dml12_remove_misc_quirks.enabled
           and isinstance(lst.ctype(), TVector)
           and itername is not None):
-        itervar = lookup_var(stmt.site, scope, itername)
+        itervar = lookup_var(stmt.site, scope, itername, location.indices)
         if not itervar:
             raise EIDENT(stmt.site, itername)
         return [mkVectorForeach(stmt.site,
@@ -3276,7 +3294,7 @@ def stmt_foreach_dml12(stmt, location, scope):
 
     list_type = safe_realtype(lst.ctype())
     if isinstance(list_type, TVector):
-        itervar = lookup_var(stmt.site, scope, itername)
+        itervar = lookup_var(stmt.site, scope, itername, location.indices)
         if not itervar:
             raise EIDENT(lst, itername)
         with CLoopContext():
@@ -3728,7 +3746,8 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
     with RecursiveInlineGuard(site, meth_node),  \
          ErrorContext(meth_node, site),          \
          contextlib.nullcontext() if meth_node.throws else NoFailure(site):
-        param_scope = MethodParamScope(global_scope)
+        location = Location(meth_node, indices)
+        param_scope = MethodParamScope(meth_node.parent.scope)
         param_scope.add(meth_node.default_method.default_sym(indices))
 
         if intercepted_method(meth_node):
@@ -3804,8 +3823,7 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
                             outargs, outvars, meth_node.outp)]
             exit_handler = GotoExit_dml12()
             with exit_handler:
-                code = [codegen_statement(meth_node.astcode,
-                                          Location(meth_node, indices),
+                code = [codegen_statement(meth_node.astcode, location,
                                           param_scope)]
             post = ([mkLabel(site, exit_handler.label)]
                     if exit_handler.used else [])
@@ -3815,7 +3833,6 @@ def codegen_inline(site, meth_node, indices, inargs, outargs,
         else:
             assert meth_node.astcode.kind == 'compound'
             [subs, rbrace_site] = meth_node.astcode.args
-            location = Location(meth_node, indices)
             exit_handler = GotoExit_dml14(outargs)
             with exit_handler:
                 code = codegen_statements(subs, location, param_scope)
@@ -3977,7 +3994,8 @@ def codegen_method_func(func):
                 [mkLit(method.site, p.c_ident, p.typ) for p in func.inp],
                 [mkLit(method.site, "*%s" % n, t) for (n, t) in func.outp],
                 SimpleSite(method.site.loc()))
-    inline_scope = MethodParamScope(global_scope)
+    location = Location(method, indices)
+    inline_scope = MethodParamScope(method.parent.scope)
     for p in func.inp:
         e = p.expr
         if (p.ident is not None
@@ -3993,7 +4011,6 @@ def codegen_method_func(func):
     inp = [p for p in func.inp if not p.inlined]
 
     with ErrorContext(method):
-        location = Location(method, indices)
         if func.memoized:
             assert func.independent and func.startup
             memoization = IndependentMemoized(func)
@@ -4097,7 +4114,8 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
             if exit_handler.used:
                 code.append(mkLabel(rbrace_site, exit_handler.label))
             code.append(codegen_return(rbrace_site, outp, throws, [
-                lookup_var(site, fnscope, varname) for (varname, _) in outp]))
+                lookup_var(site, fnscope, varname, location.indices)
+                for (varname, _) in outp]))
             to_return = mkCompound(site, code)
         else:
             # manually deconstruct compound AST node, to make sure

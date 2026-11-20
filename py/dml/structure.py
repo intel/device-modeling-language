@@ -719,6 +719,7 @@ def merge_parameters(params, obj_specs):
 def typecheck_method_override(m1, m2, location, check_throws=True):
     '''check that m1 can override m2'''
     assert m1.kind == m2.kind == 'method'
+    scope = location.node.scope
     (_, (inp1, outp1, throws1, qualifiers1, _), _, _, _, _) \
         = m1.args
     (_, (inp2, outp2, throws2, qualifiers2, _), _, _, _, _) \
@@ -744,7 +745,7 @@ def typecheck_method_override(m1, m2, location, check_throws=True):
                 if t1 is None and logging.show_porting:
                     try:
                         (struct_defs, type2) = eval_type(
-                            t2, a2.site, location, global_scope)
+                            t2, a2.site, location, scope)
                     except DMLError:
                         # uncommon but can happen, e.g. an argument
                         # with static array length that depends on a
@@ -761,8 +762,8 @@ def typecheck_method_override(m1, m2, location, check_throws=True):
             and a1.site.dml_version() != (1, 2)
             and a2.site.dml_version() != (1, 2)):
             # TODO move to caller
-            (_, type1) = eval_type(t1, a1.site, location, global_scope)
-            (_, type2) = eval_type(t2, a2.site, location, global_scope)
+            (_, type1) = eval_type(t1, a1.site, location, scope)
+            (_, type2) = eval_type(t2, a2.site, location, scope)
             type1 = safe_realtype_unconst(type1)
             type2 = safe_realtype_unconst(type2)
 
@@ -778,8 +779,8 @@ def typecheck_method_override(m1, m2, location, check_throws=True):
     for (i, (a1, a2)) in enumerate(zip(outp1, outp2)):
         if a1.site.dml_version() != (1, 2) and a2.site.dml_version() != (1, 2):
             ((n1, t1), (n2, t2)) = (a1.args, a2.args)
-            (_, type1) = eval_type(t1, a1.site, location, global_scope)
-            (_, type2) = eval_type(t2, a2.site, location, global_scope)
+            (_, type1) = eval_type(t1, a1.site, location, scope)
+            (_, type2) = eval_type(t2, a2.site, location, scope)
             type1 = safe_realtype_unconst(type1)
             type2 = safe_realtype_unconst(type2)
             ok = (type1.eq_fuzzy(type2)
@@ -879,7 +880,8 @@ def merge_subobj_defs(name, defs, parent):
             candidates = {}
             for len_ast in len_asts:
                 if len_ast is not None:
-                    length = eval_arraylen(len_ast, parent_scope)
+                    length = eval_arraylen(len_ast, parent_scope,
+                                           parent.scope)
                     candidates.setdefault(length, []).append(len_ast)
             if len(candidates) == 0:
                 idxref = (f" (with index variable '{idxvar}')"
@@ -914,7 +916,7 @@ def mkdata(spec, parent):
 
     parent_scope = Location(parent, static_indices(parent))
     (struct_defs, dtype) = eval_type(
-        typ, site, parent_scope, global_scope)
+        typ, site, parent_scope, parent.scope)
     dtype = dtype.resolve()
     add_late_global_struct_defs(struct_defs)
     obj = objects.Session(name, dtype, astinit, site, parent)
@@ -930,7 +932,7 @@ def mksaved(spec, parent):
     site, name, typ, astinit = spec
 
     parent_scope = Location(parent, static_indices(parent))
-    (struct_defs, dtype) = eval_type(typ, site, parent_scope, global_scope)
+    (struct_defs, dtype) = eval_type(typ, site, parent_scope, parent.scope)
     add_late_global_struct_defs(struct_defs)
     dtype.resolve()
     if deep_const(dtype):
@@ -954,7 +956,7 @@ def mkhook(spec, parent):
     types = []
     for type_ast in type_asts:
         (struct_defs, dtype) = eval_type(type_ast, site, parent_scope,
-                                         global_scope)
+                                         parent.scope)
         add_late_global_struct_defs(struct_defs)
         typ = dtype.resolve()
         try:
@@ -964,7 +966,7 @@ def mkhook(spec, parent):
                              e.clarification))
         types.append(typ)
 
-    array_lens = tuple(eval_arraylen(len_ast, parent_scope)
+    array_lens = tuple(eval_arraylen(len_ast, parent_scope, parent.scope)
                        for len_ast in arraylen_asts)
 
     return objects.Hook(name, site, parent, types, array_lens)
@@ -1276,12 +1278,11 @@ def create_parameters(obj, obj_specs, index_vars, index_sites):
                     merge_parameters(parameters[name], obj_specs))
             for name in sorted(parameters)]
 
-def eval_precond(cond_ast, obj, global_scope):
+def eval_precond(cond_ast, obj):
     try:
         with ErrorContext(obj, cond_ast.site):
-            cond = codegen_expression(
-                cond_ast, Location(obj, static_indices(obj, cond_ast.site)),
-                global_scope)
+            location = Location(obj, static_indices(obj, cond_ast.site))
+            cond = codegen_expression(cond_ast, location, obj.scope)
     except DMLError as e:
         report(e)
         return False # whatever
@@ -1752,7 +1753,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
     (shallow_subobjs, composite_subobjs) = ([], [])
     for obj_spec in obj_specs:
         for (preconds, shallow, composite, in_eachs) in obj_spec.blocks:
-            if all(eval_precond(cond, obj, global_scope)
+            if all(eval_precond(cond, obj)
                    for cond in preconds):
                 if logging.show_porting:
                     PWUNUSED.satisfied_conds.update(preconds)
@@ -2117,6 +2118,14 @@ def mkobj2(obj, obj_specs, params, each_stmts):
     # Fixup some parameters and stuff
 
     if obj.objtype == 'device':
+        if not breaking_changes.dml12_remove_misc_quirks.enabled:
+            # Last resort is to look for components in anonymous banks
+            for bank in obj.get_components('bank'):
+                if not bank.name:
+                    for comp in bank.get_components():
+                        if (comp.ident
+                            and not obj.scope.lookup(comp.ident, local=True)):
+                            obj.scope.add(objects.ComponentSymbol(comp))
         banks = obj.get_recursive_components('bank')
         if dml.globals.dml_version == (1, 2):
             # Check for duplicate bank functions
@@ -2211,8 +2220,8 @@ def mkobj2(obj, obj_specs, params, each_stmts):
         for export in exports:
             method_ref_ast, name_ast = (export.args)
             method_ref = codegen_expression_maybe_nonvalue(
-                method_ref_ast, obj_scope, global_scope)
-            name_expr = codegen_expression(name_ast, obj_scope, global_scope)
+                method_ref_ast, obj_scope, obj.scope)
+            name_expr = codegen_expression(name_ast, obj_scope, obj.scope)
             # By continuing we can discover more error, since exports
             # have no effect if invalid
             if not isinstance(method_ref, NodeRef):
@@ -2723,7 +2732,7 @@ class ASTParamExpr(objects.ParamExpr):
         self.params_on_stack.append(self)
         try:
             expr = codegen_expression_maybe_nonvalue(
-                self.ast, Location(self.parent, indices), global_scope)
+                self.ast, Location(self.parent, indices), self.parent.scope)
         finally:
             popped = self.params_on_stack.pop()
             assert popped is self
@@ -3277,8 +3286,8 @@ def mkmethod(site, rbrace_site, location, parent_obj, name, inp_ast,
                 and default.node.site.dml_version() == (1, 4)):
                 report(PTHROWS(body.site))
 
-    inp = eval_method_inp(inp_ast, location, global_scope)
-    outp = eval_method_outp(outp_ast, location, global_scope)
+    inp = eval_method_inp(inp_ast, location, parent_obj.scope)
+    outp = eval_method_outp(outp_ast, location, parent_obj.scope)
 
     for t in [p.typ for p in inp] + [t for (_, t) in outp]:
         if t:

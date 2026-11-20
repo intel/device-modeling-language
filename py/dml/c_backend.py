@@ -1901,7 +1901,7 @@ def generate_init_data_objs(device):
                 init = eval_initializer(
                     node.site, node._type, node.astinit,
                     Location(node.parent, static_indices(node)),
-                    global_scope, True)
+                    node.parent.scope, True)
             # mainly meant to capture EIDXVAR; for other errors, the error will
             # normally re-appear when evaluating per instance
             except DMLError:
@@ -1914,7 +1914,7 @@ def generate_init_data_objs(device):
                             init = eval_initializer(
                                 node.site, node._type, node.astinit,
                                 Location(node.parent, index_exprs),
-                                global_scope, True)
+                                node.parent.scope, True)
                         except DMLError as e:
                             report(e)
                         else:

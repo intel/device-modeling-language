@@ -7,6 +7,7 @@ import contextlib
 
 from .logging import dollar
 from .set import Set
+from .symtab import Symtab, Symbol, global_scope
 import dml.globals
 
 __all__ = (
@@ -191,11 +192,39 @@ class DMLObject(object):
     def idxvars(self):
         return self.parent.idxvars
 
+class MemberSymbol(Symbol):
+    '''A member of an object, found in the object's scope. The indices
+    passed to expr() may belong to a descendant of the object.'''
+
+class ComponentSymbol(MemberSymbol):
+    def __init__(self, node):
+        super().__init__(node.ident, node, node.site)
+    def expr(self, site, indices):
+        from .ctree import component_ref
+        node = self.value
+        return component_ref(site, node, indices[:node.parent.dimensions])
+
+class ThisSymbol(MemberSymbol):
+    def __init__(self, obj):
+        super().__init__('this', obj, obj.site)
+    def expr(self, site, indices):
+        from .ctree import mkNodeRef
+        return mkNodeRef(site, self.value, indices[:self.value.dimensions])
+
+class SharedMethodSymbol(MemberSymbol):
+    '''A shared method implementation, which is not a component'''
+    def __init__(self, name, obj):
+        super().__init__(name, obj, obj.site)
+    def expr(self, site, indices):
+        obj = self.value
+        return obj.traits.lookup_shared_method_impl(
+            site, self.name, indices[:obj.dimensions])
+
 class CompositeObject(DMLObject):
     '''A DML object that may contain other DML objects'''
     __slots__ = ('name', '_components', '_component_dict', '_arraylens',
                  '_idxvars', 'traits', 'templates', 'template_method_impls',
-                 '_confidential', 'uniq')
+                 '_confidential', 'uniq', 'scope')
 
     def __init__(self, ident, site, parent, arraylens = (), idxvars = ()):
         super(CompositeObject, self).__init__(ident, site, parent)
@@ -206,6 +235,13 @@ class CompositeObject(DMLObject):
         # Use None here rather than creating an empty dictionary. This
         # has a noticeable effect on memory usage.
         self._component_dict = None
+
+        # The members of this object, nested in the parent's scope
+        self.scope = Symtab(parent.scope if parent else global_scope)
+        self.scope.add(ThisSymbol(self))
+        if dml.globals.dml_version == (1, 2):
+            # the object of $ references
+            self.scope.add(Symbol('$', self, site))
 
         self._arraylens = arraylens
         self._idxvars = idxvars
@@ -256,6 +292,7 @@ class CompositeObject(DMLObject):
                 self._component_dict = {}
             assert comp.ident not in self._component_dict
             self._component_dict[comp.ident] = comp
+            self.scope.add(ComponentSymbol(comp))
         self._components.append(comp)
 
     def idxvars(self):
@@ -310,6 +347,10 @@ class CompositeObject(DMLObject):
 
     def set_traits(self, traits):
         self.traits = traits
+        for name in sorted(set().union(*(t.method_impl_traits
+                                         for t in traits.direct_parents))):
+            if not self.scope.lookup(name, local=True):
+                self.scope.add(SharedMethodSymbol(name, self))
         for t in itertools.chain(*([t] + list(t.ancestors)
                                    for t in traits.ancestors)):
             dml.globals.trait_instances.setdefault(t, Set()).add(self)
