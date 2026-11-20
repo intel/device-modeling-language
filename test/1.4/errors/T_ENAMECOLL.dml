@@ -139,6 +139,14 @@ extern int x;
 /// ERROR ENAMECOLL
 bank x;
 
+/// ERROR ENAMECOLL
+extern int shared_global;
+template shared_global_clash {
+    /// ERROR ENAMECOLL
+    shared method shared_global() {}
+}
+is shared_global_clash;
+
 group g {
     /// ERROR ENAMECOLL
     param name = "dev";

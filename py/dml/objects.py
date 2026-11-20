@@ -377,8 +377,14 @@ class CompositeObject(DMLObject):
         self.traits = traits
         for name in sorted(set().union(*(t.method_impl_traits
                                          for t in traits.direct_parents))):
-            if not self.scope.lookup(name, local=True):
+            prev = self.scope.lookup(name, local=True)
+            if prev is None:
                 self.scope.add(SharedMethodSymbol(name, self))
+            elif not isinstance(prev, MemberSymbol):
+                [impl_trait, *_] = traits.shared_method_impl_trait(
+                    name).method_impl_traits[name]
+                report(ENAMECOLL(impl_trait.method_impls[name].site,
+                                 prev.site, name))
         for t in itertools.chain(*([t] + list(t.ancestors)
                                    for t in traits.ancestors)):
             dml.globals.trait_instances.setdefault(t, Set()).add(self)
