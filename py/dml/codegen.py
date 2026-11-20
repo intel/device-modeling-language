@@ -1205,7 +1205,6 @@ def expr_apply(tree, location, scope):
 @expression_dispatcher
 def expr_variable_dml12(tree, location, scope):
     [name] = tree.args
-    check_object_scope(location, scope)
     sym = scope.lookup(name)
     if isinstance(sym, objects.MemberSymbol):
         # in 1.2, objects are only reachable through $
@@ -1232,23 +1231,12 @@ def lookup_without_objects(scope: Symtab, name: str) -> Symbol | None:
     return (lookup_global_dml12(name)
             if isinstance(sym, objects.MemberSymbol) else sym)
 
-def check_object_scope(location: Location | None, scope: Symtab) -> None:
-    # TODO: remove together with the location argument
-    if location is not None:
-        node = location.node
-        target = (node.parent if isinstance(node, objects.Method)
-                  else node).scope
-        while scope is not target:
-            scope = scope.parent
-            assert scope is not None, location
-
 def location_indices(location: Location | None) -> tuple[Expression, ...]:
     return () if location is None else location.indices
 
 @expression_dispatcher
 def expr_variable(tree, location, scope):
     [name] = tree.args
-    check_object_scope(location, scope)
     e = lookup_var(tree.site, scope, name, location_indices(location))
     if e is None:
         raise EIDENT(tree.site, name)
@@ -1265,7 +1253,6 @@ def expr_objectref(tree, location, scope):
     if not dollar_sym:
         # This happens when invoked from mkglobals
         raise ENCONST(tree.site, dollar(tree.site)+name)
-    check_object_scope(location, scope)
     e = ctree.lookup_component(
         tree.site, dollar_sym.obj, location_indices(location), name, False)
     if not e:
@@ -1275,9 +1262,7 @@ def expr_objectref(tree, location, scope):
         if (lookup_without_objects(scope, name)
             and (lookup_without_objects(scope, name)
                  != lookup_global_dml12(name))):
-            this = location.node
-            if this.objtype == 'method':
-                this = this.parent
+            this = dollar_sym.obj
             node = this
             while not node.get_component(name):
                 node = node.parent
@@ -2200,14 +2185,14 @@ def stmt_session(stmt, location, scope):
     for (decl_ast, init) in zip(decls, inits):
         (name, asttype) = decl_ast.args
         (struct_decls, etype) = eval_type(asttype, stmt.site, location,
-                                          location.node.parent.scope)
+                                          location.method().parent.scope)
         etype = etype.resolve()
         add_late_global_struct_defs(struct_decls)
         if init:
             try:
                 init = eval_initializer(
                     stmt.site, etype, init, location,
-                    location.node.parent.scope, True)
+                    location.method().parent.scope, True)
             except DMLError as e:
                 report(e)
                 init = None
@@ -2302,7 +2287,7 @@ def stmt_saved(stmt, location, scope):
         serialize.mark_for_serialization(stmt.site, etype)
 
         # acquire better name
-        node = location.node
+        node = location.method()
         cname = name
         while node.objtype != "device":
             cname = node.name + "_" + cname
@@ -2822,8 +2807,9 @@ def stmt_log(stmt, location, scope):
     # Acquire a subsequent log key and the logging object based on obj or trait
     # identity
     if location.method():
-        identity = ObjIdentity(site, location.node.parent, location.indices)
-        logobj = log_object(site, location.node, location.indices)
+        identity = ObjIdentity(site, location.method().parent,
+                               location.indices)
+        logobj = log_object(site, location.method(), location.indices)
     else:
         identity = TraitObjIdentity(
             site, lookup_var(site, scope, "this", location.indices))
@@ -2907,7 +2893,8 @@ def after_domains(site: Site, location: Location,
     # TODO after statement should be extended to allow the user to explicitly
     # give the domains
     if location.method():
-        return [ObjIdentity(site, location.node.parent, location.indices)]
+        return [ObjIdentity(site, location.method().parent,
+                            location.indices)]
     else:
         return [TraitObjIdentity(
             site, lookup_var(site, scope, "this", location.indices))]
@@ -3219,7 +3206,7 @@ def stmt_immediateafter(stmt, location, scope):
 def stmt_select(stmt, location, scope):
     [iter_ident, lst, cond_ast, stmt_ast, else_ast] = stmt.args
     itername = iter_ident.args[0] if iter_ident.kind == 'variable' else None
-    # dbg('SELNODE %r, %r, %r' % (location.node, location.indices, lst))
+    # dbg('SELNODE %r, %r' % (location.indices, lst))
     lst = codegen_expression_maybe_nonvalue(lst, location, scope)
     # dbg('SELECT %s in %r' % (itername, lst))
     if isinstance(lst, NonValue):
@@ -4134,10 +4121,11 @@ def codegen_method(site, inp, outp, throws, independent, memoization, ast,
             assert ast.kind == 'compound'
             [subs, _] = ast.args
             with fail_handler, exit_handler:
-                body = ([mkIndicesAssert(site, location.node,
+                body = ([mkIndicesAssert(site, location.method(),
                                          location.indices)]
                         if (breaking_changes.range_check_method_indices.enabled
-                            and location.method() and location.node.dimsizes)
+                            and location.method()
+                            and location.method().dimsizes)
                         else [])
                 body.extend(prelude())
                 body.extend(codegen_statements(subs, location, fnscope))

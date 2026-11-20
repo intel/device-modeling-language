@@ -1900,7 +1900,7 @@ def generate_init_data_objs(device):
                 assert not node.isindexed()
                 init = eval_initializer(
                     node.site, node._type, node.astinit,
-                    Location(node.parent, static_indices(node)),
+                    Location(None, static_indices(node)),
                     node.parent.scope, True)
             # mainly meant to capture EIDXVAR; for other errors, the error will
             # normally re-appear when evaluating per instance
@@ -1913,7 +1913,7 @@ def generate_init_data_objs(device):
                         try:
                             init = eval_initializer(
                                 node.site, node._type, node.astinit,
-                                Location(node.parent, index_exprs),
+                                Location(None, index_exprs),
                                 node.parent.scope, True)
                         except DMLError as e:
                             report(e)

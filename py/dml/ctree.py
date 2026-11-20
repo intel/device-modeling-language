@@ -278,9 +278,12 @@ class LiteralSymbol(symtab.Symbol):
         return mkLit(site, self.value, self.type)
 
 class Location(object):
-    __slots__ = ('node', 'indices')
-    def __init__(self, node, indices):
-        self.node = node
+    '''Code generation context: the enclosing method, or None outside
+    methods and in shared methods, and the indices of the enclosing object'''
+    __slots__ = ('_method', 'indices')
+    def __init__(self, method: objects.Method | None,
+                 indices: tuple[Expression, ...]):
+        self._method = method
         # Many functions take an 'indices' arg derived from
         # Location.indices; we generally allow such functions to assume
         # that indices are either TInt or StaticIndex.
@@ -289,12 +292,9 @@ class Location(object):
                    for e in indices)
         self.indices = indices
     def __repr__(self):
-        return 'Location(%r, %r)' % (self.node, self.indices)
-    def method(self):
-        if isinstance(self.node, objects.Method):
-            return self.node
-        else:
-            return None
+        return 'Location(%r, %r)' % (self._method, self.indices)
+    def method(self) -> objects.Method | None:
+        return self._method
 
 #
 # Statements
