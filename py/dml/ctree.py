@@ -6,6 +6,7 @@
 import os.path
 import re
 import abc
+import dataclasses
 import operator
 import itertools
 import math
@@ -31,6 +32,7 @@ __all__ = (
     'source_for_assignment',
 
     'Location',
+    'global_location',
 
     'ExpressionSymbol',
     'LiteralSymbol',
@@ -177,6 +179,7 @@ __all__ = (
     'as_int',
     'sym_declaration',
     'lookup_var',
+    'symbol_expr',
     'log_object',
     'log_statement',
 
@@ -262,7 +265,7 @@ class ExpressionSymbol(symtab.Symbol):
     @property
     def type(self):
         return self.value.ctype()
-    def expr(self, site):
+    def expr(self, site, indices):
         expr = self.value.copy(site)
         expr.incref()
         return expr
@@ -273,27 +276,27 @@ class LiteralSymbol(symtab.Symbol):
         super(LiteralSymbol, self).__init__(name, value = crep or name,
                                             site = site)
         self.type = type
-    def expr(self, site):
+    def expr(self, site, indices):
         return mkLit(site, self.value, self.type)
 
-class Location(object):
-    __slots__ = ('node', 'indices')
-    def __init__(self, node, indices):
-        self.node = node
+@dataclasses.dataclass(frozen=True, slots=True)
+class Location:
+    '''The context of code: its scope, the enclosing method, or None outside
+    methods and in shared methods, and the indices of the enclosing object'''
+    method: objects.Method | None
+    indices: tuple[Expression, ...]
+    scope: symtab.Symtab = dataclasses.field(repr=False)
+
+    def __post_init__(self):
         # Many functions take an 'indices' arg derived from
         # Location.indices; we generally allow such functions to assume
         # that indices are either TInt or StaticIndex.
         assert all(isinstance(e, StaticIndex)
                    or isinstance(realtype(e.ctype()), TInt)
-                   for e in indices)
-        self.indices = indices
-    def __repr__(self):
-        return 'Location(%r, %r)' % (self.node, self.indices)
-    def method(self):
-        if isinstance(self.node, objects.Method):
-            return self.node
-        else:
-            return None
+                   for e in self.indices)
+
+# The location of code outside objects; the device's scope is the global scope
+global_location = Location(None, (), symtab.global_scope)
 
 #
 # Statements
@@ -2961,12 +2964,12 @@ class InterfaceMethodRef(NonValue):
 
     def __str__(self):
         return "%s.%s" % (self.node_expr, self.method_name)
-    def apply(self, inits, location, scope):
+    def apply(self, inits, location):
         args = typecheck_inarg_inits(
             self.site, inits,
             [(str(i + 1), t)
              for (i, t) in enumerate(self.ftype.input_types[1:])],
-            location, scope, 'function', self.ftype.varargs)
+            location, 'function', self.ftype.varargs)
 
         return InterfaceMethodApply(
             self.site, self.node_expr,
@@ -3874,14 +3877,14 @@ class TraitMethodRef(NonValue):
     @abc.abstractproperty
     def independent(self): pass
 
-    def apply(self, inits, location, scope):
+    def apply(self, inits, location):
         '''Return expression for application as a function'''
         if self.throws or len(self.outp) > 1:
             raise EAPPLYMETH(self.site, self)
         if crep.TypedParamContext.active and self.independent:
             raise ETYPEDPARAMVIOL(self.site)
         args = typecheck_inarg_inits(self.site, inits, self.inp,
-                                     location, scope, 'method')
+                                     location, 'method')
         if self.outp:
             [(_, rettype)] = self.outp
         else:
@@ -3984,55 +3987,33 @@ class TraitHookRef(Expression):
                 + f'{self.name}, {coeff}, {index_offset})')
 
 
-def lookup_component(site, base, indices, name, only_local):
+def lookup_component(site: Site, base: objects.DMLObject,
+                     indices: tuple[Expression, ...], name: str,
+                     only_local: bool) -> Expression | None:
     '''Lookup a name in object scope 'base' and return an
     Expression, or None.'''
-    assert isinstance(base, objects.DMLObject)
-    assert isinstance(indices, tuple)
-
-    if name == 'this':
-        if isinstance(base, objects.Method):
-            base = base.parent
-        return mkNodeRef(site, base, indices)
-
-    node = base.get_component(name)
-    if node:
-        if node.objtype == 'parameter':
-            return node.get_expr(indices).copy(site)
-        if node.isindexed() and len(indices) < node.dimensions:
-            return NodeArrayRef(site, node, indices)
-        else:
-            return mkNodeRef(site, node, indices)
-
-    if base.traits:
-        # A shared method implementation does not end up as an object
-        # in the object hierarchy, so need to look for it explicitly
-        shared_method = base.traits.lookup_shared_method_impl(
-            site, name, indices)
-        if shared_method is not None:
-            return shared_method
-
-    # Search upwards in outer scopes if it wasn't found
-    if not only_local and base.parent:
-        if base.isindexed():
-            indices = indices[:-base.local_dimensions()]
-        return lookup_component(site, base.parent, indices, name, False)
-
-    if (not breaking_changes.dml12_remove_misc_quirks.enabled
-        and not base.parent):
-        # Last resort is to look for components in anonymous banks
-        for bank in base.get_components('bank'):
-            if not bank.name:
-                node = bank.get_component(name)
-                if node:
-                    if node.objtype == 'parameter':
-                        return node.get_expr(indices).copy(site)
-                    if node.isindexed() and len(indices) < node.dimensions:
-                        return NodeArrayRef(site, node, indices)
-                    else:
-                        return mkNodeRef(site, node, indices)
-
+    if not isinstance(base, objects.CompositeObject):
+        base = base.parent
+    sym = base.scope.lookup(name, local=only_local)
+    if (dml.globals.dml_version == (1, 2)
+        and not breaking_changes.dml12_remove_misc_quirks.enabled
+        and not isinstance(sym, objects.MemberSymbol)
+        and (not only_local or not base.parent)):
+        # a device member may collide with a global
+        dollar = symtab.global_scope.lookup('$', local=True)
+        sym = dollar.colliding_members.get(name)
+    if isinstance(sym, objects.MemberSymbol):
+        return sym.expr(site, indices)
     return None
+
+def component_ref(site: Site, node: objects.DMLObject,
+                  indices: tuple[Expression, ...]) -> Expression:
+    if node.objtype == 'parameter':
+        return node.get_expr(indices).copy(site)
+    if node.isindexed() and len(indices) < node.dimensions:
+        return NodeArrayRef(site, node, indices)
+    else:
+        return mkNodeRef(site, node, indices)
 
 
 # Return the node type for a node
@@ -4057,13 +4038,13 @@ class NodeRef(Expression):
             return '$<anonymous %s>' % self.node.objtype
     def get_ref(self):
         return (self.node, self.indices)
-    def apply(self, inits, location, scope):
+    def apply(self, inits, location):
         '''Apply as an expression'''
         if self.node.objtype == 'method':
             if self.node.throws or len(self.node.outp) > 1:
                 raise EAPPLYMETH(self.site, self.node.name)
             return codegen_call_expr(self.site, self.node, self.indices, inits,
-                                     location, scope)
+                                     location)
         raise EAPPLY(self, self.node.objtype + " object")
 
 class NodeRefWithStorage(NodeRef, LValue):
@@ -4105,12 +4086,12 @@ class NodeRefWithStorage(NodeRef, LValue):
             expr = '_dev->' + crep.cref_session(node, self.indices)
         return expr
 
-    def apply(self, inits, location, scope):
+    def apply(self, inits, location):
         if self.node.objtype == 'method':
             assert dml.globals.dml_version == (1, 2)
             raise EAPPLYMETH(self.site, self.node.name)
         # storage might be a function pointer
-        return mkApplyInits(self.site, self, inits, location, scope)
+        return mkApplyInits(self.site, self, inits, location)
 
 class SessionVariableRef(LValue):
     "A reference to a session variable"
@@ -4305,13 +4286,13 @@ class HookSendNowRef(NonValue):
 
     def __str__(self):
         return "%s.send_now" % (self.hookref_expr,)
-    def apply(self, inits, location, scope):
+    def apply(self, inits, location):
         msg_types = safe_realtype_shallow(self.hookref_expr.ctype()).msg_types
         args = typecheck_inarg_inits(
             self.site, inits,
             [(f'comp{i}', t)
              for (i, t) in enumerate(msg_types)],
-            location, scope, 'send_now')
+            location, 'send_now')
         return mkHookSendNowApply(self.site, self.hookref_expr, args)
 
 mkHookSendNowRef = HookSendNowRef
@@ -4351,13 +4332,13 @@ class HookSendRef(NonValue):
 
     def __str__(self):
         return "%s.send" % (self.hookref_expr,)
-    def apply(self, inits, location, scope):
+    def apply(self, inits, location):
         msg_types = safe_realtype_shallow(self.hookref_expr.ctype()).msg_types
         args = typecheck_inarg_inits(
             self.site, inits,
             [(f'comp{i}', t)
              for (i, t) in enumerate(msg_types)],
-            location, scope, 'send',
+            location, 'send',
             on_ptr_to_stack=(lambda x: report(WHOOKSEND(x.site, x))))
         from .codegen import get_type_sequence_info, get_immediate_after
         typeseq_info = get_type_sequence_info(msg_types, create_new=True)
@@ -5564,13 +5545,15 @@ class CText(Code):
 
 mkCText = CText
 
-def lookup_var(site, scope, name):
+def lookup_var(site: Site, location: Location,
+               name: str) -> Expression | None:
     "Lookup a symbol in scope or parameters and create an expression for it"
-    # dbg("LOOKUP_VAR %s %s" % (scope.id, name))
-    sym = scope.lookup(name)
-    if not sym:
-        return None
-    elif isinstance(sym, symtab.LocalSymbol):
+    sym = location.scope.lookup(name)
+    return symbol_expr(site, sym, location.indices) if sym else None
+
+def symbol_expr(site: Site, sym: symtab.Symbol,
+                indices: tuple[Expression, ...]) -> Expression:
+    if isinstance(sym, symtab.LocalSymbol):
         expr = mkLocalVariable(site, sym)
         assert expr.site == site
         return expr
@@ -5579,7 +5562,7 @@ def lookup_var(site, scope, name):
         assert expr.site == site
         return expr
     else:
-        return sym.expr(site)
+        return sym.expr(site, indices)
 
 def log_object(site, node, indices):
     return mkLit(site, crep.conf_object(site, node, indices),

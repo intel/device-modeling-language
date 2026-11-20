@@ -41,7 +41,7 @@ class Symbol(object):
         return '%s(%s, %s)' % (self.__class__.__name__, self.name,
                                repr(self.value))
 
-    def expr(self, site):
+    def expr(self, site, indices):
         raise ICE(site, "can't evaluate %r" % (type(self),))
 
 class LocalSymbol(Symbol):

@@ -1,0 +1,28 @@
+/*
+  © 2026 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+// expectations in this file are selectively enabled using SCAN-FOR-TAGS
+
+// Objects are only reachable through $, so without $, a global wins over a
+// device member of the same name
+/// ERROR ENAMECOLL
+constant c = 1;
+/// ERROR ENAMECOLL
+parameter c = 2;
+
+parameter plain_c = c;
+// follow-on error: the colliding member is discarded
+/// ERROR EREF
+parameter dollar_c = $c;
+
+// Not a collision: only device members share the global scope
+constant k = 4;
+bank b {
+    parameter k = 3;
+    method check -> (bool ok) {
+        ok = k == 4 && $k == 3;
+    }
+}

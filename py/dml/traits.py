@@ -67,8 +67,8 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                               + ' '.join(['independent']*independent
                                          + ['startup']*startup
                                          + ['memoized']*memoized))
-                inp = eval_method_inp(inp_asts, None, global_scope)
-                outp = eval_method_outp(outp_asts, None, global_scope)
+                inp = eval_method_inp(inp_asts, global_location)
+                outp = eval_method_outp(outp_asts, global_location)
                 check_namecoll(mname, ast.site)
                 methods[mname] = (ast.site, inp, outp, throws, independent,
                                   startup, memoized, overridable,
@@ -78,7 +78,7 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                 for decl_ast in decls:
                     (sname, type_ast) = decl_ast.args
                     (struct_defs, stype) = eval_type(
-                        type_ast, ast.site, None, global_scope)
+                        type_ast, ast.site, global_location)
                     add_late_global_struct_defs(struct_defs)
                     check_namecoll(sname, ast.site)
                     sessions[sname] = (ast.site, stype)
@@ -86,8 +86,8 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                 (pname, type_info, _, _) = ast.args
                 assert type_info.kind == 'paramtype'
                 (type_ast,) = type_info.args
-                (struct_defs, ptype) = eval_type(type_ast, type_info.site, None,
-                                                 global_scope)
+                (struct_defs, ptype) = eval_type(type_ast, type_info.site,
+                                                 global_location)
                 # this would be trivial to support, but completely meaningless
                 for (err_site, _) in struct_defs:
                     report(EANONSTRUCT(err_site, "parameter type"))
@@ -98,12 +98,12 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
 
                 msg_types = []
                 for type_ast in type_asts:
-                    (struct_defs, dtype) = eval_type(type_ast, ast.site, None,
-                                                     global_scope)
+                    (struct_defs, dtype) = eval_type(type_ast, ast.site,
+                                                     global_location)
                     add_late_global_struct_defs(struct_defs)
                     # TODO maybe realtype?
                     msg_types.append(dtype)
-                array_lens = tuple(eval_arraylen(len_ast, global_scope)
+                array_lens = tuple(eval_arraylen(len_ast, global_location)
                                    for len_ast in arraylen_asts)
                 check_namecoll(hname, ast.site)
                 hooks[hname] = (ast.site, array_lens, msg_types)
@@ -121,7 +121,7 @@ class NoDefaultSymbol(Symbol):
     EIDENT."""
     def __init__(self, site):
         super(NoDefaultSymbol, self).__init__('default', site=site)
-    def expr(self, site):
+    def expr(self, site, indices):
         raise ENDEFAULT(site)
 
 class AmbiguousDefaultSymbol(Symbol):
@@ -133,7 +133,7 @@ class AmbiguousDefaultSymbol(Symbol):
         super(AmbiguousDefaultSymbol, self).__init__(
             'default', site=default_method_sites[0])
         self.default_method_sites = default_method_sites
-    def expr(self, site):
+    def expr(self, site, indices):
         raise EAMBDEFAULT(site, self.default_method_sites)
 
 class TraitVTableItem(metaclass=abc.ABCMeta):
@@ -224,7 +224,9 @@ class TraitMethod(TraitVTableItem):
     def codegen_body(self):
         with (crep.DeviceInstanceContext()
               if not self.independent else contextlib.nullcontext()):
-            scope = MethodParamScope(self.trait.scope(global_scope))
+            location = Location(
+                None, (),
+                MethodParamScope(self.trait.scope(global_scope)))
             implicit_inargs = self.vtable_trait.implicit_args()
             site = SimpleSite(self.site.loc())
             if len(self.default_traits) > 1:
@@ -260,7 +262,7 @@ class TraitMethod(TraitVTableItem):
             body = codegen_method(
                 self.astbody.site, self.inp, self.outp, self.throws,
                 self.independent, memoization, self.astbody, default,
-                Location(dml.globals.device, ()), scope, self.rbrace_site)
+                location, self.rbrace_site)
 
             downcast_path = self.downcast_path()
             if downcast_path:
@@ -687,16 +689,24 @@ class ObjTraits(SubTrait):
         '''The C name of a trait's vtable'''
         return "_tr_%s__%s" % (self.node.attrname() or '_dev', trait.name)
 
+    def shared_method_impl_trait(self, name):
+        '''Return the parent trait that provides an implementation of a
+        shared method, or None'''
+        for trait in self.direct_parents:
+            if name in trait.method_impl_traits:
+                return trait
+        return None
+
     def lookup_shared_method_impl(self, site, name, indices):
         '''Return implementation of shared method provided by trait'''
         assert isinstance(indices, tuple)
-        for trait in self.direct_parents:
-            if name in trait.method_impl_traits:
-                ref = ObjTraitRef(site, self.node, trait, indices)
-                method = trait.lookup(name, ref, site)
-                assert method
-                return method
-        return None
+        trait = self.shared_method_impl_trait(name)
+        if trait is None:
+            return None
+        ref = ObjTraitRef(site, self.node, trait, indices)
+        method = trait.lookup(name, ref, site)
+        assert method
+        return method
 
 class ReservedSymbol(NonValue):
     @auto_init
@@ -840,9 +850,9 @@ class Trait(SubTrait):
         # early enough that the bad overrides don't cause ICE:s to happen
         # (though their presence may lead to other strange behaviour.)
 
-    def scope(self, global_scope):
+    def scope(self, parent_scope):
         '''Return a scope for looking up sibling objects in this trait'''
-        s = Symtab(global_scope)
+        s = Symtab(parent_scope)
         selfref = mkLit(self.site, '_' + cident(self.name), self.type())
         for name in self.members():
             # This is very hacky, but works well

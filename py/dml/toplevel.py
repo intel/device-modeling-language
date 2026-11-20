@@ -171,7 +171,7 @@ def scan_statements(filename, site, stmts):
 
             try:
                 expr = ctree.as_bool(codegen.codegen_expression(
-                    cond, None, scope))
+                    cond, ctree.Location(None, (), scope)))
                 if not expr.constant:
                     raise ENCONST(expr.site, expr)
             except EIDENT:

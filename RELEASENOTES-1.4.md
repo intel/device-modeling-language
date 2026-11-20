@@ -458,3 +458,7 @@
 - `release 7 7219`
 - `note 7` Fixed a performance bug in attribute setters. The bug affected devices with thousands of register banks organized into arrays, and caused slowdowns when restoring a snapshot or checkpoint.
 - `release 7 7227`
+- `note 7` A shared method whose name coincides with a global symbol, such
+  as an `extern` declaration or a `constant`, is now reported as an
+  `ENAMECOLL` error, consistent with how other members of the device object
+  are treated. Previously, such collisions were not reported.

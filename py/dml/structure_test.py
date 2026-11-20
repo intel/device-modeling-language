@@ -4,7 +4,7 @@
 import unittest
 
 from dml.structure import param_linear_int
-from dml import objects, logging, ctree, types
+from dml import objects, logging, ctree, types, symtab
 
 class test_param_linear_int(unittest.TestCase):
     def p(self, mkexpr_, dimsizes):
@@ -14,6 +14,9 @@ class test_param_linear_int(unittest.TestCase):
             site = nowhere
             def mkexpr(self, indices):
                 return mkexpr_(indices)
+        # the device's members are added to the global scope
+        symtab.global_scope.symdict.clear()
+        symtab.global_scope.symlist.clear()
         dev = objects.Device('dev', nowhere)
         group = objects.Group('g', nowhere, dev, arraylens=dimsizes,
                               idxvars=tuple(f'i{n}' for n in dimsizes))
