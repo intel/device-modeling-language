@@ -1053,158 +1053,133 @@ extern typedef struct {
         const uint32 *indices;
 } _port_object_t;
 
-method _get_attribute_attr_trampoline(void *info) -> (attr_value_t) {
-    return _get_attribute_attr(info, 0, 0);
+method _get_attribute_dev_trampoline(void *info) -> (attr_value_t) {
+    return _get_attribute_confobj(info, 0, 0);
 }
 
-independent method _get_attribute_attr_portobj_trampoline(
+independent method _get_attribute_portobj_trampoline(
     conf_object_t *_portobj, void *_info)
     -> (attr_value_t) {
     local _port_object_t *portobj = cast(_portobj, _port_object_t *);
     local _dml_attr_getset_info_t *info =
         cast(_info, _dml_attr_getset_info_t *);
-    local uint32 flat_index_offset = 0;
+    local uint32 portobj_offset = 0;
     local uint32 offset_coefficient = info->num;
     for (local uint32 i = 0; i < portobj->ndims; ++i) {
         offset_coefficient /= info->id_info->dimsizes[i];
-        flat_index_offset += portobj->indices[i] * offset_coefficient;
+        portobj_offset += portobj->indices[i] * offset_coefficient;
     }
 
-    return (&_get_attribute_attr)(portobj->dev, _info, portobj->ndims,
-                                  flat_index_offset);
+    return (&_get_attribute_confobj)(portobj->dev, _info, portobj->ndims,
+                                     portobj_offset);
 }
 
-method _get_attribute_attr(const _dml_attr_getset_info_t *_conf_info,
-                           uint32 start_dim, uint32 flat_index_offset)
+method _get_attribute_element(const _dml_attr_getset_info_t *conf_info,
+                              uint32 flat_index) -> (attr_value_t) {
+    local _traitref_t traitref = {conf_info->vtable,
+                                  {conf_info->id_info->id, flat_index}};
+    return cast(&traitref, _conf_attribute *)->get_attribute();
+}
+
+method _get_attribute_slice(const _dml_attr_getset_info_t *conf_info,
+                            uint32 dim, uint32 first_index)
     -> (attr_value_t) {
-    local _dml_attr_getset_info_t conf_info = *_conf_info;
-    local _id_info_t id_info = *conf_info.id_info;
-    assert start_dim <= id_info.dimensions;
-
-    if (id_info.dimensions - start_dim == 0) {
-        local _traitref_t traitref = {conf_info.vtable,
-                                      {id_info.id, flat_index_offset}};
-        return cast(&traitref, _conf_attribute *)->get_attribute();
+    local const _id_info_t *id_info = conf_info->id_info;
+    local uint32 stride = 1;
+    for (local uint32 i = dim + 1; i < id_info->dimensions; ++i) {
+        stride *= id_info->dimsizes[i];
     }
-
-    local size_t no_items = conf_info.num;
-    for (local uint32 i = 0; i < start_dim; ++i) {
-        no_items /= id_info.dimsizes[i];
-    }
-    local attr_value_t *items = new attr_value_t[no_items];
-    local attr_value_t *items_buf = new attr_value_t[no_items];
-    for (local int i = 0; i < no_items; ++i) {
-        local _traitref_t traitref = {conf_info.vtable,
-                                      {id_info.id, i + flat_index_offset}};
-        items[i] = cast(&traitref, _conf_attribute *)->get_attribute();
-    }
-    for (local int i = cast(id_info.dimensions, int) - 1; i >= start_dim;
-         --i) {
-        local uint32 new_frag_size = id_info.dimsizes[i];
-        local size_t new_no_items = no_items / new_frag_size;
-        for (local int j = 0; j < new_no_items; ++j) {
-            items_buf[j] = SIM_alloc_attr_list(new_frag_size);
-            local attr_value_t *new_frag = SIM_attr_list(items_buf[j]);
-            for (local int k = 0; k < new_frag_size; ++k) {
-                new_frag[k] = items[j * new_frag_size + k];
-            }
+    local uint32 size = id_info->dimsizes[dim];
+    local attr_value_t ret = SIM_alloc_attr_list(size);
+    local attr_value_t *elems = SIM_attr_list(ret);
+    for (local uint32 k = 0; k < size; ++k) {
+        local uint32 index = first_index + k * stride;
+        if (dim + 1 == id_info->dimensions) {
+            elems[k] = _get_attribute_element(conf_info, index);
+        } else {
+            elems[k] = _get_attribute_slice(conf_info, dim + 1, index);
         }
-        (items, items_buf) = (items_buf, items);
-        no_items = new_no_items;
     }
-    local attr_value_t to_ret = *items;
-    delete items;
-    delete items_buf;
-    return to_ret;
+    return ret;
 }
 
-method _set_attribute_attr_trampoline(attr_value_t *val, void *info)
-                                  -> (set_error_t) {
-    return _set_attribute_attr(info, 0, 0, val);
+method _get_attribute_confobj(const _dml_attr_getset_info_t *conf_info,
+                              uint32 portobj_dims, uint32 portobj_offset)
+    -> (attr_value_t) {
+    assert portobj_dims <= conf_info->id_info->dimensions;
+    if (portobj_dims == conf_info->id_info->dimensions) {
+        return _get_attribute_element(conf_info, portobj_offset);
+    }
+    return _get_attribute_slice(conf_info, portobj_dims, portobj_offset);
 }
 
-independent method _set_attribute_attr_portobj_trampoline(
+method _set_attribute_dev_trampoline(attr_value_t *val, void *info)
+    -> (set_error_t) {
+    return _set_attribute_confobj(info, 0, 0, val);
+}
+
+independent method _set_attribute_portobj_trampoline(
     conf_object_t *_portobj, attr_value_t *val, void *_info) -> (set_error_t) {
     local _port_object_t *portobj = cast(_portobj, _port_object_t *);
     local _dml_attr_getset_info_t *info = cast(_info,
                                                _dml_attr_getset_info_t *);
-    local uint32 flat_index_offset = 0;
+    local uint32 portobj_offset = 0;
     local uint32 offset_coefficient = info->num;
     for (local uint32 i = 0; i < portobj->ndims; ++i) {
         offset_coefficient /= info->id_info->dimsizes[i];
-        flat_index_offset += portobj->indices[i] * offset_coefficient;
+        portobj_offset += portobj->indices[i] * offset_coefficient;
     }
 
-    return (&_set_attribute_attr)(portobj->dev, _info, portobj->ndims,
-                                  flat_index_offset, val);
+    return (&_set_attribute_confobj)(portobj->dev, _info, portobj->ndims,
+                                     portobj_offset, val);
 }
 
-method _set_attribute_attr(const _dml_attr_getset_info_t *_conf_info,
-                           uint32 start_dim, uint32 flat_index_offset,
-                           attr_value_t *val) -> (set_error_t) {
-    local _dml_attr_getset_info_t conf_info = *_conf_info;
-    local _id_info_t id_info = *conf_info.id_info;
-    assert start_dim <= id_info.dimensions;
-    if (id_info.dimensions - start_dim == 0) {
-        local _traitref_t traitref = {conf_info.vtable,
-                                      {id_info.id, flat_index_offset}};
-        return cast(&traitref, _conf_attribute *)->set_attribute(*val);
-    }
+method _set_attribute_element(const _dml_attr_getset_info_t *conf_info,
+                              uint32 flat_index, attr_value_t val)
+    -> (set_error_t) {
+    local _traitref_t traitref = {conf_info->vtable,
+                                  {conf_info->id_info->id, flat_index}};
+    return cast(&traitref, _conf_attribute *)->set_attribute(val);
+}
 
-    local size_t num_items = conf_info.num;
-    for (local uint32 i = 0; i < start_dim; ++i) {
-        num_items /= id_info.dimsizes[i];
+method _set_attribute_slice(const _dml_attr_getset_info_t *conf_info,
+                            uint32 dim, uint32 first_index,
+                            attr_value_t val) -> (set_error_t) {
+    local const _id_info_t *id_info = conf_info->id_info;
+    local uint32 stride = 1;
+    for (local uint32 i = dim + 1; i < id_info->dimensions; ++i) {
+        stride *= id_info->dimsizes[i];
     }
-    local attr_value_t *items = new attr_value_t[num_items];
-    local attr_value_t *items_buf = new attr_value_t[num_items];
-    *items = *val;
-    local size_t prev_gen_size = 1;
-    local bool allow_cutoff = conf_info.allow_cutoff;
-
-    for (local uint32 i = start_dim; i < id_info.dimensions; ++i) {
-        local uint32 frag_size = id_info.dimsizes[i];
-        local size_t this_gen_size = prev_gen_size * frag_size;
-        if (allow_cutoff) {
-            for (local uint32 j = 0; j < prev_gen_size; ++j) {
-                local uint32 subfrag_size = SIM_attr_is_list(items[j])
-                                          ? SIM_attr_list_size(items[j])
-                                          : 0;
-                local attr_value_t *subfrags = subfrag_size > 0
-                                             ? SIM_attr_list(items[j])
-                                             : NULL;
-                for (local uint32 k = 0; k < subfrag_size; ++k) {
-                    /*% COVERITY copy_paste_error FALSE %*/
-                    items_buf[j * frag_size + k] = subfrags[k];
-                }
-                for (local uint32 k = subfrag_size; k < frag_size; ++k) {
-                    items_buf[j * frag_size + k] = SIM_make_attr_nil();
-                }
-            }
+    local uint32 size = id_info->dimsizes[dim];
+    // with allow_cutoff, a short list or nil is padded with nil
+    local uint32 given = SIM_attr_is_list(val) ? SIM_attr_list_size(val) : 0;
+    // guaranteed by attribute type string
+    assert conf_info->allow_cutoff || given == size;
+    local attr_value_t *elems = given > 0 ? SIM_attr_list(val) : NULL;
+    for (local uint32 k = 0; k < size; ++k) {
+        local attr_value_t elem = k < given ? elems[k] : SIM_make_attr_nil();
+        local uint32 index = first_index + k * stride;
+        local set_error_t status;
+        if (dim + 1 == id_info->dimensions) {
+            status = _set_attribute_element(conf_info, index, elem);
         } else {
-            for (local uint32 j = 0; j < prev_gen_size; ++j) {
-                local attr_value_t *subfrags = SIM_attr_list(items[j]);
-                for (local uint32 k = 0; k < frag_size; ++k) {
-                    items_buf[j * frag_size + k] = subfrags[k];
-                }
-            }
+            status = _set_attribute_slice(conf_info, dim + 1, index, elem);
         }
-        (items, items_buf) = (items_buf, items);
-        prev_gen_size = this_gen_size;
-    }
-    assert prev_gen_size == num_items;
-    delete items_buf;
-    for (local uint32 i = 0; i < num_items; ++i) {
-        local _traitref_t traitref = {conf_info.vtable,
-                                      {id_info.id, i + flat_index_offset}};
-        local set_error_t status = cast(&traitref, _conf_attribute *)
-                                   ->set_attribute(items[i]);
         if (status != Sim_Set_Ok) {
-            delete items;
             return status;
         }
     }
-    delete items;
     return Sim_Set_Ok;
+}
+
+method _set_attribute_confobj(const _dml_attr_getset_info_t *conf_info,
+                              uint32 portobj_dims, uint32 portobj_offset,
+                              attr_value_t *val) -> (set_error_t) {
+    assert portobj_dims <= conf_info->id_info->dimensions;
+    if (portobj_dims == conf_info->id_info->dimensions) {
+        return _set_attribute_element(conf_info, portobj_offset, *val);
+    }
+    return _set_attribute_slice(conf_info, portobj_dims, portobj_offset, *val);
 }
 
 extern typedef struct {} _vtable_list_t;
@@ -1229,10 +1204,10 @@ independent startup method _register_all_attributes() {
                              _each___conf_attribute,
                              each _conf_attribute in (dev),
                              &_get_attribute_info,
-                             &_get_attribute_attr_trampoline,
-                             &_set_attribute_attr_trampoline,
-                             &_get_attribute_attr_portobj_trampoline,
-                             &_set_attribute_attr_portobj_trampoline);
+                             &_get_attribute_dev_trampoline,
+                             &_set_attribute_dev_trampoline,
+                             &_get_attribute_portobj_trampoline,
+                             &_set_attribute_portobj_trampoline);
 }
 
 /**
