@@ -1208,17 +1208,28 @@ def expr_variable_dml12(tree, location, scope):
     check_object_scope(location, scope)
     sym = scope.lookup(name)
     if isinstance(sym, objects.MemberSymbol):
-        # in 1.2, a name without $ shadows the object hierarchy
-        sym = global_scope.lookup(name) or sym
+        # in 1.2, objects are only reachable through $
+        sym = lookup_global_dml12(name)
     if sym is None:
         raise EIDENT(tree.site, name)
     return symbol_expr(tree.site, sym, location_indices(location))
+
+def lookup_global_dml12(name: str) -> Symbol | None:
+    '''Look up a global name as DML 1.2 sees it without $: the only visible
+    device members are top-level params from 1.4 files, which allows a 1.2
+    'constant' to be converted compatibly to a 'param' in a 1.4 file'''
+    sym = global_scope.lookup(name)
+    if (isinstance(sym, objects.ComponentSymbol)
+        and sym.value.objtype == 'parameter'
+        and sym.value.site.dml_version() == (1, 4)):
+        return sym
+    return None if isinstance(sym, objects.MemberSymbol) else sym
 
 def lookup_without_objects(scope: Symtab, name: str) -> Symbol | None:
     '''Look up a name, as if the object hierarchy were not part of the
     scope'''
     sym = scope.lookup(name)
-    return (global_scope.lookup(name)
+    return (lookup_global_dml12(name)
             if isinstance(sym, objects.MemberSymbol) else sym)
 
 def check_object_scope(location: Location | None, scope: Symtab) -> None:
@@ -1250,20 +1261,20 @@ def expr_discard(tree, location, scope):
 @expression_dispatcher
 def expr_objectref(tree, location, scope):
     [name] = tree.args
-    node = scope.lookup('$')
-    if not node:
+    dollar_sym = scope.lookup('$')
+    if not dollar_sym:
         # This happens when invoked from mkglobals
         raise ENCONST(tree.site, dollar(tree.site)+name)
     check_object_scope(location, scope)
     e = ctree.lookup_component(
-        tree.site, node.value, location.indices, name, False)
+        tree.site, dollar_sym.obj, location_indices(location), name, False)
     if not e:
         raise EREF(tree.site, name)
     assert dml.globals.dml_version == (1, 2)
     if logging.show_porting:
         if (lookup_without_objects(scope, name)
             and (lookup_without_objects(scope, name)
-                 != global_scope.lookup(name))):
+                 != lookup_global_dml12(name))):
             this = location.node
             if this.objtype == 'method':
                 this = this.parent

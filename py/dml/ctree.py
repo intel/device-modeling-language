@@ -3993,6 +3993,13 @@ def lookup_component(site: Site, base: objects.DMLObject,
     if not isinstance(base, objects.CompositeObject):
         base = base.parent
     sym = base.scope.lookup(name, local=only_local)
+    if (dml.globals.dml_version == (1, 2)
+        and not breaking_changes.dml12_remove_misc_quirks.enabled
+        and not isinstance(sym, objects.MemberSymbol)
+        and (not only_local or not base.parent)):
+        # a device member may collide with a global
+        dollar = symtab.global_scope.lookup('$', local=True)
+        sym = dollar.colliding_members.get(name)
     if isinstance(sym, objects.MemberSymbol):
         return sym.expr(site, indices)
     return None

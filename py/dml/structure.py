@@ -2123,9 +2123,16 @@ def mkobj2(obj, obj_specs, params, each_stmts):
             for bank in obj.get_components('bank'):
                 if not bank.name:
                     for comp in bank.get_components():
-                        if (comp.ident
-                            and not obj.scope.lookup(comp.ident, local=True)):
-                            obj.scope.add(objects.ComponentSymbol(comp))
+                        if not comp.ident:
+                            continue
+                        prev = obj.scope.lookup(comp.ident, local=True)
+                        sym = objects.ComponentSymbol(comp)
+                        if prev is None:
+                            obj.scope.add(sym)
+                        elif not isinstance(prev, objects.MemberSymbol):
+                            # a global, which shadows comp except for $
+                            obj.scope.lookup('$', local=True) \
+                                .colliding_members[comp.ident] = sym
         banks = obj.get_recursive_components('bank')
         if dml.globals.dml_version == (1, 2):
             # Check for duplicate bank functions
@@ -2147,21 +2154,6 @@ def mkobj2(obj, obj_specs, params, each_stmts):
         for b in banks:
             sort_registers(b)
         set_confidential_object(obj)
-
-        if dml.globals.dml_version == (1, 2):
-            # top-level parameters defined in 1.4 files can be accessed
-            # without $. This allows 'constant' declarations in 1.2 files
-            # to be converted compatibly to 'param' in unified 1.2+1.4 files.
-            with crep.DeviceInstanceContext():
-                for p in params:
-                    if (p.site.dml_version() == (1, 4)
-                        and global_scope.lookup(p.name) is None):
-                        try:
-                            global_scope.add(
-                                ExpressionSymbol(p.name, p.get_expr(()), p.site))
-                        except DMLError:
-                            # handled later
-                            pass
 
         # Evaluate all parameters once, to early smoke out non-existing
         # identifiers. TODO: perhaps this should not be done?
@@ -2200,20 +2192,6 @@ def mkobj2(obj, obj_specs, params, each_stmts):
                             param.site, param.logname(), e))
                     else:
                         report(e)
-        if (dml.globals.dml_version != (1, 2)
-            or breaking_changes.dml12_remove_misc_quirks.enabled):
-            # TODO: this should be handled cleaner in the case of pure
-            # 1.4 code
-            for p in obj.get_components():
-                sym = global_scope.lookup(p.name)
-                if sym and (
-                        # hacky workaround for the ExpressionSymbol
-                        # implicitly added above. Needed when importing 1.4
-                        # code from 1.2 with --breaking-change=dml12_remove_misc_quirks
-                        dml.globals.dml_version != (1, 2)
-                        or p.site.dml_version() == (1, 2)
-                        or p.site != sym.site):
-                    report(ENAMECOLL(p.site, sym.site, p.name))
 
         # At this point, methods and subobjs are created and we can
         # try to evaluate their exporting

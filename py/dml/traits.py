@@ -225,8 +225,7 @@ class TraitMethod(TraitVTableItem):
         with (crep.DeviceInstanceContext()
               if not self.independent else contextlib.nullcontext()):
             location = Location(dml.globals.device, ())
-            scope = MethodParamScope(
-                self.trait.scope(dml.globals.device.scope))
+            scope = MethodParamScope(self.trait.scope(global_scope))
             implicit_inargs = self.vtable_trait.implicit_args()
             site = SimpleSite(self.site.loc())
             if len(self.default_traits) > 1:

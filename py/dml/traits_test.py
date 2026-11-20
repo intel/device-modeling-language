@@ -7,6 +7,7 @@ from dml.traits import (
     Trait, ObjTraits,
 )
 import dml.objects
+import dml.symtab
 import dml.ast
 import dml.ctree
 from dml import crep
@@ -17,6 +18,9 @@ from dml import serialize
 class Test_traits(unittest.TestCase):
     def setUp(self):
         self.site = dml.logging.SimpleSite('X')
+        # the device's members are added to the global scope
+        dml.symtab.global_scope.symdict.clear()
+        dml.symtab.global_scope.symlist.clear()
         dev = dml.objects.Device('dev', self.site)
         dev.name = 'dev'
         self.prev_device = dml.globals.device
