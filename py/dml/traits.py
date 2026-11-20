@@ -67,8 +67,8 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                               + ' '.join(['independent']*independent
                                          + ['startup']*startup
                                          + ['memoized']*memoized))
-                inp = eval_method_inp(inp_asts, None, global_scope)
-                outp = eval_method_outp(outp_asts, None, global_scope)
+                inp = eval_method_inp(inp_asts, global_location)
+                outp = eval_method_outp(outp_asts, global_location)
                 check_namecoll(mname, ast.site)
                 methods[mname] = (ast.site, inp, outp, throws, independent,
                                   startup, memoized, overridable,
@@ -78,7 +78,7 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                 for decl_ast in decls:
                     (sname, type_ast) = decl_ast.args
                     (struct_defs, stype) = eval_type(
-                        type_ast, ast.site, None, global_scope)
+                        type_ast, ast.site, global_location)
                     add_late_global_struct_defs(struct_defs)
                     check_namecoll(sname, ast.site)
                     sessions[sname] = (ast.site, stype)
@@ -86,8 +86,8 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
                 (pname, type_info, _, _) = ast.args
                 assert type_info.kind == 'paramtype'
                 (type_ast,) = type_info.args
-                (struct_defs, ptype) = eval_type(type_ast, type_info.site, None,
-                                                 global_scope)
+                (struct_defs, ptype) = eval_type(type_ast, type_info.site,
+                                                 global_location)
                 # this would be trivial to support, but completely meaningless
                 for (err_site, _) in struct_defs:
                     report(EANONSTRUCT(err_site, "parameter type"))
@@ -98,12 +98,12 @@ def process_trait(site, name, subasts, ancestors, template_symbols):
 
                 msg_types = []
                 for type_ast in type_asts:
-                    (struct_defs, dtype) = eval_type(type_ast, ast.site, None,
-                                                     global_scope)
+                    (struct_defs, dtype) = eval_type(type_ast, ast.site,
+                                                     global_location)
                     add_late_global_struct_defs(struct_defs)
                     # TODO maybe realtype?
                     msg_types.append(dtype)
-                array_lens = tuple(eval_arraylen(len_ast, None, global_scope)
+                array_lens = tuple(eval_arraylen(len_ast, global_location)
                                    for len_ast in arraylen_asts)
                 check_namecoll(hname, ast.site)
                 hooks[hname] = (ast.site, array_lens, msg_types)
@@ -224,8 +224,9 @@ class TraitMethod(TraitVTableItem):
     def codegen_body(self):
         with (crep.DeviceInstanceContext()
               if not self.independent else contextlib.nullcontext()):
-            location = Location(None, ())
-            scope = MethodParamScope(self.trait.scope(global_scope))
+            location = Location(
+                None, (),
+                MethodParamScope(self.trait.scope(global_scope)))
             implicit_inargs = self.vtable_trait.implicit_args()
             site = SimpleSite(self.site.loc())
             if len(self.default_traits) > 1:
@@ -261,7 +262,7 @@ class TraitMethod(TraitVTableItem):
             body = codegen_method(
                 self.astbody.site, self.inp, self.outp, self.throws,
                 self.independent, memoization, self.astbody, default,
-                location, scope, self.rbrace_site)
+                location, self.rbrace_site)
 
             downcast_path = self.downcast_path()
             if downcast_path:

@@ -747,7 +747,7 @@ def wrap_method(meth, wrapper_name, indices=()):
         if retvar:
             mkDeclaration(meth.site, retvar, rettype,
                           init = get_initializer(meth.site, rettype,
-                                                 None, None, None)).toc()
+                                                 None, global_location)).toc()
 
         with LogFailure(meth.site, meth, indices):
             inargs = [mkLit(meth.site, p.c_ident, p.typ) for p in meth.inp]
@@ -1900,8 +1900,8 @@ def generate_init_data_objs(device):
                 assert not node.isindexed()
                 init = eval_initializer(
                     node.site, node._type, node.astinit,
-                    Location(None, static_indices(node)),
-                    node.parent.scope, True)
+                    Location(None, static_indices(node), node.parent.scope),
+                    True)
             # mainly meant to capture EIDXVAR; for other errors, the error will
             # normally re-appear when evaluating per instance
             except DMLError:
@@ -1913,8 +1913,8 @@ def generate_init_data_objs(device):
                         try:
                             init = eval_initializer(
                                 node.site, node._type, node.astinit,
-                                Location(None, index_exprs),
-                                node.parent.scope, True)
+                                Location(None, index_exprs,
+                                         node.parent.scope), True)
                         except DMLError as e:
                             report(e)
                         else:

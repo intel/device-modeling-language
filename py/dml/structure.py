@@ -118,7 +118,7 @@ def mkglobals(stmts):
             if stmt[0] == 'constant':
                 _, site, name, expr = stmt
                 expr = codegen_expression_maybe_nonvalue(
-                    expr, None, global_scope)
+                    expr, global_location)
                 check_constant_expr(expr)
                 if expr.constant:
                     global_scope.add(ExpressionSymbol(name, expr, site))
@@ -184,7 +184,7 @@ def mkglobals(stmts):
                     typ = TUnknown()
                 else:
                     (struct_defs, typ) = eval_type(
-                        typ, site, None, global_scope, extern=True,
+                        typ, site, global_location, extern=True,
                         allow_void=site.dml_version() == (1, 2))
                     # any substructs are converted to anonymous extern structs
                     assert not struct_defs
@@ -198,7 +198,7 @@ def mkglobals(stmts):
                 (_, site, (_, _, name, typ)) = stmt
                 assert not typedefs.get(name, None)
                 (struct_defs, typ) = eval_type(
-                    typ, site, None, global_scope, typename=name, extern=True,
+                    typ, site, global_location, typename=name, extern=True,
                     allow_void=True)
                 # any substructs are converted to anonymous extern structs
                 assert not struct_defs
@@ -206,7 +206,7 @@ def mkglobals(stmts):
             elif stmt[0] == 'dml_typedef':
                 (_, site, (_, _, name, typ)) = stmt
                 assert not typedefs.get(name, None)
-                (struct_defs, typ) = eval_type(typ, site, None, global_scope,
+                (struct_defs, typ) = eval_type(typ, site, global_location,
                                                typename=name, allow_void=True)
                 for (_, t) in struct_defs:
                     if t is not typ:
@@ -716,7 +716,7 @@ def merge_parameters(params, obj_specs):
 
     return param0
 
-def typecheck_method_override(m1, m2, location, scope, check_throws=True):
+def typecheck_method_override(m1, m2, location, check_throws=True):
     '''check that m1 can override m2'''
     assert m1.kind == m2.kind == 'method'
     (_, (inp1, outp1, throws1, qualifiers1, _), _, _, _, _) \
@@ -744,7 +744,7 @@ def typecheck_method_override(m1, m2, location, scope, check_throws=True):
                 if t1 is None and logging.show_porting:
                     try:
                         (struct_defs, type2) = eval_type(
-                            t2, a2.site, location, scope)
+                            t2, a2.site, location)
                     except DMLError:
                         # uncommon but can happen, e.g. an argument
                         # with static array length that depends on a
@@ -761,8 +761,8 @@ def typecheck_method_override(m1, m2, location, scope, check_throws=True):
             and a1.site.dml_version() != (1, 2)
             and a2.site.dml_version() != (1, 2)):
             # TODO move to caller
-            (_, type1) = eval_type(t1, a1.site, location, scope)
-            (_, type2) = eval_type(t2, a2.site, location, scope)
+            (_, type1) = eval_type(t1, a1.site, location)
+            (_, type2) = eval_type(t2, a2.site, location)
             type1 = safe_realtype_unconst(type1)
             type2 = safe_realtype_unconst(type2)
 
@@ -778,8 +778,8 @@ def typecheck_method_override(m1, m2, location, scope, check_throws=True):
     for (i, (a1, a2)) in enumerate(zip(outp1, outp2)):
         if a1.site.dml_version() != (1, 2) and a2.site.dml_version() != (1, 2):
             ((n1, t1), (n2, t2)) = (a1.args, a2.args)
-            (_, type1) = eval_type(t1, a1.site, location, scope)
-            (_, type2) = eval_type(t2, a2.site, location, scope)
+            (_, type1) = eval_type(t1, a1.site, location)
+            (_, type2) = eval_type(t2, a2.site, location)
             type1 = safe_realtype_unconst(type1)
             type2 = safe_realtype_unconst(type2)
             ok = (type1.eq_fuzzy(type2)
@@ -855,7 +855,7 @@ def merge_subobj_defs(name, defs, parent):
 
     merged_arrayinfo = []
     if arrayinfo:
-        parent_scope = Location(None, static_indices(parent))
+        parent_scope = Location(None, static_indices(parent), parent.scope)
         for (dim_i, dim) in enumerate(
                 zip(*(arrayinfo for (_, arrayinfo, _, _) in defs))):
             (idxvar_asts, len_asts) = zip(*dim)
@@ -879,8 +879,7 @@ def merge_subobj_defs(name, defs, parent):
             candidates = {}
             for len_ast in len_asts:
                 if len_ast is not None:
-                    length = eval_arraylen(len_ast, parent_scope,
-                                           parent.scope)
+                    length = eval_arraylen(len_ast, parent_scope)
                     candidates.setdefault(length, []).append(len_ast)
             if len(candidates) == 0:
                 idxref = (f" (with index variable '{idxvar}')"
@@ -913,9 +912,9 @@ def method_is_std(node, methname):
 def mkdata(spec, parent):
     site, name, typ, astinit = spec
 
-    parent_scope = Location(None, static_indices(parent))
+    parent_scope = Location(None, static_indices(parent), parent.scope)
     (struct_defs, dtype) = eval_type(
-        typ, site, parent_scope, parent.scope)
+        typ, site, parent_scope)
     dtype = dtype.resolve()
     add_late_global_struct_defs(struct_defs)
     obj = objects.Session(name, dtype, astinit, site, parent)
@@ -930,8 +929,8 @@ def mkdata(spec, parent):
 def mksaved(spec, parent):
     site, name, typ, astinit = spec
 
-    parent_scope = Location(None, static_indices(parent))
-    (struct_defs, dtype) = eval_type(typ, site, parent_scope, parent.scope)
+    parent_scope = Location(None, static_indices(parent), parent.scope)
+    (struct_defs, dtype) = eval_type(typ, site, parent_scope)
     add_late_global_struct_defs(struct_defs)
     dtype.resolve()
     if deep_const(dtype):
@@ -951,11 +950,10 @@ def mksaved(spec, parent):
 
 def mkhook(spec, parent):
     (_, site, name, arraylen_asts, type_asts) = spec
-    parent_scope = Location(None, static_indices(parent))
+    parent_scope = Location(None, static_indices(parent), parent.scope)
     types = []
     for type_ast in type_asts:
-        (struct_defs, dtype) = eval_type(type_ast, site, parent_scope,
-                                         parent.scope)
+        (struct_defs, dtype) = eval_type(type_ast, site, parent_scope)
         add_late_global_struct_defs(struct_defs)
         typ = dtype.resolve()
         try:
@@ -965,7 +963,7 @@ def mkhook(spec, parent):
                              e.clarification))
         types.append(typ)
 
-    array_lens = tuple(eval_arraylen(len_ast, parent_scope, parent.scope)
+    array_lens = tuple(eval_arraylen(len_ast, parent_scope)
                        for len_ast in arraylen_asts)
 
     return objects.Hook(name, site, parent, types, array_lens)
@@ -1280,8 +1278,9 @@ def create_parameters(obj, obj_specs, index_vars, index_sites):
 def eval_precond(cond_ast, obj):
     try:
         with ErrorContext(obj, cond_ast.site):
-            location = Location(None, static_indices(obj, cond_ast.site))
-            cond = codegen_expression(cond_ast, location, obj.scope)
+            location = Location(None, static_indices(obj, cond_ast.site),
+                                obj.scope)
+            cond = codegen_expression(cond_ast, location)
     except DMLError as e:
         report(e)
         return False # whatever
@@ -1546,7 +1545,7 @@ def process_method_declarations(obj, name, declarations,
 
     (default_map, method_order) = traits.sort_method_implementations(impls)
 
-    location = Location(None, static_indices(obj))
+    location = Location(None, static_indices(obj), obj.scope)
 
     nonshared_impls = []
 
@@ -1565,7 +1564,7 @@ def process_method_declarations(obj, name, declarations,
     # Typecheck nonshared abstract decls against each other
     for (meth0, meth1) in itertools.pairwise(abstract_decls):
         typecheck_method_override(meth0.method_ast, meth1.method_ast,
-                                  location, obj.scope)
+                                  location)
 
     # Then typecheck any shared abstract declaration -- or, failing that,
     # the highest ranking implementation -- against some arbitrary abstract
@@ -1589,7 +1588,6 @@ def process_method_declarations(obj, name, declarations,
                 # that they throw
                 typecheck_method_override(
                     impl.method_ast, abstract_decls[0].method_ast, location,
-                    obj.scope,
                     check_throws=not (impl.throws
                                       and impl.site.dml_version() == (1, 2)))
         else:
@@ -1644,7 +1642,7 @@ def process_method_declarations(obj, name, declarations,
                 assert not impl.shared
                 typecheck_method_override(impl.method_ast,
                                           overridden.method_ast,
-                                          location, obj.scope,
+                                          location,
                                           check_throws=False)
             if (impl.site.dml_version() == (1, 2) and throws
                 and not overridden.throws
@@ -1886,7 +1884,7 @@ def mkobj2(obj, obj_specs, params, each_stmts):
     trait_method_impls = traits.merge_method_impl_maps(
         obj.site, explicit_traits)
 
-    obj_scope = Location(None, static_indices(obj))
+    obj_scope = Location(None, static_indices(obj), obj.scope)
     # Create all method nodes
     for name in sorted(method_asts):
         if dml.globals.dml_version == (1, 2):
@@ -2198,8 +2196,8 @@ def mkobj2(obj, obj_specs, params, each_stmts):
         for export in exports:
             method_ref_ast, name_ast = (export.args)
             method_ref = codegen_expression_maybe_nonvalue(
-                method_ref_ast, obj_scope, obj.scope)
-            name_expr = codegen_expression(name_ast, obj_scope, obj.scope)
+                method_ref_ast, obj_scope)
+            name_expr = codegen_expression(name_ast, obj_scope)
             # By continuing we can discover more error, since exports
             # have no effect if invalid
             if not isinstance(method_ref, NodeRef):
@@ -2710,7 +2708,7 @@ class ASTParamExpr(objects.ParamExpr):
         self.params_on_stack.append(self)
         try:
             expr = codegen_expression_maybe_nonvalue(
-                self.ast, Location(None, indices), self.parent.scope)
+                self.ast, Location(None, indices, self.parent.scope))
         finally:
             popped = self.params_on_stack.pop()
             assert popped is self
@@ -3264,8 +3262,8 @@ def mkmethod(site, rbrace_site, location, parent_obj, name, inp_ast,
                 and default.node.site.dml_version() == (1, 4)):
                 report(PTHROWS(body.site))
 
-    inp = eval_method_inp(inp_ast, location, parent_obj.scope)
-    outp = eval_method_outp(outp_ast, location, parent_obj.scope)
+    inp = eval_method_inp(inp_ast, location)
+    outp = eval_method_outp(outp_ast, location)
 
     for t in [p.typ for p in inp] + [t for (_, t) in outp]:
         if t:

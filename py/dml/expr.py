@@ -151,9 +151,9 @@ class Expression(Code):
         '''The corresponding DML type of this expression'''
         return self.type
 
-    def apply(self, inits, location, scope):
+    def apply(self, inits, location):
         'Apply this expression as a function'
-        return mkApplyInits(self.site, self, inits, location, scope)
+        return mkApplyInits(self.site, self, inits, location)
 
     @property
     def is_stack_allocated(self):
@@ -198,7 +198,7 @@ class NonValue(Expression):
         raise ICE(self.site, 'not a value: %r' % (self,))
     def read(self):
         raise ICE(self.site, 'cannot read non-value %r' % (self,))
-    def apply(self, inits, location, scope):
+    def apply(self, inits, location):
         raise self.exc()
     def exc(self):
         '''Exception to raise when expression appears in an incorrect context'''
@@ -291,7 +291,7 @@ def typecheck_inargs(site, args, inp, kind="function", known_arglen=None):
 # where each element is either an AST of an initializer, or an initializer
 # directly.
 # Returns a list of expressions corresponding to the provided initializers
-def typecheck_inarg_inits(site, inits, inp, location, scope,
+def typecheck_inarg_inits(site, inits, inp, location,
                           kind="function", variadic=False,
                           allow_undefined_args=False,
                           on_ptr_to_stack=None):
@@ -334,8 +334,7 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
                 raise ESYNTAX(init.site, '{',
                               'the argument for an untyped parameter must be '
                               + 'a simple expression')
-            arg = codegen_expression_maybe_nonvalue(init.args[0], location,
-                                                    scope)
+            arg = codegen_expression_maybe_nonvalue(init.args[0], location)
             if (isinstance(arg, NonValue)
                 and not (allow_undefined_args and arg.undefined)):
                 raise arg.exc()
@@ -343,7 +342,7 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
             and dml.globals.compat_dml12_int(init.site)
             and init.kind == 'initializer_scalar'):
             arg = coerce_if_eint(codegen_expression(init.args[0],
-                                                    location, scope))
+                                                    location))
             argtype = safe_realtype(arg.ctype())
             if not argtype:
                 raise ICE(site, "unknown expression type")
@@ -360,7 +359,7 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
         else:
             try:
                 arg = eval_initializer(init.site, ptype, init, location,
-                                       scope, False).as_expr(ptype)
+                                       False).as_expr(ptype)
             except EASTYPE as e:
                 if e.site is init.site:
                     raise EPTYPE(site, e.source, e.target_type, logref,
@@ -383,7 +382,7 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
                 raise ESYNTAX(init.site, '{',
                               'variadic arguments must be simple expressions')
             args.append(coerce_if_eint(codegen_expression(init.args[0],
-                                                          location, scope)))
+                                                          location)))
 
     return args
 
@@ -402,7 +401,7 @@ class Apply(Expression):
         return (self.fun.read() +
                 '(' + ", ".join(e.read() for e in self.args) + ')')
 
-def mkApplyInits(site, fun, inits, location, scope):
+def mkApplyInits(site, fun, inits, location):
     '''Apply a C function to initializers'''
     funtype = fun.ctype()
 
@@ -423,7 +422,7 @@ def mkApplyInits(site, fun, inits, location, scope):
     args = typecheck_inarg_inits(
         site, inits,
         [(str(i + 1), t) for (i, t) in enumerate(funtype.input_types)],
-        location, scope, 'function', funtype.varargs)
+        location, 'function', funtype.varargs)
 
     return Apply(site, fun, args, funtype)
 
