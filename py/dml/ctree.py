@@ -970,7 +970,8 @@ class ForeachSequence(Statement):
         obj_ref_init = CompoundInitializer(site,
                                            [list_id_init, inner_idx_init])
 
-        return CompoundInitializer(site, [vtable_init, obj_ref_init])
+        return CompoundInitializer(
+            site, [CompoundInitializer(site, [vtable_init, obj_ref_init])])
 
     @auto_init
     def __init__(self, site, trait, each_in_expr, body, break_label): pass
@@ -2541,6 +2542,15 @@ def source_for_assignment(site, target_type, source):
                     source = mkIfExpr(site, source,
                                       mkIntegerLiteral(site, 1),
                                       mkIntegerLiteral(site, 0))
+            # Permit traitrefs to get upcast
+            # We do this here rather than in eval_initializer in order to
+            # properly handle assignment chains and method call initializers
+            elif isinstance(real_target_type, TTrait):
+                try:
+                    source = mkTraitUpcast(site, source,
+                                           real_target_type.trait)
+                except ECAST as e:
+                    raise EASTYPE(site, target_type, source) from e
             else:
                 raise EASTYPE(site, target_type, source)
         if ((isinstance(real_target_type, TInt)
@@ -3677,7 +3687,7 @@ class ObjTraitRef(Expression):
         pointer = '(&%s)' % ('.'.join([structref] + [
             cident(t.name) for t in self.ancestry_path[1:]]))
         id = ObjIdentity(self.site, self.node, indices).read()
-        traitref_expr = ('((%s) {%s, %s})'
+        traitref_expr = ('((%s) {{%s, %s}})'
                          % (cident(self.trait.name), pointer, id))
         if indices_decl:
             return '({%s; %s;})' % (indices_decl, traitref_expr)
@@ -3737,7 +3747,7 @@ class TraitObjIdentity(Expression):
         return TNamed('_identity_t')
 
     def read(self):
-        return "(%s).id" % (self.traitref.read(),)
+        return "(%s).ref.id" % (self.traitref.read(),)
 
 class PortObjectFromObjIdentity(Expression):
     priority = dml.expr.Apply.priority
@@ -3769,8 +3779,9 @@ class TraitUpcast(Expression):
             raise ICE(self.site, 'cannot upcast %s to %s'
                       % (typ.trait.name, self.parent.name))
 
-        return ("UPCAST(%s, %s, %s)"
+        return ("UPCAST(%s, %s, %s, %s)"
                 % (self.sub.read(), cident(typ.trait.name),
+                   cident(self.parent.name),
                    ".".join(cident(t.name) for t in
                             typ.trait.ancestry_paths[self.parent][0])))
 
@@ -3785,8 +3796,10 @@ class TraitObjectCast(Expression):
         return TTrait(dml.globals.object_trait)
 
     def read(self):
-        return (f'({{_identity_t __id = ({self.sub.read()}).id; '
-                + '(_traitref_t) {_object_vtables[__id.id], __id};})')
+        return (f'({{_identity_t __id = ({self.sub.read()}).ref.id; '
+                + f'({cident(dml.globals.object_trait.name)}) '
+                + '{{likely(__id.id) ? _object_vtables[__id.id - 1] : NULL, '
+                + ' __id}};})')
 
 def mkTraitUpcast(site, sub, parent):
     if isinstance(sub, NonValue):
@@ -3797,16 +3810,27 @@ def mkTraitUpcast(site, sub, parent):
         if typ.trait is parent:
             return sub
         elif parent in typ.trait.ancestors:
+            if sub.constant and isinstance(sub, ObjTraitRef):
+                return ObjTraitRef(
+                    site, sub.node, parent, sub.indices,
+                    # We want this to ensure downcast-ability gets preserved.
+                    # In particular, TQMICs needs this.
+                    sub.ancestry_path + typ.trait.ancestry_paths[parent][0])
             return TraitUpcast(site, sub, parent)
         elif parent is dml.globals.object_trait:
+            if sub.constant and isinstance(sub, ObjTraitRef):
+                return ObjTraitRef(site, sub.node, parent, sub.indices)
             return TraitObjectCast(site, sub)
-    raise ETEMPLATEUPCAST(site, typ, parent.type())
+        else:
+            raise ETEMPLATEUPCAST(site, sub, parent.type(), typ)
+    else:
+        raise ECAST(site, sub, parent.type())
 
 def vtable_read(expr):
     typ = realtype(expr.ctype())
     assert isinstance(typ, TTrait)
-    return '((struct _%s *) (%s).trait)' % (cident(typ.trait.name),
-                                            expr.read())
+    return '((struct _%s *) (%s).ref.trait)' % (cident(typ.trait.name),
+                                                expr.read())
 
 class TraitParameter(Expression):
     priority = dml.expr.Apply.priority
@@ -3821,7 +3845,7 @@ class TraitParameter(Expression):
         assert isinstance(t, TTrait)
         vtable_type = f'struct _{cident(t.trait.name)}'
         if isinstance(realtype(self.type), TTraitList):
-            return (f'_vtable_sequence_param({self.traitref.read()},'
+            return (f'_vtable_sequence_param(({self.traitref.read()}).ref,'
                     f' offsetof({vtable_type}, {self.name}))')
         else:
             return (f'VTABLE_PARAM({self.traitref.read()}, {vtable_type}'
@@ -4910,11 +4934,12 @@ class Cast(Expression):
 def mkCast(site, expr, new_type):
     real = safe_realtype(new_type)
     if isinstance(real, TTrait):
-        if isinstance(expr, NodeRef):
+        if (isinstance(expr, NodeRef)
+            and isinstance(expr.node, objects.CompositeObject)):
             (node, indices) = expr.get_ref()
             if real.trait in node.traits.ancestors:
                 return ObjTraitRef(site, node, real.trait, indices)
-            raise ETEMPLATEUPCAST(site, "object", new_type)
+            raise ETEMPLATEUPCAST(site, expr, new_type, "object")
         else:
             return mkTraitUpcast(site, expr, real.trait)
 

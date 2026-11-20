@@ -55,9 +55,33 @@ template w is (t, u1, u2, u3, v) {
     }
 }
 
+template p1 is t {
+    param p1_val : double;
+    shared method sm() -> (double) default {
+        return p1_val;
+    }
+}
+
+template p2 is t {
+    param p2_val : double;
+    shared method sm() -> (double) default {
+        return p2_val;
+    }
+}
+
+template p is (p1, p2) {
+    shared method sm() -> (double) {
+        return 5.0;
+    }
+}
+
 group g1 is w;
 group g2 is w {
     param enable_u3 = false;
+}
+group g3 is p {
+    param p1_val = 5.1;
+    param p2_val = 5.2;
 }
 
 method init() {
@@ -82,6 +106,12 @@ method init() {
     // Since g2 lacks u3's def of m(), the TQMIC with v unambiguously resolves
     // to u2's implementation
     assert g2.templates.v.m() == 2.2;
+
+    // TQMICs on constant trait references. The implementation downcasts
+    // its trait reference along its own ancestry path, so the upcast of
+    // the constant trait reference must follow that same path.
+    assert cast(g3, p).templates.p1.sm() == 5.1;
+    assert cast(g3, p).templates.p2.sm() == 5.2;
 
     // a TQMIC qualified by the 'object' template is always allowed.
     // This really only serves as an easy way to call `cancel_after()` or the

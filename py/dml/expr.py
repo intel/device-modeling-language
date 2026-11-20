@@ -10,7 +10,7 @@ from .output import *
 from .types import *
 from .slotsmeta import *
 
-from . import output
+from . import output, objects
 
 __all__ = (
     'Code',
@@ -382,8 +382,24 @@ def typecheck_inarg_inits(site, inits, inp, location, scope,
             if init.kind != 'initializer_scalar':
                 raise ESYNTAX(init.site, '{',
                               'variadic arguments must be simple expressions')
-            args.append(coerce_if_eint(codegen_expression(init.args[0],
-                                                          location, scope)))
+            expr = codegen_expression_maybe_nonvalue(init.args[0], location,
+                                                     scope)
+
+            if isinstance(expr, NonValue):
+                exc = expr.exc()
+
+                from .ctree import NodeRef
+                if (isinstance(exc, ENVAL)
+                    and isinstance(expr, NodeRef)
+                    and isinstance(expr.node, objects.CompositeObject)):
+                    msg = ("Note: a variadic argument can't implicitly be "
+                           + "converted to a template type. If that's what "
+                           + "you intended, make a manual 'cast'.")
+                    exc = ENVAL(exc.site, f'{expr}\n{msg}')
+
+                raise exc
+
+            args.append(coerce_if_eint(expr))
 
     return args
 
