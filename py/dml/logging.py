@@ -33,8 +33,11 @@ import os
 import bisect
 import abc
 import contextlib
+from typing import TYPE_CHECKING
 
 import dml.globals
+if TYPE_CHECKING:
+    from dml.template import Rank
 
 show_porting = False
 
@@ -436,30 +439,72 @@ class ExpandedSite(Site):
 
 class TemplateSite(ExpandedSite):
     '''A source code location after template expansion'''
-    __slots__ = ('tpl_name',)
+    __slots__ = ('tpl_name', 'cause_rank')
 
-    def __init__(self, site, cause_site, tpl_name):
+    def __init__(self, site: Site, cause_site: Site, tpl_name: str,
+                 cause_rank: 'Rank'):
         self.site = site
         # site of the is statement that yielded this site
         self.cause_site = cause_site
         # name of the template this statement was expanded from
         self.tpl_name = tpl_name
+        # Rank of the block containing the is statement
+        self.cause_rank = cause_rank
 
     def describe(self):
         return f'template {self.tpl_name}'
 
 class InEachSite(ExpandedSite):
     '''A source code location after `in each` expansion'''
-    __slots__ = ('tpl_names',)
-    def __init__(self, site, in_each_site, tpl_names):
+    __slots__ = ('tpl_names', 'targets')
+    def __init__(self, site: Site, in_each_site: Site, tpl_names: list[str],
+                 targets: list[tuple[Site, 'Rank', str]]):
         self.site = site
         self.cause_site = in_each_site
         # names of the templates in the set the 'in each' statement is
         # targeting
         self.tpl_names = tpl_names
+        # (site of 'is', rank of the block containing it, template name)
+        # for the instantiations of the targeted templates
+        self.targets = targets
 
     def describe(self):
         return f"'in each ({', '.join(self.tpl_names)})' block"
+
+def expansion_chains(*sites: Site) -> list[list[tuple[Site, str]]]:
+    '''For each site, return a list of (site, message) pairs describing the
+    'is' statements through which it was expanded, including those that made
+    'in each' blocks apply. Instantiations from the same rank are
+    described together, once, by the first site that reaches them.'''
+    # rank -> [site of first 'is', description of its context, template names]
+    groups: dict['Rank', tuple[Site, str, list[str]]] = {}
+    group_order: list[list['Rank']] = [[] for _ in sites]
+    for (i, site) in enumerate(sites):
+        queue: list[Site] = [site]
+        for s in queue:
+            if isinstance(s, TemplateSite):
+                links = [(s.cause_site, s.cause_rank, s.tpl_name)]
+            elif isinstance(s, InEachSite):
+                links = s.targets
+            else:
+                continue
+            for (cause, rank, name) in links:
+                if rank not in groups:
+                    by = (f'by {cause.describe()}'
+                          if isinstance(cause, ExpandedSite) else 'here')
+                    groups[rank] = (cause, by, [])
+                    group_order[i].append(rank)
+                names = groups[rank][2]
+                if name not in names:
+                    names.append(name)
+                    queue.append(cause)
+    def describe(key: 'Rank') -> tuple[Site, str]:
+        (site, by, names) = groups[key]
+        if len(names) == 1:
+            return (site, f'template {names[0]} instantiated {by}')
+        return (site, f"templates {', '.join(names[:-1])} and {names[-1]}"
+                f' instantiated {by}')
+    return [[describe(key) for key in keys] for keys in group_order]
 
 store_errors = None
 

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 from .logging import (DMLError, DMLWarning, SimpleSite, PortingMessage, ICE,
-                      dollar)
+                      dollar, expansion_chains)
 
 def truncate(s, maxlen):
     "Make sure that s is not longer than maxlen"
@@ -150,9 +150,11 @@ class EAMBINH(DMLError):
     def __init__(self, site, other_site, method, rank_desc1, rank_desc2,
                  overridable=True):
         DMLError.__init__(self, site, method, rank_desc1, rank_desc2)
-        extra_lines = []
+        [extra_lines, *other_chain] = expansion_chains(
+            site, *([other_site] if other_site else []))
         if other_site:
             extra_lines.append((other_site, "conflicting definition"))
+            extra_lines.extend(*other_chain)
             def how_to_instantiate(rank_desc):
                 # we ignore 'in each' blocks here. In order to get a
                 # rank superior to an 'in each' block, one needs to

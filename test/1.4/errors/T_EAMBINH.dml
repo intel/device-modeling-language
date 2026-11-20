@@ -160,3 +160,54 @@ template each_b {
 }
 is each_a;
 is each_b;
+
+// The chain of 'is' statements behind an indirectly instantiated
+// conflicting definition is reported
+template ind_a {
+    /// ERROR EAMBINH
+    method ind() default {}
+}
+template ind_b1 {
+    /// ERROR EAMBINH
+    method ind() default {}
+}
+template ind_b2 {}
+in each ind_b2 {
+    /// ERROR EAMBINH
+    is ind_b1;
+}
+template ind_b3 {
+    /// ERROR EAMBINH
+    is ind_b2;
+}
+template ind_b4 {
+    /// ERROR EAMBINH
+    is ind_b3;
+}
+/// ERROR EAMBINH
+group g4 is (ind_a, ind_b4);
+
+// An 'in each' with multiple targets: the instantiations of all
+// targets are reported
+template ie_a {
+    /// ERROR EAMBINH
+    method ie() default {}
+}
+template ie_b {
+    /// ERROR EAMBINH
+    method ie() default {}
+}
+template ie_x {}
+template ie_y {}
+template ie_ymid {
+    /// ERROR EAMBINH
+    is ie_y;
+}
+group g5 {
+    in each (ie_x, ie_y) {
+        /// ERROR EAMBINH
+        is ie_b;
+    }
+    /// ERROR EAMBINH
+    group sub is (ie_a, ie_x, ie_ymid);
+}

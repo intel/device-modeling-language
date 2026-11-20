@@ -530,11 +530,15 @@ def setparam(node, name, mkexpr):
 
 def add_templates(obj_specs, each_stmts):
     used_templates = {}
-    queue = sum((obj_spec.templates for obj_spec in obj_specs), [])
+    # Template -> (site of 'is', rank of the block containing the 'is')
+    instantiations: dict[template.Template, tuple[Site, Rank]] = {}
+    # (site of 'is', Template, rank of the block containing the 'is')
+    queue = [(site, tpl, obj_spec.rank) for obj_spec in obj_specs
+             for (site, tpl) in obj_spec.templates]
 
     i = 0
     while i < len(queue):
-        (site, tpl) = queue[i]
+        (site, tpl, cause_rank) = queue[i]
         i += 1
         if (tpl.name in dml.globals.missing_templates
             and (
@@ -553,8 +557,10 @@ def add_templates(obj_specs, each_stmts):
             obj_spec = tpl.spec
         else:
             obj_spec = InstantiatedTemplateSpec(
-                tpl, *wrap_sites(TemplateSite, tpl.spec, site, tpl.name))
+                tpl, *wrap_sites(TemplateSite, tpl.spec, site, tpl.name,
+                                 cause_rank))
         used_templates[tpl] = obj_spec
+        instantiations[tpl] = (site, cause_rank)
 
         for (tpls, orig_tpls, spec) in each_stmts.get(tpl, []):
             for t in tpls:
@@ -570,13 +576,15 @@ def add_templates(obj_specs, each_stmts):
                     break
             else:
                 # All templates match; expand the each statement.
-                obj_specs.append(
-                    ObjectSpec(*wrap_sites(InEachSite, spec, spec.site,
-                                           [t.name for t in orig_tpls])))
-                queue.extend(spec.templates)
+                in_each_spec = ObjectSpec(*wrap_sites(
+                    InEachSite, spec, spec.site, [t.name for t in orig_tpls],
+                    [(*instantiations[t], t.name) for t in orig_tpls]))
+                obj_specs.append(in_each_spec)
+                queue.extend((s, t, spec.rank)
+                             for (s, t) in in_each_spec.templates)
 
         obj_specs.append(obj_spec)
-        queue.extend(obj_spec.templates)
+        queue.extend((s, t, obj_spec.rank) for (s, t) in obj_spec.templates)
 
     if logging.show_porting:
         PWUNUSED.used_templates.update(used_templates)
