@@ -1897,6 +1897,7 @@ SPDX-License-Identifier: MPL-2.0
             '.gitignore',
             '_config.yml',
             'syntaxes/Dml.tmlanguage',
+            ".github/workflows/copilot-code-review.yml",
         }
         for f in ignorelist:
             assert (root / f).is_file(), f
