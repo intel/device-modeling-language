@@ -40,7 +40,21 @@ bank shared_unresolved is shared_ambiguous;
 bank shared_resolved is shared_ambiguous {
     method m() {}
 }
+
+// A three-way clash shows an arbitrary but deterministic selection of two sites
+template three_0 {
+    /// ERROR EAMBINH
+    method m() default { }
 }
+template three_1 {
+    /// ERROR EAMBINH
+    method m() default { }
+}
+template three_2 {
+    method m() default { }
+}
+
+group three is (three_0, three_1, three_2);
 
 // Abstract declarations from unrelated templates also conflict. Semantically
 // there is no good reason to disallow this clash, we just haven't implemented
