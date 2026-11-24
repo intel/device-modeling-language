@@ -16,8 +16,8 @@ template t {
     param p: int;
 }
 
-/// ERROR ENPARAM
 group g2 {
+    /// ERROR ENPARAM
     is t;
 }
 

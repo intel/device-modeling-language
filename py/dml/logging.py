@@ -3,6 +3,8 @@
 
 # This module handles errors and warnings
 
+from __future__ import annotations
+
 __all__ = (
     'report',
     'ICE',
@@ -37,7 +39,7 @@ from typing import TYPE_CHECKING
 
 import dml.globals
 if TYPE_CHECKING:
-    from dml.template import Rank
+    from dml.objects import DMLObject
 
 show_porting = False
 
@@ -193,18 +195,20 @@ class LogMessage(object):
 
     def log_context(self):
         global last_reported_context
-        if self.ctx:
+        lines = [line for chain in expansion_chains(*self.context_sites())
+                 for line in chain]
+        if self.ctx and not any(obj is self.ctx.node
+                                for (_, _, obj) in lines):
             msg = f'in {self.ctx.node.identity()}'
             key = (self.ctx.site.loc(), msg)
             if key != last_reported_context:
                 last_reported_context = key
                 self.print_site_message(self.ctx.site, msg)
-        for chain in expansion_chains(*self.context_sites()):
-            for (site, msg) in chain:
-                loc = site.loc()
-                if last_reported_loc.get(msg) != loc:
-                    last_reported_loc[msg] = loc
-                    self.print_site_message(site, msg)
+        for (site, msg, _) in lines:
+            loc = site.loc()
+            if last_reported_loc.get(msg) != loc:
+                last_reported_loc[msg] = loc
+                self.print_site_message(site, msg)
 
     def postprocess(self):
         pass
@@ -279,9 +283,9 @@ class PortingMessage(LogMessage):
 class Site(metaclass=abc.ABCMeta):
     __slots__ = ()
     @abc.abstractmethod
-    def loc(self): pass
+    def loc(self) -> str: pass
     @abc.abstractmethod
-    def filename(self): pass
+    def filename(self) -> str: pass
     @abc.abstractproperty
     def lineno(self): pass
     @abc.abstractproperty
@@ -292,6 +296,10 @@ class Site(metaclass=abc.ABCMeta):
     def provisional_enabled(self, feature): pass
     @abc.abstractmethod
     def bitorder(self): pass
+
+    def outer_object(self) -> DMLObject | None:
+        '''Object in which this site was expanded, if known.'''
+        return None
 
 class SimpleSite(Site):
     '''A variant of Site without line information. Useful for code
@@ -446,57 +454,71 @@ class ExpandedSite(Site):
 
 class TemplateSite(ExpandedSite):
     '''A source code location after template expansion'''
-    __slots__ = ('tpl_name', 'cause_rank')
+    __slots__ = ('tpl_name', 'cause_object')
 
     def __init__(self, site: Site, cause_site: Site, tpl_name: str,
-                 cause_rank: 'Rank'):
+                 cause_object: DMLObject | None):
         self.site = site
         # site of the is statement that yielded this site
         self.cause_site = cause_site
         # name of the template this statement was expanded from
         self.tpl_name = tpl_name
-        # Rank of the block containing the is statement
-        self.cause_rank = cause_rank
+        # The object that the template was instantiated in
+        self.cause_object = cause_object
 
     def describe(self):
         return f'template {self.tpl_name}'
+
+    def outer_object(self) -> DMLObject | None:
+        return self.cause_object
 
 class InEachSite(ExpandedSite):
     '''A source code location after `in each` expansion'''
     __slots__ = ('tpl_names', 'targets')
     def __init__(self, site: Site, in_each_site: Site, tpl_names: list[str],
-                 targets: list[tuple[Site, 'Rank', str]]):
+                 targets: list[tuple[Site, str, DMLObject | None]]):
         self.site = site
         self.cause_site = in_each_site
         # names of the templates in the set the 'in each' statement is
         # targeting
         self.tpl_names = tpl_names
-        # (site of 'is', rank of the block containing it, template name)
-        # for the instantiations of the targeted templates
+        # (site of 'is', template name, object) for the instantiations of
+        # the targeted templates
         self.targets = targets
 
     def describe(self):
         return f"'in each ({', '.join(self.tpl_names)})' block"
 
-def expansion_chains(*sites: Site) -> list[list[tuple[Site, str]]]:
-    '''For each site, return a list of (site, message) pairs describing the
-    'is' statements through which it was expanded, including those that made
-    'in each' blocks apply.'''
+    def outer_object(self) -> DMLObject | None:
+        return self.targets[0][2] if self.targets else None
+
+def expansion_chains(*sites: Site
+                     ) -> list[list[tuple[Site, str, DMLObject | None]]]:
+    '''For each site, return a list of (site, message, object) triples
+    describing the 'is' statements through which it was expanded, including
+    those that made 'in each' blocks apply. The object is mentioned in the
+    message, and returned, when it differs from that of the enclosing
+    instantiation; otherwise it is None.'''
     chains = []
     for site in sites:
         chain = []
         queue: list[Site] = [site]
         for s in queue:
             if isinstance(s, TemplateSite):
-                links = [(s.cause_site, s.cause_rank, s.tpl_name)]
+                links = [(s.cause_site, s.tpl_name, s.cause_object)]
             elif isinstance(s, InEachSite):
                 links = s.targets
             else:
                 continue
-            for (cause, rank, name) in links:
+            for (cause, name, obj) in links:
                 by = (f'by {cause.describe()}'
                       if isinstance(cause, ExpandedSite) else 'here')
-                chain.append((cause, f'template {name} instantiated {by}'))
+                mentioned = (obj if obj is not None
+                             and cause.outer_object() is not obj else None)
+                if mentioned is not None:
+                    by += f' ({mentioned.objtype} {mentioned.identity()})'
+                chain.append((cause, f'template {name} instantiated {by}',
+                              mentioned))
                 queue.append(cause)
         chains.append(chain)
     return chains

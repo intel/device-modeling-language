@@ -528,17 +528,16 @@ def setparam(node, name, mkexpr):
         raise ICE(mkexpr.site, "Unknown parameter '%s' in setparam" % (name,))
     pnode.set_expr(mkexpr)
 
-def add_templates(obj_specs, each_stmts):
+def add_templates(obj, obj_specs, each_stmts):
     used_templates = {}
-    # Template -> (site of 'is', rank of the block containing the 'is')
-    instantiations: dict[template.Template, tuple[Site, Rank]] = {}
-    # (site of 'is', Template, rank of the block containing the 'is')
-    queue = [(site, tpl, obj_spec.rank) for obj_spec in obj_specs
-             for (site, tpl) in obj_spec.templates]
+    # Template -> site of the 'is' that instantiated it
+    instantiations: dict[template.Template, Site] = {}
+    # (site of 'is', Template)
+    queue = sum((obj_spec.templates for obj_spec in obj_specs), [])
 
     i = 0
     while i < len(queue):
-        (site, tpl, cause_rank) = queue[i]
+        (site, tpl) = queue[i]
         i += 1
         if (tpl.name in dml.globals.missing_templates
             and (
@@ -557,10 +556,9 @@ def add_templates(obj_specs, each_stmts):
             obj_spec = tpl.spec
         else:
             obj_spec = InstantiatedTemplateSpec(
-                tpl, *wrap_sites(TemplateSite, tpl.spec, site, tpl.name,
-                                 cause_rank))
+                tpl, *wrap_sites(TemplateSite, tpl.spec, site, tpl.name, obj))
         used_templates[tpl] = obj_spec
-        instantiations[tpl] = (site, cause_rank)
+        instantiations[tpl] = site
 
         for (tpls, orig_tpls, spec) in each_stmts.get(tpl, []):
             for t in tpls:
@@ -578,13 +576,12 @@ def add_templates(obj_specs, each_stmts):
                 # All templates match; expand the each statement.
                 in_each_spec = ObjectSpec(*wrap_sites(
                     InEachSite, spec, spec.site, [t.name for t in orig_tpls],
-                    [(*instantiations[t], t.name) for t in orig_tpls]))
+                    [(instantiations[t], t.name, obj) for t in orig_tpls]))
                 obj_specs.append(in_each_spec)
-                queue.extend((s, t, spec.rank)
-                             for (s, t) in in_each_spec.templates)
+                queue.extend(in_each_spec.templates)
 
         obj_specs.append(obj_spec)
-        queue.extend((s, t, obj_spec.rank) for (s, t) in obj_spec.templates)
+        queue.extend(obj_spec.templates)
 
     if logging.show_porting:
         PWUNUSED.used_templates.update(used_templates)
@@ -1064,7 +1061,8 @@ def mkobj(ident, objtype, arrayinfo, obj_specs, parent, each_stmts):
         raise EASZLARGE(site, num_elems)
 
     with ErrorContext(obj):
-        (obj_specs, used_templates) = add_templates(obj_specs, each_stmts)
+        (obj_specs, used_templates) = add_templates(obj, obj_specs,
+                                                    each_stmts)
         obj.templates = used_templates
         obj_params = create_parameters(obj, obj_specs, index_vars, index_sites)
         return mkobj2(obj, obj_specs, obj_params, each_stmts)
