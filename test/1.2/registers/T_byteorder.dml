@@ -5,6 +5,7 @@
 dml 1.2;
 device test;
 
+/// ERROR EERRSTMT dml-builtins.dml
 /// ERROR EERRSTMT
 bank b {
     parameter byte_order = undefined;

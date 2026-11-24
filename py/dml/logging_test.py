@@ -29,15 +29,15 @@ class test_expansion_chains(unittest.TestCase):
             (is_b, 'template b instantiated by template a'),
             (is_a, 'template a instantiated here')]])
 
-    def test_same_rank_grouped(self):
+    def test_same_rank_separate(self):
         # 'is (a, b)' in the device; conflicting definitions in a and b
         is_a = SimpleSite('is a')
         is_b = SimpleSite('is b')
         site_a = TemplateSite(SimpleSite('a.m'), is_a, 'a', self.dev_rank)
         site_b = TemplateSite(SimpleSite('b.m'), is_b, 'b', self.dev_rank)
         self.assertEqual(expansion_chains(site_a, site_b), [
-            [(is_a, 'templates a and b instantiated here')],
-            []])
+            [(is_a, 'template a instantiated here')],
+            [(is_b, 'template b instantiated here')]])
 
     def test_shared_tail(self):
         # a instantiated in the device; b and c both instantiated by a
@@ -47,9 +47,10 @@ class test_expansion_chains(unittest.TestCase):
         site_b = TemplateSite(SimpleSite('b.m'), is_b, 'b', self.a_rank)
         site_c = TemplateSite(SimpleSite('c.m'), is_c, 'c', self.a_rank)
         self.assertEqual(expansion_chains(site_b, site_c), [
-            [(is_b, 'templates b and c instantiated by template a'),
+            [(is_b, 'template b instantiated by template a'),
              (is_a, 'template a instantiated here')],
-            []])
+            [(is_c, 'template c instantiated by template a'),
+             (is_a, 'template a instantiated here')]])
 
     def test_in_each(self):
         # 'in each (x, y) { is d; }', where x is instantiated in the
@@ -65,8 +66,9 @@ class test_expansion_chains(unittest.TestCase):
         site = TemplateSite(SimpleSite('d.m'), is_d, 'd', in_each_rank)
         self.assertEqual(expansion_chains(site), [[
             (is_d, "template d instantiated by 'in each (x, y)' block"),
-            (is_x, 'templates x and a instantiated here'),
-            (is_y, 'template y instantiated by template a')]])
+            (is_x, 'template x instantiated here'),
+            (is_y, 'template y instantiated by template a'),
+            (is_a, 'template a instantiated here')]])
 
     def test_imported_files(self):
         # Definitions directly in imported files are not expanded

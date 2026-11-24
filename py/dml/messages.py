@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 from .logging import (DMLError, DMLWarning, SimpleSite, PortingMessage, ICE,
-                      dollar, expansion_chains)
+                      dollar)
 
 def truncate(s, maxlen):
     "Make sure that s is not longer than maxlen"
@@ -49,13 +49,12 @@ class EAFTER(DMLError):
         self.unserializable = unserializable
     def log(self):
         DMLError.log(self)
-        self.print_site_message(
-            self.method.site,
-            "method declaration"
-            + ''.join(
-                f"\nmethod parameter {p.logref} is of unserializable type: "
-                + f"{p.typ}"
-                for p in self.unserializable or []))
+        self.print_site_message(self.method.site, "method declaration")
+        for p in self.unserializable or []:
+            self.print_site_message(
+                self.method.site,
+                f"method parameter {p.logref} is of unserializable type: "
+                + f"{p.typ}")
 
 class EAFTERSENDNOW(DMLError):
     """
@@ -150,11 +149,10 @@ class EAMBINH(DMLError):
     def __init__(self, site, other_site, method, rank_desc1, rank_desc2,
                  overridable=True):
         DMLError.__init__(self, site, method, rank_desc1, rank_desc2)
-        [extra_lines, *other_chain] = expansion_chains(
-            site, *([other_site] if other_site else []))
+        self.other_site = other_site
+        extra_lines = []
         if other_site:
             extra_lines.append((other_site, "conflicting definition"))
-            extra_lines.extend(*other_chain)
             def how_to_instantiate(rank_desc):
                 # we ignore 'in each' blocks here. In order to get a
                 # rank superior to an 'in each' block, one needs to
@@ -186,6 +184,11 @@ class EAMBINH(DMLError):
         DMLError.log(self)
         for (site, msg) in self.extra_lines:
             self.print_site_message(site, msg)
+    def context_sites(self):
+        sites = DMLError.context_sites(self)
+        if self.other_site:
+            sites.insert(1, self.other_site)
+        return sites
 
 class EAMBDEFAULT(DMLError):
     """A method may not invoke its default implementation if multiple

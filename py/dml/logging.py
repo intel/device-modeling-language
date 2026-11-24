@@ -91,7 +91,10 @@ class ErrorContext(object):
         if not exc_type:
             ErrorContext.last_entered = popped
 
-last_used_error_context = None
+# Context lines are only repeated when they change: the location each
+# expansion description was last reported at, and the last 'in <object>' line
+last_reported_loc: dict[str, str] = {}
+last_reported_context: tuple[str, str] | None = None
 
 def report_error():
     global failure
@@ -169,29 +172,7 @@ class LogMessage(object):
 
     # This method can be overridden
     def log(self):
-        global last_used_error_context
         tag = self.tag()
-
-        if not self.ctx or self.ctx == last_used_error_context:
-            ctx = None
-        else:
-            last_used_error_context = self.ctx
-            ctx = self.ctx
-
-        expanded_site = ctx.node.site if ctx else self.site
-        # The chain of expansions (is statements or in-each:s) leading to this
-        # message.
-        expansions = []
-        while isinstance(expanded_site, ExpandedSite):
-            expansions.append(expanded_site)
-            expanded_site = expanded_site.cause_site
-        for site in reversed(expansions):
-            self.print_site_message(site.cause_site, f"In {site.describe()}")
-
-        if ctx:
-            self.print_site_message(ctx.site,
-                                    "In %s" % self.ctx.node.identity())
-
         lines = self.msg.splitlines() or ['']
         if include_tag:
             tag = ' ' + tag
@@ -201,6 +182,29 @@ class LogMessage(object):
                                 '%s%s: %s' % (self.kind, tag, lines[0]))
         for l in lines[1:]:
             self.print_site_message(self.site, '  ' + l)
+
+    def context_sites(self) -> list['Site']:
+        '''Sites whose expansion through templates and 'in each' blocks
+        is described after the message'''
+        sites = [self.site] if self.site else []
+        if self.ctx:
+            sites.append(self.ctx.node.site)
+        return sites
+
+    def log_context(self):
+        global last_reported_context
+        if self.ctx:
+            msg = f'in {self.ctx.node.identity()}'
+            key = (self.ctx.site.loc(), msg)
+            if key != last_reported_context:
+                last_reported_context = key
+                self.print_site_message(self.ctx.site, msg)
+        for chain in expansion_chains(*self.context_sites()):
+            for (site, msg) in chain:
+                loc = site.loc()
+                if last_reported_loc.get(msg) != loc:
+                    last_reported_loc[msg] = loc
+                    self.print_site_message(site, msg)
 
     def postprocess(self):
         pass
@@ -268,6 +272,9 @@ class PortingMessage(LogMessage):
                 # messages on Windows
                 os.path.normcase(arg.loc()) if isinstance(arg, Site) else arg
                 for arg in self.args]))
+
+    def log_context(self):
+        pass
 
 class Site(metaclass=abc.ABCMeta):
     __slots__ = ()
@@ -474,12 +481,10 @@ class InEachSite(ExpandedSite):
 def expansion_chains(*sites: Site) -> list[list[tuple[Site, str]]]:
     '''For each site, return a list of (site, message) pairs describing the
     'is' statements through which it was expanded, including those that made
-    'in each' blocks apply. Instantiations from the same rank are
-    described together, once, by the first site that reaches them.'''
-    # rank -> [site of first 'is', description of its context, template names]
-    groups: dict['Rank', tuple[Site, str, list[str]]] = {}
-    group_order: list[list['Rank']] = [[] for _ in sites]
-    for (i, site) in enumerate(sites):
+    'in each' blocks apply.'''
+    chains = []
+    for site in sites:
+        chain = []
         queue: list[Site] = [site]
         for s in queue:
             if isinstance(s, TemplateSite):
@@ -489,22 +494,12 @@ def expansion_chains(*sites: Site) -> list[list[tuple[Site, str]]]:
             else:
                 continue
             for (cause, rank, name) in links:
-                if rank not in groups:
-                    by = (f'by {cause.describe()}'
-                          if isinstance(cause, ExpandedSite) else 'here')
-                    groups[rank] = (cause, by, [])
-                    group_order[i].append(rank)
-                names = groups[rank][2]
-                if name not in names:
-                    names.append(name)
-                    queue.append(cause)
-    def describe(key: 'Rank') -> tuple[Site, str]:
-        (site, by, names) = groups[key]
-        if len(names) == 1:
-            return (site, f'template {names[0]} instantiated {by}')
-        return (site, f"templates {', '.join(names[:-1])} and {names[-1]}"
-                f' instantiated {by}')
-    return [[describe(key) for key in keys] for keys in group_order]
+                by = (f'by {cause.describe()}'
+                      if isinstance(cause, ExpandedSite) else 'here')
+                chain.append((cause, f'template {name} instantiated {by}'))
+                queue.append(cause)
+        chains.append(chain)
+    return chains
 
 store_errors = None
 
@@ -516,6 +511,7 @@ def report(logmessage):
 
     if logmessage.preprocess():
         logmessage.log()
+        logmessage.log_context()
         logmessage.postprocess()
 
 def dbg(*args):
