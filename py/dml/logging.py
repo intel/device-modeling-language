@@ -36,7 +36,7 @@ import os
 import bisect
 import abc
 import contextlib
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterable
 
 import dml.globals
 if TYPE_CHECKING:
@@ -186,46 +186,22 @@ class LogMessage(object):
         for l in lines[1:]:
             self.print_site_message(self.site, '  ' + l)
 
-    def context_sites(self) -> list['Site']:
-        '''Sites whose expansion through templates and 'in each' blocks
-        is described after the message'''
-        sites = [self.site] if self.site else []
-        if self.ctx:
-            sites.append(self.ctx.node.site)
-        return sites
-
-    def log_context(self):
-        global last_reported_context
-        lines = [line for chain in expansion_chains(*self.context_sites())
-                 for line in chain]
-        if self.ctx and not any(obj is self.ctx.node
-                                for (_, _, obj) in lines):
-            msg = f'in {self.ctx.node.identity()}'
-            key = (self.ctx.site.loc(), msg)
-            if key != last_reported_context:
-                last_reported_context = key
-                self.print_site_message(self.ctx.site, msg)
-        for (site, msg, _) in lines:
-            loc = site.loc()
-            if last_reported_loc.get(msg) != loc:
-                last_reported_loc[msg] = loc
-                self.print_site_message(site, msg)
+    def hints(self) -> Iterable[tuple[Site, str]]:
+        '''Additional located lines belonging to this message.'''
+        return ()
 
     def postprocess(self):
         pass
 
-# This is a base class for internal compiler errors
-#
 class ICE(Exception, LogMessage):
     kind = "internal compiler error"
     fmt = "%s"
-    def __init__(self, site, msg):
+    def __init__(self, site, msg=' '):
         LogMessage.__init__(self, site, msg)
         Exception.__init__(self, msg)
 
-# This is a base class for warning messages
-#
 class DMLWarning(LogMessage):
+    '''base class for warning messages'''
     kind = "warning"
     next_warning_yields_error = False
 
@@ -248,9 +224,8 @@ class DMLWarning(LogMessage):
             DMLWarning.next_warning_yields_error = False
 
 
-# This is a base class for error messages
-#
 class DMLError(Exception, LogMessage):
+    '''base class for error messages'''
     kind = "error"
 
     def __init__(self, site, *msgargs):
@@ -277,9 +252,6 @@ class PortingMessage(LogMessage):
                 # messages on Windows
                 os.path.normcase(arg.loc()) if isinstance(arg, Site) else arg
                 for arg in self.args]))
-
-    def log_context(self):
-        pass
 
 class Site(metaclass=abc.ABCMeta):
     __slots__ = ()
@@ -546,6 +518,7 @@ def expansion_chains(*sites: Site
 store_errors = None
 
 def report(logmessage):
+    global last_reported_context
     if store_errors is not None and isinstance(logmessage,
                                                (DMLError, DMLWarning)):
         store_errors.append(logmessage)
@@ -553,7 +526,30 @@ def report(logmessage):
 
     if logmessage.preprocess():
         logmessage.log()
-        logmessage.log_context()
+        hints = list(logmessage.hints())
+        lines = []
+        if not isinstance(logmessage, PortingMessage):
+            sites = [logmessage.site] if logmessage.site else []
+            if logmessage.ctx:
+                sites.append(logmessage.ctx.node.site)
+            sites.extend(site for (site, _) in hints)
+            lines = [line for chain in expansion_chains(*sites)
+                     for line in chain]
+            if logmessage.ctx and not any(obj is logmessage.ctx.node
+                                          for (_, _, obj) in lines):
+                msg = f'in {logmessage.ctx.node.identity()}'
+                context_site = logmessage.ctx.site
+                key = (context_site.loc(), msg)
+                if key != last_reported_context:
+                    last_reported_context = key
+                    hints.append((context_site, msg))
+        for (site, msg) in hints:
+            logmessage.print_site_message(site, msg)
+        for (site, msg, _) in lines:
+            loc = site.loc()
+            if last_reported_loc.get(msg) != loc:
+                last_reported_loc[msg] = loc
+                logmessage.print_site_message(site, msg)
         logmessage.postprocess()
 
 def dbg(*args):
