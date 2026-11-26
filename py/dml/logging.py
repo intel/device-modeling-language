@@ -26,6 +26,7 @@ __all__ = (
     'ExpandedSite',
     'TemplateSite',
     'InEachSite',
+    'ImportSite',
 
     'dbg',
     )
@@ -297,6 +298,10 @@ class Site(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def bitorder(self): pass
 
+    def describe_cause(self) -> str:
+        '''Describe this site as the cause of an expansion.'''
+        return 'here'
+
     def outer_object(self) -> DMLObject | None:
         '''Object in which this site was expanded, if known.'''
         return None
@@ -434,8 +439,8 @@ class ExpandedSite(Site):
     __slots__ = ('site', 'cause_site')
 
     @abc.abstractmethod
-    def describe(self) -> str:
-        '''A description of the construct for the reusable chunk of code'''
+    def expansion_links(self) -> list[tuple[Site, str, str, DMLObject | None]]:
+        '''Return the causes, descriptions, actions and objects of expansions.'''
         pass
 
     def __repr__(self):
@@ -466,11 +471,27 @@ class TemplateSite(ExpandedSite):
         # The object that the template was instantiated in
         self.cause_object = cause_object
 
-    def describe(self):
-        return f'template {self.tpl_name}'
+    def describe_cause(self) -> str:
+        return f'by template {self.tpl_name}'
+
+    def expansion_links(self) -> list[tuple[Site, str, str, DMLObject | None]]:
+        return [(self.cause_site, f'template {self.tpl_name}', 'instantiated',
+                 self.cause_object)]
 
     def outer_object(self) -> DMLObject | None:
         return self.cause_object
+
+class ImportSite(ExpandedSite):
+    '''A source code location in an imported file.'''
+    __slots__ = ('import_name',)
+
+    def __init__(self, site: Site, cause_site: Site, import_name: str):
+        self.site = site
+        self.cause_site = cause_site
+        self.import_name = import_name
+
+    def expansion_links(self) -> list[tuple[Site, str, str, DMLObject | None]]:
+        return [(self.cause_site, f'file {self.import_name}', 'imported', None)]
 
 class InEachSite(ExpandedSite):
     '''A source code location after `in each` expansion'''
@@ -486,8 +507,12 @@ class InEachSite(ExpandedSite):
         # the targeted templates
         self.targets = targets
 
-    def describe(self):
-        return f"'in each ({', '.join(self.tpl_names)})' block"
+    def describe_cause(self) -> str:
+        return f"by 'in each ({', '.join(self.tpl_names)})' block"
+
+    def expansion_links(self) -> list[tuple[Site, str, str, DMLObject | None]]:
+        return [(cause, f'template {name}', 'instantiated', obj)
+                for (cause, name, obj) in self.targets]
 
     def outer_object(self) -> DMLObject | None:
         return self.targets[0][2] if self.targets else None
@@ -504,20 +529,15 @@ def expansion_chains(*sites: Site
         chain = []
         queue: list[Site] = [site]
         for s in queue:
-            if isinstance(s, TemplateSite):
-                links = [(s.cause_site, s.tpl_name, s.cause_object)]
-            elif isinstance(s, InEachSite):
-                links = s.targets
-            else:
+            if not isinstance(s, ExpandedSite):
                 continue
-            for (cause, name, obj) in links:
-                by = (f'by {cause.describe()}'
-                      if isinstance(cause, ExpandedSite) else 'here')
+            for (cause, description, action, obj) in s.expansion_links():
+                by = cause.describe_cause()
                 mentioned = (obj if obj is not None
                              and cause.outer_object() is not obj else None)
                 if mentioned is not None:
                     by += f' ({mentioned.objtype} {mentioned.identity()})'
-                chain.append((cause, f'template {name} instantiated {by}',
+                chain.append((cause, f'{description} {action} {by}',
                               mentioned))
                 queue.append(cause)
         chains.append(chain)

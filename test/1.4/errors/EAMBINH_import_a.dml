@@ -1,0 +1,7 @@
+/*
+  © 2026 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.4;
+/// TAGS-FROM EAMBINH_import_b.dml
+import "EAMBINH_import_b.dml";

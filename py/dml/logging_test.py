@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from dml import logging
 from dml.logging import (ErrorContext, SimpleSite, TemplateSite, InEachSite,
-                         expansion_chains)
+                         ImportSite, expansion_chains)
 from dml.objects import Device, Group
 
 class test_expansion_chains(unittest.TestCase):
@@ -130,15 +130,19 @@ class test_expansion_chains(unittest.TestCase):
             (is_a, 'template a instantiated here', None)]])
 
     def test_imported_files(self):
-        # Definitions directly in imported files are not expanded
-        self.assertEqual(expansion_chains(SimpleSite('a.dml:2'),
-                          SimpleSite('b.dml:2')),
-                         [[], []])
-        # 'is ta' in a.dml and 'is tb' in b.dml are in different files
-        is_ta = SimpleSite('a.dml:4')
-        is_tb = SimpleSite('b.dml:4')
-        site_a = TemplateSite(SimpleSite('ta.dml:1'), is_ta, 'ta', None)
-        site_b = TemplateSite(SimpleSite('tb.dml:1'), is_tb, 'tb', None)
-        self.assertEqual(expansion_chains(site_a, site_b), [
-            [(is_ta, 'template ta instantiated here', None)],
-            [(is_tb, 'template tb instantiated here', None)]])
+        import_a = SimpleSite('dev.dml:2')
+        import_b = ImportSite(SimpleSite('a.dml:2'), import_a, 'a.dml')
+        definition = ImportSite(SimpleSite('b.dml:3'), import_b, 'b.dml')
+        self.assertEqual(expansion_chains(definition), [[
+            (import_b, 'file b.dml imported here', None),
+            (import_a, 'file a.dml imported here', None)]])
+
+        imported_template_site = ImportSite(
+            SimpleSite('b.dml:4'), import_b, 'b.dml')
+        method = TemplateSite(SimpleSite('b.dml:5'), imported_template_site,
+                              'example', None)
+        self.assertEqual(expansion_chains(method), [[
+            (imported_template_site, 'template example instantiated here',
+             None),
+            (import_b, 'file b.dml imported here', None),
+            (import_a, 'file a.dml imported here', None)]])

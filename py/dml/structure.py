@@ -487,6 +487,10 @@ def wrap_sites(site_constructor, spec, issite, *rest):
                 (_, site, msg) = stmt
                 shallow_wrapped.append(
                     ast.error(site_constructor(site, issite, *rest), msg))
+            elif asttype == 'export':
+                (_, site, *args) = stmt
+                shallow_wrapped.append(
+                    ast.export(site_constructor(site, issite, *rest), *args))
             elif asttype == 'session':
                 (_, site, decls, inits) = stmt
                 shallow_wrapped.append(
@@ -553,7 +557,8 @@ def add_templates(obj, obj_specs, each_stmts):
             continue
 
         if tpl.name.startswith('@'):
-            obj_spec = tpl.spec
+            obj_spec = ObjectSpec(*wrap_sites(
+                ImportSite, tpl.spec, site, tpl.name[1:]))
         else:
             obj_spec = InstantiatedTemplateSpec(
                 tpl, *wrap_sites(TemplateSite, tpl.spec, site, tpl.name, obj))

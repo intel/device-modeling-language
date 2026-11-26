@@ -6,6 +6,14 @@ dml 1.4;
 
 device test;
 
+/// TAGS-FROM EAMBINH_import_a.dml
+/// ERROR EAMBINH
+import "EAMBINH_import_a.dml";
+
+/// TAGS-FROM EAMBINH_import_c.dml
+/// ERROR EAMBINH
+import "EAMBINH_import_c.dml";
+
 // Conflicting shared method implementations.
 template shared_a {
     shared method m() default {}
