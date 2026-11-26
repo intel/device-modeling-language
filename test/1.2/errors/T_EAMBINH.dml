@@ -8,83 +8,11 @@ device test;
 
 /// WARNING WEXPERIMENTAL T_EAMBINH.dml
 
-// trivial example
 trait a {
     method m() default {}
 }
 
-trait b {
-    method m() default {}
-}
-/// ERROR EAMBINH
-trait c {
-    is a;
-    is b;
-}
-
-// parameters vs methods
-trait ap {
-    parameter int m;
-}
-/// ERROR EAMBINH
-trait cp {
-    is a;
-    is ap;
-}
-
-// nontrivial example
-trait d {
-    method m();
-}
-trait e {
-    is d;
-    method m() default {}
-}
-trait f {
-    is d;
-    method m() default {}
-}
-trait g {
-    is e;
-}
-// no error
-trait h {
-    is g;
-    is f;
-}
-
-/// ERROR EAMBINH
-bank b1 is h;
-
-// no error
-bank b2 is h {
-    method m() nothrow {}
-}
-
-// Currently, not even abstract methods may clash. We don't have a good reason
-// to disallow this clash; we just haven't implemented it yet.
-trait i {
-    method m();
-}
-trait j {
-    method m();
-}
-/// ERROR EAMBINH
-trait k {
-    is i;
-    is j;
-    method m() default {}
-}
-
-// name clash between methods from unrelated traits, instantiated directly
-// by an object, SIMICS-9681
-/// ERROR EAMBINH
-port p {
-    is i;
-    is j;
-    method m() nothrow {}
-}
-
+// DML 1.2 templates do not create a trait of their own.
 template ta {
     is a;
     /// ERROR EAMBINH
