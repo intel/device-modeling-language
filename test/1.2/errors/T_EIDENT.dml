@@ -7,9 +7,14 @@ provisional simics_util_vect;
 
 device test;
 
+parameter dev_param = 3;
+
 port p {
     /// ERROR EIDENT
     parameter foo = x;
+    // objects are only reachable through $
+    /// ERROR EIDENT
+    parameter bar = dev_param;
 }
 
 /// ERROR EIDENT

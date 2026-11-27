@@ -1,0 +1,11 @@
+/*
+  © 2026 Intel Corporation
+  SPDX-License-Identifier: MPL-2.0
+*/
+dml 1.2;
+
+device test;
+
+/// DMLC-FLAG --breaking-change=dml12-remove-misc-quirks
+/// SCAN-FOR-TAGS dml12_remove_misc_quirks.dml
+import "dml12_remove_misc_quirks.dml";

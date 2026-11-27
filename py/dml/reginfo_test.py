@@ -7,13 +7,19 @@ import itertools
 
 from dml.reginfo import RegInstance, RegInfo, explode_register
 from dml.objects import Device, Bank, Group, Register
+from dml.logging import SimpleSite
+from dml.symtab import global_scope
 
 class TestRegInfo(unittest.TestCase):
     def reg_array(self, bankdim, regdims):
-        group = Bank('b', None, Device('d', None), bankdim, ('i'))
+        site = SimpleSite('nowhere')
+        # the device's members are added to the global scope
+        global_scope.symdict.clear()
+        global_scope.symlist.clear()
+        group = Bank('b', site, Device('d', site), bankdim, ('i'))
         for dimsizes in regdims:
-            group = Group('g', None, group, dimsizes, 'i')
-        return Register('r', None, group, (), ())
+            group = Group('g', site, group, dimsizes, 'i')
+        return Register('r', site, group, (), ())
 
     def test_complete(self):
         '''Test RegInfo.node_instances() for a fully populated register array'''
