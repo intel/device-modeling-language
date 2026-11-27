@@ -230,11 +230,12 @@ class ETMETH(DMLError):
             self.trait_method_site, "shared method definition")
 
 class ETEMPLATEUPCAST(DMLError):
-    """When casting to a template type, the source expression must be either
-    an object implementing the template, or an expression whose type is a
-    subtemplate of the target type."""
+    """When converting to a template type (via a cast or an initializer), the
+    source expression must be either an object implementing the template, or an
+    expression whose type is a subtemplate of the target type."""
     version = "1.4"
-    fmt = "invalid upcast, %s not a subtemplate of %s"
+    fmt = ("cannot convert '%s' to %s. "
+           + "%s does not instantiate that template.")
 
 class EABSTEMPLATE(DMLError):
     """

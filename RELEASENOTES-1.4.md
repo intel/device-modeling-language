@@ -458,3 +458,34 @@
 - `release 7 7219`
 - `note 7` Fixed a performance bug in attribute setters. The bug affected devices with thousands of register banks organized into arrays, and caused slowdowns when restoring a snapshot or checkpoint.
 - `release 7 7227`
+- `note 7` Fixed a memory safety bug affecting values of template type that are
+  subsequently cast to `object`. This bug would only manifest if the `.name`
+  (not `._qname()`) member of such a value was accessed.
+- `note 7` If a constant value of a template type is cast to a different
+  template type, the resulting value will now also be considered constant.
+- `note 7` Any object reference or value of template type will now
+  automatically be converted to the desired type when used as an initializer
+  for a target of template type.
+
+  The right-hand side of an assignment or variable declaration, as well as the
+  values of a `return` statement and every non-variadic argument of a function
+  or method call, are considered initializers. For example, this change permits
+  the following:
+
+  ```
+  bank my_bank;
+
+  method my_bank_to_desc() -> (desc) {
+    // Implicitly converts object reference to 'bank'
+    local bank b = my_bank;
+    // 'b' gets implicitly upcast to 'object'
+    return object_to_desc(b);
+  }
+
+  method object_to_desc(object o) -> (desc) {
+    // 'o' gets implicitly upcast to 'desc'
+    return o;
+  }
+  ```
+
+  Note that parameter definitions are not considered initializers.

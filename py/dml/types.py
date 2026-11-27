@@ -301,11 +301,12 @@ class DMLType(metaclass=abc.ABCMeta):
         Conditions (1) and (2) together are called "type compatibility", and
         parallels the C concept.
 
-        For example, all trait reference types share the same C representation,
-        and so satisfy (1), but trait reference types for different traits do
-        not share vtables; trying to use a vtable for one trait with an
-        incompatible reference would result in undefined behavior, and so do
-        not satisfy (2).
+        For example, all hook reference types share the same C representation,
+        and so satisfy (1), but hook reference types with different message
+        component types will rely on different C types to represent the
+        message; trying to send a message through a hook reference with an
+        incompatible type would result in undefined behavior, and so do not
+        satisfy (2).
         Any bitfields type compared to the integer type it's based on
         satisfy (1) and (2), but don't satisfy (3) as DMLC permits making
         subreferences to the members of the bitfields for the bitfields type,

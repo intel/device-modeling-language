@@ -272,42 +272,43 @@ UNUSED static uint64 _count_eachin(_each_in_t each_in,
 }
 
 // Upcast a trait reference expression expr of type 'from' to a corresponding
-// trait reference of an ancestor trait, given that the vtable of the new trait
-// is found as from.ancestry. E.g.: If a trait y extends z, and x extends y,
-// and xyz is a reference to trait x, then UPCAST(xyz, x, y.z) yields a trait
-// reference to the z trait.
-#define UPCAST(expr, from, ancestry)                            \
-    ({_traitref_t __tref = expr;                                \
-      __tref.trait = (char *)(__tref.trait)                     \
-                     + offsetof(struct _ ## from, ancestry);    \
+// trait reference of an ancestor trait 'to', given that the vtable of the new
+// trait is found as from.ancestry. E.g.: If a trait y extends z, and x extends
+// y, and xyz is a reference to trait x, then UPCAST(xyz, x, z, y.z) yields a
+// trait reference to the z trait.
+#define UPCAST(expr, from, to, ancestry)                         \
+    ({to __tref = { (expr).ref };                                \
+      __tref.ref.trait = (char *)(__tref.ref.trait)              \
+                         + offsetof(struct _ ## from, ancestry); \
       __tref;})
 
 // Downcast a trait reference expression expr to a corresponding trait
-// reference with vtable type of trait 'to',
+// reference of trait 'to',
 // given that expr's vtable type is found as to.ancestry. E.g.: If a trait y
 // extends z, and x extends y, and xyz is a reference to trait x upcast to
 // trait z, then DOWNCAST(xyz, x, y.z) yields a trait reference to the x trait,
-// and UPCAST(DOWNCAST(xyz, x, y.z), x, y.z) == xyz.
+// and UPCAST(DOWNCAST(xyz, x, y.z), x, z, y.z) == xyz.
 // This is similar to the container_of macro in Linux.
-#define DOWNCAST(expr, to, ancestry)                            \
-        ({_traitref_t __tref = expr;                            \
-          __tref.trait = (char *)(__tref.trait)                 \
-                         - offsetof(struct _ ## to, ancestry);  \
+#define DOWNCAST(expr, to, ancestry)                             \
+        ({to __tref = { (expr).ref };                            \
+          __tref.ref.trait = (char *)(__tref.ref.trait)          \
+                           - offsetof(struct _ ## to, ancestry); \
           __tref;})
 
-#define CALL_TRAIT_METHOD(type, method, dev, traitref, ...)             \
-        ({_traitref_t __tref = traitref;                                \
-          ((struct _ ## type *) __tref.trait)->method(dev, __tref,      \
-                                                      __VA_ARGS__);})
-#define CALL_TRAIT_METHOD0(type, method, dev, traitref)                 \
-        ({_traitref_t __tref = traitref;                                \
-          ((struct _ ## type *) __tref.trait)->method(dev, __tref);})
+#define CALL_TRAIT_METHOD(type, method, dev, traitref, ...)              \
+        ({type __tref = traitref;                                        \
+          ((struct _ ## type *) __tref.ref.trait)->method(dev, __tref,   \
+                                                          __VA_ARGS__);})
+#define CALL_TRAIT_METHOD0(type, method, dev, traitref)                  \
+        ({type __tref = traitref;                                        \
+          ((struct _ ## type *) __tref.ref.trait)->method(dev, __tref);})
 #define CALL_INDEPENDENT_TRAIT_METHOD(type, method, traitref, ...)       \
-        ({_traitref_t __tref = traitref;                                      \
-          ((struct _ ## type *) __tref.trait)->method(__tref, __VA_ARGS__);})
-#define CALL_INDEPENDENT_TRAIT_METHOD0(type, method, traitref)     \
-    ({_traitref_t __tref = traitref;                                    \
-      ((struct _ ## type *) __tref.trait)->method(__tref);})
+        ({type __tref = traitref;                                        \
+          ((struct _ ## type *) __tref.ref.trait)->method(__tref,        \
+                                                          __VA_ARGS__);})
+#define CALL_INDEPENDENT_TRAIT_METHOD0(type, method, traitref)           \
+    ({type __tref = traitref;                                            \
+      ((struct _ ## type *) __tref.ref.trait)->method(__tref);})
 
 // A parameter is represented in the vtable using a pointer that points to the
 // parameter value. A parameter whose value varies across indices is stored as
@@ -317,7 +318,7 @@ UNUSED static uint64 _count_eachin(_each_in_t each_in,
 // the pointer to 0. Parameter values are always stored with an alignment of at
 // least 2.
 #define VTABLE_PARAM(traitref, vtable_type, member)                     \
-        ({_traitref_t __tref = traitref;                                     \
+        ({_traitref_t __tref = (traitref).ref;                               \
           uintptr_t __member                                                 \
               = (uintptr_t)((vtable_type *)__tref.trait)->member;            \
           ((typeof(((vtable_type*)NULL)->member))(__member & ~1))[           \
@@ -356,12 +357,12 @@ _vtable_sequence_param(_traitref_t traitref, size_t vtable_member_offset)
 }
 
 #define VTABLE_SESSION(dev, traitref, vtable_type, member, var_type)    \
-      ({_traitref_t __tref = traitref;                                  \
+      ({_traitref_t __tref = (traitref).ref;                            \
         (var_type)((uintptr_t)dev + ((vtable_type *)__tref.trait)->member) \
            + __tref.id.encoded_index; })
 
 #define VTABLE_HOOK(traitref, vtable_type, member, coeff, offset)           \
-    ({_traitref_t __tref = traitref;                                        \
+    ({_traitref_t __tref = (traitref).ref;                                  \
         (_hookref_t){ .id = ((vtable_type *)__tref.trait)->member,          \
                       .encoded_index = __tref.id.encoded_index * (coeff)    \
                                        + (offset)}; })
