@@ -47,15 +47,12 @@ class EAFTER(DMLError):
         DMLError.__init__(self, site, on_hook, method.name, msg)
         self.method = method
         self.unserializable = unserializable
-    def log(self):
-        DMLError.log(self)
-        self.print_site_message(
-            self.method.site,
-            "method declaration"
-            + ''.join(
-                f"\nmethod parameter {p.logref} is of unserializable type: "
-                + f"{p.typ}"
-                for p in self.unserializable or []))
+    def hints(self):
+        yield (self.method.site, "method declaration")
+        for p in self.unserializable or []:
+            yield (self.method.site,
+                   f"method parameter {p.logref} is of unserializable type: "
+                   + f"{p.typ}")
 
 class EAFTERSENDNOW(DMLError):
     """
@@ -120,10 +117,9 @@ class ECYCLICIMP(DMLError):
     def __init__(self, sites):
         DMLError.__init__(self, sites[0])
         self.other_sites = sites[1:]
-    def log(self):
-        DMLError.log(self)
+    def hints(self):
         for site in self.other_sites:
-            self.print_site_message(site, "via here")
+            yield (site, "via here")
 
 class ECYCLICTEMPLATE(DMLError):
     """
@@ -133,10 +129,9 @@ class ECYCLICTEMPLATE(DMLError):
     def __init__(self, sites):
         DMLError.__init__(self, sites[0])
         self.other_sites = sites[1:]
-    def log(self):
-        DMLError.log(self)
+    def hints(self):
         for site in self.other_sites:
-            self.print_site_message(site, "via here")
+            yield (site, "via here")
 
 class EAMBINH(DMLError):
     """<a id="EAMBINH"/>
@@ -150,6 +145,7 @@ class EAMBINH(DMLError):
     def __init__(self, site, other_site, method, rank_desc1, rank_desc2,
                  overridable=True):
         DMLError.__init__(self, site, method, rank_desc1, rank_desc2)
+        self.other_site = other_site
         extra_lines = []
         if other_site:
             extra_lines.append((other_site, "conflicting definition"))
@@ -180,10 +176,8 @@ class EAMBINH(DMLError):
                     site, "probable resolution: " + how_to_instantiate(
                         rank_desc2)))
         self.extra_lines = extra_lines
-    def log(self):
-        DMLError.log(self)
-        for (site, msg) in self.extra_lines:
-            self.print_site_message(site, msg)
+    def hints(self):
+        yield from self.extra_lines
 
 class EAMBDEFAULT(DMLError):
     """A method may not invoke its default implementation if multiple
@@ -195,10 +189,9 @@ class EAMBDEFAULT(DMLError):
     def __init__(self, site, default_sites):
         DMLError.__init__(self, site)
         self.default_sites = default_sites
-    def log(self):
-        DMLError.log(self)
+    def hints(self):
         for site in self.default_sites:
-            self.print_site_message(site, "default method candidate")
+            yield (site, "default method candidate")
 
 class EAMETH(DMLError):
     """
@@ -210,10 +203,8 @@ class EAMETH(DMLError):
         DMLError.__init__(self, site, name)
         self.prev_site = prev_site
 
-    def log(self):
-        DMLError.log(self)
-        self.print_site_message(
-            self.prev_site, "previous declaration")
+    def hints(self):
+        yield (self.prev_site, "previous declaration")
 
 class ETMETH(DMLError):
     """
@@ -224,10 +215,8 @@ class ETMETH(DMLError):
     def __init__(self, site, trait_method_site, name):
         DMLError.__init__(self, site, name)
         self.trait_method_site = trait_method_site
-    def log(self):
-        DMLError.log(self)
-        self.print_site_message(
-            self.trait_method_site, "shared method definition")
+    def hints(self):
+        yield (self.trait_method_site, "shared method definition")
 
 class ETEMPLATEUPCAST(DMLError):
     """When casting to a template type, the source expression must be either
@@ -246,10 +235,8 @@ class EABSTEMPLATE(DMLError):
     def __init__(self, is_site, decl_site, decl_trait, kind, name):
         DMLError.__init__(self, is_site, decl_trait, kind, name)
         self.decl_site = decl_site
-    def log(self):
-        DMLError.log(self)
-        self.print_site_message(
-            self.decl_site, "abstract declaration")
+    def hints(self):
+        yield (self.decl_site, "abstract declaration")
 
 class EABSMETH(DMLError):
     """
@@ -298,10 +285,9 @@ class ETREC(DMLError):
     def __init__(self, sites, type):
         DMLError.__init__(self, sites[0], type)
         self.other_sites = sites[1:]
-    def log(self):
-        DMLError.log(self)
+    def hints(self):
         for site in self.other_sites:
-            self.print_site_message(site, "via here")
+            yield (site, "via here")
 
 class EANONSTRUCT(DMLError):
     """
@@ -429,9 +415,8 @@ class EEXPORT(DMLError):
         DMLError.__init__(self, method_site)
         self.export_site = export_site
 
-    def log(self):
-        DMLError.log(self)
-        self.print_site_message(self.export_site, "exported here")
+    def hints(self):
+        yield (self.export_site, "exported here")
 
 class ESTATICEXPORT(DMLError):
     """A method reference can only be converted to a function pointer if the
@@ -444,10 +429,8 @@ class ESTATICEXPORT(DMLError):
         DMLError.__init__(self, method_site)
         self.addressof_site = addressof_site
 
-    def log(self):
-        DMLError.log(self)
-        self.print_site_message(self.addressof_site,
-                                "attempted conversion here")
+    def hints(self):
+        yield (self.addressof_site, "attempted conversion here")
 
 class EINVALID(DMLError):
     """
@@ -677,15 +660,12 @@ class EBADFAIL_dml12(DMLError):
         self.call_chain = call_chain
         self.other_callers = other_callers
 
-    def log(self):
-        DMLError.log(self)
+    def hints(self):
         for (site, m) in self.call_chain:
-            self.print_site_message(
-                site, "exception propagated from %s()" % (m.name,))
+            yield (site, "exception propagated from %s()" % (m.name,))
         (_, bad_method) = self.call_chain[0]
         for (site, m) in self.other_callers:
-            self.print_site_message(
-                site, "method '%s' also called here" % (bad_method.name,))
+            yield (site, "method '%s' also called here" % (bad_method.name,))
 
     @classmethod
     def all_errors(cls):
@@ -845,11 +825,10 @@ class EATTRDATA(DMLError):
         self.data_sites = data_sites
         DMLError.__init__(self, attr)
 
-    def log(self):
-        DMLError.log(self)
-        self.print_site_message(self.allocate_site, "'allocate_type' set here")
+    def hints(self):
+        yield (self.allocate_site, "'allocate_type' set here")
         for data_site in self.data_sites:
-            self.print_site_message(data_site, 'data object declared here')
+            yield (data_site, 'data object declared here')
 
 class ERETTYPE(DMLError):
     """
@@ -930,10 +909,9 @@ class EAINCOMP(DMLError):
     def __init__(self, site, othersite, name, reason):
         DMLError.__init__(self, site, reason)
         self.othersite = othersite
-    def log(self):
-        DMLError.log(self)
+    def hints(self):
         if self.othersite:
-            self.print_site_message(self.othersite, "conflicting declaration")
+            yield (self.othersite, "conflicting declaration")
 
 class EAUNKDIMSIZE(DMLError):
     """
@@ -1041,10 +1019,9 @@ class ENARGT(DMLError):
     def __init__(self, site, pref, direction, callsite = None):
         DMLError.__init__(self, site, direction, pref)
         self.callsite = callsite
-    def log(self):
-        DMLError.log(self)
+    def hints(self):
         if self.callsite:
-            self.print_site_message(self.callsite, "called from here")
+            yield (self.callsite, "called from here")
 
 class EPTYPE(DMLError):
     """
@@ -1065,10 +1042,9 @@ class ENAMECOLL(DMLError):
     def __init__(self, site, othersite, name):
         DMLError.__init__(self, site, name)
         self.othersite = othersite
-    def log(self):
-        DMLError.log(self)
+    def hints(self):
         if self.othersite:
-            self.print_site_message(self.othersite, "conflicting definition")
+            yield (self.othersite, "conflicting definition")
 
 class ENALLOW(DMLError):
     """
@@ -1119,9 +1095,8 @@ class EINVOVER(DMLError):
     def __init__(self, site, non_default_site, name):
         DMLError.__init__(self, site, name)
         self.non_default_site = non_default_site
-    def log(self):
-        DMLError.log(self)
-        self.print_site_message(self.non_default_site, "overridden assignment")
+    def hints(self):
+        yield (self.non_default_site, "overridden assignment")
 
 class ENPARAM(DMLError):
     """
@@ -1149,14 +1124,12 @@ class ENOVERRIDEPARAM(DMLError):
     fmt = ("parameter '%s' not declared previously."
            " To declare and define a new parameter, use the ':%s' syntax.")
 
-    def log(self):
+    def hints(self):
         from . import provisional
-        DMLError.log(self)
         prov_site = self.site.provisional_enabled(
             provisional.explicit_param_decls)
-        self.print_site_message(
-            prov_site,
-            "enabled by the explicit_param_decls provisional feature")
+        yield (prov_site,
+               "enabled by the explicit_param_decls provisional feature")
 
 
 class EOVERRIDEPARAM(DMLError):
@@ -1172,9 +1145,8 @@ class EOVERRIDEPARAM(DMLError):
     def __init__(self, site, other_site, name, token):
         super().__init__(site, name, token)
         self.other_site = other_site
-    def log(self):
-        DMLError.log(self)
-        self.print_site_message(self.other_site, "existing declaration")
+    def hints(self):
+        yield (self.other_site, "existing declaration")
 
 
 class EEXTENSION(DMLError):
@@ -1205,15 +1177,13 @@ class EMULTIOBJDECL(DMLError):
         super().__init__(site, name, f'{objtype} {name} ...')
         self.other_site = other_site
 
-    def log(self):
+    def hints(self):
         from . import provisional
-        DMLError.log(self)
-        self.print_site_message(self.other_site, "existing declaration")
+        yield (self.other_site, "existing declaration")
         prov_site = self.site.provisional_enabled(
             provisional.explicit_object_extensions)
-        self.print_site_message(
-            prov_site,
-            "enabled by the explicit_object_extensions provisional feature")
+        yield (prov_site,
+               "enabled by the explicit_object_extensions provisional feature")
 
 class EVARPARAM(DMLError):
     """
@@ -1230,10 +1200,9 @@ class ERECPARAM(DMLError):
     def __init__(self, sites):
         DMLError.__init__(self, sites[0])
         self.other_sites = sites[1:]
-    def log(self):
-        DMLError.log(self)
+    def hints(self):
         for site in self.other_sites:
-            self.print_site_message(site, "via here")
+            yield (site, "via here")
 
 class EIDXVAR(DMLError):
     """Expressions that are evaluated statically to constants cannot have
@@ -1272,10 +1241,9 @@ class EDVAR(DMLError):
     def __init__(self, site, othersite, name):
         DMLError.__init__(self, site, name)
         self.othersite = othersite
-    def log(self):
-        DMLError.log(self)
+    def hints(self):
         if self.othersite:
-            self.print_site_message(self.othersite, "conflicting definition")
+            yield (self.othersite, "conflicting definition")
 
 class EDDEFMETH(DMLError):
     """
@@ -1286,9 +1254,8 @@ class EDDEFMETH(DMLError):
     def __init__(self, site, othersite, name):
         DMLError.__init__(self, site, name)
         self.othersite = othersite
-    def log(self):
-        DMLError.log(self)
-        self.print_site_message(self.othersite, "conflicting definition")
+    def hints(self):
+        yield (self.othersite, "conflicting definition")
 
 class EDMETH(DMLError):
     """
@@ -1298,9 +1265,8 @@ class EDMETH(DMLError):
     def __init__(self, site, othersite, name):
         DMLError.__init__(self, site, name)
         self.othersite = othersite
-    def log(self):
-        DMLError.log(self)
-        self.print_site_message(self.othersite, "conflicting definition")
+    def hints(self):
+        yield (self.othersite, "conflicting definition")
 
 class EMETH(DMLError):
     """
@@ -1311,10 +1277,9 @@ class EMETH(DMLError):
     def __init__(self, site, othersite, reason):
         DMLError.__init__(self, site, reason)
         self.othersite = othersite
-    def log(self):
-        DMLError.log(self)
+    def hints(self):
         if self.othersite:
-            self.print_site_message(self.othersite, "conflicting definition")
+            yield (self.othersite, "conflicting definition")
 
 class ENOVERRIDEMETH(DMLError):
     """When the `explict_method_decls` provisional feature is enabled, method
@@ -1328,14 +1293,12 @@ class ENOVERRIDEMETH(DMLError):
     fmt = ("method '%s' not declared previously."
            " To declare and define a new method, use the ':%s{...}' syntax.")
 
-    def log(self):
+    def hints(self):
         from . import provisional
-        DMLError.log(self)
         prov_site = self.site.provisional_enabled(
             provisional.explicit_method_decls)
-        self.print_site_message(
-            prov_site,
-            "enabled by the explicit_method_decls provisional feature")
+        yield (prov_site,
+               "enabled by the explicit_method_decls provisional feature")
 
 class EOVERRIDEMETH(DMLError):
     """When the `explict_method_decls` provisional feature is enabled,
@@ -1350,9 +1313,8 @@ class EOVERRIDEMETH(DMLError):
     def __init__(self, site, other_site, name, token):
         super().__init__(site, name, token)
         self.other_site = other_site
-    def log(self):
-        DMLError.log(self)
-        self.print_site_message(self.other_site, "existing declaration")
+    def hints(self):
+        yield (self.other_site, "existing declaration")
 
 class EIMPLMEMBER(DMLError):
     """
@@ -1363,9 +1325,8 @@ class EIMPLMEMBER(DMLError):
     def __init__(self, site, name, othersite):
         DMLError.__init__(self, site, name)
         self.othersite = othersite
-    def log(self):
-        DMLError.log(self)
-        self.print_site_message(self.othersite, "interface struct definition")
+    def hints(self):
+        yield (self.othersite, "interface struct definition")
 
 class EANONPORT(DMLError):
     """
@@ -1376,10 +1337,8 @@ class EANONPORT(DMLError):
     def __init__(self, site, port):
         self.port = port
         DMLError.__init__(self, site, port.objtype)
-    def log(self):
-        DMLError.log(self)
-        self.print_site_message(self.port.site,
-                                "this is the %s" % self.port.objtype)
+    def hints(self):
+        yield (self.port.site, "this is the %s" % self.port.objtype)
 
 class EDBFUNC(DMLError):
     """
@@ -1390,10 +1349,9 @@ class EDBFUNC(DMLError):
     def __init__(self, site, othersite, func):
         DMLError.__init__(self, site, func)
         self.othersite = othersite
-    def log(self):
-        DMLError.log(self)
+    def hints(self):
         if self.othersite:
-            self.print_site_message(self.othersite.site, "conflicting bank")
+            yield (self.othersite.site, "conflicting bank")
 
 class EREGNSZ(DMLError):
     """
@@ -1420,11 +1378,9 @@ class EREGOL(DMLError):
         self.other = reg2
         DMLError.__init__(self, reg1.site,
                           reg1.identity(coord1), reg2.identity(coord2))
-    def log(self):
-        DMLError.log(self)
-        self.print_site_message(
-            self.other.site,
-            "register %s defined here" % (self.other.identity()))
+    def hints(self):
+        yield (self.other.site,
+               "register %s defined here" % (self.other.identity()))
 
 class EBITRR(DMLError):
     """
@@ -1444,11 +1400,9 @@ class EBITRO(DMLError):
         self.other = f2
         DMLError.__init__(self, f1,
                           f1.identity(i1), f2.identity(i2))
-    def log(self):
-        DMLError.log(self)
-        self.print_site_message(
-            self.other.site,
-            "field %s defined here" % (self.other.identity(),))
+    def hints(self):
+        yield (self.other.site,
+               "field %s defined here" % (self.other.identity(),))
 
 class EBITRN(DMLError):
     """
@@ -1584,9 +1538,8 @@ class EVERS(DMLError):
     def __init__(self, site, impsite, impvers, devvers):
         DMLError.__init__(self, site, impvers, devvers)
         self.impsite = impsite
-    def log(self):
-        DMLError.log(self)
-        self.print_site_message(self.impsite, "imported here")
+    def hints(self):
+        yield (self.impsite, "imported here")
 
 class ELAYOUT(DMLError):
     """
@@ -1628,10 +1581,9 @@ class EINC(DMLError):
     def __init__(self, site, hint=None):
         DMLError.__init__(self, site)
         self.hint = hint
-    def log(self):
-        DMLError.log(self)
+    def hints(self):
         if self.hint:
-            self.print_site_message(self.site, self.hint)
+            yield (self.site, self.hint)
     fmt = "illegal increment/decrement operation"
 
 class ENTYPE(DMLError):
@@ -1668,10 +1620,9 @@ class ENSHARED(DMLError):
     def __init__(self, site, fmt, template, decl_site):
         DMLError.__init__(self, site, fmt, template)
         self.decl_site = decl_site
-    def log(self):
-        DMLError.log(self)
+    def hints(self):
         if self.decl_site:
-            self.print_site_message(self.decl_site, "declared here")
+            yield (self.decl_site, "declared here")
 
 class ESERIALIZE(DMLError):
     """Some complex types, in particular most pointer types, cannot be
@@ -1696,9 +1647,8 @@ class EATTRCOLL(DMLError):
         DMLError.__init__(self, site)
         self.othersite = othersite
 
-    def log(self):
-        DMLError.log(self)
-        self.print_site_message(self.othersite, "conflicting definition")
+    def hints(self):
+        yield (self.othersite, "conflicting definition")
 
 class ESTOREDINLINE(DMLError):
     """You cannot declare session or saved variables in methods marked with
@@ -1788,13 +1738,11 @@ class EAMBTQMIC(DMLError):
                   + "ancestor template with the desired implementation:")
         DMLError.__init__(self, site, template, method, extra)
         self.candidates = candidates
-    def log(self):
-        DMLError.log(self)
+    def hints(self):
         for (ancestor, candidate) in self.candidates:
-            self.print_site_message(
-                candidate.site,
-                "implementation candidate provided by ancestor template "
-                + f"'{ancestor.name}'")
+            yield (candidate.site,
+                   "implementation candidate provided by ancestor template "
+                   + f"'{ancestor.name}'")
 
 class EMEMBERTQMIC(DMLError):
     """A template-qualified method implementation call can only be done if
@@ -1823,9 +1771,8 @@ class EMEMBERTQMIC(DMLError):
             extra = ""
         DMLError.__init__(self, site, template.name, method, extra)
 
-    def log(self):
-        DMLError.log(self)
-        self.print_site_message(self.template.site, "template declaration")
+    def hints(self):
+        yield (self.template.site, "template declaration")
 
 
 class ENSHAREDTQMIC(DMLError):
@@ -1960,15 +1907,12 @@ class EEXTERNINCOMP(DMLError):
         self.other_site = other_site
         self.typ = typ
         self.other_type = other_type
-    def log(self):
-        DMLError.log(self)
-        self.print_site_message(
-            self.site,
-            "this declaration specifies the type: " + self.typ.describe())
-        self.print_site_message(
-            self.other_site,
-            "conflicting declaration, which specifies the type: "
-            + self.other_type.describe())
+    def hints(self):
+        yield (self.site,
+               "this declaration specifies the type: " + self.typ.describe())
+        yield (self.other_site,
+               "conflicting declaration, which specifies the type: "
+               + self.other_type.describe())
 
 class EPRAGMA(DMLError):
     """
@@ -2205,11 +2149,8 @@ class WTHROWS_DML12(DMLWarning):
     def __init__(self, site, other_site=None):
         DMLWarning.__init__(self, site)
         self.other_site = other_site
-    def log(self):
-        DMLWarning.log(self)
-        self.print_site_message(
-            self.other_site,
-            "original non-throwing declaration")
+    def hints(self):
+        yield (self.other_site, "original non-throwing declaration")
 
 class WNEGCONSTCOMP(DMLWarning):
     """DML uses a special method when comparing an unsigned and signed integer,
@@ -2221,10 +2162,8 @@ class WNEGCONSTCOMP(DMLWarning):
         self.ty = ty
     fmt = ("Comparing negative constant to unsigned integer has a constant "
            + "result")
-    def log(self):
-        DMLError.log(self)
-        self.print_site_message(
-            self.expr.site, "Consider 'cast(%s, %s)'" % (self.expr, self.ty))
+    def hints(self):
+        yield (self.expr.site, "Consider 'cast(%s, %s)'" % (self.expr, self.ty))
 
 class WASTRUNC(DMLWarning):
     """The source of an assignment is a constant value that can't fit in the

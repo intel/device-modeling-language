@@ -6,82 +6,216 @@ dml 1.4;
 
 device test;
 
-// Declarations from an 'in each' override those of the extended template, but
-// are overridden by declarations from the surrounding template
-template sub { }
-template t {
-    in each sub {
+/// TAGS-FROM EAMBINH_import_a.dml
+/// ERROR EAMBINH
+import "EAMBINH_import_a.dml";
+
+/// TAGS-FROM EAMBINH_import_c.dml
+/// ERROR EAMBINH
+import "EAMBINH_import_c.dml";
+
+// Conflicting shared method implementations.
+template shared_a {
+    shared method m() default {}
+}
+template shared_b {
+    shared method m() default {}
+}
+/// ERROR EAMBINH
+template shared_conflict is (shared_a, shared_b) {}
+
+template shared_param {
+    param m: int;
+}
+/// ERROR EAMBINH
+template shared_param_conflict is (shared_a, shared_param) {}
+
+template shared_base {
+    shared method m();
+}
+template shared_left is shared_base {
+    shared method m() default {}
+}
+template shared_right is shared_base {
+    shared method m() default {}
+}
+template shared_derived is shared_left {}
+template shared_ambiguous is (shared_derived, shared_right) {}
+
+/// ERROR EAMBINH
+bank shared_unresolved is shared_ambiguous;
+
+bank shared_resolved is shared_ambiguous {
+    method m() {}
+}
+
+// A three-way clash shows an arbitrary but deterministic selection of two sites
+template three_0 {
+    /// ERROR EAMBINH
+    method m() default { }
+}
+template three_1 {
+    /// ERROR EAMBINH
+    method m() default { }
+}
+template three_2 {
+    method m() default { }
+}
+
+group three is (three_0, three_1, three_2);
+
+// Abstract declarations from unrelated templates also conflict. Semantically
+// there is no good reason to disallow this clash, we just haven't implemented
+// it yet.
+template abstract_a {
+    shared method m();
+}
+template abstract_b {
+    shared method m();
+}
+template abstract_c {
+    shared method m();
+}
+/// ERROR EAMBINH
+template abstract_ab is (abstract_a, abstract_b) {
+    shared method m() default {}
+}
+/// ERROR EAMBINH
+template abstract_ac is (abstract_a, abstract_c) {
+    shared method m() {}
+}
+/// ERROR EAMBINH
+port abstract_port is (abstract_a, abstract_b) {
+    method m() {}
+}
+
+template abstract_left is abstract_a {
+    shared method m() default {}
+}
+template abstract_right is abstract_a {
+    shared method m() default {}
+}
+template abstract_resolved is (abstract_left, abstract_right) {
+    shared method m() {}
+}
+template abstract_nondefault is abstract_a {
+    shared method m() {}
+}
+/// ERROR EAMBINH
+template abstract_conflict is (abstract_left, abstract_nondefault) {}
+
+/// ERROR EAMBINH
+group abstract_unresolved is (abstract_left, abstract_right);
+group abstract_override is (abstract_left, abstract_right) {
+    method m() {}
+}
+// Exercise ancestor vtable merging with redundant inheritance.
+group abstract_redundant is (abstract_left, abstract_right, abstract_a,
+                             abstract_resolved);
+
+// Conflicting non-shared overrides of a shared method.
+template unshared_a is shared_a {
+    /// ERROR EAMBINH
+    method m() default {}
+}
+template unshared_b is shared_a {
+    /// ERROR EAMBINH
+    method m() default {}
+}
+port unshared_conflict is (unshared_a, unshared_b);
+
+// Conflicting parameter definitions in object extensions.
+template param_a {
+    group g {
+        /// ERROR EAMBINH
+        param p1 default 4;
+    }
+}
+template param_b {
+    group g {
+        /// ERROR EAMBINH
+        param p1 default 4;
+    }
+}
+bank param_conflict is (param_a, param_b);
+
+// Conflicting type declarations for the same parameter.
+template param_type_a {
+    param p : int;
+}
+template param_type_b {
+    param p : int;
+}
+/// ERROR EAMBINH
+template param_type_conflict is (param_type_a, param_type_b) {
+    param p = 3;
+}
+
+// An 'in each' declaration conflicts with an unrelated object extension.
+template each_target { }
+template each_a {
+    in each each_target {
         /// ERROR EAMBINH
         param x default 1;
     }
 }
-
-template t2 {
+template each_b {
     port p {
-        is sub;
+        is each_target;
         /// ERROR EAMBINH
         param x default 2;
     }
 }
+is each_a;
+is each_b;
 
-is t;
-is t2;
-
-// conflicting type declarations for the same parameter
-template tp1 {
-    param p : int;
+// The chain of 'is' statements behind an indirectly instantiated
+// conflicting definition is reported
+template ind_a {
+    /// ERROR EAMBINH
+    method ind() default {}
 }
-template tp2 {
-    param p : int;
+template ind_b1 {
+    /// ERROR EAMBINH
+    method ind() default {}
+}
+template ind_b2 {}
+in each ind_b2 {
+    /// ERROR EAMBINH
+    is ind_b1;
+}
+template ind_b3 {
+    /// ERROR EAMBINH
+    is ind_b2;
+}
+template ind_b4 {
+    /// ERROR EAMBINH
+    is ind_b3;
 }
 /// ERROR EAMBINH
-template tp3 is (tp1, tp2) {
-    param p = 3;
-}
+group g4 is (ind_a, ind_b4);
 
-template asm1 {
-    shared method m();
+// An 'in each' with multiple targets: the instantiations of all
+// targets are reported
+template ie_a {
+    /// ERROR EAMBINH
+    method ie() default {}
 }
-template asm2 {
-    shared method m();
+template ie_b {
+    /// ERROR EAMBINH
+    method ie() default {}
 }
-template asm3 {
-    shared method m();
+template ie_x {}
+template ie_y {}
+template ie_ymid {
+    /// ERROR EAMBINH
+    is ie_y;
 }
-/// ERROR EAMBINH
-template asm4 is (asm1, asm2) {
-    shared method m() {}
+group g5 {
+    in each (ie_x, ie_y) {
+        /// ERROR EAMBINH
+        is ie_b;
+    }
+    /// ERROR EAMBINH
+    group sub is (ie_a, ie_x, ie_ymid);
 }
-/// ERROR EAMBINH
-template asm5 is (asm1, asm3) {
-    shared method m() {}
-}
-
-template asm6 is asm1 {
-    shared method m() default {}
-}
-template asm7 is asm1 {
-    shared method m() default {}
-}
-template asm8 is (asm6, asm7) {
-    shared method m() {}
-}
-
-template asm9 is asm1 {
-    shared method m() {}
-}
-
-/// ERROR EAMBINH
-template asm10 is (asm6, asm9) {}
-
-/// ERROR EAMBINH
-group g1 is (asm6, asm7);
-
-// no error
-group g2 is (asm6, asm7) {
-    method m() {}
-}
-
-// Redundancy as a smoke test that ancestor vtable merging works properly
-// no error
-group g3 is (asm6, asm7, asm1, asm8);

@@ -487,6 +487,10 @@ def wrap_sites(site_constructor, spec, issite, *rest):
                 (_, site, msg) = stmt
                 shallow_wrapped.append(
                     ast.error(site_constructor(site, issite, *rest), msg))
+            elif asttype == 'export':
+                (_, site, *args) = stmt
+                shallow_wrapped.append(
+                    ast.export(site_constructor(site, issite, *rest), *args))
             elif asttype == 'session':
                 (_, site, decls, inits) = stmt
                 shallow_wrapped.append(
@@ -528,8 +532,11 @@ def setparam(node, name, mkexpr):
         raise ICE(mkexpr.site, "Unknown parameter '%s' in setparam" % (name,))
     pnode.set_expr(mkexpr)
 
-def add_templates(obj_specs, each_stmts):
+def add_templates(obj, obj_specs, each_stmts):
     used_templates = {}
+    # Template -> site of the 'is' that instantiated it
+    instantiations: dict[template.Template, Site] = {}
+    # (site of 'is', Template)
     queue = sum((obj_spec.templates for obj_spec in obj_specs), [])
 
     i = 0
@@ -550,11 +557,13 @@ def add_templates(obj_specs, each_stmts):
             continue
 
         if tpl.name.startswith('@'):
-            obj_spec = tpl.spec
+            obj_spec = ObjectSpec(*wrap_sites(
+                ImportSite, tpl.spec, site, tpl.name[1:]))
         else:
             obj_spec = InstantiatedTemplateSpec(
-                tpl, *wrap_sites(TemplateSite, tpl.spec, site, tpl.name))
+                tpl, *wrap_sites(TemplateSite, tpl.spec, site, tpl.name, obj))
         used_templates[tpl] = obj_spec
+        instantiations[tpl] = site
 
         for (tpls, orig_tpls, spec) in each_stmts.get(tpl, []):
             for t in tpls:
@@ -570,10 +579,11 @@ def add_templates(obj_specs, each_stmts):
                     break
             else:
                 # All templates match; expand the each statement.
-                obj_specs.append(
-                    ObjectSpec(*wrap_sites(InEachSite, spec, spec.site,
-                                           [t.name for t in orig_tpls])))
-                queue.extend(spec.templates)
+                in_each_spec = ObjectSpec(*wrap_sites(
+                    InEachSite, spec, spec.site, [t.name for t in orig_tpls],
+                    [(instantiations[t], t.name, obj) for t in orig_tpls]))
+                obj_specs.append(in_each_spec)
+                queue.extend(in_each_spec.templates)
 
         obj_specs.append(obj_spec)
         queue.extend(obj_spec.templates)
@@ -1056,7 +1066,8 @@ def mkobj(ident, objtype, arrayinfo, obj_specs, parent, each_stmts):
         raise EASZLARGE(site, num_elems)
 
     with ErrorContext(obj):
-        (obj_specs, used_templates) = add_templates(obj_specs, each_stmts)
+        (obj_specs, used_templates) = add_templates(obj, obj_specs,
+                                                    each_stmts)
         obj.templates = used_templates
         obj_params = create_parameters(obj, obj_specs, index_vars, index_sites)
         return mkobj2(obj, obj_specs, obj_params, each_stmts)

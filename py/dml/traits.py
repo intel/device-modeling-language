@@ -586,7 +586,10 @@ def sort_method_implementations(implementations):
         def is_default(r):
             return rank_to_method[r].overridable
 
-        [r1, r2] = sorted(minimal_ancestry[None], key=is_default)[:2]
+        # restore deterministic order
+        ambiguity = [r for r in rank_to_method if r in minimal_ancestry[None]]
+        # if there is a non-default declaration, then print that first
+        [r1, r2] = sorted(ambiguity, key=is_default)[:2]
         raise EAMBINH(rank_to_method[r1].site,
                       rank_to_method[r2].site,
                       rank_to_method[r1].name,

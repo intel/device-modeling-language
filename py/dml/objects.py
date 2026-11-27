@@ -31,6 +31,7 @@ __all__ = (
 class DMLObject(object):
     __slots__ = ('ident', 'site', 'parent', 'nongroup_parent', 'object_parent',
                  'dimensions')
+    objtype: str
     def __init__(self, ident, site, parent):
         self.ident = ident
         self.site = site
