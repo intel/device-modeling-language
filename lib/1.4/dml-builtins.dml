@@ -83,14 +83,15 @@ extern typedef struct {
 
 // DMLC doesn't expose to DML that template types are thin wrappers around
 // _traitref_t.
-// To convert a value of one to the other, do '*cast(&x, ...)'
 //
-// Wart: although converting a template type to _traitref_t this way is
-// definitely fine, there's no consensus whether the C standard permits the
-// inverse. Mainly due to how poorly the strict aliasing rules are written.
-// Even so, GCC, Clang, and MSVC all play nice with either direction (MSVC
-// doesn't even try to exploit strict aliasing at all), and there's very little
-// reason to believe they ever wouldn't.
+// To convert between a _traitref_t and a template type, first declare a
+// variable of that template type, say, 'x':
+// * To convert to _traitref_t, store the template type value in 'x'.
+//   Then use '*cast(&x, _traitref_t *)' to reference it as a _traitref_t.
+// * To convert from _traitref_t, do: *cast(&x, _traitref_t *) = traitref;
+//   'x' will then be that traitref, but having the desired template type.
+//   This is only safe if the traitref truly does correspond to that
+//   template type.
 extern typedef struct {
     void *trait;
     _identity_t id;
@@ -1041,7 +1042,8 @@ extern typedef struct {
 
 independent method _get_attribute_info(_traitref_t ref)
     -> (_dml_attr_conf_info_t) {
-    local _conf_attribute attr = *cast(&ref, _conf_attribute *);
+    local _conf_attribute attr;
+    *cast(&attr, _traitref_t *) = ref;
     return {
         attr._attr_name, attr._attr_type, attr._documentation,
         attr._parent_obj_class ? *attr._parent_obj_class : NULL,
@@ -1094,9 +1096,10 @@ method _get_attribute_attr(const _dml_attr_getset_info_t *_conf_info,
     assert start_dim <= id_info.dimensions;
 
     if (id_info.dimensions - start_dim == 0) {
-        local _traitref_t traitref = {conf_info.vtable,
-                                      {id_info.id, flat_index_offset}};
-        return cast(&traitref, _conf_attribute *)->get_attribute();
+        local _conf_attribute attr;
+        *cast(&attr, _traitref_t *) = {conf_info.vtable,
+                                       {id_info.id, flat_index_offset}};
+        return attr.get_attribute();
     }
 
     local size_t no_items = conf_info.num;
@@ -1106,9 +1109,10 @@ method _get_attribute_attr(const _dml_attr_getset_info_t *_conf_info,
     local attr_value_t *items = new attr_value_t[no_items];
     local attr_value_t *items_buf = new attr_value_t[no_items];
     for (local int i = 0; i < no_items; ++i) {
-        local _traitref_t traitref = {conf_info.vtable,
-                                      {id_info.id, i + flat_index_offset}};
-        items[i] = cast(&traitref, _conf_attribute *)->get_attribute();
+        local _conf_attribute attr;
+        *cast(&attr, _traitref_t *) = {conf_info.vtable,
+                                       {id_info.id, i + flat_index_offset}};
+        items[i] = attr.get_attribute();
     }
     for (local int i = cast(id_info.dimensions, int) - 1; i >= start_dim;
          --i) {
@@ -1206,10 +1210,10 @@ method _set_attribute_attr(const _dml_attr_getset_info_t *_conf_info,
     assert prev_gen_size == num_items;
     delete items_buf;
     for (local uint32 i = 0; i < num_items; ++i) {
-        local _traitref_t traitref = {conf_info.vtable,
-                                      {id_info.id, i + flat_index_offset}};
-        local set_error_t status = cast(&traitref, _conf_attribute *)
-                                   ->set_attribute(items[i]);
+        local _conf_attribute attr;
+        *cast(&attr, _traitref_t *) = {conf_info.vtable,
+                                       {id_info.id, i + flat_index_offset}};
+        local set_error_t status = attr.set_attribute(items[i]);
         if (status != Sim_Set_Ok) {
             delete items;
             return status;
